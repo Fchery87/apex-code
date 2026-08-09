@@ -2,11 +2,12 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Draft — Phase 0 not started · **Created:** 2026-08-08 · **Last updated:** 2026-08-08
+**Status:** Active — Phase 0 in progress (0.1, 0.2, 0.4 landed) · **Created:** 2026-08-08 · **Last updated:** 2026-08-09
 
-> **Name settled: `apex-code`.** It carries into the binary (`apex-code`), the config
-> directory (`~/.apex-code/`), session paths, and the package name. Task 0.1 is now
-> claiming those — see Phase 0.
+> **Name settled: `apex-code`.** Binary `apex-code`, config directory
+> `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
+> coordinate is free; it is **not yet published**, so it stays claimable by anyone
+> until Task 0.5.
 
 This is the **program** document: what gets built, in what order, and the measurable
 condition each phase must satisfy to be considered done. It is permanent and
@@ -24,10 +25,10 @@ be wrong by Phase 3.
 
 | Decision | Choice | Consequence |
 | --- | --- | --- |
-| Fork depth | Fork `pi-coding-agent` + `pi-agent-core`; consume `pi-ai` and `pi-tui` upstream | Full control of loop, tools, permissions, sessions. 35 providers keep updating for free. Provider work rides `registerProvider()`. |
+| Fork depth | Fork `pi-coding-agent` + `pi-agent-core`; consume every other Pi package | Full control of loop, tools, permissions, sessions. 35 providers keep updating for free. Provider work rides `registerProvider()`. Implemented as a full-tree graft with the consumed packages frozen and CI-asserted — see ADR 0001's amendment. |
 | Target bar | Distributable OSS product | Versioned releases, install/update, docs, **session-format back-compat**, security posture, opt-in telemetry. Constrains every phase, not just Phase 9. |
 | Thanos disposition | Evidence capture in core; SpecEngine + governance policy stay a bundled extension | Evidence recorded at the source (the bash tool knows its own exit code). Policy layer stays independently testable and switchable-off. |
-| License | MIT (Pi is MIT across all four packages; Thanos is already MIT) | Attribution required. Clean to distribute. |
+| License | MIT (Pi is MIT across the whole monorepo; Thanos is already MIT) | Attribution required. Clean to distribute. |
 | Name | **Apex Code**, identifier `apex-code` | Binary `apex-code`, config dir `~/.apex-code/`, repo `Fchery87/apex-code`. Bare `apex` was rejected: the npm coordinate is held by an abandoned 2022 stub (`v0.1.2`, "Work In Progress", untouched since 2022-06-13), which would have forced a scope and left users installing one name and running another. |
 | npm coordinate | `apex-code` — **unscoped, verified free** | No scope needed, so the install command and the binary match. Claim it before first publish (Task 0.5); until then this is reversible. |
 
@@ -43,10 +44,10 @@ implementation. Descriptions of its behavior in `docs/research/` are fine and ar
 its ideas legitimately enter the project. This is ADR-0002 and it is the single
 constraint most likely to be violated by accident under time pressure.
 
-**2. Upstream is a dependency relationship, not a one-time copy.** Pi ships fast —
-`.atomic` is already on 0.83 while Thanos targets 0.80.6. A fork without merge
-discipline is dead in two months. Phase 0 defines the cadence, the patch surface
-ceiling, and the abandonment tripwire, in the style of the existing ADR 0024.
+**2. Upstream is a dependency relationship, not a one-time copy.** Pi ships fast, and
+Phase 0 measured how fast: one *patch* release moved 57 files and ~2,000 lines inside
+the two packages we fork. A fork without merge discipline is dead in two months.
+ADR 0003 sets the cadence, the ceiling, and the abandonment tripwires.
 
 **3. Every phase exits on a number, not a feeling.** The strongest thing in the
 current Thanos docs is the `≥50% keeps src/spec/` gate. Every phase below carries a
@@ -103,14 +104,14 @@ exit criterion is unmeasurable).
   dir `~/.apex-code/`, npm `apex-code` (unscoped, verified free), MIT license + Pi
   attribution, `CONTRIBUTING`. **The npm name is verified but not yet published** —
   it is claimable by anyone until Task 0.5.
-- Fork `pi-coding-agent` and `pi-agent-core`. Pin `pi-ai` and `pi-tui` as ordinary
-  dependencies. Record the boundary in ADR-0001 so it stops being re-litigated.
+- **Task 0.2 — fork.** ✅ Done. Full-tree graft at `v0.84.0`, rehearsal merge to
+  `v0.84.1`. Consumed packages frozen and CI-asserted (ADR 0001, amended).
 - Build, typecheck, lint, test, and a release pipeline that produces an installable
   artifact from day one. A release path added in Phase 9 is a release path that has
   never been exercised.
-- **Upstream merge rehearsal**: actually take one real upstream release end-to-end,
-  and record how many patch hunks it cost. That number is the baseline for the
-  ceiling in ADR-0003.
+- **Upstream merge rehearsal.** ✅ Done, and it disproved its own premise: at fork+0
+  divergence the hunk count is 0 by construction, so ADR 0003's ceiling basis moved
+  past Phase 2. Upstream churn is the honest Phase 0 metric.
 - **Replay corpus + headless metrics harness.** A fixed set of recorded sessions
   (start from the real transcripts in `.omp`, `.prime`, `.atomic`) replayable
   offline, emitting deterministic metrics: context tokens at turn N, system-prompt
