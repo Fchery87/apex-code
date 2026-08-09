@@ -2,12 +2,11 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phase 0 in progress (0.1–0.4 landed) · **Created:** 2026-08-08 · **Last updated:** 2026-08-09
+**Status:** Active — Phase 0 in progress (0.1–0.5 landed) · **Created:** 2026-08-08 · **Last updated:** 2026-08-09
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
-> coordinate is free; it is **not yet published**, so it stays claimable by anyone
-> until Task 0.5.
+> coordinate is now claimed by the published `0.0.1-alpha.0` prerelease.
 
 This is the **program** document: what gets built, in what order, and the measurable
 condition each phase must satisfy to be considered done. It is permanent and
@@ -77,7 +76,7 @@ capable and measurably worse.
 
 | Phase | Name | State | Spec | Plan |
 | --- | --- | --- | --- | --- |
-| 0 | Fork foundation | **in progress** — 4 of 10 tasks | [spec](specs/2026-08-08-fork-foundation.md) | [plan](plans/2026-08-08-fork-foundation.md) |
+| 0 | Fork foundation | **in progress** — 5 of 10 tasks | [spec](specs/2026-08-08-fork-foundation.md) | [plan](plans/2026-08-08-fork-foundation.md) |
 | 1 | Provider & model layer | not started | — | — |
 | 2 | Permissions & sandbox | not started | — | — |
 | 3 | Context engineering | not started | — | — |
@@ -102,7 +101,7 @@ exit criterion is unmeasurable).
 **Scope.**
 - **Task 0.1 — claim the name.** ✅ Done. Repo `apex-code`, binary `apex-code`, config
   dir `~/.apex-code/`, npm `apex-code` (unscoped, verified free), MIT license + Pi
-  attribution, `CONTRIBUTING`. Task 0.5 claims it with the first pre-alpha publication.
+  attribution, `CONTRIBUTING`. Task 0.5 claimed it with the first pre-alpha publication.
 - **Task 0.2 — fork.** ✅ Done. Full-tree graft at `v0.84.0`, rehearsal merge to
   `v0.84.1`. Consumed packages frozen and CI-asserted (ADR 0001, amended).
 - Build, typecheck, lint, test, and a release pipeline that produces an installable
@@ -127,6 +126,7 @@ two consecutive runs on the same input.
 | Criterion | State |
 | --- | --- |
 | CI green on three platforms | **met as amended.** Run [`31298112668`](https://github.com/Fchery87/apex-code/actions/runs/31298112668) passed the frozen-package gate and completed green. Linux and macOS passed Build, Check, and Apex-owned tests. Windows passed Build and Check; its advisory Test step failed on inherited platform behavior, establishing the baseline Task 0.10 must characterise. The amended criterion is: *Linux green, macOS and Windows characterised.* |
+| Published artifact installs and completes a provider turn | **met.** `apex-code@0.0.1-alpha.0` clean-installed from npm, reported the expected version, passed registry signature/attestation audit, and completed a configured Google turn. Release run [`31326901954`](https://github.com/Fchery87/apex-code/actions/runs/31326901954). |
 | Upstream release merged, hunk count recorded | **met, and the criterion was wrong.** `v0.84.0` → `v0.84.1` merged: 1 conflicted hunk, 0 in forked paths. But at fork+0 divergence a hunk count is zero by construction and cannot found a ceiling. ADR 0003 was amended to move the ceiling basis past Phase 2; the honest Phase 0 metric is upstream churn — 57 files / ~2,000 lines per patch release. |
 | Replay corpus deterministic across two runs | **not started.** Tasks 0.6–0.9. Still the highest-leverage item in the phase and the one most likely to be skipped as "not real work." |
 
