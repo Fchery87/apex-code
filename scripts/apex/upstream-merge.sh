@@ -62,14 +62,25 @@ echo "  target             ${target}"
 echo "  conflicted hunks   ${hunks}"
 echo "  conflicted files   ${files}  (${forked_files} in forked paths)"
 echo "────────────────────────────────────────────────"
+# Advance the pin the frozen-package check reads. Doing this here rather than by
+# hand is the point: if the pin lags the merge, check-frozen-packages.mjs compares
+# the consumed packages against a stale tag and reports drift that is really just
+# an unrecorded merge.
+printf '%s\n' "${target}" > .upstream-tag
+echo "updated .upstream-tag -> ${target}"
+
 echo
 echo "Next:"
 echo "  1. Resolve conflicts."
-echo "  2. Record target / hunks / files / time in docs/upstream-log.md."
-echo "  3. Check the count against the ADR 0003 ceiling. Three consecutive"
+echo "  2. Verify the ADR 0001 boundary held:"
+echo "       node scripts/apex/check-frozen-packages.mjs"
+echo "     A failure here means a consumed package was modified by the merge"
+echo "     resolution — resolve those in upstream's favour, always."
+echo "  3. Record target / hunks / files / time in docs/upstream-log.md."
+echo "  4. Check the count against the ADR 0003 ceiling. Three consecutive"
 echo "     breaches attributable to our own divergence is a tripwire, not a"
 echo "     bad week — see docs/adr/0003-upstream-merge-cadence.md."
-echo "  4. Commit."
+echo "  5. Commit."
 
 if [ "${hunks}" -eq 0 ] && [ "${files}" -eq 0 ]; then
   echo

@@ -96,3 +96,19 @@ ceiling — otherwise the tripwire fires on upstream editing their own README. I
 grows beyond a few hunks per release, the fix is to move upstream's copies aside
 (`AGENTS.upstream.md`) rather than to keep resolving them; at one hunk it is not worth
 the churn.
+
+**A third category, added 2026-08-09: deleted `.github/`.** Upstream's project
+automation was removed wholesale, so every future upstream change to those paths
+arrives as a delete/modify conflict, resolved with `git rm` each time. Expect a
+handful per release. Also excluded from the ceiling.
+
+The graft brought in ten upstream workflows, several actively hazardous on a
+different repository: `issue-analysis.yml` runs an agent against issues using
+Earendil org tokens, `publish-model-catalog.yml` writes to their R2 bucket,
+`build-binaries.yml` publishes `pi-*` release artifacts, and four gate/triage
+workflows enforce a contribution process Apex Code does not run. Deleting was
+correct rather than neutering: `.github/` is upstream's **operations**, not their
+product. The packages/ argument for keeping paths mergeable does not apply, because
+we want none of their CI. `.github/APPROVED_CONTRIBUTORS` and `ISSUE_TEMPLATE/` went
+with them — the first was orphaned once its enforcing workflow was gone, and the
+templates pointed users at Pi's Discord and Pi's contribution rules.
