@@ -15,9 +15,9 @@ export interface AuthCommand {
 export class AuthCommandError extends Error {}
 
 const AUTH_COMMAND_USAGE: Record<AuthCommandKind, string> = {
-	check: "pi auth check --provider <provider> [--json] [--credentials] [--no-refresh]",
-	api_key: "pi auth print-api-key --provider <provider> [--model <model>]",
-	bearer_token: "pi auth print-bearer-token --provider <provider> [--model <model>] [--min-expiry <duration>]",
+	check: "apex-code auth check --provider <provider> [--json] [--credentials] [--no-refresh]",
+	api_key: "apex-code auth print-api-key --provider <provider> [--model <model>]",
+	bearer_token: "apex-code auth print-bearer-token --provider <provider> [--model <model>] [--min-expiry <duration>]",
 };
 
 export function getAuthCommandName(kind: AuthCommandKind): string {
@@ -57,7 +57,7 @@ export function parseAuthCommand(args: string[]): AuthCommand | undefined {
 					: undefined;
 	if (!kind) {
 		throw new AuthCommandError(
-			`Unknown auth command "${args[1] ?? ""}". Use "pi auth print-api-key", "pi auth print-bearer-token", or "pi auth check".`,
+			`Unknown auth command "${args[1] ?? ""}". Use "apex-code auth print-api-key", "apex-code auth print-bearer-token", or "apex-code auth check".`,
 		);
 	}
 
