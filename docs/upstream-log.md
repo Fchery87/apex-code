@@ -34,7 +34,8 @@ Ten packages, not the four ADR 0001 was written against:
 
 `packages/coding-agent` declares runtime dependencies on **five** Pi packages, not
 two: `pi-agent-core`, `pi-ai`, `pi-client`, `pi-protocol`, `pi-tui` (all `^0.84.0`).
-ADR 0001 names only `pi-ai` and `pi-tui` as consumed and needs amending on this point.
+ADR 0001 originally named only `pi-ai` and `pi-tui` as consumed; it was amended on
+2026-08-09 to cover the full set.
 
 ## Measured upstream churn
 

@@ -50,10 +50,14 @@ Two rules that catch most problems:
 
 ## Working with forked code
 
-Apex Code forks `pi-coding-agent` and `pi-agent-core` and consumes `pi-ai` and `pi-tui`
-([ADR 0001](docs/adr/0001-fork-boundary.md)).
+Apex Code forks `pi-coding-agent` and `pi-agent-core`. Every other Pi package is
+consumed and **frozen** — present in the tree because this is a full-tree graft, and
+asserted byte-identical to the upstream tag by CI ([ADR 0001](docs/adr/0001-fork-boundary.md)).
 
-- **Do not vendor or patch `pi-ai` or `pi-tui`.** Extend through their public APIs.
+- **Do not patch any frozen package.** `packages/ai`, `tui`, `client`, `protocol`,
+  `server`, `session-backends`, `evals`, `telemetry` are consumed, not forked. Extend
+  through their public APIs. `node scripts/apex/check-frozen-packages.mjs` runs in CI
+  and fails the build on any edit.
   If you believe something requires patching them, open an issue — it may be an
   upstream contribution instead.
 - **Keep forked files legible as a diff against upstream.** Reformatting, renaming,

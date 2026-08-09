@@ -13,7 +13,7 @@
 
 | Name | What it is | License | Role in Apex Code's design |
 | --- | --- | --- | --- |
-| **Pi** `0.80.6` / `0.83.0` | `github.com/earendil-works/pi` — four packages: `ai`, `tui`, `agent`, `coding-agent` | MIT | **The base.** Forked per ADR 0001. |
+| **Pi** `0.80.6` / `0.83.0` | `github.com/earendil-works/pi` — ten packages; the four that matter here are `ai`, `tui`, `agent`, `coding-agent` | MIT | **The base.** Forked per ADR 0001. |
 | **`c-code`** | Leaked Claude Code source, `v0.0.0-leaked`, ~519k LOC | **UNLICENSED** | **Behavior spec only.** Never a code source (ADR 0002). |
 | **OMP** | A mature Pi-lineage fork (state inspected, no source) | — | Source of the credential-pool, model-roles, and measured-routing designs. |
 | **Prime** | A mature Pi-lineage fork (state inspected, no source) | — | Source of daemon journaling, session leases, recursion-depth bounding. |
