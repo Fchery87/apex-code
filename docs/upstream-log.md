@@ -121,6 +121,30 @@ workspace glob, the build step, the `eval` script, the path mapping, and the lin
 globs. Those four files now carry permanent divergence and will conflict whenever
 upstream touches them.
 
+### Upstream defects we cannot fix
+
+`v0.84.1` ships a real type error in a frozen package's own test file:
+`packages/ai/test/openai-completions-tool-choice.test.ts` reads `.maxTokensField`
+off an un-narrowed `OpenAICompletionsCompat | OpenAIResponsesCompat`. It reached a
+release because upstream's `CI` workflow triggers on `main` and pull requests but
+**not on tags**, so the only workflow that ran on `v0.84.1` was Build Binaries.
+Their `check` never executed against the release.
+
+We cannot repair it: `packages/ai` is frozen, and the gate rejects the edit. No
+newer release exists.
+
+Resolution: the root `tsconfig.json` excludes frozen packages' `test/**` from the
+typecheck. Their `src` is still fully typechecked, because `packages/coding-agent`
+imports it, so genuine breakage still surfaces. Only upstream's own test files are
+dropped, and only for packages we are forbidden to edit.
+
+The principle, worth keeping: **a CI gate that can go red for defects we may not
+repair is not a gate — it is noise that trains people to ignore red.** Frozen code is
+verified by byte-identity, which is the correct and sufficient check for code we do
+not own. If a frozen package ever leaves the frozen set, remove its exclusion.
+
+Worth reporting upstream. Not yet filed.
+
 **A third category, added 2026-08-09: deleted `.github/`.** Upstream's project
 automation was removed wholesale, so every future upstream change to those paths
 arrives as a delete/modify conflict, resolved with `git rm` each time. Expect a
