@@ -7,14 +7,14 @@ Rules live in `AGENTS.md`; rationale lives in `docs/`.
 
 | Term | Meaning |
 | --- | --- |
-| **Pi** | The upstream harness Apex forks. Repo `github.com/earendil-works/pi`, MIT. |
+| **Pi** | The upstream harness Apex Code forks. Repo `github.com/earendil-works/pi`, MIT. |
 | **`pi-coding-agent`** | Upstream package `packages/coding-agent`. Tools, sessions, compaction, extensions, TUI modes, CLI. **Forked.** |
 | **`pi-agent-core`** | Upstream package `packages/agent`. The `Agent` class and agent loop. **Forked.** |
 | **`pi-ai`** | Upstream provider layer: 35 providers over 9 API dialects. **Consumed as a dependency.** |
 | **`pi-tui`** | Upstream terminal UI primitives. Two runtime deps. **Consumed as a dependency.** |
-| **Fork point** | The upstream release Apex was forked from. Recorded in `docs/upstream-log.md`. |
+| **Fork point** | The upstream release Apex Code was forked from. Recorded in `docs/upstream-log.md`. |
 
-## Apex concepts
+## Apex Code concepts
 
 | Term | Meaning |
 | --- | --- |
@@ -52,21 +52,21 @@ Rules live in `AGENTS.md`; rationale lives in `docs/`.
                     pi-ai (dep)        pi-tui (dep)
                         │                   │
                         ▼                   ▼
-        apex-agent-core (fork of pi-agent-core)
+        apex-code-agent-core (fork of pi-agent-core)
                         │
                         ▼
-        apex (fork of pi-coding-agent)
+        apex-code (fork of pi-coding-agent)
          │        │            │
          │        │            └── bundled extension: SpecEngine + governance
          │        └── extensions (user, project, packages)
-         └── ~/.apex/  ← sessions, settings, credentials, state
+         └── ~/.apex-code/  ← sessions, settings, credentials, state
 ```
 
 ## Prior art referenced
 
 | Name | What it is | Where it's captured |
 | --- | --- | --- |
-| **Thanos** | The predecessor governance layer: spec contracts, evidence, verification gates. Its evidence model moves into Apex core (ADR 0007, Phase 7). | `~/.pi/src` |
+| **Thanos** | The predecessor governance layer: spec contracts, evidence, verification gates. Its evidence model moves into Apex Code core (ADR 0007, Phase 7). | `~/.pi/src` |
 | **OMP** | A mature Pi fork. Source of the credential-pool, model-roles, and measured-routing designs. | `docs/research/2026-08-08-harness-comparative-review.md` |
 | **Prime** | A mature Pi fork. Source of the daemon-worker journaling, session-lease, and recursion-depth designs. | same |
 | **Atomic** | Near-stock Pi plus the community package ecosystem. | same |

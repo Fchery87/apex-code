@@ -1,6 +1,6 @@
 # Security Policy
 
-> **Pre-alpha.** Apex is not yet installable and has no released version. This policy
+> **Pre-alpha.** Apex Code is not yet installable and has no released version. This policy
 > describes the intended posture and is hardened in Phase 9.
 >
 > **UNRESOLVED — must be set before the first public release:** the reporting
@@ -17,9 +17,9 @@ Report privately. Do not open a public issue.
 - Expect an acknowledgement within a few days. We will tell you whether it is in
   scope, and coordinate disclosure timing with you if it is.
 
-## What Apex is, security-wise
+## What Apex Code is, security-wise
 
-Apex is a local coding agent. It runs with the permissions of the user account that
+Apex Code is a local coding agent. It runs with the permissions of the user account that
 starts it, executes shell commands, and reads and writes files. Extensions are
 TypeScript modules that run with the same permissions as the process.
 
@@ -46,7 +46,7 @@ nothing once a turn is running.
 ## Running untrusted work
 
 For untrusted repositories, unattended automation, or generated code you do not
-intend to review closely, run Apex inside a container, VM, or micro-VM with only the
+intend to review closely, run Apex Code inside a container, VM, or micro-VM with only the
 files and credentials the task requires. Mount workspaces read-only where you can,
 restrict network access when the task does not need it, and use short-lived
 credentials. Review diffs before copying results back to trusted systems.
@@ -56,6 +56,6 @@ virtualization-level isolation.
 
 ## Credentials
 
-Apex never writes API keys to a config file it manages. Keys come from the credential
+Apex Code never writes API keys to a config file it manages. Keys come from the credential
 store or the environment. If you find a build that violates this, treat it as a
 vulnerability and report it under this policy.

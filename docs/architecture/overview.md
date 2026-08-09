@@ -1,6 +1,6 @@
 # Architecture Overview
 
-The layer map: what Apex owns, what it borrows, and where each roadmap phase lands.
+The layer map: what Apex Code owns, what it borrows, and where each roadmap phase lands.
 This is the orientation document — mechanisms are specified in `docs/specs/`,
 decisions in `docs/adr/`, vocabulary in `CONTEXT.md`.
 
@@ -10,9 +10,9 @@ specifies them.
 
 ## Mental model
 
-**Upstream owns reach. Apex owns judgment.**
+**Upstream owns reach. Apex Code owns judgment.**
 
-`pi-ai` decides how to talk to 35 providers. Apex decides which one to talk to, with
+`pi-ai` decides how to talk to 35 providers. Apex Code decides which one to talk to, with
 whose credentials, under what permissions, with how much context, and whether the
 result can be believed. That split is the whole architecture, and it is why the fork
 boundary falls where it does (ADR 0001).
@@ -24,11 +24,11 @@ boundary falls where it does (ADR 0001).
 │  Extensions            user · project · packages · bundled    │
 │                        ├─ SpecEngine + governance (Phase 7)   │
 ├───────────────────────────────────────────────────────────────┤
-│  APEX  (fork of pi-coding-agent)                              │
+│  APEX CODE  (fork of pi-coding-agent)                         │
 │    Tools ─ permissions ─ sessions ─ compaction ─ eviction     │
 │    Delegation ─ evidence capture ─ daemon ─ CLI/RPC/SDK       │
 ├───────────────────────────────────────────────────────────────┤
-│  APEX CORE  (fork of pi-agent-core)                           │
+│  APEX CODE CORE  (fork of pi-agent-core)                      │
 │    Agent loop · steering & follow-up queues · tool execution  │
 │    Interception: beforeToolCall · afterToolCall               │
 │                  transformContext · prepareNextTurn           │
@@ -39,7 +39,7 @@ boundary falls where it does (ADR 0001).
 └───────────────────────────────────────────────────────────────┘
 ```
 
-Everything above the dependency line is Apex's to change. Nothing below it is
+Everything above the dependency line is Apex Code's to change. Nothing below it is
 (ADR 0001).
 
 ## Where each phase lands
@@ -48,13 +48,13 @@ Everything above the dependency line is Apex's to change. Nothing below it is
 | --- | --- | --- |
 | 0 Foundation | build/CI | Fork, release pipeline, upstream merge process, **replay corpus** |
 | 1 Provider | above `pi-ai` | Credential pool, model roles, fallback chains, measured routing |
-| 2 Permissions | core + apex | Rule engine at `beforeToolCall`; OS sandbox beneath tool execution |
-| 3 Context | apex | Tool-result eviction, deferred schemas, reactive compaction |
-| 4 Tools | apex | The tool surface, each with its own rule grammar |
-| 5 Delegation | apex | Subagents, capability ceiling, depth bound, artifact isolation |
-| 6 State | apex | SQLite indices, daemon + clients, command journal, session leases |
+| 2 Permissions | core + apex-code | Rule engine at `beforeToolCall`; OS sandbox beneath tool execution |
+| 3 Context | apex-code | Tool-result eviction, deferred schemas, reactive compaction |
+| 4 Tools | apex-code | The tool surface, each with its own rule grammar |
+| 5 Delegation | apex-code | Subagents, capability ceiling, depth bound, artifact isolation |
+| 6 State | apex-code | SQLite indices, daemon + clients, command journal, session leases |
 | 7 Evidence | core + extension | Capture in core; SpecEngine and policy as a bundled extension |
-| 8 Observability | apex | Cost and latency accounting, OTel export, status line |
+| 8 Observability | apex-code | Cost and latency accounting, OTel export, status line |
 | 9 Release | all | Install, update, session migration, docs, security posture |
 
 ## Load-bearing seams
@@ -96,7 +96,7 @@ running without it.
 
 ## Inherited invariants
 
-Properties of Pi that Apex keeps, and that changes must not quietly break:
+Properties of Pi that Apex Code keeps, and that changes must not quietly break:
 
 - **Sessions are a tree.** JSONL entries linked `id`/`parentId`; branching happens in
   place without new files. `/tree` navigation and branch summarization follow from

@@ -1,11 +1,11 @@
-# Apex — roadmap
+# Apex Code — roadmap
 
 *A provider-agnostic agentic harness forked from Pi.*
 
 **Status:** Draft — Phase 0 not started · **Created:** 2026-08-08 · **Last updated:** 2026-08-08
 
-> **Name settled: `apex`.** It carries into the binary (`apex`), the config
-> directory (`~/.apex/`), session paths, and the package name. Task 0.1 is now
+> **Name settled: `apex-code`.** It carries into the binary (`apex-code`), the config
+> directory (`~/.apex-code/`), session paths, and the package name. Task 0.1 is now
 > claiming those — see Phase 0.
 
 This is the **program** document: what gets built, in what order, and the measurable
@@ -28,7 +28,8 @@ be wrong by Phase 3.
 | Target bar | Distributable OSS product | Versioned releases, install/update, docs, **session-format back-compat**, security posture, opt-in telemetry. Constrains every phase, not just Phase 9. |
 | Thanos disposition | Evidence capture in core; SpecEngine + governance policy stay a bundled extension | Evidence recorded at the source (the bash tool knows its own exit code). Policy layer stays independently testable and switchable-off. |
 | License | MIT (Pi is MIT across all four packages; Thanos is already MIT) | Attribution required. Clean to distribute. |
-| npm coordinate | `@fchery87/apex` (scoped) | Unscoped `apex` is held by an abandoned 2022 stub (`v0.1.2`, "Work In Progress", untouched since 2022-06-13). It declares **no `bin`**, so the `apex` command name is unclaimed and the binary stays `apex`. Reversible until first publish (Task 0.5); free unscoped alternatives if the scope is unwanted: `apexcode`, `apex-harness`, `apex-agent`, `apexcli`. |
+| Name | **Apex Code**, identifier `apex-code` | Binary `apex-code`, config dir `~/.apex-code/`, repo `Fchery87/apex-code`. Bare `apex` was rejected: the npm coordinate is held by an abandoned 2022 stub (`v0.1.2`, "Work In Progress", untouched since 2022-06-13), which would have forced a scope and left users installing one name and running another. |
+| npm coordinate | `apex-code` — **unscoped, verified free** | No scope needed, so the install command and the binary match. Claim it before first publish (Task 0.5); until then this is reversible. |
 
 ---
 
@@ -98,10 +99,10 @@ merge discipline (or the fork rots) and the replay corpus (or every later phase'
 exit criterion is unmeasurable).
 
 **Scope.**
-- **Task 0.1 — claim the name.** Repo `apex`, binary `apex`, config dir `~/.apex/`,
-  npm package name (check availability; scope it if `apex` is taken), MIT license +
-  Pi attribution, `CONTRIBUTING`. Claiming the npm name early is cheap and
-  irreversible-if-lost.
+- **Task 0.1 — claim the name.** ✅ Done. Repo `apex-code`, binary `apex-code`, config
+  dir `~/.apex-code/`, npm `apex-code` (unscoped, verified free), MIT license + Pi
+  attribution, `CONTRIBUTING`. **The npm name is verified but not yet published** —
+  it is claimable by anyone until Task 0.5.
 - Fork `pi-coding-agent` and `pi-agent-core`. Pin `pi-ai` and `pi-tui` as ordinary
   dependencies. Record the boundary in ADR-0001 so it stops being re-litigated.
 - Build, typecheck, lint, test, and a release pipeline that produces an installable

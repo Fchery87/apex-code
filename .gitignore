@@ -10,7 +10,7 @@ coverage/
 .vitest/
 
 # Local runtime state
-.apex/
+.apex-code/
 *.log
 
 # Secrets — never commit. See AGENTS.md § Secrets.

@@ -1,9 +1,9 @@
 # Research: comparative review of five agentic harnesses
 
-**Date:** 2026-08-08 · **Status:** Permanent — this is the source of record for Apex's design inputs
+**Date:** 2026-08-08 · **Status:** Permanent — this is the source of record for Apex Code's design inputs
 
 > **Why this document exists.** Per ADR 0002, ideas observed in unlicensed sources may
-> enter Apex only as *behavioral descriptions*, never as code. This file is that
+> enter Apex Code only as *behavioral descriptions*, never as code. This file is that
 > channel. Specs and ADRs cite this document; they do not cite the source trees. For
 > `c-code` in particular, what follows is a description of externally observable
 > behavior and design approach — deliberately not a transcription of its
@@ -11,14 +11,14 @@
 
 ## Systems reviewed
 
-| Name | What it is | License | Role in Apex's design |
+| Name | What it is | License | Role in Apex Code's design |
 | --- | --- | --- | --- |
 | **Pi** `0.80.6` / `0.83.0` | `github.com/earendil-works/pi` — four packages: `ai`, `tui`, `agent`, `coding-agent` | MIT | **The base.** Forked per ADR 0001. |
 | **`c-code`** | Leaked Claude Code source, `v0.0.0-leaked`, ~519k LOC | **UNLICENSED** | **Behavior spec only.** Never a code source (ADR 0002). |
 | **OMP** | A mature Pi-lineage fork (state inspected, no source) | — | Source of the credential-pool, model-roles, and measured-routing designs. |
 | **Prime** | A mature Pi-lineage fork (state inspected, no source) | — | Source of daemon journaling, session leases, recursion-depth bounding. |
 | **Atomic** | Near-stock Pi 0.83 plus community packages | MIT | Evidence of what the ecosystem already supplies. |
-| **Thanos** | Predecessor governance extension layer, ~19k LOC on Pi | MIT | The evidence/verification model, moving into Apex core. |
+| **Thanos** | Predecessor governance extension layer, ~19k LOC on Pi | MIT | The evidence/verification model, moving into Apex Code core. |
 
 OMP, Prime, and Atomic were reviewed as *installed state* — configs, SQLite schemas,
 session transcripts, directory layouts. Persisted schemas reveal architecture
@@ -37,7 +37,7 @@ environment scoping.
 `c-code`'s equivalent abstraction spans four values — three of which are Anthropic
 hosting options. For a provider-agnostic goal it is an anti-reference.
 
-**Consequence for Apex:** consume `pi-ai`, do not fork it (ADR 0001).
+**Consequence for Apex Code:** consume `pi-ai`, do not fork it (ADR 0001).
 
 ## Finding 2 — Pi's loop contract is better; `c-code`'s loop hardening is better
 
@@ -60,14 +60,14 @@ carries recovery behavior Pi has not needed yet:
 - speculative prefetching of memory and skill lookups underneath the streaming
   window, so latency hides inside work already happening.
 
-**Consequence for Apex:** keep Pi's loop structure; add these behaviors (Phase 1, 3).
+**Consequence for Apex Code:** keep Pi's loop structure; add these behaviors (Phase 1, 3).
 
 ## Finding 3 — the safety floor is Pi's largest gap
 
 Pi ships no permission system and, by explicit design, no sandbox; its own security
 documentation states that project trust is a guard on *loading* configuration and
 constrains nothing once a turn runs. The reasoning given — that a partial in-process
-sandbox is worse than none because it is misread as a boundary — is sound, and Apex
+sandbox is worse than none because it is misread as a boundary — is sound, and Apex Code
 adopts it as the framing for what its own sandbox must honestly claim.
 
 `c-code` demonstrates the shape of a real answer:
@@ -86,7 +86,7 @@ adopts it as the framing for what its own sandbox must honestly claim.
 Atomic's settings show the ecosystem patching this gap with a third-party
 permission-gate extension — which is evidence of the need, not a substitute.
 
-**Consequence for Apex:** Phase 2, and it gates the tool surface.
+**Consequence for Apex Code:** Phase 2, and it gates the tool surface.
 
 ## Finding 4 — context engineering is what makes a large tool surface affordable
 
@@ -112,7 +112,7 @@ format.
 Evicting a cached prefix can cost more than it saves, so cache hit rate belongs in
 the Phase 3 gate, not in a follow-up.
 
-**Consequence for Apex:** Phase 3, before Phase 4.
+**Consequence for Apex Code:** Phase 3, before Phase 4.
 
 ## Finding 5 — Pi's session format is the best of the five
 
@@ -126,7 +126,7 @@ Prime extends it usefully: git provenance in the session header (repo URL, commi
 branch), a recursion-depth field for nested delegation, per-subagent artifact
 directories, and session leases for multi-client attach.
 
-**Consequence for Apex:** keep the format; it becomes a compatibility promise once
+**Consequence for Apex Code:** keep the format; it becomes a compatibility promise once
 distributed (ADR 0006, Phase 6). It is also what makes the Phase 0 replay corpus
 possible.
 
@@ -145,7 +145,7 @@ answer to "which model for which task."
 cache, so a long-running command survives a restart; session leases; and a persistent
 Python kernel whose state is serialized between turns.
 
-**Consequence for Apex:** Phases 1, 6, 8.
+**Consequence for Apex Code:** Phases 1, 6, 8.
 
 ## Finding 7 — no reviewed harness can distinguish a claim from a result
 
@@ -157,12 +157,12 @@ workflow artifacts with content hashes — and gates task completion on it.
 Its most valuable property is not the model but the calibration: field data showed
 that the overwhelming majority of recorded gate failures came from a handful of
 template-generated criteria that no user had written, and the gate was narrowed to
-exclude them. That is the standard Apex's phase gates are held to.
+exclude them. That is the standard Apex Code's phase gates are held to.
 
 Its structural limit is that, as an extension, it can only observe tool results after
 the fact and reconstruct what happened.
 
-**Consequence for Apex:** capture evidence at the source, in core; keep the policy
+**Consequence for Apex Code:** capture evidence at the source, in core; keep the policy
 layer a bundled, switchable extension (ADR 0007, Phase 7).
 
 ## Finding 8 — terminal UI
@@ -175,7 +175,7 @@ OMP's UI *configuration* is worth carrying: an ASCII symbol preset, a colorblind
 mode, configurable token-usage display, and status-line presets. Cheap accessibility
 work that almost nobody does.
 
-**Consequence for Apex:** keep `pi-tui` (ADR 0001); adopt the accessibility settings
+**Consequence for Apex Code:** keep `pi-tui` (ADR 0001); adopt the accessibility settings
 (Phase 8).
 
 ## Incidental finding — credential hygiene
@@ -184,6 +184,6 @@ A live provider API key was found in cleartext in two separate installed
 configurations. One of those systems had already moved credentials into a database
 table while leaving a plaintext copy in its model configuration file.
 
-**Consequence for Apex:** keys come from the credential store or the environment,
+**Consequence for Apex Code:** keys come from the credential store or the environment,
 never from a config file the loader writes. This is a Phase 1 exit criterion and a
 `SECURITY.md` in-scope item.

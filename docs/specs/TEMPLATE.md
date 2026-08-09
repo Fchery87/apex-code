@@ -29,7 +29,7 @@ and cite it from Rollout; do not fold it in here.
 **Compatibility posture** is not optional and not a one-word answer. State plainly
 whether this is a **clean break** (old callers, config, or behavior stop working, no
 shim) or **preserves compatibility** (old and new coexist — for whom, for how long),
-and why that posture beat the other one. Apex is distributed, so anything touching
+and why that posture beat the other one. Apex Code is distributed, so anything touching
 the session format, settings schema, or CLI surface carries a real obligation to
 users; say what it is. A spec with no stated posture forces every reader to
 reverse-engineer it from the diff.
@@ -59,7 +59,7 @@ What exists today — the "before," on the record so the diff has a baseline. Ci
 `file:line` where it clarifies more than prose. Description, not argument.
 
 For changes to forked code, say whether the current state is upstream Pi's behavior
-or something Apex already changed. The merge cost differs (ADR 0003).
+or something Apex Code already changed. The merge cost differs (ADR 0003).
 
 ## The problem
 

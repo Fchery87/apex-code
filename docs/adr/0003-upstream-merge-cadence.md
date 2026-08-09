@@ -9,12 +9,12 @@ merge discipline does not decide to stop tracking upstream; it discovers, some m
 later, that it already has. By then the divergence is too expensive to close and the
 fork silently inherits maintenance of everything it forked.
 
-This ADR decides how Apex tracks upstream, and — more importantly — what evidence
+This ADR decides how Apex Code tracks upstream, and — more importantly — what evidence
 would justify stopping.
 
 ## Cadence
 
-Apex merges upstream on **every upstream minor release**, not on a calendar. Merges
+Apex Code merges upstream on **every upstream minor release**, not on a calendar. Merges
 are batched only when releases land within days of each other; skipping a release to
 "catch up later" is what produces unmergeable drift, so it is not an option
 available by default.
@@ -38,18 +38,18 @@ and not renegotiated afterward.
 
 Crossing the ceiling on a single merge is not itself a decision to stop. It triggers
 a review: is the spike caused by one upstream refactor that will not recur, or by
-Apex's own divergence compounding?
+Apex Code's own divergence compounding?
 
 ## Tripwires
 
-Apex keeps tracking upstream until one of these fires. Each is checkable against
+Apex Code keeps tracking upstream until one of these fires. Each is checkable against
 `docs/upstream-log.md` rather than argued from impression:
 
 1. **Sustained ceiling breach** — three consecutive merges over the ceiling, with the
-   cost attributable to Apex's divergence rather than a one-off upstream refactor.
+   cost attributable to Apex Code's divergence rather than a one-off upstream refactor.
 2. **Upstream stalls** — no upstream release for two quarters, making the tracking
    relationship notional.
-3. **Irreconcilable direction** — an upstream change that Apex must structurally
+3. **Irreconcilable direction** — an upstream change that Apex Code must structurally
    reject to keep a shipped guarantee (a permission or sandbox invariant, or the
    session-format migration promise of ADR 0006), where no upstream contribution
    resolves it.

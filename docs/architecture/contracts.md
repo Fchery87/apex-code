@@ -56,7 +56,7 @@ ledger that reads `evidence`. Tools written in Phase 4 declare all four sections
 front, so Phases 5 and 7 consume declarations that already exist.
 
 ```ts
-/** Apex extends upstream ToolDefinition with exactly one required field. */
+/** Apex Code extends upstream ToolDefinition with exactly one required field. */
 export interface ApexToolDefinition<TParams extends TSchema, TDetails = unknown>
   extends ToolDefinition<TParams, TDetails> {
   contract: ToolContract<TParams, TDetails>;

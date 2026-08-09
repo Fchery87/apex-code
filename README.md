@@ -1,4 +1,4 @@
-# Apex
+# Apex Code
 
 A provider-agnostic agentic coding harness. Forked from [Pi](https://github.com/earendil-works/pi).
 
@@ -18,7 +18,7 @@ What it does not have is a safety floor or a capability surface. There is no
 permission system and, by explicit design, no sandbox — project trust is a guard on
 *loading* config, and does nothing once a turn starts. The core ships seven tools.
 
-Apex keeps the foundations and builds the rest:
+Apex Code keeps the foundations and builds the rest:
 
 - **Provider-agnostic in the operational sense** *(planned, Phase 1)* — credential
   pooling with failover, model roles, fallback chains, and routing driven by measured
@@ -44,7 +44,7 @@ Apex keeps the foundations and builds the rest:
 
 ## Relationship to upstream
 
-Apex forks `pi-coding-agent` and `pi-agent-core`, and **consumes** `pi-ai` and
+Apex Code forks `pi-coding-agent` and `pi-agent-core`, and **consumes** `pi-ai` and
 `pi-tui` as ordinary dependencies. That boundary is deliberate: the provider layer is
 the part of Pi that needed no improvement, and rewriting 35 providers would be the
 most expensive way to gain nothing. See [ADR 0001](docs/adr/0001-fork-boundary.md).

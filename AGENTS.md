@@ -5,7 +5,7 @@ first edit. Background and rationale live in `docs/` — this file is rules only
 
 ## What this repo is
 
-Apex is a provider-agnostic agentic coding harness, forked from Pi. We fork
+Apex Code is a provider-agnostic agentic coding harness, forked from Pi. We fork
 `pi-coding-agent` and `pi-agent-core`; we **consume** `pi-ai` and `pi-tui` as
 upstream dependencies (ADR 0001). Read `CONTEXT.md` for the glossary and
 `docs/roadmap.md` for what phase we are in.
@@ -13,12 +13,12 @@ upstream dependencies (ADR 0001). Read `CONTEXT.md` for the glossary and
 ## The one rule that must never be broken
 
 **Never copy from `c-code` or any other leaked or unlicensed source.** The leaked
-Claude Code tree at `~/Documents/Coding Projects/c-code` is `UNLICENSED`. Apex ships
+Claude Code tree at `~/Documents/Coding Projects/c-code` is `UNLICENSED`. Apex Code ships
 MIT. Copying from it — a file, a function, a type, a distinctive string, a comment —
 contaminates the license of a distributed product.
 
 - Do **not** open, read, grep, or check out `c-code` while working in this repo.
-- Its ideas enter Apex through one channel only: the behavioral descriptions already
+- Its ideas enter Apex Code through one channel only: the behavioral descriptions already
   captured in `docs/research/`. Cite the research doc, not the source.
 - If a task seems to require reading it, stop and escalate. Do not decide this
   yourself.
@@ -89,7 +89,7 @@ prevent.
 - Do not revert or rewrite unrelated user changes.
 - If the branch is red, isolate the failing seam, repair it, re-run the tight loop,
   then expand.
-- Keep artifact-heavy output under `.apex/` and return references, not inlined
+- Keep artifact-heavy output under `.apex-code/` and return references, not inlined
   payloads.
 
 ## Secrets

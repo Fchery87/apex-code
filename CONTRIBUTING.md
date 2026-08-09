@@ -1,12 +1,12 @@
-# Contributing to Apex
+# Contributing to Apex Code
 
-Apex is pre-alpha and moving fast. Before investing in a large change, open an issue
+Apex Code is pre-alpha and moving fast. Before investing in a large change, open an issue
 — the roadmap phase order is deliberate and dependency-driven, and work that jumps
 ahead of its phase usually has to be redone.
 
 ## Before anything else: source hygiene
 
-Apex is MIT and distributed. **Contributions must be your own work or drawn from
+Apex Code is MIT and distributed. **Contributions must be your own work or drawn from
 compatibly licensed sources.**
 
 Do not submit code copied or adapted from leaked, proprietary, or unlicensed
@@ -23,8 +23,8 @@ under the MIT License. See [ADR 0002](docs/adr/0002-clean-room-sources.md).
 Requires Node.js ≥ 22.19.0.
 
 ```bash
-git clone <repo-url> apex
-cd apex
+git clone <repo-url> apex-code
+cd apex-code
 npm install
 npm run typecheck
 npm test
@@ -32,7 +32,7 @@ npm test
 
 ## The development loop
 
-Apex is built test-first. The loop:
+Apex Code is built test-first. The loop:
 
 1. Write the failing test.
 2. Run it. Confirm it fails, and that it fails for the reason you expect — a test
@@ -50,7 +50,7 @@ Two rules that catch most problems:
 
 ## Working with forked code
 
-Apex forks `pi-coding-agent` and `pi-agent-core` and consumes `pi-ai` and `pi-tui`
+Apex Code forks `pi-coding-agent` and `pi-agent-core` and consumes `pi-ai` and `pi-tui`
 ([ADR 0001](docs/adr/0001-fork-boundary.md)).
 
 - **Do not vendor or patch `pi-ai` or `pi-tui`.** Extend through their public APIs.
@@ -65,7 +65,7 @@ Apex forks `pi-coding-agent` and `pi-agent-core` and consumes `pi-ai` and `pi-tu
 
 ## Documentation
 
-Apex uses four document types with different lifecycles. Put content in the right
+Apex Code uses four document types with different lifecycles. Put content in the right
 one — see `AGENTS.md` § Documentation rules.
 
 - Nontrivial changes need a **spec** in `docs/specs/` before implementation, using
@@ -83,7 +83,7 @@ preceding phase exits.
 - A PR should describe what changed, why, and how it was verified — with the actual
   command and output, not a claim.
 - Do not claim verification you did not run. This matters more here than in most
-  projects: Apex's own thesis is that evidence beats assertion.
+  projects: Apex Code's own thesis is that evidence beats assertion.
 - Green CI is required: typecheck, lint, and tests.
 
 ## Security

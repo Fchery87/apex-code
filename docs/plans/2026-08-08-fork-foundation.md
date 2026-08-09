@@ -10,7 +10,7 @@
 releases, takes upstream changes, and can measure itself against a replay corpus.
 
 **Architecture:** Clone upstream with full history so merges stay ordinary `git merge`
-operations. Rename to Apex with the minimum diff. Add CI, a release path, and a
+operations. Rename to Apex Code with the minimum diff. Add CI, a release path, and a
 deterministic offline replay runner that substitutes a recorded-response provider
 through the existing registration API — no changes below the ADR 0001 line.
 
@@ -19,9 +19,9 @@ through the existing registration API — no changes below the ADR 0001 line.
 
 | Task | State | Commit |
 | --- | --- | --- |
-| 0.1 Claim the name | not started | — |
+| 0.1 Claim the name | **done** | 4b04781 |
 | 0.2 Fork with history + merge rehearsal | not started | — |
-| 0.3 Rename to Apex | not started | — |
+| 0.3 Rename to Apex Code | not started | — |
 | 0.4 CI | not started | — |
 | 0.5 Release pipeline | not started | — |
 | 0.6 Session scrubber | not started | — |
@@ -32,34 +32,33 @@ through the existing registration API — no changes below the ADR 0001 line.
 
 ---
 
-## Task 0.1 — Claim the name
+## Task 0.1 — Claim the name ✅
 
-No test. This is registration work, and it is first because the names thread through
-every later task.
+No test. Registration work, first because the names thread through every later task.
 
-**Step 1 — check npm availability.**
+**Outcome — 2026-08-08.**
 
-```bash
-npm view apex version 2>&1 | head -2
-```
+| Surface | Value |
+| --- | --- |
+| Product name | Apex Code |
+| Identifier / npm | `apex-code` — unscoped, verified free |
+| Binary | `apex-code` |
+| Config dir | `~/.apex-code/` |
+| Repo | `github.com/Fchery87/apex-code` (public) |
 
-If it resolves, `apex` is taken. Fall back to a scope (`@fchery87/apex`) — the binary
-stays `apex` regardless. Record the decision in `docs/upstream-log.md` header.
+Bare `apex` was checked first and rejected. The npm coordinate is held by an
+abandoned 2022 stub (`v0.1.2`, description "Work In Progress", untouched since
+2022-06-13). It declares no `bin`, so the *command* `apex` was actually free — but
+taking it would have meant publishing under a scope while shipping an unscoped
+binary, so users install one name and run another. `apex-code` is free on both, and
+the install command matches the command you type.
 
-**Step 2 — create the repository.** Private initially; public at Phase 9.
+**Still open:** the npm name is verified free but **not yet claimed**. Anyone can
+take it until first publish. Claim it in Task 0.5.
 
-**Step 3 — move the existing docs in.** The doc set already written lives at
-`~/Documents/Coding Projects/apex`. That directory becomes the repo root.
-
-```bash
-cd ~/Documents/Coding\ Projects/apex && git init -b main
-```
-
-**Step 4 — commit.**
-
-```bash
-git add -A && git commit -m "docs: roadmap, ADRs 0001-0003, spec and plan for phase 0"
-```
+**Repository:** initialized and pushed before this task formally ran; the initial
+commit was reconciled rather than recreated. History was rewritten once to drop a
+stray artifact — see `docs/upstream-log.md`.
 
 ---
 
@@ -89,7 +88,7 @@ git remote add upstream <resolved-url>
 git fetch upstream --tags
 ```
 
-**Step 3 — graft upstream history under Apex's root**, keeping `main` rooted in
+**Step 3 — graft upstream history under Apex Code's root**, keeping `main` rooted in
 upstream so future merges are ordinary merges. Pin the fork point to a **released
 tag**, not to `HEAD` of the default branch — forking from an unreleased commit makes
 the first merge's hunk count meaningless.
@@ -139,7 +138,7 @@ git commit -m "chore: fork upstream at <tag>, add merge script and upstream log"
 
 ---
 
-## Task 0.3 — Rename to Apex
+## Task 0.3 — Rename to Apex Code
 
 **Files:** Modify `packages/*/package.json`, binary name, config-directory constant,
 session path construction.
@@ -151,17 +150,17 @@ grep -rn '"\.pi"\|~/\.pi\|piConfig\|\bpi\b' --include='*.json' --include='*.ts' 
 ```
 
 **Step 2 — write the failing test.** The rename has one externally checkable
-property: state goes to `~/.apex/`, not `~/.pi/`.
+property: state goes to `~/.apex-code/`, not `~/.pi/`.
 
 ```ts
-// packages/apex/src/core/__tests__/config-dir.test.ts
+// packages/apex-code/src/core/__tests__/config-dir.test.ts
 import { describe, expect, it } from "vitest";
 import { resolveConfigDir } from "../config-dir.js";
 
 describe("resolveConfigDir", () => {
-  it("resolves under .apex, never .pi", () => {
+  it("resolves under .apex-code, never .pi", () => {
     const dir = resolveConfigDir("/home/u");
-    expect(dir).toBe("/home/u/.apex/agent");
+    expect(dir).toBe("/home/u/.apex-code/agent");
     expect(dir).not.toContain(".pi");
   });
 });
@@ -171,7 +170,7 @@ describe("resolveConfigDir", () => {
 a `.pi` path), not a typo:
 
 ```bash
-npx vitest run packages/apex/src/core/__tests__/config-dir.test.ts
+npx vitest run packages/apex-code/src/core/__tests__/config-dir.test.ts
 ```
 
 **Step 4 — apply the rename.** Package names, `bin` entry, config-directory constant,
@@ -181,7 +180,7 @@ import reordering. Every cosmetic edit here is permanent merge cost (ADR 0001).
 **Step 5 — verify.**
 
 ```bash
-npx vitest run packages/apex/src/core/__tests__/config-dir.test.ts   # PASS
+npx vitest run packages/apex-code/src/core/__tests__/config-dir.test.ts   # PASS
 npm run typecheck
 grep -rn '~/\.pi' packages/ --include='*.ts' | grep -v node_modules  # expect: no output
 ```
@@ -192,7 +191,7 @@ separate row, so Task 0.2's baseline is not confounded by it.
 **Step 7 — commit.**
 
 ```bash
-git commit -am "refactor: rename forked packages to apex, config dir to ~/.apex"
+git commit -am "refactor: rename forked packages to apex-code, config dir to ~/.apex-code"
 ```
 
 ---
@@ -221,7 +220,7 @@ prove the path end-to-end — a release path first exercised at Phase 9 is a rel
 path that does not work.
 
 **Verify:** install the published artifact on a clean machine or container, run
-`apex --version`, and complete one turn against a configured provider.
+`apex-code --version`, and complete one turn against a configured provider.
 
 **Commit:** `ci: tag-triggered release pipeline`
 
@@ -320,7 +319,7 @@ git commit -m "test: scrubbed replay corpus with enforced hygiene gate"
 
 ## Task 0.8 — Replay runner
 
-**Files:** Create `packages/apex/src/testing/replay/{runner.ts,recorded-provider.ts}`
+**Files:** Create `packages/apex-code/src/testing/replay/{runner.ts,recorded-provider.ts}`
 and tests.
 
 **Step 1 — write the failing test.**
@@ -352,7 +351,7 @@ git commit -m "feat: offline deterministic replay runner"
 This task produces the instrument every later phase gate reads. **It is the reason
 Phase 0 exists.**
 
-**Files:** Create `packages/apex/src/testing/replay/metrics.ts` and tests.
+**Files:** Create `packages/apex-code/src/testing/replay/metrics.ts` and tests.
 
 **Step 1 — write the determinism test first.**
 

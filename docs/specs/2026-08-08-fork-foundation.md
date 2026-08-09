@@ -10,11 +10,11 @@
 | Last updated | 2026-08-08 |
 | Roadmap phase | 0 — Fork foundation |
 | Tracking issue/PR | none |
-| Compatibility posture | **Not applicable — greenfield.** Apex has no users, no released version, and no published format. Nothing can break. This is the only phase where that is true, and it is why the format-defining work (session identity, config directory, package name) belongs here rather than later: after Phase 9 every one of these is a compatibility promise (ADR 0006). |
+| Compatibility posture | **Not applicable — greenfield.** Apex Code has no users, no released version, and no published format. Nothing can break. This is the only phase where that is true, and it is why the format-defining work (session identity, config directory, package name) belongs here rather than later: after Phase 9 every one of these is a compatibility promise (ADR 0006). |
 
 ## Executive summary
 
-Stand up Apex as a working fork of `pi-coding-agent` and `pi-agent-core` that builds,
+Stand up Apex Code as a working fork of `pi-coding-agent` and `pi-agent-core` that builds,
 tests, releases, takes upstream changes, and can measure itself. The measurement
 piece — a replay corpus of scrubbed real sessions plus a headless metrics runner — is
 the load-bearing deliverable: every later phase gate in `docs/roadmap.md` is stated as
@@ -68,7 +68,7 @@ Three failure modes, each of which has already happened to comparable projects:
 
 ## Goals
 
-- [ ] `apex` builds, typechecks, lints, and tests green in CI on Linux, macOS, and Windows.
+- [ ] `apex-code` builds, typechecks, lints, and tests green in CI on Linux, macOS, and Windows.
 - [ ] `npx <package>@<version>` (or the equivalent published artifact) runs a
       pre-alpha binary that starts, accepts a prompt, and completes one turn against
       a configured provider.
@@ -80,7 +80,7 @@ Three failure modes, each of which has already happened to comparable projects:
       consecutive runs on the same input.
 - [ ] No corpus fixture contains a credential, an absolute personal path, or a
       hostname. Enforced by a test, not by review.
-- [ ] `apex --version` reports the Apex version and the upstream fork point.
+- [ ] `apex-code --version` reports the Apex Code version and the upstream fork point.
 
 ## Non-goals
 
@@ -105,17 +105,17 @@ Three failure modes, each of which has already happened to comparable projects:
 | Component | Change | Path |
 | --- | --- | --- |
 | Repo skeleton | Workspace with two forked packages; license, notice, docs | repo root |
-| `apex-agent-core` | Fork of `packages/agent`, renamed, `pi-ai` pinned | `packages/agent-core` |
-| `apex` | Fork of `packages/coding-agent`, renamed; config dir `~/.apex/`, binary `apex` | `packages/apex` |
+| `apex-code-agent-core` | Fork of `packages/agent`, renamed, `pi-ai` pinned | `packages/agent-core` |
+| `apex-code` | Fork of `packages/coding-agent`, renamed; config dir `~/.apex-code/`, binary `apex-code` | `packages/apex-code` |
 | Upstream tracking | `upstream` git remote, merge script, hunk-count log | `scripts/upstream-merge.sh`, `docs/upstream-log.md` |
 | CI | typecheck, lint, test, build on three platforms | `.github/workflows/ci.yml` |
 | Release | Tagged publish producing an installable artifact | `.github/workflows/release.yml` |
 | Corpus scrubber | Redacts credentials, paths, hostnames from recorded sessions | `scripts/scrub-session.ts` |
-| Replay runner | Replays a corpus session offline, emits metrics as JSON | `packages/apex/src/testing/replay/` |
+| Replay runner | Replays a corpus session offline, emits metrics as JSON | `packages/apex-code/src/testing/replay/` |
 | Metrics schema | Context tokens at turn N, system-prompt tokens, tool calls, cache hit rate, wall time, cost | same |
 
 **Fork mechanics.** Clone upstream with full history, add it as an `upstream` remote,
-and keep Apex's history rooted in it. Merging then remains a normal `git merge`
+and keep Apex Code's history rooted in it. Merging then remains a normal `git merge`
 rather than a manual diff-and-patch exercise, which is what makes the ADR 0003 hunk
 count meaningful.
 
@@ -131,13 +131,13 @@ two installed configs — is exactly the outcome review-based hygiene produces.
 
 ## Deletion inventory
 
-Nothing existing is removed — Apex has no prior state. Two things are *retired by
+Nothing existing is removed — Apex Code has no prior state. Two things are *retired by
 supersession* from the predecessor project, recorded so they are not carried forward
 by habit:
 
 | Item | Type | Disposition |
 | --- | --- | --- |
-| Thanos as a standalone extension layer on stock Pi | behavior | Superseded. Its evidence model moves into Apex core in Phase 7 (ADR 0007); its policy layer is re-hosted as a bundled Apex extension. Not ported in Phase 0. |
+| Thanos as a standalone extension layer on stock Pi | behavior | Superseded. Its evidence model moves into Apex Code core in Phase 7 (ADR 0007); its policy layer is re-hosted as a bundled Apex Code extension. Not ported in Phase 0. |
 | Any self-measurement that cannot fail | behavior | Retired by policy. The replay corpus replaces impression-based reporting; a metric with no failure mode is not added. |
 
 ## Risks

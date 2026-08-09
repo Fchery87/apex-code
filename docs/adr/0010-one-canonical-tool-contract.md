@@ -11,7 +11,7 @@
 Upstream `ToolDefinition` describes a tool to the model and to the renderer. It says
 nothing about how the tool is authorized, whether its output may be evicted, whether
 its schema may be deferred, what capability class it belongs to, or what evidence it
-produces. Apex needs all five, and they are needed by four different roadmap phases
+produces. Apex Code needs all five, and they are needed by four different roadmap phases
 (2, 3, 5, 7) that consume roughly fifteen tools built in a fifth (4).
 
 Left to itself, each phase would add its own field in its own spec, and every tool
@@ -21,7 +21,7 @@ classification being derived once for authorization and separately re-derived fo
 every surface that displayed it, until the two disagreed and a real registered tool
 fell through both classifiers into neither.
 
-**Every Apex tool declares one `contract` covering all four axes — capabilities,
+**Every Apex Code tool declares one `contract` covering all four axes — capabilities,
 permission grammar, context behavior, evidence emission — and one projection function
 serves every consumer that describes rather than enforces.**
 
