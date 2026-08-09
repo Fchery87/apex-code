@@ -57,8 +57,18 @@ the install command matches the command you type.
 take it until first publish. Claim it in Task 0.5.
 
 **Repository:** initialized and pushed before this task formally ran; the initial
-commit was reconciled rather than recreated. History was rewritten once to drop a
-stray artifact — see `docs/upstream-log.md`.
+commit was reconciled rather than recreated.
+
+History was rewritten once, on 2026-08-08, and force-pushed. The initial commit had
+included `inline`, a stale status blob from an unrelated session carrying absolute
+`/home/...` paths — exactly the pattern Task 0.7's corpus hygiene gate rejects. It is
+gone from all reachable history; verified by scanning every blob in `main` for the
+path prefix. Pre-rewrite history survives locally on `backup-pre-rewrite` and
+`refs/original/refs/heads/main`, neither of which is pushed.
+
+Note: commit `916bc83`'s message still says it dropped the artifact. After the
+rewrite the artifact never existed in that history, so the message is a harmless
+fossil — not worth a second rewrite to correct.
 
 ---
 
