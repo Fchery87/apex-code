@@ -1,0 +1,30 @@
+Apex
+Copyright (c) 2026 Fchery87
+
+This product includes software derived from and depending on Pi.
+
+--------------------------------------------------------------------------------
+Pi
+https://github.com/earendil-works/pi
+Copyright (c) Earendil Works
+Licensed under the MIT License.
+
+Apex contains code derived from the following Pi packages:
+
+  @earendil-works/pi-coding-agent   (packages/coding-agent)  — forked
+  @earendil-works/pi-agent-core     (packages/agent)         — forked
+
+Apex depends on, but does not modify or redistribute modified copies of, the
+following Pi packages:
+
+  @earendil-works/pi-ai             (packages/ai)
+  @earendil-works/pi-tui            (packages/tui)
+
+The fork point and every subsequent upstream merge are recorded in
+docs/upstream-log.md.
+--------------------------------------------------------------------------------
+
+Additional third-party dependencies are declared in package.json and their
+licenses are distributed with those packages in node_modules. A consolidated
+dependency license report is generated as part of the release process
+(see docs/roadmap.md, Phase 9).
