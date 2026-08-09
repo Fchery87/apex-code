@@ -4,7 +4,7 @@
 > unlicensed sources) applies to every task here. Work test-first where a task has a
 > test; several infrastructure tasks legitimately do not, and say so.
 
-**Status:** in progress — 0.1, 0.2, 0.4 verified; 0.3 landed pending CI ·
+**Status:** in progress — 0.1–0.4 verified; 0.5 next ·
 **Date:** 2026-08-08 · **Spec:** `docs/specs/2026-08-08-fork-foundation.md`
 
 **Goal:** A working fork of `pi-coding-agent` and `pi-agent-core` that builds, tests,
@@ -28,8 +28,8 @@ through the existing registration API — no changes below the ADR 0001 line.
 | 0.1 | Claim the name | **done** | `916bc83c2`, `ed07bf261` |
 | 0.2 | Fork with history + merge rehearsal | **done** | `c81a7091a`, `cd8d84fe5`, `124f506e2` |
 | 0.4 | CI + frozen-package assertion | **done** — Linux and macOS green; Windows characterised advisory | `fe0022498`, `9d5e7f0ad`, `990e1805d`, `707dd0440` |
-| 0.3 | Rename to Apex Code | **done**, unverified — needs one green post-rename CI run | `947e3f1ace`, `f6aa519afe` |
-| 0.5 | Release pipeline | not started | — |
+| 0.3 | Rename to Apex Code | **done** — Linux/macOS green post-rename; Windows remains characterised advisory | `947e3f1ace`, `f6aa519afe` |
+| 0.5 | Release pipeline | next | — |
 | 0.6 | Session scrubber | not started | — |
 | 0.7 | Corpus fixtures | not started | — |
 | 0.8 | Replay runner | not started | — |
@@ -263,6 +263,13 @@ separate row, so Task 0.2's baseline is not confounded by it.
 ```bash
 git commit -am "refactor: rename forked packages to apex-code, config dir to ~/.apex-code"
 ```
+
+**Verified 2026-08-09.** CI run
+[`31300453521`](https://github.com/Fchery87/apex-code/actions/runs/31300453521)
+passed the frozen-package gate and completed green after the rename. Linux and macOS
+passed Build, Check, and the Apex-owned test suites. Windows retained the same advisory
+inherited failures recorded by Task 0.4; Task 0.3 introduced no new required-leg
+failure.
 
 ---
 
