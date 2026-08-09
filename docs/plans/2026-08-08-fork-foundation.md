@@ -4,7 +4,7 @@
 > unlicensed sources) applies to every task here. Work test-first where a task has a
 > test; several infrastructure tasks legitimately do not, and say so.
 
-**Status:** in progress — 0.1, 0.2, 0.4 landed; 0.4 pending its first green CI run ·
+**Status:** in progress — 0.1, 0.2 landed; 0.4 repair in progress after four red CI runs ·
 **Date:** 2026-08-08 · **Spec:** `docs/specs/2026-08-08-fork-foundation.md`
 
 **Goal:** A working fork of `pi-coding-agent` and `pi-agent-core` that builds, tests,
@@ -27,8 +27,8 @@ through the existing registration API — no changes below the ADR 0001 line.
 | --- | --- | --- | --- |
 | 0.1 | Claim the name | **done** | `916bc83c2`, `ed07bf261` |
 | 0.2 | Fork with history + merge rehearsal | **done** | `c81a7091a`, `cd8d84fe5`, `124f506e2` |
-| 0.4 | CI + frozen-package assertion | **done**, unverified — needs one green run | `fe0022498` |
-| 0.3 | Rename to Apex Code | next | — |
+| 0.4 | CI + frozen-package assertion | **in progress** — boundary and build pass; check/test baseline still red | `fe0022498`, `9d5e7f0ad` |
+| 0.3 | Rename to Apex Code | blocked on green 0.4 baseline | — |
 | 0.5 | Release pipeline | not started | — |
 | 0.6 | Session scrubber | not started | — |
 | 0.7 | Corpus fixtures | not started | — |
@@ -267,6 +267,14 @@ git commit -am "refactor: rename forked packages to apex-code, config dir to ~/.
 ---
 
 ## Task 0.4 — CI
+
+**Current verification — 2026-08-09.** The workflow has run four times, and all four
+runs were red. The frozen-package assertion and builds pass; the latest run failed in
+`npm run check` because `package-lock.json` still referenced the deleted `evals` and
+`session-backends` workspaces, so the generated-lock checks tried to open manifests
+that no longer exist. Task 0.4 remains in progress until that derived state is repaired
+and one Linux Build/Check/Test leg is green. macOS and Windows remain advisory until
+Task 0.10 characterises their inherited baseline, per the amended roadmap criterion.
 
 **Files:** Create `.github/workflows/ci.yml`.
 
