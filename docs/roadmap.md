@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phase 0 in progress (0.1, 0.2, 0.4 landed) · **Created:** 2026-08-08 · **Last updated:** 2026-08-09
+**Status:** Active — Phase 0 in progress (0.1–0.4 landed) · **Created:** 2026-08-08 · **Last updated:** 2026-08-09
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -77,7 +77,7 @@ capable and measurably worse.
 
 | Phase | Name | State | Spec | Plan |
 | --- | --- | --- | --- | --- |
-| 0 | Fork foundation | **in progress** — 3 of 10 tasks | [spec](specs/2026-08-08-fork-foundation.md) | [plan](plans/2026-08-08-fork-foundation.md) |
+| 0 | Fork foundation | **in progress** — 4 of 10 tasks | [spec](specs/2026-08-08-fork-foundation.md) | [plan](plans/2026-08-08-fork-foundation.md) |
 | 1 | Provider & model layer | not started | — | — |
 | 2 | Permissions & sandbox | not started | — | — |
 | 3 | Context engineering | not started | — | — |
