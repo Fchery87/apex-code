@@ -269,11 +269,14 @@ git commit -am "refactor: rename forked packages to apex-code, config dir to ~/.
 ## Task 0.4 — CI
 
 **Current verification — 2026-08-09.** The workflow has run four times, and all four
-runs were red. The frozen-package assertion and builds pass; the latest run failed in
-`npm run check` because `package-lock.json` still referenced the deleted `evals` and
-`session-backends` workspaces, so the generated-lock checks tried to open manifests
-that no longer exist. Task 0.4 remains in progress until that derived state is repaired
-and one Linux Build/Check/Test leg is green. macOS and Windows remain advisory until
+runs were red. The frozen-package assertion and builds passed; the first four runs
+failed in `npm run check` because `package-lock.json` still referenced the deleted
+`evals` and `session-backends` workspaces. Run 5 confirmed that repair: Build and Check
+passed on all three platforms, then Test exposed two separate issues. The root test
+command still ran frozen-package suites, including an upstream `pi-ai` failure we may
+not repair, and Windows exposed inherited platform failures in forked-package tests.
+Task 0.4 remains in progress until Linux's owned-package test leg is green. macOS and
+Windows remain advisory until
 Task 0.10 characterises their inherited baseline, per the amended roadmap criterion.
 
 **Files:** Create `.github/workflows/ci.yml`.
