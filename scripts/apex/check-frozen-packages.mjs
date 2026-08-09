@@ -27,8 +27,16 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 /**
  * Consumed packages. Everything under packages/ that Apex Code does NOT fork.
+ *
  * Forked packages — coding-agent, agent — are deliberately absent: they are
  * expected to diverge, and that divergence is what ADR 0003 measures.
+ *
+ * `evals` and `session-backends` were deleted from the tree rather than frozen.
+ * Both depended on the two forked packages, so the Task 0.3 rename would have
+ * left them pointing at names that no longer exist in the workspace — and npm
+ * would have quietly resolved those from the registry instead, building them
+ * against UPSTREAM's published packages while CI stayed green. Neither is used
+ * by Apex Code. See docs/upstream-log.md.
  */
 const FROZEN = [
   "packages/ai",
@@ -36,8 +44,6 @@ const FROZEN = [
   "packages/client",
   "packages/protocol",
   "packages/server",
-  "packages/session-backends",
-  "packages/evals",
   "packages/telemetry",
 ];
 

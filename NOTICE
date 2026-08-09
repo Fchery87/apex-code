@@ -24,9 +24,12 @@ each is byte-identical to the upstream tag recorded in docs/upstream-log.md, and
 published Apex Code artifacts depend on the @earendil-works/* releases from npm
 rather than on these in-tree copies.
 
-  packages/ai        packages/protocol   packages/session-backends
-  packages/tui       packages/server     packages/evals
+  packages/ai        packages/protocol
+  packages/tui       packages/server
   packages/client    packages/telemetry
+
+packages/evals and packages/session-backends were removed from this fork; they
+depended on the two packages Apex Code renames.
 
 The fork point and every subsequent upstream merge are recorded in
 docs/upstream-log.md.
