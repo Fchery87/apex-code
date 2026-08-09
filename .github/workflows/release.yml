@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish tagged npm release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: npm
+    env:
+      # Bootstraps the first publish. After both npm packages exist, configure
+      # release.yml as their trusted publisher; npm then prefers short-lived OIDC.
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Validate tag and package identity
+        id: release
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          version="$(node scripts/apex/validate-release-tag.mjs "${GITHUB_REF_NAME}")"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Install
+        run: npm ci --ignore-scripts
+
+      - name: Check frozen package boundary
+        run: node scripts/apex/check-frozen-packages.mjs
+
+      - name: Build
+        run: npm run build
+
+      - name: Check
+        run: npm run check
+
+      - name: Test
+        run: npm test
+
+      - name: Validate package contents
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm pack --dry-run --ignore-scripts --json --workspace packages/agent >/dev/null
+          npm pack --dry-run --ignore-scripts --json --workspace packages/coding-agent >/dev/null
+
+      # The core is an exact dependency of the CLI, so it must become visible
+      # in the registry before apex-code is published.
+      - name: Publish Apex Code agent core
+        working-directory: packages/agent
+        run: npm publish --access public --provenance --tag next --ignore-scripts
+
+      - name: Wait for agent core registry visibility
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+          for attempt in {1..30}; do
+            if [[ "$(npm view "apex-code-agent-core@${VERSION}" version 2>/dev/null || true)" == "${VERSION}" ]]; then
+              exit 0
+            fi
+            if [[ "${attempt}" == 30 ]]; then
+              echo "apex-code-agent-core@${VERSION} did not become visible within five minutes" >&2
+              exit 1
+            fi
+            sleep 10
+          done
+
+      - name: Publish Apex Code CLI
+        working-directory: packages/coding-agent
+        run: npm publish --access public --provenance --tag next --ignore-scripts
+
+      - name: Verify clean registry install
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+          scratch="$(mktemp -d)"
+          trap 'rm -rf -- "$scratch"' EXIT
+          cd "$scratch"
+          npm init --yes >/dev/null
+          for attempt in {1..30}; do
+            if npm install --global --prefix "$scratch/global" --ignore-scripts "apex-code@${VERSION}"; then
+              break
+            fi
+            if [[ "${attempt}" == 30 ]]; then
+              echo "apex-code@${VERSION} did not install within five minutes" >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          [[ "$("$scratch/global/bin/apex-code" --version)" == "${VERSION}" ]]

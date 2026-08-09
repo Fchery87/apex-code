@@ -1,18 +1,12 @@
 # Security Policy
 
-> **Pre-alpha.** Apex Code is not yet installable and has no released version. This policy
-> describes the intended posture and is hardened in Phase 9.
->
-> **UNRESOLVED — must be set before the first public release:** the reporting
-> address below is a placeholder. Decide whether to use a dedicated alias, GitHub
-> private vulnerability reporting, or a personal address, and replace it. Do not
-> publish this file with the placeholder intact.
+> **Pre-alpha.** Apex Code is installable for release-path validation, but its security
+> posture is not hardened until Phase 9.
 
 ## Reporting a vulnerability
 
-Report privately. Do not open a public issue.
-
-- **Contact:** `<SECURITY-CONTACT-TBD>`
+Report privately through [GitHub private vulnerability reporting](https://github.com/Fchery87/apex-code/security/advisories/new).
+Do not open a public issue.
 - Include what you did, what happened, what you expected, and the version or commit.
 - Expect an acknowledgement within a few days. We will tell you whether it is in
   scope, and coordinate disclosure timing with you if it is.
