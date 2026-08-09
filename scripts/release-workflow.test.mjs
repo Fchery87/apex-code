@@ -33,6 +33,8 @@ test("release workflow validates tag identity and clean-installs the published C
 
 	assert.match(commands, /node scripts\/apex\/validate-release-tag\.mjs/);
 	assert.match(commands, /npm ci --ignore-scripts/);
+	assert.match(commands, /apt-get install .*fd-find ripgrep/s);
+	assert.match(commands, /ln -s .*fdfind.*\/usr\/local\/bin\/fd/);
 	assert.match(commands, /npm test/);
 	assert.match(commands, /npm install --global .*--ignore-scripts .*apex-code@/);
 	assert.match(commands, /apex-code" --version/);
