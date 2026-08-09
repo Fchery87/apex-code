@@ -1,15 +1,15 @@
 {
-	"name": "@earendil-works/pi-coding-agent",
+	"name": "apex-code",
 	"version": "0.84.1",
 	"lockfileVersion": 3,
 	"requires": true,
 	"packages": {
 		"": {
-			"name": "@earendil-works/pi-coding-agent",
+			"name": "apex-code",
 			"version": "0.84.1",
 			"license": "MIT",
 			"dependencies": {
-				"@earendil-works/pi-agent-core": "^0.84.1",
+				"apex-code-agent-core": "0.84.1",
 				"@earendil-works/pi-ai": "^0.84.1",
 				"@earendil-works/pi-client": "^0.84.1",
 				"@earendil-works/pi-protocol": "^0.84.1",
@@ -35,7 +35,7 @@
 				"@mariozechner/clipboard": "0.3.9"
 			},
 			"bin": {
-				"pi": "dist/cli.js"
+				"apex-code": "dist/cli.js"
 			},
 			"engines": {
 				"node": ">=22.19.0"
@@ -474,22 +474,6 @@
 			"license": "MIT",
 			"engines": {
 				"node": ">=6.9.0"
-			}
-		},
-		"node_modules/@earendil-works/pi-agent-core": {
-			"version": "0.84.1",
-			"resolved": "https://registry.npmjs.org/@earendil-works/pi-agent-core/-/pi-agent-core-0.84.1.tgz",
-			"license": "MIT",
-			"dependencies": {
-				"@earendil-works/pi-ai": "^0.84.1",
-				"@earendil-works/pi-telemetry": "^0.84.1",
-				"diff": "8.0.4",
-				"ignore": "7.0.5",
-				"typebox": "1.3.7",
-				"yaml": "2.9.0"
-			},
-			"engines": {
-				"node": ">=22.19.0"
 			}
 		},
 		"node_modules/@earendil-works/pi-ai": {
@@ -1011,6 +995,22 @@
 			"license": "MIT",
 			"engines": {
 				"node": ">= 14"
+			}
+		},
+		"node_modules/apex-code-agent-core": {
+			"version": "0.84.1",
+			"resolved": "https://registry.npmjs.org/apex-code-agent-core/-/apex-code-agent-core-0.84.1.tgz",
+			"license": "MIT",
+			"dependencies": {
+				"@earendil-works/pi-ai": "^0.84.1",
+				"@earendil-works/pi-telemetry": "^0.84.1",
+				"diff": "8.0.4",
+				"ignore": "7.0.5",
+				"typebox": "1.3.7",
+				"yaml": "2.9.0"
+			},
+			"engines": {
+				"node": ">=22.19.0"
 			}
 		},
 		"node_modules/balanced-match": {

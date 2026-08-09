@@ -1,11 +1,11 @@
-# @earendil-works/pi-agent-core
+# apex-code-agent-core
 
 Stateful agent with tool execution and event streaming. Built on `@earendil-works/pi-ai`.
 
 ## Installation
 
 ```bash
-npm install @earendil-works/pi-agent-core
+npm install apex-code-agent-core
 ```
 
 ### SQLite session backends
@@ -15,7 +15,7 @@ The SQLite session backend and the `node:sqlite` adapter live in a separate pack
 ## Quick Start
 
 ```typescript
-import { Agent } from "@earendil-works/pi-agent-core";
+import { Agent } from "apex-code-agent-core";
 import { createModels } from "@earendil-works/pi-ai";
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 
@@ -378,7 +378,7 @@ Follow-up messages are checked only when there are no more tool calls and no ste
 Extend `AgentMessage` via declaration merging:
 
 ```typescript
-declare module "@earendil-works/pi-agent-core" {
+declare module "apex-code-agent-core" {
   interface CustomAgentMessages {
     notification: { role: "notification"; text: string; timestamp: number };
   }
@@ -460,7 +460,7 @@ Return `terminate: true` from `execute()`, a blocked `beforeToolCall`, or `after
 For browser apps that proxy through a backend:
 
 ```typescript
-import { Agent, streamProxy } from "@earendil-works/pi-agent-core";
+import { Agent, streamProxy } from "apex-code-agent-core";
 
 const agent = new Agent({
   streamFn: (model, context, options) =>
@@ -477,7 +477,7 @@ const agent = new Agent({
 For direct control without the Agent class:
 
 ```typescript
-import { agentLoop, agentLoopContinue } from "@earendil-works/pi-agent-core";
+import { agentLoop, agentLoopContinue } from "apex-code-agent-core";
 
 const context: AgentContext = {
   systemPrompt: "You are helpful.",

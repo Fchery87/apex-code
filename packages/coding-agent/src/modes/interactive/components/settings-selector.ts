@@ -1,4 +1,3 @@
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { Transport } from "@earendil-works/pi-ai";
 import {
 	type Component,
@@ -13,6 +12,7 @@ import {
 	Spacer,
 	Text,
 } from "@earendil-works/pi-tui";
+import type { ThinkingLevel } from "apex-code-agent-core";
 import { formatHttpIdleTimeoutMs, HTTP_IDLE_TIMEOUT_CHOICES } from "../../../core/http-dispatcher.ts";
 import type {
 	DefaultProjectTrust,
