@@ -28,7 +28,7 @@ through the existing registration API — no changes below the ADR 0001 line.
 | 0.1 | Claim the name | **done** | `916bc83c2`, `ed07bf261` |
 | 0.2 | Fork with history + merge rehearsal | **done** | `c81a7091a`, `cd8d84fe5`, `124f506e2` |
 | 0.4 | CI + frozen-package assertion | **done** — Linux and macOS green; Windows characterised advisory | `fe0022498`, `9d5e7f0ad`, `990e1805d`, `707dd0440` |
-| 0.3 | Rename to Apex Code | **done**, unverified — needs one green post-rename CI run | `947e3f1ace` |
+| 0.3 | Rename to Apex Code | **done**, unverified — needs one green post-rename CI run | `947e3f1ace`, `f6aa519afe` |
 | 0.5 | Release pipeline | not started | — |
 | 0.6 | Session scrubber | not started | — |
 | 0.7 | Corpus fixtures | not started | — |
