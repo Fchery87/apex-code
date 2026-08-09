@@ -44,14 +44,27 @@ todo.md
 collect.sh
 
 # ─── Apex Code ───────────────────────────────────────────────
-# Local runtime state
-.apex-code/
+# NOTE: do NOT add a blanket `.apex-code/` rule.
+#
+# `<project>/.apex-code/` is the project-local config directory — extensions,
+# prompts, skills, settings — and it is meant to be VERSIONED. Upstream tracks
+# 12 files in its equivalent `.pi/` for exactly this reason. A blanket ignore
+# would silently make the whole directory unaddable after the Task 0.3 rename.
+# Ignore ephemeral state inside it by path, the way upstream does, and nothing
+# more. The user's global state lives at `~/.apex-code/`, outside any repo.
+.apex-code/hf-sessions/
+.apex-code/hf-sessions-backup/
+.apex-code_config/
+apex-code-*.html
 
 # Secrets — never commit. See AGENTS.md § Secrets.
 .env.*
 !.env.example
 *.pem
 *.key
+*credentials.json
+auth.json
 
 # Test / coverage
 .vitest/
+*.heapsnapshot
