@@ -127,7 +127,7 @@ two consecutive runs on the same input.
 
 | Criterion | State |
 | --- | --- |
-| CI green on three platforms | **partial.** Five runs completed. Run 5 passed the frozen-package gate, Build, and Check on all three platforms, then failed Test: the root command still executed frozen-package suites (including a known upstream `pi-ai` failure), while Windows also exposed inherited forked-package failures. CI is being narrowed to owned-package tests; frozen packages remain enforced by byte identity. Linux is the required gate; macOS and Windows are advisory until Task 0.10 sets their baseline, since upstream CIs Linux only. The criterion is amended accordingly: *Linux green, macOS and Windows characterised.* |
+| CI green on three platforms | **met as amended.** Run [`31298112668`](https://github.com/Fchery87/apex-code/actions/runs/31298112668) passed the frozen-package gate and completed green. Linux and macOS passed Build, Check, and Apex-owned tests. Windows passed Build and Check; its advisory Test step failed on inherited platform behavior, establishing the baseline Task 0.10 must characterise. The amended criterion is: *Linux green, macOS and Windows characterised.* |
 | Upstream release merged, hunk count recorded | **met, and the criterion was wrong.** `v0.84.0` → `v0.84.1` merged: 1 conflicted hunk, 0 in forked paths. But at fork+0 divergence a hunk count is zero by construction and cannot found a ceiling. ADR 0003 was amended to move the ceiling basis past Phase 2; the honest Phase 0 metric is upstream churn — 57 files / ~2,000 lines per patch release. |
 | Replay corpus deterministic across two runs | **not started.** Tasks 0.6–0.9. Still the highest-leverage item in the phase and the one most likely to be skipped as "not real work." |
 
