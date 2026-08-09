@@ -1,6 +1,6 @@
 {
 	"name": "apex-code",
-	"version": "0.84.1",
+	"version": "0.0.1-alpha.0",
 	"description": "Coding agent CLI with read, bash, edit, write tools and session management",
 	"type": "module",
 	"piConfig": {
@@ -44,7 +44,7 @@
 		"prepublishOnly": "npm run clean && npm run build && npm run shrinkwrap"
 	},
 	"dependencies": {
-		"apex-code-agent-core": "0.84.1",
+		"apex-code-agent-core": "0.0.1-alpha.0",
 		"@earendil-works/pi-ai": "^0.84.1",
 		"@earendil-works/pi-client": "^0.84.1",
 		"@earendil-works/pi-protocol": "^0.84.1",
@@ -100,7 +100,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/earendil-works/pi.git",
+		"url": "git+https://github.com/Fchery87/apex-code.git",
 		"directory": "packages/coding-agent"
 	},
 	"engines": {

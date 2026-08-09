@@ -2,10 +2,16 @@
 
 A provider-agnostic agentic coding harness. Forked from [Pi](https://github.com/earendil-works/pi).
 
-> **Status: pre-alpha, Phase 0.** Nothing is installable yet. The roadmap is real;
-> the code is not. See [`docs/roadmap.md`](docs/roadmap.md) for what exists and what
-> is next. Everything below marked *(planned)* describes intent, not current
-> behavior — this section will shrink as phases land.
+> **Status: pre-alpha, Phase 0.** The forked CLI is installable for release-path
+> validation; the differentiated Apex Code features below remain planned. See
+> [`docs/roadmap.md`](docs/roadmap.md) for what exists and what is next.
+
+Install the prerelease without moving npm's stable `latest` tag:
+
+```bash
+npm install --global apex-code@next
+apex-code --version
+```
 
 ## Why
 

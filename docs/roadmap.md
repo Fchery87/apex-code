@@ -102,8 +102,7 @@ exit criterion is unmeasurable).
 **Scope.**
 - **Task 0.1 — claim the name.** ✅ Done. Repo `apex-code`, binary `apex-code`, config
   dir `~/.apex-code/`, npm `apex-code` (unscoped, verified free), MIT license + Pi
-  attribution, `CONTRIBUTING`. **The npm name is verified but not yet published** —
-  it is claimable by anyone until Task 0.5.
+  attribution, `CONTRIBUTING`. Task 0.5 claims it with the first pre-alpha publication.
 - **Task 0.2 — fork.** ✅ Done. Full-tree graft at `v0.84.0`, rehearsal merge to
   `v0.84.1`. Consumed packages frozen and CI-asserted (ADR 0001, amended).
 - Build, typecheck, lint, test, and a release pipeline that produces an installable

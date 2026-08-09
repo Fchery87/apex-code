@@ -20,9 +20,11 @@ describe("Apex Code identity", () => {
 		const binaryScript = readFileSync(resolve(import.meta.dirname, "../../../scripts/build-binaries.sh"), "utf8");
 
 		expect(codingAgent.name).toBe("apex-code");
+		expect(codingAgent.version).toBe("0.0.1-alpha.0");
 		expect(codingAgent.bin).toEqual({ "apex-code": "dist/cli.js" });
-		expect(codingAgent.dependencies["apex-code-agent-core"]).toBe("0.84.1");
+		expect(codingAgent.dependencies["apex-code-agent-core"]).toBe("0.0.1-alpha.0");
 		expect(agentCore.name).toBe("apex-code-agent-core");
+		expect(agentCore.version).toBe("0.0.1-alpha.0");
 		expect(binaryScript).toContain("apex-code-$platform.tar.gz");
 		expect(binaryScript).toContain("apex-code-$platform.zip");
 	});

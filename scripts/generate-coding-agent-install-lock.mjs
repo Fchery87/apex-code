@@ -296,11 +296,11 @@ function validateGeneratedFiles(installerPackageJson, installLock, internalNames
 			errors.push(`${lockPath || "root"} contains dev/extraneous metadata`);
 		}
 		if (
-			(packageName?.startsWith(internalPackagePrefix) ||
-				(packageName !== undefined && internalPackageNames.has(packageName))) &&
+			packageName !== undefined &&
+			internalPackageNames.has(packageName) &&
 			entry.version !== installerPackageJson.version
 		) {
-			errors.push(`${lockPath} internal package version ${entry.version} does not match ${installerPackageJson.version}`);
+			errors.push(`${lockPath} Apex-owned package version ${entry.version} does not match ${installerPackageJson.version}`);
 		}
 		if (entry.hasInstallScript) {
 			if (!packageName || !entry.version) {
