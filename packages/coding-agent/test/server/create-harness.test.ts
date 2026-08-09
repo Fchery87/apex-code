@@ -1,3 +1,5 @@
+import { createModels } from "@earendil-works/pi-ai";
+import { getModel } from "@earendil-works/pi-ai/compat";
 import {
 	AgentHarness,
 	type AgentHarnessOptions,
@@ -7,10 +9,8 @@ import {
 	type Result,
 	Session,
 	type ShellExecOptions,
-} from "@earendil-works/pi-agent-core";
-import { NodeExecutionEnv } from "@earendil-works/pi-agent-core/node";
-import { createModels } from "@earendil-works/pi-ai";
-import { getModel } from "@earendil-works/pi-ai/compat";
+} from "apex-code-agent-core";
+import { NodeExecutionEnv } from "apex-code-agent-core/node";
 import { Type } from "typebox";
 import { describe, expect, test, vi } from "vitest";
 import {

@@ -455,7 +455,7 @@ describe("ToolExecutionComponent parity", () => {
 		},
 		{
 			title: "AGENTS.md",
-			path: join(process.cwd(), ".pi", "AGENTS.md"),
+			path: join(process.cwd(), ".apex-code", "AGENTS.md"),
 			content: "Hidden resource instructions",
 			compact: "read resource .pi/AGENTS.md",
 			hidden: "Hidden resource instructions",
@@ -463,7 +463,7 @@ describe("ToolExecutionComponent parity", () => {
 		},
 		{
 			title: "AGENTS.override.md",
-			path: join(process.cwd(), ".pi", "AGENTS.override.md"),
+			path: join(process.cwd(), ".apex-code", "AGENTS.override.md"),
 			content: "Hidden override instructions",
 			compact: "read resource .pi/AGENTS.override.md",
 			hidden: "Hidden override instructions",
