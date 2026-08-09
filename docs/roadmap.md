@@ -76,7 +76,7 @@ capable and measurably worse.
 
 | Phase | Name | State | Spec | Plan |
 | --- | --- | --- | --- | --- |
-| 0 | Fork foundation | not started | — | — |
+| 0 | Fork foundation | **in progress** — 3 of 10 tasks | [spec](specs/2026-08-08-fork-foundation.md) | [plan](plans/2026-08-08-fork-foundation.md) |
 | 1 | Provider & model layer | not started | — | — |
 | 2 | Permissions & sandbox | not started | — | — |
 | 3 | Context engineering | not started | — | — |
@@ -121,6 +121,18 @@ exit criterion is unmeasurable).
 **Exit criterion.** CI green on three platforms. One upstream release merged with the
 hunk count recorded. Replay corpus runs headless and produces identical metrics across
 two consecutive runs on the same input.
+
+**Progress against it** (verified, not asserted — see `docs/upstream-log.md`):
+
+| Criterion | State |
+| --- | --- |
+| CI green on three platforms | **partial.** Workflow written (`fe0022498`), never run. Linux is the required gate; macOS and Windows are advisory until Task 0.10 sets their baseline, since upstream CIs Linux only. The criterion is amended accordingly: *Linux green, macOS and Windows characterised.* |
+| Upstream release merged, hunk count recorded | **met, and the criterion was wrong.** `v0.84.0` → `v0.84.1` merged: 1 conflicted hunk, 0 in forked paths. But at fork+0 divergence a hunk count is zero by construction and cannot found a ceiling. ADR 0003 was amended to move the ceiling basis past Phase 2; the honest Phase 0 metric is upstream churn — 57 files / ~2,000 lines per patch release. |
+| Replay corpus deterministic across two runs | **not started.** Tasks 0.6–0.9. Still the highest-leverage item in the phase and the one most likely to be skipped as "not real work." |
+
+Two criteria above are recorded as *amended* rather than ticked. Task 0.10 closes this
+phase against the amended wording, not the original — a criterion that turned out to be
+unmeasurable is corrected on the record, never quietly marked done.
 
 **Risks.** The corpus is the task most likely to be skipped as "not real work." It is
 the highest-leverage item in the phase. Sessions also carry live API keys and repo

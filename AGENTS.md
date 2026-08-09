@@ -72,6 +72,31 @@ Four document types, each with a different lifecycle. Put content in the right o
 - Do not write specs or plans for future phases. They get written when the previous
   phase exits, because they would otherwise be wrong by the time they are read.
 
+### Recording progress
+
+Two places, and only two. Do not add a third — a `PROGRESS.md` would immediately
+disagree with both.
+
+- **The plan's task table** is the status board: state plus the real commit SHA for
+  every finished task. Update it in the same commit that finishes the task, not later.
+- **The roadmap's phase table** carries phase-level state and links to the live spec
+  and plan.
+
+Three rules that come from having gotten this wrong:
+
+1. **Verify a SHA before writing it down.** This repo's history was rewritten once, on
+   2026-08-08, which killed every hash recorded before it. Run `git cat-file -t <sha>`;
+   if it fails, the hash predates the rewrite and must be found again by commit subject.
+2. **Mark a task done only when it is verified**, and say what is missing when it is
+   not. "Done, unverified — needs one green CI run" is a real state and is more useful
+   than either "done" or "not started".
+3. **When work happens out of order, fix the order — don't just annotate it.** If a
+   task ran early because the documented sequence was wrong, reorder the table and
+   record why in an "Order changes" section. A note saying "we did this early" teaches
+   nothing; a corrected sequence stops the next person repeating the mistake. Task
+   numbers are identifiers, never a sequence — renumbering breaks references in docs
+   and in pushed commit messages.
+
 ## Tools
 
 Every tool declares a `contract` — capabilities, permission grammar, context
