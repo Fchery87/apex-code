@@ -150,8 +150,25 @@ git commit -m "chore: fork upstream at <tag>, add merge script and upstream log"
 
 ## Task 0.3 — Rename to Apex Code
 
+> **Do not rename directories.** `packages/coding-agent` and `packages/agent` keep
+> their upstream paths permanently. Change the npm names, the `bin` entry, the config
+> directory, and session paths — nothing else. Relocating 634 files would make every
+> future merge depend on rename detection against an upstream that moves 57 files per
+> patch release. See the spec's non-goals and ADR 0001.
+
 **Files:** Modify `packages/*/package.json`, binary name, config-directory constant,
 session path construction.
+
+**Name mapping:**
+
+| Directory (unchanged) | npm name (changes) |
+| --- | --- |
+| `packages/coding-agent` | `@earendil-works/pi-coding-agent` → `apex-code` |
+| `packages/agent` | `@earendil-works/pi-agent-core` → `apex-code-agent-core` |
+
+Consumed packages (`ai`, `tui`, `client`, `protocol`) keep their upstream names and
+are resolved from npm in published artifacts. They are frozen — the CI assertion from
+Task 0.4 fails the build if they differ from the upstream tag.
 
 **Step 1 — find every identity surface** before changing any of it:
 
@@ -163,7 +180,7 @@ grep -rn '"\.pi"\|~/\.pi\|piConfig\|\bpi\b' --include='*.json' --include='*.ts' 
 property: state goes to `~/.apex-code/`, not `~/.pi/`.
 
 ```ts
-// packages/apex-code/src/core/__tests__/config-dir.test.ts
+// packages/coding-agent/src/core/__tests__/config-dir.test.ts
 import { describe, expect, it } from "vitest";
 import { resolveConfigDir } from "../config-dir.js";
 
@@ -180,7 +197,7 @@ describe("resolveConfigDir", () => {
 a `.pi` path), not a typo:
 
 ```bash
-npx vitest run packages/apex-code/src/core/__tests__/config-dir.test.ts
+npx vitest run packages/coding-agent/src/core/__tests__/config-dir.test.ts
 ```
 
 **Step 4 — apply the rename.** Package names, `bin` entry, config-directory constant,
@@ -190,7 +207,7 @@ import reordering. Every cosmetic edit here is permanent merge cost (ADR 0001).
 **Step 5 — verify.**
 
 ```bash
-npx vitest run packages/apex-code/src/core/__tests__/config-dir.test.ts   # PASS
+npx vitest run packages/coding-agent/src/core/__tests__/config-dir.test.ts   # PASS
 npm run typecheck
 grep -rn '~/\.pi' packages/ --include='*.ts' | grep -v node_modules  # expect: no output
 ```
@@ -329,7 +346,7 @@ git commit -m "test: scrubbed replay corpus with enforced hygiene gate"
 
 ## Task 0.8 — Replay runner
 
-**Files:** Create `packages/apex-code/src/testing/replay/{runner.ts,recorded-provider.ts}`
+**Files:** Create `packages/coding-agent/src/testing/replay/{runner.ts,recorded-provider.ts}`
 and tests.
 
 **Step 1 — write the failing test.**
@@ -361,7 +378,7 @@ git commit -m "feat: offline deterministic replay runner"
 This task produces the instrument every later phase gate reads. **It is the reason
 Phase 0 exists.**
 
-**Files:** Create `packages/apex-code/src/testing/replay/metrics.ts` and tests.
+**Files:** Create `packages/coding-agent/src/testing/replay/metrics.ts` and tests.
 
 **Step 1 — write the determinism test first.**
 

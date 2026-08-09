@@ -78,6 +78,18 @@ So the consumed packages are present in the repository and **frozen**:
   preserved verbatim at `LICENSE.upstream` and the arrangement is described in
   `NOTICE`.
 
+**Directory paths are never renamed.** The forked packages keep their upstream paths —
+`packages/coding-agent` and `packages/agent` — permanently. Only the npm names, the
+binary, and the config directory become Apex Code's. Relocating `packages/coding-agent`
+to `packages/apex-code` would move 634 files and make every future merge depend on
+git's rename detection across an entire package, against an upstream measured at 57
+changed files per patch release. It is the most expensive change available and buys
+nothing a user can see: directory paths are internal, while the npm name and the
+binary are the identity users actually touch. This follows from the general rule above
+but is stated explicitly, because "tidy the paths to match the product name" is a
+reasonable-sounding request that would quietly cost more than every other decision in
+this ADR combined.
+
 The prohibition is unchanged and now enforced: a change needed inside a consumed
 package goes upstream as a contribution. A local patch converts a dependency into an
 unmanaged fork without anyone deciding to, and now it also breaks the build.

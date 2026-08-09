@@ -93,6 +93,15 @@ Three failure modes, each of which has already happened to comparable projects:
 - [ ] **No renaming or restructuring of forked internals** beyond what the package
       rename strictly requires. Every cosmetic change is permanent merge cost
       (ADR 0001, ADR 0003).
+- [ ] **Directory paths are NOT renamed.** `packages/coding-agent` and
+      `packages/agent` keep their upstream paths forever. Only the npm names, the
+      binary, and the config directory change. Renaming `packages/coding-agent` to
+      `packages/apex-code` would relocate 634 files and make every future merge
+      depend on git rename detection across the whole package — against an upstream
+      that moves 57 files per *patch* release. It is the single most expensive
+      change available to us, it buys nothing a user can see, and it is already
+      prohibited in principle by ADR 0001. Directory paths are internal; the npm
+      name and the binary are the identity users interact with.
 - [ ] **No trajectory-based model evaluation suite.** Deliberately declined: the
       predecessor project built one that called no model and fabricated its numbers,
       and deleted it. The replay corpus is the honest, affordable instrument.
@@ -105,13 +114,13 @@ Three failure modes, each of which has already happened to comparable projects:
 | Component | Change | Path |
 | --- | --- | --- |
 | Repo skeleton | Workspace with two forked packages; license, notice, docs | repo root |
-| `apex-code-agent-core` | Fork of `packages/agent`, renamed, `pi-ai` pinned | `packages/agent-core` |
-| `apex-code` | Fork of `packages/coding-agent`, renamed; config dir `~/.apex-code/`, binary `apex-code` | `packages/apex-code` |
+| `apex-code-agent-core` | Fork of `packages/agent`. npm name only; **directory path unchanged** | `packages/agent` |
+| `apex-code` | Fork of `packages/coding-agent`. npm name, binary `apex-code`, config dir `~/.apex-code/`; **directory path unchanged** | `packages/coding-agent` |
 | Upstream tracking | `upstream` git remote, merge script, hunk-count log | `scripts/upstream-merge.sh`, `docs/upstream-log.md` |
 | CI | typecheck, lint, test, build on three platforms | `.github/workflows/ci.yml` |
 | Release | Tagged publish producing an installable artifact | `.github/workflows/release.yml` |
 | Corpus scrubber | Redacts credentials, paths, hostnames from recorded sessions | `scripts/scrub-session.ts` |
-| Replay runner | Replays a corpus session offline, emits metrics as JSON | `packages/apex-code/src/testing/replay/` |
+| Replay runner | Replays a corpus session offline, emits metrics as JSON | `packages/coding-agent/src/testing/replay/` |
 | Metrics schema | Context tokens at turn N, system-prompt tokens, tool calls, cache hit rate, wall time, cost | same |
 
 **Fork mechanics.** Clone upstream with full history, add it as an `upstream` remote,

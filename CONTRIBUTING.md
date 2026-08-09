@@ -60,6 +60,11 @@ Apex Code forks `pi-coding-agent` and `pi-agent-core` and consumes `pi-ai` and `
   or restructuring a forked file raises the cost of every future merge. Gratuitous
   churn in forked code will be asked to be reverted, even when the change itself is
   an improvement.
+- **Never rename a directory under `packages/`.** They keep upstream's paths on
+  purpose — `packages/coding-agent` is the Apex Code package despite the name. The
+  npm name and the binary carry the product identity; the paths carry merge
+  compatibility with an upstream that changes ~57 files per patch release. PRs that
+  "fix" the paths will be closed (ADR 0001).
 - Genuine improvements to `pi-ai` or `pi-tui` should go upstream to Pi, not into a
   local patch.
 
