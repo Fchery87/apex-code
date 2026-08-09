@@ -22,7 +22,7 @@ through the existing registration API — no changes below the ADR 0001 line.
 | 0.1 Claim the name | **done** | 4b04781 |
 | 0.2 Fork with history + merge rehearsal | **done** | (this merge) |
 | 0.3 Rename to Apex Code | not started | — |
-| 0.4 CI (incl. frozen-package assertion) | not started | — |
+| 0.4 CI (incl. frozen-package assertion) | **done** (pending first green run) | — |
 | 0.5 Release pipeline | not started | — |
 | 0.6 Session scrubber | not started | — |
 | 0.7 Corpus fixtures | not started | — |
@@ -77,7 +77,7 @@ fossil — not worth a second rewrite to correct.
 No unit test. Verification is the recorded hunk count. **This task produces the
 number ADR 0003's ceiling is derived from — do not skip the rehearsal to save time.**
 
-**Files:** Create `docs/upstream-log.md`, `scripts/upstream-merge.sh`.
+**Files:** Create `docs/upstream-log.md`, `scripts/apex/upstream-merge.sh`.
 
 **Step 1 — confirm the real upstream remote.** `package.json` declares
 `github.com/earendil-works/pi`; published docs link to a `pi-mono` path. Resolve it
@@ -142,7 +142,7 @@ table. A synthetic rehearsal produces a synthetic baseline, which is worse than 
 **Step 7 — record it and commit.**
 
 ```bash
-git add docs/upstream-log.md scripts/upstream-merge.sh
+git add docs/upstream-log.md scripts/apex/upstream-merge.sh
 git commit -m "chore: fork upstream at <tag>, add merge script and upstream log"
 ```
 

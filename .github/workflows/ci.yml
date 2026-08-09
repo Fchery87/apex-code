@@ -10,31 +10,83 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  build-check-test:
+  # ── Gate 1: the ADR 0001 boundary ────────────────────────────────────────
+  # Apex Code is a full-tree graft, so the consumed Pi packages physically
+  # live in this repo and are editable by accident. That is the one real risk
+  # of the graft shape, and this job is what makes "do not patch consumed
+  # packages" a build failure rather than a comment.
+  #
+  # It runs first and standalone: it is seconds long, and a boundary violation
+  # should be reported as itself rather than as a confusing downstream failure.
+  frozen-packages:
+    name: Frozen packages match upstream
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v4
+        with:
+          # Full history + tags: the check diffs the working tree against the
+          # pinned upstream tag, which a shallow clone cannot resolve.
+          fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: node scripts/apex/check-frozen-packages.mjs
+
+  # ── Gate 2: build, lint, test ────────────────────────────────────────────
+  build-check-test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    # macOS and Windows are advisory until Task 0.10 establishes their baseline.
+    # Upstream CIs Linux only, so their state on the other two is unknown to us;
+    # making them required today would mean our first CI run is red for reasons
+    # that predate the fork. Task 0.10 flips them to required once we know.
+    continue-on-error: ${{ matrix.os != 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      - name: Install system dependencies
+      # Upstream's native deps (canvas/image handling) plus the tools the
+      # coding agent shells out to. Mirrors upstream's own CI.
+      - name: System dependencies (Linux)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev fd-find ripgrep
-          sudo ln -s $(which fdfind) /usr/local/bin/fd
+          sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev \
+            libgif-dev librsvg2-dev fd-find ripgrep
+          sudo ln -s "$(which fdfind)" /usr/local/bin/fd
 
-      - name: Install dependencies
+      - name: System dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cairo pango jpeg giflib librsvg fd ripgrep
+
+      - name: System dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ripgrep fd --no-progress -y
+
+      - name: Install
         run: npm ci --ignore-scripts
 
       - name: Build
         run: npm run build
 
+      # `check` is biome (lint + format, warnings are errors) plus upstream's
+      # pinned-dependency and TS-import guards. There is no separate typecheck
+      # script; the build typechecks.
       - name: Check
         run: npm run check
 

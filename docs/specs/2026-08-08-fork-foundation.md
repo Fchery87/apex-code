@@ -116,7 +116,7 @@ Three failure modes, each of which has already happened to comparable projects:
 | Repo skeleton | Workspace with two forked packages; license, notice, docs | repo root |
 | `apex-code-agent-core` | Fork of `packages/agent`. npm name only; **directory path unchanged** | `packages/agent` |
 | `apex-code` | Fork of `packages/coding-agent`. npm name, binary `apex-code`, config dir `~/.apex-code/`; **directory path unchanged** | `packages/coding-agent` |
-| Upstream tracking | `upstream` git remote, merge script, hunk-count log | `scripts/upstream-merge.sh`, `docs/upstream-log.md` |
+| Upstream tracking | `upstream` remote, merge script, pinned tag, hunk-count log | `scripts/apex/upstream-merge.sh`, `docs/upstream-log.md` |
 | CI | typecheck, lint, test, build on three platforms | `.github/workflows/ci.yml` |
 | Release | Tagged publish producing an installable artifact | `.github/workflows/release.yml` |
 | Corpus scrubber | Redacts credentials, paths, hostnames from recorded sessions | `scripts/scrub-session.ts` |
