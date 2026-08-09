@@ -28,6 +28,7 @@ be wrong by Phase 3.
 | Target bar | Distributable OSS product | Versioned releases, install/update, docs, **session-format back-compat**, security posture, opt-in telemetry. Constrains every phase, not just Phase 9. |
 | Thanos disposition | Evidence capture in core; SpecEngine + governance policy stay a bundled extension | Evidence recorded at the source (the bash tool knows its own exit code). Policy layer stays independently testable and switchable-off. |
 | License | MIT (Pi is MIT across all four packages; Thanos is already MIT) | Attribution required. Clean to distribute. |
+| npm coordinate | `@fchery87/apex` (scoped) | Unscoped `apex` is held by an abandoned 2022 stub (`v0.1.2`, "Work In Progress", untouched since 2022-06-13). It declares **no `bin`**, so the `apex` command name is unclaimed and the binary stays `apex`. Reversible until first publish (Task 0.5); free unscoped alternatives if the scope is unwanted: `apexcode`, `apex-harness`, `apex-agent`, `apexcli`. |
 
 ---
 
