@@ -4,7 +4,8 @@
 > unlicensed sources) applies to every task here. Work test-first where a task has a
 > test; several infrastructure tasks legitimately do not, and say so.
 
-**Status:** not started · **Date:** 2026-08-08 · **Spec:** `docs/specs/2026-08-08-fork-foundation.md`
+**Status:** in progress — 0.1, 0.2, 0.4 landed; 0.4 pending its first green CI run ·
+**Date:** 2026-08-08 · **Spec:** `docs/specs/2026-08-08-fork-foundation.md`
 
 **Goal:** A working fork of `pi-coding-agent` and `pi-agent-core` that builds, tests,
 releases, takes upstream changes, and can measure itself against a replay corpus.
@@ -17,18 +18,60 @@ through the existing registration API — no changes below the ADR 0001 line.
 **Tech stack:** TypeScript, Node ≥ 22.19.0, `tsgo` (build), `vitest` (test),
 `typebox` (schemas), GitHub Actions.
 
-| Task | State | Commit |
-| --- | --- | --- |
-| 0.1 Claim the name | **done** | 4b04781 |
-| 0.2 Fork with history + merge rehearsal | **done** | (this merge) |
-| 0.3 Rename to Apex Code | not started | — |
-| 0.4 CI (incl. frozen-package assertion) | **done** (pending first green run) | — |
-| 0.5 Release pipeline | not started | — |
-| 0.6 Session scrubber | not started | — |
-| 0.7 Corpus fixtures | not started | — |
-| 0.8 Replay runner | not started | — |
-| 0.9 Metrics + determinism gate | not started | — |
-| 0.10 Close the phase | not started | — |
+> **Execution order was changed during the phase.** 0.4 (CI) now runs before 0.3
+> (rename). The table below is in *execution* order, and the reason is recorded in
+> [Order changes](#order-changes) — read it before assuming the numbering is a
+> sequence.
+
+| # | Task | State | Commit(s) |
+| --- | --- | --- | --- |
+| 0.1 | Claim the name | **done** | `916bc83c2`, `ed07bf261` |
+| 0.2 | Fork with history + merge rehearsal | **done** | `c81a7091a`, `cd8d84fe5`, `124f506e2` |
+| 0.4 | CI + frozen-package assertion | **done**, unverified — needs one green run | `fe0022498` |
+| 0.3 | Rename to Apex Code | next | — |
+| 0.5 | Release pipeline | not started | — |
+| 0.6 | Session scrubber | not started | — |
+| 0.7 | Corpus fixtures | not started | — |
+| 0.8 | Replay runner | not started | — |
+| 0.9 | Metrics + determinism gate | not started | — |
+| 0.10 | Close the phase | not started | — |
+
+Supporting commits not owned by a single task: `7576d67fc` (initial doc set),
+`26dbfc35c` (history-rewrite record), `880a2e751` (`.gitignore` fix), `6bd29cb2c`
+(directory-path correction).
+
+> **SHA warning.** Commit hashes recorded before 2026-08-08's history rewrite are
+> dead. Task 0.1 previously cited `4b04781`, which no longer exists — it became
+> `916bc83c2`. If a hash in any Apex Code doc fails `git cat-file -t`, it predates the
+> rewrite; find its replacement by commit subject, not by hash.
+
+## Order changes
+
+**0.4 (CI) was executed before 0.3 (rename).** This was not a convenience; the
+original ordering was wrong.
+
+Task 0.3 changes package identity across the monorepo — `package.json` names, the
+`bin` entry, the config-directory constant, session path construction. It is the first
+task that edits many files at once, and it is precisely the task most likely to touch
+a **consumed** package by accident: a careless `grep`-and-replace over `packages/`
+hits `ai`, `tui`, `client`, and `protocol` as readily as the two forked ones. That is
+the ADR 0001 boundary violation the frozen-package gate exists to catch.
+
+Running the rename first would mean the gate's first real exercise is a diff that
+already contains the mistake, with no green baseline to compare against. Running CI
+first means the rename lands with the boundary already enforced and a known-clean
+starting point — the gate was verified passing on all 8 consumed packages at
+`fe0022498`, so any drift 0.3 introduces is unambiguously 0.3's.
+
+Two consequences worth carrying forward:
+
+- The general rule this instance illustrates: **a task that establishes a guard should
+  precede the first task capable of tripping it.** Task 0.5 (release pipeline) has the
+  same relationship to publishing that 0.4 has to the rename.
+- The plan's numbering is now non-sequential and stays that way. Renumbering would
+  break the references in this document, in `docs/upstream-log.md`, and in commit
+  messages already pushed. Numbers are identifiers, not an order — the same convention
+  ADR 0010 adopted for ADR numbers.
 
 ---
 
