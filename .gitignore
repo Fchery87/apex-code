@@ -1,27 +1,57 @@
-# Dependencies
 node_modules/
-
-# Build output
 dist/
+.artifacts/
+*.log
+.DS_Store
 *.tsbuildinfo
+# packages/*/node_modules/
+packages/*/dist/
+packages/*/dist-chrome/
+packages/*/dist-firefox/
+packages/ai/src/providers/data/
+packages/ai/src/providers/.model-generation-*/
+*.cpuprofile
 
-# Test / coverage
+# Environment
+.env
+
+# Editor files
+.vscode/
+.zed/
+.idea/
+.claude/
+*.swp
+*.swo
+*~
+
+# Package specific
+.npm/
 coverage/
-.vitest/
+.nyc_output/
+.pi_config/
+tui-debug.log
+compaction-results/
+.opencode/
+syntax.jsonl
+out.jsonl
+pi-*.html
+out.html
+packages/coding-agent/binaries/
+todo.md
+/plans/  # anchored: upstream had `plans/`, which would swallow docs/plans/
+.pi/hf-sessions/
+.pi/hf-sessions-backup/
+collect.sh
 
+# ─── Apex Code ───────────────────────────────────────────────
 # Local runtime state
 .apex-code/
-*.log
 
 # Secrets — never commit. See AGENTS.md § Secrets.
-.env
 .env.*
 !.env.example
 *.pem
 *.key
 
-# Editor / OS
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
+# Test / coverage
+.vitest/

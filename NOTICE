@@ -1,24 +1,32 @@
-Apex
+Apex Code
 Copyright (c) 2026 Fchery87
 
-This product includes software derived from and depending on Pi.
+This product is derived from, and redistributes, Pi.
 
 --------------------------------------------------------------------------------
 Pi
 https://github.com/earendil-works/pi
-Copyright (c) Earendil Works
+Copyright (c) 2025 Mario Zechner
 Licensed under the MIT License.
 
-Apex contains code derived from the following Pi packages:
+The upstream MIT license text is preserved verbatim at LICENSE.upstream.
 
-  @earendil-works/pi-coding-agent   (packages/coding-agent)  — forked
-  @earendil-works/pi-agent-core     (packages/agent)         — forked
+This repository contains the full Pi monorepo tree, grafted at v0.84.0 with
+history, so that upstream releases can be merged with ordinary git merges.
 
-Apex depends on, but does not modify or redistribute modified copies of, the
-following Pi packages:
+Apex Code MODIFIES and redistributes these packages:
 
-  @earendil-works/pi-ai             (packages/ai)
-  @earendil-works/pi-tui            (packages/tui)
+  packages/coding-agent   ->  apex-code
+  packages/agent          ->  apex-code-agent-core
+
+Apex Code redistributes these packages UNMODIFIED. They are frozen: CI asserts
+each is byte-identical to the upstream tag recorded in docs/upstream-log.md, and
+published Apex Code artifacts depend on the @earendil-works/* releases from npm
+rather than on these in-tree copies.
+
+  packages/ai        packages/protocol   packages/session-backends
+  packages/tui       packages/server     packages/evals
+  packages/client    packages/telemetry
 
 The fork point and every subsequent upstream merge are recorded in
 docs/upstream-log.md.
