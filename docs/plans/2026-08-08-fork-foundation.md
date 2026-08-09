@@ -4,7 +4,7 @@
 > unlicensed sources) applies to every task here. Work test-first where a task has a
 > test; several infrastructure tasks legitimately do not, and say so.
 
-**Status:** in progress — 0.1–0.4 verified; 0.5 landed pending external npm verification ·
+**Status:** in progress — 0.1–0.5 verified; 0.6 next ·
 **Date:** 2026-08-08 · **Spec:** `docs/specs/2026-08-08-fork-foundation.md`
 
 **Goal:** A working fork of `pi-coding-agent` and `pi-agent-core` that builds, tests,
@@ -29,7 +29,7 @@ through the existing registration API — no changes below the ADR 0001 line.
 | 0.2 | Fork with history + merge rehearsal | **done** | `c81a7091a`, `cd8d84fe5`, `124f506e2` |
 | 0.4 | CI + frozen-package assertion | **done** — Linux and macOS green; Windows characterised advisory | `fe0022498`, `9d5e7f0ad`, `990e1805d`, `707dd0440` |
 | 0.3 | Rename to Apex Code | **done** — Linux/macOS green post-rename; Windows remains characterised advisory | `947e3f1ace`, `f6aa519afe` |
-| 0.5 | Release pipeline | **done**, unverified — needs npm bootstrap token, tagged publish, clean install, and provider turn | `6cff1fdd72` |
+| 0.5 | Release pipeline | **done** — tagged publish, clean install, signatures, and provider turn verified | `6cff1fdd72`, `cf720a7d19` |
 | 0.6 | Session scrubber | not started | — |
 | 0.7 | Corpus fixtures | not started | — |
 | 0.8 | Replay runner | not started | — |
@@ -316,6 +316,16 @@ path that does not work.
 
 **Verify:** install the published artifact on a clean machine or container, run
 `apex-code --version`, and complete one turn against a configured provider.
+
+**Verified 2026-08-09.** Tag `v0.0.1-alpha.0` triggered
+[release run `31326901954`](https://github.com/Fchery87/apex-code/actions/runs/31326901954),
+which built, checked, tested, published `apex-code-agent-core` before `apex-code`, and
+clean-installed the CLI from npm. An independent scratch install reported
+`0.0.1-alpha.0`; `npm audit signatures` verified 144 registry signatures and 32
+attestations; and the installed artifact completed a Google provider turn with the
+expected response `apex-release-ok`. Both npm packages expose SLSA provenance. The
+bootstrap token remains only until trusted publishing is configured and proven on the
+next prerelease.
 
 **Commit:** `ci: tag-triggered release pipeline`
 
