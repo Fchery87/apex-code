@@ -27,10 +27,10 @@ Ten packages, not the four ADR 0001 was written against:
 | `packages/tui` | 91 | consumed |
 | `packages/client` | 23 | consumed — **not anticipated by ADR 0001** |
 | `packages/protocol` | 17 | consumed — **not anticipated by ADR 0001** |
-| `packages/server` | 31 | not used |
-| `packages/session-backends` | 33 | not used |
-| `packages/evals` | 19 | not used |
-| `packages/telemetry` | 12 | not used |
+| `packages/server` | 31 | consumed, unused |
+| `packages/telemetry` | 12 | consumed, unused |
+| `packages/session-backends` | 33 | **deleted 2026-08-09** — see below |
+| `packages/evals` | 19 | **deleted 2026-08-09** — see below |
 
 `packages/coding-agent` declares runtime dependencies on **five** Pi packages, not
 two: `pi-agent-core`, `pi-ai`, `pi-client`, `pi-protocol`, `pi-tui` (all `^0.84.0`).
@@ -97,6 +97,29 @@ ceiling — otherwise the tripwire fires on upstream editing their own README. I
 grows beyond a few hunks per release, the fix is to move upstream's copies aside
 (`AGENTS.upstream.md`) rather than to keep resolving them; at one hunk it is not worth
 the churn.
+
+### Deleted packages — `evals` and `session-backends`
+
+Removed 2026-08-09, before the Task 0.3 rename, because they could not be both
+frozen and correct.
+
+`packages/evals` depends on `@earendil-works/pi-coding-agent` and
+`packages/session-backends/sqlite-node` on `@earendil-works/pi-agent-core` — the two
+packages Task 0.3 renames. After the rename those names no longer exist in the
+workspace, and the failure mode is not an error: **npm resolves them from the registry
+instead**, silently building and testing against upstream's published packages while
+CI reports green. Editing them to point at the new names was not available either;
+that is exactly what the frozen gate forbids.
+
+Neither is used by Apex Code. `evals` is upstream's model-evaluation harness, which
+the Phase 0 spec explicitly declines to build; `session-backends` is server-side
+storage with no place in the roadmap. Deleting keeps the frozen set coherent —
+everything still frozen is genuinely consumed.
+
+Root-level `package.json`, `tsconfig.json`, and `biome.json` were edited to drop the
+workspace glob, the build step, the `eval` script, the path mapping, and the lint
+globs. Those four files now carry permanent divergence and will conflict whenever
+upstream touches them.
 
 **A third category, added 2026-08-09: deleted `.github/`.** Upstream's project
 automation was removed wholesale, so every future upstream change to those paths
