@@ -20,9 +20,9 @@ through the existing registration API — no changes below the ADR 0001 line.
 | Task | State | Commit |
 | --- | --- | --- |
 | 0.1 Claim the name | **done** | 4b04781 |
-| 0.2 Fork with history + merge rehearsal | not started | — |
+| 0.2 Fork with history + merge rehearsal | **done** | (this merge) |
 | 0.3 Rename to Apex Code | not started | — |
-| 0.4 CI | not started | — |
+| 0.4 CI (incl. frozen-package assertion) | not started | — |
 | 0.5 Release pipeline | not started | — |
 | 0.6 Session scrubber | not started | — |
 | 0.7 Corpus fixtures | not started | — |

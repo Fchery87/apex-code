@@ -72,6 +72,27 @@ three merges that follow Phase 2, not from a Phase 0 rehearsal.
 
 ## Merge history
 
-| Date | Upstream version | Conflicted hunks | Files touched (forked) | Time | Notes |
+| Date | Upstream version | Conflicted hunks | Conflicted files | Files merged (forked paths) | Notes |
 | --- | --- | --- | --- | --- | --- |
-| 2026-08-08 | `v0.84.0` | — | — | — | Fork point. No divergence yet. |
+| 2026-08-08 | `v0.84.0` | — | — | — | Fork point. Full-tree graft, 1,353 files. |
+| 2026-08-09 | `v0.84.1` | **1** | 1 (`AGENTS.md`) | 57 (+1,770 / −279) | First real rehearsal. **0 conflicts in forked code.** Total merge: 136 files, +3,976 / −992. |
+
+### Two kinds of merge cost, tracked separately
+
+The rehearsal separated a distinction the plan had conflated:
+
+**Forked-code divergence — currently 0.** No conflicts in `packages/agent` or
+`packages/coding-agent`, because Apex Code has not yet modified them. All 57 changed
+files merged clean. This is the number ADR 0003's ceiling is about, and it stays
+uninformative until Phase 2 changes forked code.
+
+**Identity-file cost — currently 1 hunk per release, recurring.** `AGENTS.md`,
+`README.md`, `CONTRIBUTING.md`, `SECURITY.md`, and `LICENSE` exist in both trees with
+entirely different content. Every upstream release that touches one of them conflicts,
+forever, resolved by taking ours each time. `v0.84.1` touched `AGENTS.md`, so: 1 hunk.
+
+This is a permanent tax, not divergence, and it must not be counted toward the ADR 0003
+ceiling — otherwise the tripwire fires on upstream editing their own README. If it ever
+grows beyond a few hunks per release, the fix is to move upstream's copies aside
+(`AGENTS.upstream.md`) rather than to keep resolving them; at one hunk it is not worth
+the churn.

@@ -1,6 +1,6 @@
 # ADR 0003 — Upstream merge cadence, patch-surface ceiling, and abandonment tripwires
 
-**Status:** Accepted (ceiling value pending Phase 0 baseline) · **Date:** 2026-08-08
+**Status:** Accepted · **Date:** 2026-08-08 · **Amended:** 2026-08-09 (ceiling basis moved from Phase 0 to post-Phase 2 — see Ceiling)
 
 Pi ships fast. At the time of this decision, one installed harness on this machine
 tracked 0.83.0 while the predecessor extension layer was still built against 0.80.6 —
@@ -31,10 +31,30 @@ forked code is reverted even when the change itself is an improvement.
 
 ## Ceiling
 
-The Phase 0 upstream-merge rehearsal establishes the baseline hunk count for a
-routine release. **The ceiling is set at 3× that baseline** and written into this ADR
-as a concrete number once Phase 0 exits — this ADR is amended once, at that point,
-and not renegotiated afterward.
+**Amended 2026-08-09.** The original text expected Phase 0's rehearsal to produce the
+baseline. It cannot, and the reasoning was wrong: at the fork point Apex Code has zero
+divergence from upstream, so every merge is conflict-free by construction. The
+`v0.84.0` → `v0.84.1` rehearsal confirmed it — 57 files and ~2,000 lines merged into
+forked paths with **zero conflicts**. A ceiling of 3 × 0 is not a ceiling.
+
+The ceiling is therefore set from **the first three merges after Phase 2**, the first
+phase that substantially modifies forked code, at 3× the median of those three. Until
+then this ADR has no numeric ceiling and the tripwires below govern alone.
+
+What Phase 0 did establish is **upstream churn**, the leading indicator: one *patch*
+release moved 57 files and 2,049 lines inside the two forked packages. That rate is
+why the cadence above is a requirement and not a preference — see
+`docs/upstream-log.md`.
+
+Two costs are tracked separately and must not be summed:
+
+- **Forked-code divergence** — conflicts inside `packages/agent` and
+  `packages/coding-agent`. This is what the ceiling measures.
+- **Identity-file cost** — `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, `SECURITY.md`,
+  and `LICENSE` exist in both trees with different content and conflict whenever
+  upstream edits theirs. Currently ~1 hunk per release, permanent, resolved by taking
+  ours. It is a fixed tax, not divergence, and counting it toward the ceiling would
+  make the tripwire fire on upstream editing their own README.
 
 Crossing the ceiling on a single merge is not itself a decision to stop. It triggers
 a review: is the spike caused by one upstream refactor that will not recur, or by
