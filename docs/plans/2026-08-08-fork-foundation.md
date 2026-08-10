@@ -332,7 +332,10 @@ The run's final clean-install step exhausted its original five-minute retry wind
 against a stale registry edge, but an independent fresh-cache install succeeded,
 reported `0.0.1-alpha.1`, and passed `npm audit signatures` with 144 verified registry
 signatures and 32 verified attestations. The verifier now discards negative npm-cache
-state between attempts and allows ten minutes. Bootstrap-credential revocation and the
+state between attempts and allows ten minutes (`ecf339da7d`). Main CI run
+[`31355755436`](https://github.com/Fchery87/apex-code/actions/runs/31355755436) then passed
+the frozen boundary and Linux/macOS gates; Windows retained only its characterised
+advisory failure. Bootstrap-credential revocation and the
 package-level disallow-token setting remain human account-hardening steps; no token is
 stored in the workflow or GitHub `npm` environment.
 
