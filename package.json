@@ -32,6 +32,7 @@
 		"test": "npm run test:scripts && npm run test --workspace packages/agent --workspace packages/coding-agent --if-present -- --exclude test/config.test.ts",
 		"test:scripts": "node --test scripts/*.test.mjs && npm run test:scrubber",
 		"test:scrubber": "vitest run --config scripts/vitest.config.ts",
+		"test:corpus": "vitest run --config scripts/vitest.config.ts fixtures/__tests__/corpus-hygiene.test.ts",
 		"version:patch": "npm version patch --workspaces --no-git-tag-version --no-workspaces-update && node scripts/sync-versions.js && npm install --package-lock-only --ignore-scripts",
 		"version:minor": "npm version minor --workspaces --no-git-tag-version --no-workspaces-update && node scripts/sync-versions.js && npm install --package-lock-only --ignore-scripts",
 		"version:major": "npm version major --workspaces --no-git-tag-version --no-workspaces-update && node scripts/sync-versions.js && npm install --package-lock-only --ignore-scripts",
@@ -58,7 +59,8 @@
 		"jiti": "2.7.0",
 		"shx": "0.4.0",
 		"tsx": "4.22.1",
-		"typescript": "5.9.3"
+		"typescript": "5.9.3",
+		"vitest": "4.1.9"
 	},
 	"engines": {
 		"node": ">=22.19.0"

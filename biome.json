@@ -31,6 +31,7 @@
 			"scripts/scrub-session.ts",
 			"scripts/__tests__/**/*.ts",
 			"scripts/vitest.config.ts",
+			"fixtures/__tests__/**/*.ts",
 			"!**/node_modules/**/*",
 			"!**/test-sessions.ts",
 			"!**/models.generated.ts",

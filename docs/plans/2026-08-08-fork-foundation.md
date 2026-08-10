@@ -31,7 +31,7 @@ through the existing registration API — no changes below the ADR 0001 line.
 | 0.3 | Rename to Apex Code | **done** — Linux/macOS green post-rename; Windows remains characterised advisory | `947e3f1ace`, `f6aa519afe` |
 | 0.5 | Release pipeline | **done** — tagged publish, token-free OIDC, clean install, signatures, and provider turn verified | `6cff1fdd72`, `cf720a7d19`, `ef44c0148` |
 | 0.6 | Session scrubber | **done** — secret rejection and tree preservation verified on Linux/macOS; Windows remains characterised advisory | `40c2507d80`, `a21085b03d` |
-| 0.7 | Corpus fixtures | not started | — |
+| 0.7 | Corpus fixtures | **in progress** — synthetic corpus and hygiene gate green locally; CI verification pending | — |
 | 0.8 | Replay runner | not started | — |
 | 0.9 | Metrics + determinism gate | not started | — |
 | 0.10 | Close the phase | not started | — |
@@ -417,7 +417,8 @@ git commit -m "feat: session scrubber with secret detection"
 ## Task 0.7 — Corpus fixtures
 
 **Files:** Create `fixtures/corpus/*.jsonl`, `fixtures/corpus/README.md`,
-`fixtures/__tests__/corpus-hygiene.test.ts`.
+`fixtures/__tests__/corpus-hygiene.test.ts`; wire the fixture test into the existing
+root script test, typecheck, and Biome gates.
 
 **Step 1 — write the hygiene gate first**, before any fixture exists:
 

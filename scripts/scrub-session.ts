@@ -53,7 +53,7 @@ const SECRET_PATTERNS: readonly SecretPattern[] = [
 	},
 ];
 
-const FILE_SUFFIXES = new Set(["js", "jsx", "ts", "tsx", "mjs", "cjs", "json", "md", "txt", "yaml", "yml"]);
+const FILE_SUFFIXES = new Set(["js", "jsx", "ts", "tsx", "mjs", "cjs", "json", "jsonl", "md", "txt", "yaml", "yml"]);
 const HIGH_ENTROPY_CANDIDATE = /(?<![A-Za-z0-9+/])[A-Za-z0-9][A-Za-z0-9_+/=-]{31,}(?![A-Za-z0-9+/=])/g;
 const TREE_IDENTIFIER = /("(?:id|parentId)"\s*:\s*)("(?:\\.|[^"\\])*")/g;
 
