@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phase 0 in progress (0.1–0.5 landed) · **Created:** 2026-08-08 · **Last updated:** 2026-08-10
+**Status:** Active — Phase 0 in progress (0.1–0.6 landed) · **Created:** 2026-08-08 · **Last updated:** 2026-08-10
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm

@@ -4,7 +4,7 @@
 > unlicensed sources) applies to every task here. Work test-first where a task has a
 > test; several infrastructure tasks legitimately do not, and say so.
 
-**Status:** in progress — 0.1–0.5 verified; 0.6 next ·
+**Status:** in progress — 0.1–0.6 verified; 0.7 next ·
 **Date:** 2026-08-08 · **Spec:** `docs/specs/2026-08-08-fork-foundation.md`
 
 **Goal:** A working fork of `pi-coding-agent` and `pi-agent-core` that builds, tests,
@@ -30,7 +30,7 @@ through the existing registration API — no changes below the ADR 0001 line.
 | 0.4 | CI + frozen-package assertion | **done** — Linux and macOS green; Windows characterised advisory | `fe0022498`, `9d5e7f0ad`, `990e1805d`, `707dd0440` |
 | 0.3 | Rename to Apex Code | **done** — Linux/macOS green post-rename; Windows remains characterised advisory | `947e3f1ace`, `f6aa519afe` |
 | 0.5 | Release pipeline | **done** — tagged publish, token-free OIDC, clean install, signatures, and provider turn verified | `6cff1fdd72`, `cf720a7d19`, `ef44c0148` |
-| 0.6 | Session scrubber | **in progress** — implementation green locally; CI verification pending | — |
+| 0.6 | Session scrubber | **done** — secret rejection and tree preservation verified on Linux/macOS; Windows remains characterised advisory | `40c2507d80`, `a21085b03d` |
 | 0.7 | Corpus fixtures | not started | — |
 | 0.8 | Replay runner | not started | — |
 | 0.9 | Metrics + determinism gate | not started | — |
@@ -394,6 +394,17 @@ npx vitest run scripts/__tests__/scrub-session.test.ts
 long high-entropy tokens, `/home/<user>` and `/Users/<user>`, hostnames, email
 addresses. Preserve JSON structure and the `id`/`parentId` tree — a scrubber that
 breaks the tree destroys the corpus.
+
+**Verified 2026-08-10.** The test-first implementation scrubs provider credentials,
+long high-entropy tokens, Linux/macOS/Windows personal home paths, hostnames, IP
+addresses, and email addresses. `findSecrets()` independently reports source-ordered
+metadata without echoing secret values. JSONL line order and top-level `id`/`parentId`
+tree edges are preserved, including high-entropy identifiers and collision cases.
+The root test and typecheck gates run the scrubber suite. CI run
+[`31359558116`](https://github.com/Fchery87/apex-code/actions/runs/31359558116) passed the
+frozen boundary and the complete Linux/macOS build, check, and test gates; Windows
+retained only its characterised advisory failures. The same run also verified the
+built-provider browser-smoke repair in `a21085b03d`.
 
 **Step 4 — verify PASS. Step 5 — commit.**
 
