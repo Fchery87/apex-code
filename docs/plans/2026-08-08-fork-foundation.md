@@ -4,7 +4,7 @@
 > unlicensed sources) applies to every task here. Work test-first where a task has a
 > test; several infrastructure tasks legitimately do not, and say so.
 
-**Status:** in progress — 0.1–0.6 verified; 0.7 next ·
+**Status:** in progress — 0.1–0.7 verified; 0.8 next ·
 **Date:** 2026-08-08 · **Spec:** `docs/specs/2026-08-08-fork-foundation.md`
 
 **Goal:** A working fork of `pi-coding-agent` and `pi-agent-core` that builds, tests,
@@ -31,7 +31,7 @@ through the existing registration API — no changes below the ADR 0001 line.
 | 0.3 | Rename to Apex Code | **done** — Linux/macOS green post-rename; Windows remains characterised advisory | `947e3f1ace`, `f6aa519afe` |
 | 0.5 | Release pipeline | **done** — tagged publish, token-free OIDC, clean install, signatures, and provider turn verified | `6cff1fdd72`, `cf720a7d19`, `ef44c0148` |
 | 0.6 | Session scrubber | **done** — secret rejection and tree preservation verified on Linux/macOS; Windows remains characterised advisory | `40c2507d80`, `a21085b03d` |
-| 0.7 | Corpus fixtures | **in progress** — synthetic corpus and hygiene gate green locally; CI verification pending | — |
+| 0.7 | Corpus fixtures | **done** — synthetic corpus hygiene and native session semantics verified; Windows remains characterised advisory | `5ab33597b9`, `adf24cf594`, `bd14192126` |
 | 0.8 | Replay runner | not started | — |
 | 0.9 | Metrics + determinism gate | not started | — |
 | 0.10 | Close the phase | not started | — |
@@ -441,6 +441,17 @@ of real work, and scrubbing handles credentials, not sensitivity.
 **Step 3 — scrub, then verify the gate passes. Step 4 — prove the gate bites:**
 temporarily add a fixture containing a fake key, confirm the test fails, remove it.
 Note in the PR that you did this.
+
+**Verified 2026-08-10.** Eight deterministic, Apex-authored synthetic sessions cover
+a single turn, turn 20, long compaction, heavy tool output, model switching, assistant
+error recovery, branching, and tool error recovery without importing personal transcript
+content. The hygiene gate rejects credentials, entropy-shaped secrets, personal paths,
+hostnames, IPs, email, control characters, malformed JSONL, invalid native entry shapes,
+disconnected trees, bad cross-references, and off-branch tool results. A temporary
+known-bad key fixture failed the gate before removal. CI run
+[`31386892760`](https://github.com/Fchery87/apex-code/actions/runs/31386892760) passed the frozen
+boundary and complete Linux/macOS build, check, and test gates; Windows retained only
+its characterised advisory failures.
 
 **Step 5 — commit.**
 
