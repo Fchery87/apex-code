@@ -37,7 +37,7 @@ fixture was removed.
 | --- | ---: | ---: | ---: | ---: | --- |
 | `short-single-turn.jsonl` | 1 | 0 | 0 | 1 | Minimal user/assistant turn |
 | `long-multi-turn.jsonl` | 22 | 0 | 0 | 1 | Consecutive turns for turn-20 metrics |
-| `compacted-session.jsonl` | 2 | 0 | 1 | 1 | Context continuation through a compaction entry |
+| `compacted-session.jsonl` | 22 | 0 | 1 | 1 | Long run continuing through a compaction entry |
 | `heavy-tool-output.jsonl` | 1 | 1 | 0 | 1 | Large deterministic result for eviction measurements |
 | `model-switch.jsonl` | 2 | 0 | 0 | 2 | Provider/model change in the middle of a session |
 | `error-recovery.jsonl` | 2 | 0 | 0 | 1 | Assistant error followed by a successful retry |
