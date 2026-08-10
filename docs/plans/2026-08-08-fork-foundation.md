@@ -4,7 +4,7 @@
 > unlicensed sources) applies to every task here. Work test-first where a task has a
 > test; several infrastructure tasks legitimately do not, and say so.
 
-**Status:** in progress — 0.1–0.7 verified; 0.8 next ·
+**Status:** in progress — 0.1–0.8 verified; 0.9 next ·
 **Date:** 2026-08-08 · **Spec:** `docs/specs/2026-08-08-fork-foundation.md`
 
 **Goal:** A working fork of `pi-coding-agent` and `pi-agent-core` that builds, tests,
@@ -32,7 +32,7 @@ through the existing registration API — no changes below the ADR 0001 line.
 | 0.5 | Release pipeline | **done** — tagged publish, token-free OIDC, clean install, signatures, and provider turn verified | `6cff1fdd72`, `cf720a7d19`, `ef44c0148` |
 | 0.6 | Session scrubber | **done** — secret rejection and tree preservation verified on Linux/macOS; Windows remains characterised advisory | `40c2507d80`, `a21085b03d` |
 | 0.7 | Corpus fixtures | **done** — synthetic corpus hygiene and native session semantics verified; Windows remains characterised advisory | `5ab33597b9`, `adf24cf594`, `bd14192126` |
-| 0.8 | Replay runner | **in progress** — public replay test red, then offline provider/Agent replay implemented; review and CI pending | — |
+| 0.8 | Replay runner | **done** — offline Agent replay, recorded provider, inert tool/error replay, model/branch/compaction handling, strict JSONL validation, and deterministic metrics seam verified | `56646c6746` |
 | 0.9 | Metrics + determinism gate | not started | — |
 | 0.10 | Close the phase | not started | — |
 
@@ -481,6 +481,18 @@ it("replays a session offline and emits metrics", async () => {
 provider through the **existing** provider registration API and replay assistant
 responses from the transcript. Do not modify `pi-ai` — if this appears to require it,
 stop: that is an ADR 0001 boundary question, not an implementation detail.
+
+**Verified 2026-08-10.** `replay()` loads native v3 JSONL without mutating the recording,
+selects the active tree branch, runs each user turn through the existing Agent loop,
+registers an offline `recorded` provider through `ModelRuntime.registerProvider()`,
+replays inert tool results and errors without filesystem tools, applies recorded model
+changes, and samples the final provider-boundary context for each turn. Provider and
+tool responses are checked against the recording; malformed JSONL, invalid trees,
+missing parents, model mismatches, and unconsumed responses fail deterministically.
+The focused suite has 12 passing tests, including repeated-run byte equality and an
+explicit network rejection hook. CI run [`31442661868`](https://github.com/Fchery87/apex-code/actions/runs/31442661868)
+passed the frozen boundary and complete Linux/macOS build, check, and test gates;
+Windows retained only its characterised advisory failures.
 
 **Step 4 — verify PASS. Step 5 — commit.**
 
