@@ -82,7 +82,7 @@ try {
 		),
 	);
 	const catalogInputs = Array.from(contributingInputs).filter((input) =>
-		normalizePath(input).includes("packages/ai/src/providers/data/"),
+		/\/packages\/ai\/(?:src|dist)\/providers\/data\//.test(`/${normalizePath(input)}`),
 	);
 	if (catalogInputs.length !== 1 || !normalizePath(catalogInputs[0]).endsWith("/anthropic.json")) {
 		throw new Error(
