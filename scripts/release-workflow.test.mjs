@@ -17,7 +17,8 @@ test("release workflow is tag-triggered, least-privilege, and publishes only Ape
 
 	assert.deepEqual(workflow.on, { push: { tags: ["v*"] } });
 	assert.deepEqual(workflow.permissions, { contents: "read", "id-token": "write" });
-	assert.equal(publish.env.NODE_AUTH_TOKEN, "${{ secrets.NPM_TOKEN }}");
+	assert.equal(publish.env, undefined);
+	assert.doesNotMatch(source, /NPM_TOKEN|NODE_AUTH_TOKEN/);
 	assert.equal(publish["timeout-minutes"], 30);
 	assert.equal(publish.steps[0].with["persist-credentials"], false);
 	for (const step of publish.steps.filter((candidate) => candidate.uses)) {
