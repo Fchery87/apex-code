@@ -2,11 +2,12 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phase 0 in progress (0.1–0.5 landed) · **Created:** 2026-08-08 · **Last updated:** 2026-08-09
+**Status:** Active — Phase 0 in progress (0.1–0.5 landed) · **Created:** 2026-08-08 · **Last updated:** 2026-08-10
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
-> coordinate is now claimed by the published `0.0.1-alpha.0` prerelease.
+> coordinate is now claimed; token-free Trusted Publishing was proven by the published
+> `0.0.1-alpha.1` prerelease.
 
 This is the **program** document: what gets built, in what order, and the measurable
 condition each phase must satisfy to be considered done. It is permanent and

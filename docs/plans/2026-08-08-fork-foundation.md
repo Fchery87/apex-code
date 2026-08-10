@@ -29,7 +29,7 @@ through the existing registration API — no changes below the ADR 0001 line.
 | 0.2 | Fork with history + merge rehearsal | **done** | `c81a7091a`, `cd8d84fe5`, `124f506e2` |
 | 0.4 | CI + frozen-package assertion | **done** — Linux and macOS green; Windows characterised advisory | `fe0022498`, `9d5e7f0ad`, `990e1805d`, `707dd0440` |
 | 0.3 | Rename to Apex Code | **done** — Linux/macOS green post-rename; Windows remains characterised advisory | `947e3f1ace`, `f6aa519afe` |
-| 0.5 | Release pipeline | **done** — tagged publish, clean install, signatures, and provider turn verified | `6cff1fdd72`, `cf720a7d19` |
+| 0.5 | Release pipeline | **done** — tagged publish, token-free OIDC, clean install, signatures, and provider turn verified | `6cff1fdd72`, `cf720a7d19`, `ef44c0148` |
 | 0.6 | Session scrubber | not started | — |
 | 0.7 | Corpus fixtures | not started | — |
 | 0.8 | Replay runner | not started | — |
@@ -323,9 +323,18 @@ which built, checked, tested, published `apex-code-agent-core` before `apex-code
 clean-installed the CLI from npm. An independent scratch install reported
 `0.0.1-alpha.0`; `npm audit signatures` verified 144 registry signatures and 32
 attestations; and the installed artifact completed a Google provider turn with the
-expected response `apex-release-ok`. Both npm packages expose SLSA provenance. The
-bootstrap token remains only until trusted publishing is configured and proven on the
-next prerelease.
+expected response `apex-release-ok`. Both npm packages expose SLSA provenance.
+
+Trusted Publishing was subsequently proven without `NPM_TOKEN` by attempt 3 of
+[release run `31349371366`](https://github.com/Fchery87/apex-code/actions/runs/31349371366):
+both `0.0.1-alpha.1` packages published through GitHub OIDC with signed provenance.
+The run's final clean-install step exhausted its original five-minute retry window
+against a stale registry edge, but an independent fresh-cache install succeeded,
+reported `0.0.1-alpha.1`, and passed `npm audit signatures` with 144 verified registry
+signatures and 32 verified attestations. The verifier now discards negative npm-cache
+state between attempts and allows ten minutes. Bootstrap-credential revocation and the
+package-level disallow-token setting remain human account-hardening steps; no token is
+stored in the workflow or GitHub `npm` environment.
 
 **Commit:** `ci: tag-triggered release pipeline`
 

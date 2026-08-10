@@ -37,7 +37,9 @@ test("release workflow validates tag identity and clean-installs the published C
 	assert.match(commands, /apt-get install .*fd-find ripgrep/s);
 	assert.match(commands, /ln -s .*fdfind.*\/usr\/local\/bin\/fd/);
 	assert.match(commands, /npm test/);
-	assert.match(commands, /npm install --global .*--ignore-scripts .*apex-code@/);
+	assert.match(commands, /npm install --global .*--prefer-online .*--ignore-scripts .*apex-code@/);
+	assert.match(commands, /rm -rf -- "\$scratch\/npm-cache"/);
+	assert.match(commands, /for attempt in \{1\.\.60\}/);
 	assert.match(commands, /apex-code" --version/);
 	assert.match(source, /apex-code-agent-core@\$\{VERSION\}.*did not become visible/s);
 });

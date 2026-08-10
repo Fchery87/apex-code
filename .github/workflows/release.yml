@@ -104,12 +104,16 @@ jobs:
           trap 'rm -rf -- "$scratch"' EXIT
           cd "$scratch"
           npm init --yes >/dev/null
-          for attempt in {1..30}; do
-            if npm install --global --prefix "$scratch/global" --ignore-scripts "apex-code@${VERSION}"; then
+          # A newly published version can reach different registry/CDN edges at
+          # different times. Use a fresh cache on every attempt so npm does not
+          # retain an early ETARGET response, and allow up to ten minutes.
+          for attempt in {1..60}; do
+            rm -rf -- "$scratch/npm-cache"
+            if npm install --global --prefix "$scratch/global" --cache "$scratch/npm-cache" --prefer-online --ignore-scripts "apex-code@${VERSION}"; then
               break
             fi
-            if [[ "${attempt}" == 30 ]]; then
-              echo "apex-code@${VERSION} did not install within five minutes" >&2
+            if [[ "${attempt}" == 60 ]]; then
+              echo "apex-code@${VERSION} did not install within ten minutes" >&2
               exit 1
             fi
             sleep 10
