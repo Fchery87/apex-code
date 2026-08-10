@@ -166,3 +166,7 @@ it("does not restore a tree identifier into colliding content", () => {
 	expect(result.id).toBe(id);
 	expect(result.text).toBe(" ".repeat(id.length));
 });
+
+it("does not mistake corpus JSONL filenames for hostnames", () => {
+	expect(findSecrets("long-multi-turn.jsonl")).toHaveLength(0);
+});

@@ -1,5 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { findSecrets } from "../../scripts/scrub-session.ts";
@@ -29,11 +29,30 @@ function assertIsoTimestamp(value: unknown, context: string): number {
 	return timestamp;
 }
 
+function expectString(value: unknown, context: string): string {
+	if (typeof value !== "string" || value.length === 0) throw new Error(`expected string: ${context}`);
+	return value;
+}
+
+function isAncestor(
+	candidate: string,
+	descendant: string | null,
+	parentById: ReadonlyMap<string, string | null>,
+): boolean {
+	let current = descendant;
+	while (current !== null) {
+		if (current === candidate) return true;
+		current = parentById.get(current) ?? null;
+	}
+	return false;
+}
+
 describe("replay corpus", () => {
 	it("contains 8–12 representative sessions", async () => {
 		const files = await corpusFiles();
-		expect(files).toHaveLength(8);
-		expect(files.map((file) => file.slice(file.lastIndexOf("/") + 1))).toEqual(
+		expect(files.length).toBeGreaterThanOrEqual(8);
+		expect(files.length).toBeLessThanOrEqual(12);
+		expect(files.map((file) => basename(file))).toEqual(
 			expect.arrayContaining([
 				"short-single-turn.jsonl",
 				"long-multi-turn.jsonl",
@@ -47,7 +66,8 @@ describe("replay corpus", () => {
 
 	it("contains only documented files and no sensitive values", async () => {
 		const files = await corpusAllFiles();
-		expect(files.map((file) => file.slice(file.lastIndexOf("/") + 1))).toEqual(expect.arrayContaining(["README.md"]));
+		expect(files.map((file) => basename(file))).toEqual(expect.arrayContaining(["README.md"]));
+		expect(files.every((file) => basename(file) === "README.md" || extname(file) === ".jsonl")).toBe(true);
 		for (const file of files) {
 			const text = await readFile(file, "utf8");
 			expect(text).not.toMatch(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/);
@@ -76,11 +96,13 @@ describe("replay corpus", () => {
 				cwd: "$HOME/replay-fixtures",
 			});
 			expect(entries.filter((entry) => entry.type === "session")).toHaveLength(1);
+			expect(header.id).toEqual(expect.stringMatching(/^[a-z][a-z0-9-]{1,31}$/));
 			let lastTimestamp = assertIsoTimestamp(header.timestamp, `${file}:1`);
 
 			const ids = new Set<string>();
 			const parentById = new Map<string, string | null>();
-			const pendingTools = new Map<string, string>();
+			const pendingTools = new Map<string, { name: string; entryId: string }>();
+			let roots = 0;
 			for (const [index, entry] of entries.slice(1).entries()) {
 				expect(entry).toEqual(expect.objectContaining({ type: expect.any(String), id: expect.any(String) }));
 				const { id, parentId, type } = entry;
@@ -94,9 +116,43 @@ describe("replay corpus", () => {
 				const timestamp = assertIsoTimestamp(entry.timestamp, `${file}:${index + 2}`);
 				expect(timestamp, `timestamps out of order in ${file}`).toBeGreaterThanOrEqual(lastTimestamp);
 				lastTimestamp = timestamp;
+				expect(id).toMatch(/^[a-z][a-z0-9-]{1,31}$/);
 				expect(ids.has(id), `duplicate id ${id} in ${file}`).toBe(false);
-				if (parentId !== null) expect(ids.has(parentId), `missing parent ${parentId} in ${file}`).toBe(true);
+				if (parentId === null) roots++;
+				else expect(ids.has(parentId), `missing parent ${parentId} in ${file}`).toBe(true);
 				parentById.set(id, parentId);
+
+				switch (type) {
+					case "message":
+						asRecord(entry.message, `${file} message`);
+						break;
+					case "model_change":
+						expectString(entry.provider, `${file} provider`);
+						expectString(entry.modelId, `${file} model`);
+						break;
+					case "compaction":
+						expectString(entry.summary, `${file} summary`);
+						expectString(entry.firstKeptEntryId, `${file} first kept entry`);
+						if (typeof entry.tokensBefore !== "number" || entry.tokensBefore < 0)
+							throw new Error(`invalid compaction tokens in ${file}`);
+						break;
+					case "branch_summary":
+						expectString(entry.summary, `${file} summary`);
+						expectString(entry.fromId, `${file} from id`);
+						break;
+					case "label":
+						expectString(entry.targetId, `${file} target id`);
+						break;
+					case "thinking_level_change":
+						expectString(entry.thinkingLevel, `${file} thinking level`);
+						break;
+					case "custom":
+					case "custom_message":
+					case "session_info":
+						break;
+					default:
+						throw new Error(`unknown entry type ${type} in ${file}`);
+				}
 
 				for (const key of ["firstKeptEntryId", "fromId", "targetId"] as const) {
 					const reference = entry[key];
@@ -130,8 +186,10 @@ describe("replay corpus", () => {
 						);
 						const content = Array.isArray(message.content) ? message.content : [];
 						for (const part of content.map((value) => asRecord(value, `${file} assistant content`))) {
-							if (part.type === "toolCall" && typeof part.id === "string" && typeof part.name === "string")
-								pendingTools.set(part.id, part.name);
+							if (part.type === "toolCall" && typeof part.id === "string" && typeof part.name === "string") {
+								expect(pendingTools.has(part.id), `duplicate tool call ${part.id} in ${file}`).toBe(false);
+								pendingTools.set(part.id, { name: part.name, entryId: id });
+							}
 						}
 						if (message.stopReason === "toolUse")
 							expect(content.some((part) => asRecord(part, file).type === "toolCall")).toBe(true);
@@ -140,12 +198,18 @@ describe("replay corpus", () => {
 					if (role === "toolResult") {
 						const callId = message.toolCallId;
 						if (typeof callId !== "string") throw new Error(`tool result lacks call id in ${file}`);
-						expect(pendingTools.get(callId), `orphan tool result ${callId} in ${file}`).toBe(message.toolName);
+						const call = pendingTools.get(callId);
+						expect(call?.name, `orphan tool result ${callId} in ${file}`).toBe(message.toolName);
+						expect(
+							call && isAncestor(call.entryId, parentId, parentById),
+							`tool result off call branch in ${file}`,
+						).toBe(true);
 						pendingTools.delete(callId);
 					}
 				}
 				ids.add(id);
 			}
+			expect(roots, `expected one root in ${file}`).toBe(1);
 			expect(pendingTools, `unresolved tool calls in ${file}`).toEqual(new Map());
 		}
 	});
@@ -170,6 +234,16 @@ describe("replay corpus", () => {
 			0,
 		);
 		const long = documents.find(({ file }) => file.endsWith("long-multi-turn.jsonl"));
-		expect(long?.text.split("\n").filter((line) => line.includes('"role":"user"')).length).toBeGreaterThanOrEqual(20);
+		const longEntries =
+			long?.text
+				.split("\n")
+				.filter(Boolean)
+				.map((line) => asRecord(JSON.parse(line), "long fixture")) ?? [];
+		expect(
+			longEntries.filter((entry) => entry.type === "message" && Reflect.get(entry.message ?? {}, "role") === "user")
+				.length,
+		).toBeGreaterThanOrEqual(20);
+		const compacted = documents.find(({ file }) => file.endsWith("compacted-session.jsonl"));
+		expect(compacted?.text.match(/"role":"user"/g)?.length).toBeGreaterThanOrEqual(20);
 	});
 });
