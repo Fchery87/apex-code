@@ -6,5 +6,5 @@
 		"moduleResolution": "NodeNext",
 		"types": ["node", "vitest/globals"]
 	},
-	"include": ["scrub-session.ts", "__tests__/**/*.ts", "vitest.config.ts"]
+	"include": ["scrub-session.ts", "__tests__/**/*.ts", "../fixtures/__tests__/**/*.ts", "vitest.config.ts"]
 }
