@@ -335,9 +335,11 @@ signatures and 32 verified attestations. The verifier now discards negative npm-
 state between attempts and allows ten minutes (`ecf339da7d`). Main CI run
 [`31355755436`](https://github.com/Fchery87/apex-code/actions/runs/31355755436) then passed
 the frozen boundary and Linux/macOS gates; Windows retained only its characterised
-advisory failure. Bootstrap-credential revocation and the
-package-level disallow-token setting remain human account-hardening steps; no token is
-stored in the workflow or GitHub `npm` environment.
+advisory failure. Post-release hardening is complete: the bootstrap credential was
+revoked, both packages require two-factor authentication and disallow tokens, and no
+token is stored in the workflow or GitHub `npm` environment. The prerelease channel
+remains `next` → `0.0.1-alpha.1`; the automatically created default channel remains
+`latest` → `0.0.1-alpha.0` until a stable release exists.
 
 **Commit:** `ci: tag-triggered release pipeline`
 

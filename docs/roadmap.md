@@ -7,7 +7,8 @@
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
 > coordinate is now claimed; token-free Trusted Publishing was proven by the published
-> `0.0.1-alpha.1` prerelease.
+> `0.0.1-alpha.1` prerelease. The bootstrap token is revoked, and both packages
+> disallow token-based publishing.
 
 This is the **program** document: what gets built, in what order, and the measurable
 condition each phase must satisfy to be considered done. It is permanent and
