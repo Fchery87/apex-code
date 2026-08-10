@@ -1,0 +1,10 @@
+{
+	"extends": "../tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"types": ["node", "vitest/globals"]
+	},
+	"include": ["scrub-session.ts", "__tests__/**/*.ts", "vitest.config.ts"]
+}
