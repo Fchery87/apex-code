@@ -32,7 +32,7 @@ through the existing registration API — no changes below the ADR 0001 line.
 | 0.5 | Release pipeline | **done** — tagged publish, token-free OIDC, clean install, signatures, and provider turn verified | `6cff1fdd72`, `cf720a7d19`, `ef44c0148` |
 | 0.6 | Session scrubber | **done** — secret rejection and tree preservation verified on Linux/macOS; Windows remains characterised advisory | `40c2507d80`, `a21085b03d` |
 | 0.7 | Corpus fixtures | **done** — synthetic corpus hygiene and native session semantics verified; Windows remains characterised advisory | `5ab33597b9`, `adf24cf594`, `bd14192126` |
-| 0.8 | Replay runner | not started | — |
+| 0.8 | Replay runner | **in progress** — public replay test red, then offline provider/Agent replay implemented; review and CI pending | — |
 | 0.9 | Metrics + determinism gate | not started | — |
 | 0.10 | Close the phase | not started | — |
 
@@ -470,7 +470,7 @@ and tests.
 
 ```ts
 it("replays a session offline and emits metrics", async () => {
-  const result = await replay("fixtures/corpus/short-session.jsonl");
+  const result = await replay("fixtures/corpus/short-single-turn.jsonl");
   expect(result.turns).toBeGreaterThan(0);
   expect(result.metrics.contextTokensByTurn).toHaveLength(result.turns);
   expect(result.networkCalls).toBe(0);   // the whole point
