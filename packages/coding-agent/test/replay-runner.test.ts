@@ -3,10 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { replay } from "../src/testing/replay/runner.ts";
+import { replay, replayCorpus } from "../src/testing/replay/runner.ts";
+
+const corpusDirectory = fileURLToPath(new URL("../../../fixtures/corpus/", import.meta.url));
 
 function corpusFixture(name: string): string {
-	return fileURLToPath(new URL(`../../../fixtures/corpus/${name}`, import.meta.url));
+	return join(corpusDirectory, name);
 }
 
 afterEach(() => {
@@ -60,7 +62,7 @@ describe("offline session replay", () => {
 		expect(result.requests).toBe(22);
 		expect(result.metrics.contextTokensByTurn).toHaveLength(22);
 		expect(result.metrics.contextTokensByTurn[18]).toBeLessThan(result.metrics.contextTokensByTurn[17]);
-		expect(result.metrics.contextTokensByTurn.slice(18)).toEqual([27, 45, 63, 81]);
+		expect(result.metrics.contextTokensByTurn.slice(18)).toEqual([445, 463, 481, 499]);
 	});
 
 	it("replays tool results through inert tools without touching the filesystem", async () => {
@@ -84,11 +86,51 @@ describe("offline session replay", () => {
 		]);
 	});
 
+	it("aggregates recorded cache usage and cost", async () => {
+		const scratch = await mkdtemp(join(tmpdir(), "apex-replay-"));
+		try {
+			const source = await readFile(corpusFixture("short-single-turn.jsonl"), "utf8");
+			const session = join(scratch, "usage.jsonl");
+			await writeFile(
+				session,
+				source
+					.replace(
+						'"cacheRead":0,"cacheWrite":0,"totalTokens":30',
+						'"cacheRead":30,"cacheWrite":10,"totalTokens":70',
+					)
+					.replace('"cacheRead":0,"cacheWrite":0,"total":0', '"cacheRead":0.03,"cacheWrite":0.01,"total":0.04'),
+			);
+
+			const result = await replay(session);
+
+			expect(result.metrics.cacheHitRate).toBe(0.5);
+			expect(result.metrics.costUsd).toBe(0.04);
+		} finally {
+			await rm(scratch, { recursive: true, force: true });
+		}
+	});
+
+	it("produces byte-identical metrics for two consecutive corpus runs", async () => {
+		const first = await replayCorpus(corpusDirectory);
+		const second = await replayCorpus(corpusDirectory);
+
+		expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+	});
+
 	it("returns deterministic output for the same recording", async () => {
 		const first = await replay(corpusFixture("tool-error-recovery.jsonl"));
 		const second = await replay(corpusFixture("tool-error-recovery.jsonl"));
 
 		expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+		expect(first.metrics).toEqual({
+			contextTokensByTurn: [487],
+			systemPromptTokens: 599,
+			cacheHitRate: 0,
+			toolCallsByName: { read: 2 },
+			wallTimeMs: 0,
+			costUsd: 0,
+			turnsCompleted: 1,
+		});
 	});
 
 	it("rejects a recorded model mismatch", async () => {
