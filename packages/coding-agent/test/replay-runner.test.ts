@@ -62,7 +62,7 @@ describe("offline session replay", () => {
 		expect(result.requests).toBe(22);
 		expect(result.metrics.contextTokensByTurn).toHaveLength(22);
 		expect(result.metrics.contextTokensByTurn[18]).toBeLessThan(result.metrics.contextTokensByTurn[17]);
-		expect(result.metrics.contextTokensByTurn.slice(18)).toEqual([1362, 1380, 1398, 1416]);
+		expect(result.metrics.contextTokensByTurn.slice(18)).toEqual([734, 752, 770, 788]);
 	});
 
 	it("replays tool results through inert tools without touching the filesystem", async () => {
@@ -123,8 +123,8 @@ describe("offline session replay", () => {
 
 		expect(JSON.stringify(second)).toBe(JSON.stringify(first));
 		expect(first.metrics).toEqual({
-			contextTokensByTurn: [1387],
-			systemPromptTokens: 1335,
+			contextTokensByTurn: [759],
+			systemPromptTokens: 707,
 			cacheHitRate: 0,
 			toolCallsByName: { read: 2 },
 			wallTimeMs: 0,
