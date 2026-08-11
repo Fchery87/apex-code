@@ -4,7 +4,7 @@
 > unlicensed sources) applies to every task here. Work test-first where a task has a
 > test; several infrastructure tasks legitimately do not, and say so.
 
-**Status:** in progress — 0.1–0.8 verified; 0.9 next ·
+**Status:** in progress — 0.1–0.9 verified; 0.10 next ·
 **Date:** 2026-08-08 · **Spec:** `docs/specs/2026-08-08-fork-foundation.md`
 
 **Goal:** A working fork of `pi-coding-agent` and `pi-agent-core` that builds, tests,
@@ -33,7 +33,7 @@ through the existing registration API — no changes below the ADR 0001 line.
 | 0.6 | Session scrubber | **done** — secret rejection and tree preservation verified on Linux/macOS; Windows remains characterised advisory | `40c2507d80`, `a21085b03d` |
 | 0.7 | Corpus fixtures | **done** — synthetic corpus hygiene and native session semantics verified; Windows remains characterised advisory | `5ab33597b9`, `adf24cf594`, `bd14192126` |
 | 0.8 | Replay runner | **done** — offline Agent replay, recorded provider, inert tool/error replay, model/branch/compaction handling, strict JSONL validation, and deterministic metrics seam verified | `56646c6746` |
-| 0.9 | Metrics + determinism gate | not started | — |
+| 0.9 | Metrics + determinism gate | **done** — complete stable schema, production prompt/schema baseline, replay-derived completion/tool metrics, and byte-identical corpus gate verified | `89f6d41cbf` |
 | 0.10 | Close the phase | not started | — |
 
 Supporting commits not owned by a single task: `7576d67fc` (initial doc set),
@@ -533,6 +533,17 @@ it("produces identical metrics across two consecutive runs", async () => {
 **Step 4 — make it deterministic.** Exclude or pin wall-clock and ordering-dependent
 fields explicitly, and **write a comment saying why for each one**. Loosening the
 equality check instead is how this gate quietly stops working.
+
+**Verified 2026-08-10.** The corpus runner emits the full stable schema in lexical
+fixture order. Context accounting includes messages, the production system prompt,
+and tool schemas; cache rate follows the existing input + cache-read + cache-write
+denominator; tool counts and completion come from replayed output; recorded usage
+provides cost. Wall time is explicitly pinned pending recorded durations. Two complete
+corpus runs produced byte-identical JSON. The focused suite passed 14 tests and
+`npx tsgo --noEmit` passed. The repository-wide test command was also run; its 13
+inherited/environmental failures remain the characterised baseline (missing `rg`,
+external-editor fixtures, terminal rendering, model config/API credentials), while
+the replay suite stayed green.
 
 **Step 5 — verify PASS twice in a row. Step 6 — commit.**
 
