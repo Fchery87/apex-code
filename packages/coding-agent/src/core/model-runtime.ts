@@ -40,6 +40,8 @@ import * as builtinProviderCatalog from "@earendil-works/pi-ai/providers/all";
 import { getAgentDir } from "../config.ts";
 import { operationSignal, raceWithAbortSignal } from "../utils/abort.ts";
 import { AuthStorage as DefaultAuthStorage } from "./auth-storage.ts";
+import { classifyCredentialFailure, drainAttempt, replayAttempt, type ResultStream } from "./credential-failover.ts";
+import type { CredentialIdentity, CredentialPool } from "./credential-pool.ts";
 import { ModelConfig } from "./model-config.ts";
 import { FileModelsStore, InMemoryCodingAgentModelsStore } from "./models-store.ts";
 import {
@@ -79,6 +81,19 @@ export interface CreateModelRuntimeOptions {
 	signal?: AbortSignal;
 	/** Skip initial catalog and availability refresh. Static models remain available. */
 	refreshOnCreate?: boolean;
+	/**
+	 * Optional pool for bounded, pre-completion credential failover in streamSimple().
+	 * Providers with no entries in the pool keep single-credential auth resolution
+	 * unchanged. Apex owns this pool adjacent to the consumed CredentialStore
+	 * contract (one credential per provider); it is never itself a CredentialStore.
+	 */
+	credentialPool?: CredentialPool;
+	/**
+	 * Resolves the request-scoped auth override for a credential-pool selection.
+	 * Required for pool entries to actually authenticate; an identity with no
+	 * resolver entry falls back to the request's own apiKey/env options.
+	 */
+	resolveCredentialPoolAuth?: (identity: CredentialIdentity) => { apiKey?: string; env?: Record<string, string> } | undefined;
 }
 
 export interface ModelRuntimeAuthOverrides extends AuthOperationOptions {
@@ -150,6 +165,10 @@ export class ModelRuntime implements Models {
 	private readonly providerAvailabilitySeq = new Map<string, number>();
 	private availabilityError: string | undefined;
 	private readonly credentialOperations = new Map<string, Promise<unknown>>();
+	private readonly credentialPool: CredentialPool | undefined;
+	private readonly resolveCredentialPoolAuth:
+		| ((identity: CredentialIdentity) => { apiKey?: string; env?: Record<string, string> } | undefined)
+		| undefined;
 
 	private constructor(
 		credentials: RuntimeCredentials,
@@ -158,11 +177,15 @@ export class ModelRuntime implements Models {
 		modelsStore: ModelsStore,
 		providers: readonly Provider[],
 		modelNetworkEnabled: boolean,
+		credentialPool?: CredentialPool,
+		resolveCredentialPoolAuth?: (identity: CredentialIdentity) => { apiKey?: string; env?: Record<string, string> } | undefined,
 	) {
 		this.credentials = credentials;
 		this.config = config;
 		this.modelsPath = modelsPath;
 		this.modelNetworkEnabled = modelNetworkEnabled;
+		this.credentialPool = credentialPool;
+		this.resolveCredentialPoolAuth = resolveCredentialPoolAuth;
 		this.defaultBuiltins = new Map(providers.map((provider) => [provider.id, provider]));
 		for (const [providerId, provider] of this.defaultBuiltins) this.builtins.set(providerId, provider);
 		this.models = createModels({ credentials, modelsStore });
@@ -194,6 +217,8 @@ export class ModelRuntime implements Models {
 			modelsStore,
 			providers,
 			process.env.PI_OFFLINE === undefined,
+			options.credentialPool,
+			options.resolveCredentialPoolAuth,
 		);
 		runtime.configureRadiusProviders();
 		runtime.rebuildProviders();
@@ -635,9 +660,63 @@ export class ModelRuntime implements Models {
 
 	streamSimple(model: Model<Api>, context: Context, options?: ModelsSimpleStreamOptions): AssistantMessageEventStream {
 		return lazyStream(model, async () => {
+			const pool = this.credentialPool;
+			if (pool?.snapshot().some((entry) => entry.providerId === model.provider)) {
+				return this.streamSimpleWithCredentialFailover(pool, model, context, options);
+			}
 			const prepared = await this.prepareRequest(model, options);
 			return prepared.provider.streamSimple(prepared.model, context, prepared.options as SimpleStreamOptions);
 		});
+	}
+
+	/**
+	 * Bounded, pre-completion credential failover: each attempt is fully drained
+	 * before any event reaches the caller, so a rotated-away attempt is invisible
+	 * to it. A turn visits each (credential identity, this model) at most once.
+	 * Only a classified rate-limit/blocked/transient failure advances the chain;
+	 * on exhaustion the original (first) failure is rethrown, not the last one.
+	 */
+	private async streamSimpleWithCredentialFailover(
+		pool: CredentialPool,
+		model: Model<Api>,
+		context: Context,
+		options: ModelsSimpleStreamOptions | undefined,
+	): Promise<ResultStream> {
+		const attempted = new Set<CredentialIdentity>();
+		let originalFailure: ResultStream | undefined;
+
+		for (;;) {
+			options?.signal?.throwIfAborted();
+			const selection = pool.select({ providerId: model.provider, attempted });
+			if (!selection) {
+				if (originalFailure) return originalFailure;
+				// Pool configured for this provider but nothing currently eligible
+				// (e.g. every entry cooling down): fall back to default auth resolution
+				// so the caller still gets a real attempt instead of a silent no-op.
+				const prepared = await this.prepareRequest(model, options);
+				return prepared.provider.streamSimple(prepared.model, context, prepared.options as SimpleStreamOptions);
+			}
+			attempted.add(selection.identity);
+
+			const auth = this.resolveCredentialPoolAuth?.(selection.identity);
+			const prepared = await this.prepareRequest(model, {
+				...options,
+				apiKey: auth?.apiKey ?? options?.apiKey,
+				env: auth?.env ?? options?.env,
+			});
+			const attemptStream = prepared.provider.streamSimple(
+				prepared.model,
+				context,
+				prepared.options as SimpleStreamOptions,
+			) as ResultStream;
+			const drained = await drainAttempt(attemptStream);
+
+			const kind = classifyCredentialFailure(drained.message);
+			if (!kind) return replayAttempt(drained);
+
+			pool.recordFailure({ identity: selection.identity, kind });
+			if (!originalFailure) originalFailure = replayAttempt(drained);
+		}
 	}
 
 	completeSimple(model: Model<Api>, context: Context, options?: ModelsSimpleStreamOptions): Promise<AssistantMessage> {
