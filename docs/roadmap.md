@@ -78,7 +78,7 @@ capable and measurably worse.
 
 | Phase | Name | State | Spec | Plan |
 | --- | --- | --- | --- | --- |
-| 0 | Fork foundation | **landed** — 10 of 10 tasks | [spec](specs/2026-08-08-fork-foundation.md) | — |
+| 0 | Fork foundation | **landed** — 10 of 10 tasks · `9d79cc6c6b` | [spec](specs/2026-08-08-fork-foundation.md) | — |
 | 1 | Provider & model layer | **specified** — planning next | [spec](specs/2026-08-10-provider-and-model-layer.md) | — |
 | 2 | Permissions & sandbox | not started | — | — |
 | 3 | Context engineering | not started | — | — |
