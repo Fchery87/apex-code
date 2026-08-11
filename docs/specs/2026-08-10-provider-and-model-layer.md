@@ -5,9 +5,9 @@
 | Field | Value |
 | --- | --- |
 | Author | Fchery87 |
-| Status | `Active` |
+| Status | `Active` — landed |
 | Created | 2026-08-10 |
-| Last updated | 2026-08-10 |
+| Last updated | 2026-08-11 |
 | Roadmap phase | 1 — Provider & model layer |
 | Tracking issue/PR | none |
 | Compatibility posture | **Preserves compatibility.** Existing provider configuration, `AuthStorage`, `ModelRuntime`, and Pi-compatible model identifiers continue to work. Roles, fallbacks, and credential selection are additive; legacy single-model selection remains the default when no role configuration is present. Keys are never migrated into a new plaintext file. |

@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phase 0 landed; Phase 1 implementation active · **Created:** 2026-08-08 · **Last updated:** 2026-08-11
+**Status:** Active — Phase 0 landed; Phase 1 landed · **Created:** 2026-08-08 · **Last updated:** 2026-08-11
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -79,7 +79,7 @@ capable and measurably worse.
 | Phase | Name | State | Spec | Plan |
 | --- | --- | --- | --- | --- |
 | 0 | Fork foundation | **landed** — 10 of 10 tasks · `9d79cc6c6b` | [spec](specs/2026-08-08-fork-foundation.md) | — |
-| 1 | Provider & model layer | **in progress** — plan active | [spec](specs/2026-08-10-provider-and-model-layer.md) | [plan](plans/2026-08-11-provider-and-model-layer.md) |
+| 1 | Provider & model layer | **landed** — 7 of 7 tasks · `ed64d318a` | [spec](specs/2026-08-10-provider-and-model-layer.md) | — |
 | 2 | Permissions & sandbox | not started | — | — |
 | 3 | Context engineering | not started | — | — |
 | 4 | Tool surface | not started | — | — |
@@ -170,6 +170,32 @@ replay corpus. No API key appears in any file the config loader writes.
 
 **Risks.** Cost tables drift constantly. Treat `cost` as data to refresh, and add a
 staleness warning rather than silently reporting wrong numbers.
+
+**Progress against it** (verified, not asserted):
+
+| Criterion | State |
+| --- | --- |
+| Forced 429 on primary rotates to a secondary and the turn completes | **met.** `packages/coding-agent/test/model-runtime-failover.test.ts` exercises this through the real `ModelRuntime.streamSimple()` seam via a registered fake provider; the classified failure and rotation are also proven for role-level model fallback (`streamSimpleForRole()`), all-fail exhaustion (original failure preserved, not the last), non-retryable errors (no rotation), and an already-cancelled request (no attempt). |
+| Role routing resolves distinct models per role from one config | **met.** `packages/coding-agent/test/model-roles.test.ts`: `default`/`plan`/`tiny`/`designer` plus a custom role name resolve to distinct models from one `models.json`; a legacy file with no `roles` key resolves to an empty role map, leaving existing initial-model selection untouched. |
+| Per-turn recorded cost within 5% of provider-reported cost, replay corpus | **met.** `packages/coding-agent/test/replay-runner.test.ts` independently re-derives provider-reported cost from each fixture's raw JSONL (bypassing the replay pipeline) and reconciles it against replay-reported cost per corpus result, plus a nonzero-cost scratch case; zero network calls verified. Today's recorded-passthrough accounting reconciles exactly — the 5% tolerance is the stated contract for when that changes, not a loosened assertion. |
+| No API key appears in any file the config loader writes | **met.** `packages/coding-agent/test/model-config.test.ts`: a legacy `models.json` with a literal key, a `$ENV` reference, and a `!command` reference all load unchanged; the loader never writes the file, never logs, and never copies a resolved secret into loader-generated output. |
+
+Also delivered, beyond the letter of the exit criterion: a deterministic, non-secret
+`CredentialPool` (rotation, cooldown/blocked exclusion, single-owner refresh leases —
+`credential-pool.test.ts`), and a versioned, mode-0600 `UsagePerformanceStore`
+recording one non-secret sample (provider/model/role/credential-identity/outcome/
+ttft/generation/usage/cost) per request attempt, win or rotated-away
+(`usage-performance-store.test.ts`).
+
+Full verification: `npx tsgo --noEmit` clean; `npm --workspace packages/coding-agent
+test` green except pre-existing failures unrelated to this phase (`external-editor`,
+`radius`, `skills`, `startup-session-name`, `tools` grep-flag tests,
+`6999-models-json-hot-reload`) — confirmed present against the pre-Phase-1 tree, not
+introduced by it.
+
+**Order changes.** Task 1.2 (credential-pool selection) was implemented and verified
+before Task 1.1 (secrecy guard): it is a pure module with no dependency on the
+config/secret-boundary work Task 1.1 establishes, so there was no ordering hazard.
 
 ---
 
