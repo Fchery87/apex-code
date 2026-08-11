@@ -49,10 +49,11 @@ import {
 	replayAttempt,
 	type ResultStream,
 } from "./credential-failover.ts";
-import type { CredentialIdentity, CredentialPool } from "./credential-pool.ts";
+import type { CredentialFailureKind, CredentialIdentity, CredentialPool } from "./credential-pool.ts";
 import { ModelConfig } from "./model-config.ts";
 import { resolveModelRoles, type RoleResolutionResult } from "./model-resolver.ts";
 import { FileModelsStore, InMemoryCodingAgentModelsStore } from "./models-store.ts";
+import type { UsagePerformanceSample, UsagePerformanceStore } from "./usage-performance-store.ts";
 import {
 	type AuthStatus,
 	type CompatibilityRequestConfig,
@@ -103,6 +104,10 @@ export interface CreateModelRuntimeOptions {
 	 * resolver entry falls back to the request's own apiKey/env options.
 	 */
 	resolveCredentialPoolAuth?: (identity: CredentialIdentity) => { apiKey?: string; env?: Record<string, string> } | undefined;
+	/** Optional durable store for non-secret per-request usage/latency samples. Unset records nothing. */
+	usagePerformanceStore?: UsagePerformanceStore;
+	/** Monotonic clock for usage/latency timing. Defaults to performance.now(); inject a fake in tests. */
+	performanceClock?: () => number;
 }
 
 export interface ModelRuntimeAuthOverrides extends AuthOperationOptions {
@@ -178,6 +183,8 @@ export class ModelRuntime implements Models {
 	private readonly resolveCredentialPoolAuth:
 		| ((identity: CredentialIdentity) => { apiKey?: string; env?: Record<string, string> } | undefined)
 		| undefined;
+	private readonly usagePerformanceStore: UsagePerformanceStore | undefined;
+	private readonly performanceClock: () => number;
 
 	private constructor(
 		credentials: RuntimeCredentials,
@@ -188,6 +195,8 @@ export class ModelRuntime implements Models {
 		modelNetworkEnabled: boolean,
 		credentialPool?: CredentialPool,
 		resolveCredentialPoolAuth?: (identity: CredentialIdentity) => { apiKey?: string; env?: Record<string, string> } | undefined,
+		usagePerformanceStore?: UsagePerformanceStore,
+		performanceClock?: () => number,
 	) {
 		this.credentials = credentials;
 		this.config = config;
@@ -195,6 +204,8 @@ export class ModelRuntime implements Models {
 		this.modelNetworkEnabled = modelNetworkEnabled;
 		this.credentialPool = credentialPool;
 		this.resolveCredentialPoolAuth = resolveCredentialPoolAuth;
+		this.usagePerformanceStore = usagePerformanceStore;
+		this.performanceClock = performanceClock ?? (() => performance.now());
 		this.defaultBuiltins = new Map(providers.map((provider) => [provider.id, provider]));
 		for (const [providerId, provider] of this.defaultBuiltins) this.builtins.set(providerId, provider);
 		this.models = createModels({ credentials, modelsStore });
@@ -228,6 +239,8 @@ export class ModelRuntime implements Models {
 			process.env.PI_OFFLINE === undefined,
 			options.credentialPool,
 			options.resolveCredentialPoolAuth,
+			options.usagePerformanceStore,
+			options.performanceClock,
 		);
 		runtime.configureRadiusProviders();
 		runtime.rebuildProviders();
@@ -694,7 +707,91 @@ export class ModelRuntime implements Models {
 			return this.streamSimpleWithCredentialFailover(pool, model, context, options, role);
 		}
 		const prepared = await this.prepareRequest(model, options);
-		return prepared.provider.streamSimple(prepared.model, context, prepared.options as SimpleStreamOptions) as ResultStream;
+		const attemptStream = prepared.provider.streamSimple(
+			prepared.model,
+			context,
+			prepared.options as SimpleStreamOptions,
+		) as ResultStream;
+		return this.instrumentAttempt(attemptStream, model, role, undefined);
+	}
+
+	/**
+	 * Wraps a provider attempt stream with usage/latency recording, pass-through
+	 * (no buffering, so live streaming is unaffected). Recording is triggered by
+	 * the terminal (done/error) event itself, synchronously before that event is
+	 * yielded onward. This matters: a consumer's `.result()` promise can resolve
+	 * the instant the terminal event reaches it — one iteration step before a
+	 * plain post-loop "the generator finished" check would fire — so recording
+	 * after the loop exits would race a caller awaiting `.result()` and lose.
+	 * Relies on every call site fully iterating the returned stream (all current
+	 * ones do, via drainAttempt or lazyStream's forwardStream).
+	 */
+	private instrumentAttempt(
+		stream: ResultStream,
+		model: Model<Api>,
+		role: string | undefined,
+		credentialIdentity: CredentialIdentity | undefined,
+	): ResultStream {
+		const store = this.usagePerformanceStore;
+		if (!store) return stream;
+		const now = this.performanceClock;
+		const startedAt = now();
+		const self = this;
+		return {
+			async *[Symbol.asyncIterator]() {
+				let firstEventAt: number | undefined;
+				for await (const event of stream) {
+					if (firstEventAt === undefined) firstEventAt = now();
+					if (event.type === "done" || event.type === "error") {
+						const completedAt = now();
+						const message = event.type === "done" ? event.message : event.error;
+						void store
+							.record(
+								self.buildUsageSample(model, role, credentialIdentity, message, {
+									startedAt,
+									firstEventAt: firstEventAt ?? completedAt,
+									completedAt,
+								}),
+							)
+							.catch(() => {});
+					}
+					yield event;
+				}
+			},
+			result: () => stream.result(),
+		};
+	}
+
+	private buildUsageSample(
+		model: Model<Api>,
+		role: string | undefined,
+		credentialIdentity: CredentialIdentity | undefined,
+		message: AssistantMessage,
+		timing: { startedAt: number; firstEventAt: number; completedAt: number },
+	): UsagePerformanceSample {
+		const outcome: UsagePerformanceSample["outcome"] =
+			message.stopReason === "aborted" ? "aborted" : message.stopReason === "error" ? "error" : "success";
+		const failureKind: CredentialFailureKind | undefined = outcome === "error" ? classifyCredentialFailure(message) : undefined;
+		return {
+			timestamp: Date.now(),
+			provider: model.provider,
+			model: model.id,
+			role,
+			credentialIdentity,
+			outcome,
+			failureKind,
+			ttftMs: timing.firstEventAt - timing.startedAt,
+			generationMs: timing.completedAt - timing.firstEventAt,
+			usage: message.usage
+				? {
+						input: message.usage.input,
+						output: message.usage.output,
+						cacheRead: message.usage.cacheRead,
+						cacheWrite: message.usage.cacheWrite,
+					}
+				: undefined,
+			cost: message.usage?.cost.total,
+		};
 	}
 
 	/**
@@ -792,7 +889,12 @@ export class ModelRuntime implements Models {
 				// (e.g. every entry cooling down): fall back to default auth resolution
 				// so the caller still gets a real attempt instead of a silent no-op.
 				const prepared = await this.prepareRequest(model, options);
-				return prepared.provider.streamSimple(prepared.model, context, prepared.options as SimpleStreamOptions);
+				const fallbackStream = prepared.provider.streamSimple(
+					prepared.model,
+					context,
+					prepared.options as SimpleStreamOptions,
+				) as ResultStream;
+				return this.instrumentAttempt(fallbackStream, model, role, undefined);
 			}
 			attempted.add(selection.identity);
 
@@ -802,11 +904,12 @@ export class ModelRuntime implements Models {
 				apiKey: auth?.apiKey ?? options?.apiKey,
 				env: auth?.env ?? options?.env,
 			});
-			const attemptStream = prepared.provider.streamSimple(
-				prepared.model,
-				context,
-				prepared.options as SimpleStreamOptions,
-			) as ResultStream;
+			const attemptStream = this.instrumentAttempt(
+				prepared.provider.streamSimple(prepared.model, context, prepared.options as SimpleStreamOptions) as ResultStream,
+				model,
+				role,
+				selection.identity,
+			);
 			const drained = await drainAttempt(attemptStream);
 
 			const kind = classifyCredentialFailure(drained.message);
