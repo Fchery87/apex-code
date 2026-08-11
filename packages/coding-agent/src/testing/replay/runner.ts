@@ -1,8 +1,10 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
 	type AssistantMessage,
 	InMemoryModelsStore,
 	type Message,
+	type Tool,
 	type ToolCall,
 	type ToolResultMessage,
 	Type,
@@ -19,11 +21,10 @@ import {
 	SessionManager,
 	type SessionMessageEntry,
 } from "../../core/session-manager.ts";
+import { buildSystemPrompt } from "../../core/system-prompt.ts";
+import { createAllToolDefinitions } from "../../core/tools/index.ts";
+import { buildReplayMetrics, type ReplayMetrics } from "./metrics.ts";
 import { registerRecordedProvider } from "./recorded-provider.ts";
-
-export interface ReplayMetrics {
-	contextTokensByTurn: number[];
-}
 
 export interface ReplayResult {
 	turns: number;
@@ -179,6 +180,33 @@ function assertToolResultsMatch(actual: readonly ToolResultMessage[], expected: 
 	}
 }
 
+function productionPromptAndSchemas(toolNames: readonly string[]): { systemPrompt: string; tools: Tool[] } {
+	const definitions = createAllToolDefinitions("$HOME/replay-fixtures");
+	const selected = [...new Set(toolNames)].sort().flatMap((name) => {
+		const definition = Reflect.get(definitions, name);
+		return definition && typeof definition === "object" ? [definition] : [];
+	});
+	const toolSnippets = Object.fromEntries(
+		selected.flatMap((definition) =>
+			typeof definition.promptSnippet === "string" ? [[definition.name, definition.promptSnippet]] : [],
+		),
+	);
+	const promptGuidelines = selected.flatMap((definition) => definition.promptGuidelines ?? []);
+	return {
+		systemPrompt: buildSystemPrompt({
+			cwd: "$HOME/replay-fixtures",
+			selectedTools: selected.map((definition) => definition.name),
+			toolSnippets,
+			promptGuidelines,
+		}),
+		tools: selected.map((definition) => ({
+			name: definition.name,
+			description: definition.description,
+			parameters: definition.parameters,
+		})),
+	};
+}
+
 export async function replay(filePath: string): Promise<ReplayResult> {
 	let physicalLines: unknown[];
 	try {
@@ -219,6 +247,8 @@ export async function replay(filePath: string): Promise<ReplayResult> {
 	const replayedResponses: AssistantMessage[] = [];
 	const replayedToolResults: ToolResultMessage[] = [];
 	const contextTokensByTurn: number[] = [];
+	let turnsCompleted = 0;
+	const promptBaseline = productionPromptAndSchemas(recordedTools.tools.map((tool) => tool.name));
 	let networkCalls = 0;
 	const rejectNetwork: typeof globalThis.fetch = async () => {
 		networkCalls++;
@@ -230,7 +260,7 @@ export async function replay(filePath: string): Promise<ReplayResult> {
 	const agent = new Agent({
 		initialState: {
 			model: recorded.getModel(firstContext.model?.modelId ?? firstResponse.model),
-			systemPrompt: "",
+			systemPrompt: promptBaseline.systemPrompt,
 			tools: recordedTools.tools,
 		},
 		streamFn: (model, context, options) => runtime.streamSimple(model, context, { ...options, fetch: rejectNetwork }),
@@ -277,10 +307,19 @@ export async function replay(filePath: string): Promise<ReplayResult> {
 		const turnContexts = recorded.contexts.slice(requestStart);
 		const lastContext = turnContexts.at(-1);
 		if (!lastContext) throw new Error(`User turn ${contextTokensByTurn.length + 1} made no provider request`);
-		contextTokensByTurn.push(lastContext.messages.reduce((total, message) => total + estimateTokens(message), 0));
+		const staticInputTokens = Math.ceil(
+			`${lastContext.systemPrompt ?? ""}\n${JSON.stringify(lastContext.tools ?? [])}`.length / 4,
+		);
+		contextTokensByTurn.push(
+			staticInputTokens + lastContext.messages.reduce((total, message) => total + estimateTokens(message), 0),
+		);
 		for (const message of agent.state.messages.slice(historical.messages.length - 1)) {
 			if (message.role === "assistant") replayedResponses.push(message);
 			if (message.role === "toolResult") replayedToolResults.push(message);
+		}
+		const terminalResponse = replayedResponses.at(-1);
+		if (terminalResponse && terminalResponse.stopReason !== "error" && terminalResponse.stopReason !== "aborted") {
+			turnsCompleted++;
 		}
 	}
 	recorded.assertExhausted();
@@ -297,6 +336,24 @@ export async function replay(filePath: string): Promise<ReplayResult> {
 			...structuredClone(result),
 			timestamp: recordedToolResults[index]?.timestamp ?? result.timestamp,
 		})),
-		metrics: { contextTokensByTurn },
+		metrics: buildReplayMetrics({
+			systemPrompt: promptBaseline.systemPrompt,
+			tools: promptBaseline.tools,
+			recordedResponses: responses,
+			replayedResponses,
+			contextTokensByTurn,
+			turnsCompleted,
+		}),
 	};
+}
+
+/** Replay every JSONL fixture in lexical order for byte-stable corpus output. */
+export async function replayCorpus(directory: string): Promise<Record<string, ReplayMetrics>> {
+	const metrics: Record<string, ReplayMetrics> = {};
+	for (const name of readdirSync(directory)
+		.filter((entry) => entry.endsWith(".jsonl"))
+		.sort()) {
+		metrics[name] = (await replay(join(directory, name))).metrics;
+	}
+	return metrics;
 }
