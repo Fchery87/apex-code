@@ -33,7 +33,7 @@ through the existing registration API — no changes below the ADR 0001 line.
 | 0.6 | Session scrubber | **done** — secret rejection and tree preservation verified on Linux/macOS; Windows remains characterised advisory | `40c2507d80`, `a21085b03d` |
 | 0.7 | Corpus fixtures | **done** — synthetic corpus hygiene and native session semantics verified; Windows remains characterised advisory | `5ab33597b9`, `adf24cf594`, `bd14192126` |
 | 0.8 | Replay runner | **done** — offline Agent replay, recorded provider, inert tool/error replay, model/branch/compaction handling, strict JSONL validation, and deterministic metrics seam verified | `56646c6746` |
-| 0.9 | Metrics + determinism gate | **done** — complete stable schema, production prompt/schema baseline, replay-derived completion/tool metrics, and byte-identical corpus gate verified | `89f6d41cbf` |
+| 0.9 | Metrics + determinism gate | **done** — complete stable schema, production prompt/schema baseline, replay-derived completion/tool metrics, and byte-identical corpus gate verified | `89f6d41cbf`, `9879e60607` |
 | 0.10 | Close the phase | not started | — |
 
 Supporting commits not owned by a single task: `7576d67fc` (initial doc set),
