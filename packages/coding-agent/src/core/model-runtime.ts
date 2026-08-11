@@ -43,6 +43,7 @@ import { AuthStorage as DefaultAuthStorage } from "./auth-storage.ts";
 import { classifyCredentialFailure, drainAttempt, replayAttempt, type ResultStream } from "./credential-failover.ts";
 import type { CredentialIdentity, CredentialPool } from "./credential-pool.ts";
 import { ModelConfig } from "./model-config.ts";
+import { resolveModelRoles, type RoleResolutionResult } from "./model-resolver.ts";
 import { FileModelsStore, InMemoryCodingAgentModelsStore } from "./models-store.ts";
 import {
 	type AuthStatus,
@@ -420,6 +421,17 @@ export class ModelRuntime implements Models {
 
 	getModel(providerId: string, modelId: string): Model<Api> | undefined {
 		return this.models.getModel(providerId, modelId);
+	}
+
+	/**
+	 * Resolve additive role configuration into ordered model-candidate chains.
+	 * Credential-blind and side-effect free: it never resolves auth and never
+	 * writes configuration. Legacy files with no `roles` resolve to an empty map,
+	 * leaving initial model selection (`findInitialModel`, `resolveCliModel`)
+	 * behaviorally unchanged.
+	 */
+	resolveModelRoles(): RoleResolutionResult {
+		return resolveModelRoles(this.config.getRoles(), this.getModels());
 	}
 
 	async checkAuth(providerId: string, options?: AuthOperationOptions): Promise<AuthCheck | undefined> {

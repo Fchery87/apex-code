@@ -203,14 +203,22 @@ const ProviderConfigSchema = Type.Object({
 	modelOverrides: Type.Optional(Type.Record(Type.String(), ModelOverrideSchema)),
 });
 
+const RoleDefinitionSchema = Type.Object({
+	/** Ordered, non-empty list of canonical "provider/modelId" candidates. */
+	models: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
+});
+
 const ModelsConfigSchema = Type.Object({
 	providers: Type.Record(Type.String(), ProviderConfigSchema),
+	/** Additive, credential-blind role -> ordered model-candidate mapping. */
+	roles: Type.Optional(Type.Record(Type.String(), RoleDefinitionSchema)),
 });
 const validateModelsConfig = Compile(ModelsConfigSchema);
 
 export type ModelsJsonModel = Static<typeof ModelDefinitionSchema>;
 export type ModelsJsonModelOverride = Static<typeof ModelOverrideSchema>;
 export type ModelsJsonProvider = Static<typeof ProviderConfigSchema>;
+export type ModelsJsonRoleDefinition = Static<typeof RoleDefinitionSchema>;
 type ModelsJson = Static<typeof ModelsConfigSchema>;
 
 function formatValidationPath(error: TLocalizedValidationError): string {
@@ -235,10 +243,16 @@ function deepFreeze<T>(value: T): T {
 /** One immutable load of models.json. */
 export class ModelConfig {
 	private readonly providers: ReadonlyMap<string, ModelsJsonProvider>;
+	private readonly roles: ReadonlyMap<string, readonly string[]>;
 	private readonly error: string | undefined;
 
-	private constructor(providers: ReadonlyMap<string, ModelsJsonProvider>, error?: string) {
+	private constructor(
+		providers: ReadonlyMap<string, ModelsJsonProvider>,
+		roles: ReadonlyMap<string, readonly string[]> = new Map(),
+		error?: string,
+	) {
 		this.providers = providers;
+		this.roles = roles;
 		this.error = error;
 	}
 
@@ -252,6 +266,7 @@ export class ModelConfig {
 			if ((error as NodeJS.ErrnoException).code === "ENOENT") return new ModelConfig(new Map());
 			return new ModelConfig(
 				new Map(),
+				new Map(),
 				`Failed to load models.json: ${error instanceof Error ? error.message : error}\n\nFile: ${path}`,
 			);
 		}
@@ -261,6 +276,7 @@ export class ModelConfig {
 			parsed = JSON.parse(stripJsonComments(content));
 		} catch (error) {
 			return new ModelConfig(
+				new Map(),
 				new Map(),
 				`Failed to parse models.json: ${error instanceof Error ? error.message : error}\n\nFile: ${path}`,
 			);
@@ -272,7 +288,7 @@ export class ModelConfig {
 					.Errors(parsed)
 					.map((error) => `  - ${formatValidationPath(error)}: ${error.message}`)
 					.join("\n") || "Unknown schema error";
-			return new ModelConfig(new Map(), `Invalid models.json schema:\n${errors}\n\nFile: ${path}`);
+			return new ModelConfig(new Map(), new Map(), `Invalid models.json schema:\n${errors}\n\nFile: ${path}`);
 		}
 
 		const config = parsed as ModelsJson;
@@ -280,7 +296,11 @@ export class ModelConfig {
 		for (const [providerId, provider] of Object.entries(config.providers)) {
 			providers.set(providerId, deepFreeze(structuredClone(provider)));
 		}
-		return new ModelConfig(providers);
+		const roles = new Map<string, readonly string[]>();
+		for (const [roleName, role] of Object.entries(config.roles ?? {})) {
+			roles.set(roleName, Object.freeze([...role.models]));
+		}
+		return new ModelConfig(providers, roles);
 	}
 
 	getProvider(providerId: string): ModelsJsonProvider | undefined {
@@ -289,6 +309,11 @@ export class ModelConfig {
 
 	getProviderIds(): readonly string[] {
 		return [...this.providers.keys()];
+	}
+
+	/** Additive role -> ordered "provider/modelId" candidate references, unresolved. */
+	getRoles(): ReadonlyMap<string, readonly string[]> {
+		return this.roles;
 	}
 
 	getError(): string | undefined {
