@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phase 0 landed; Phase 1 landed · **Created:** 2026-08-08 · **Last updated:** 2026-08-11
+**Status:** Active — Phases 0 and 1 landed; Phase 2a implementation active · **Created:** 2026-08-08 · **Last updated:** 2026-08-11
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -68,8 +68,8 @@ capable and measurably worse.
 ```
 0  Fork foundation ──┬──► 1  Provider & model layer
                      │
-                     ├──► 2  Permissions & sandbox ──┐
-                     │                               ├──► 4  Tool surface ──► 5  Delegation
+                     ├──► 2a Permissions: rule model ┐
+                     │    2b Permissions: sandbox    ├──► 4  Tool surface ──► 5  Delegation
                      └──► 3  Context engineering ────┘
                                                           │
    6  Durable state & daemon ──────────────────────────────┘
@@ -80,7 +80,8 @@ capable and measurably worse.
 | --- | --- | --- | --- | --- |
 | 0 | Fork foundation | **landed** — 10 of 10 tasks · `9d79cc6c6b` | [spec](specs/2026-08-08-fork-foundation.md) | — |
 | 1 | Provider & model layer | **landed** — 7 of 7 tasks · `ad79a98fe` | [spec](specs/2026-08-10-provider-and-model-layer.md) | — |
-| 2 | Permissions & sandbox | not started | — | — |
+| 2a | Permissions — rule model | **in progress** — plan active | [spec](specs/2026-08-11-permission-rule-model.md) | [plan](plans/2026-08-11-permission-rule-model.md) |
+| 2b | Permissions — OS sandbox | not started | — | — |
 | 3 | Context engineering | not started | — | — |
 | 4 | Tool surface | not started | — | — |
 | 5 | Delegation & multi-agent | not started | — | — |
@@ -231,6 +232,27 @@ host, and both surface as violations rather than silent failures.
 overrun. Ship the rule model first; it is independently valuable and unblocks Phase 4
 on its own.
 
+### Amendment (2026-08-11): split into 2a and 2b
+
+The phase is **split on the record**, acting on its own Risks note rather than
+discovering it mid-implementation. The exit criterion above is unchanged in substance
+and is divided at its own seam:
+
+| Sub-phase | Scope | Exit criterion |
+| --- | --- | --- |
+| **2a — rule model** | Rules, eight-source precedence, modes, `PermissionUpdate`, `beforeToolCall` interception, `ToolContract` backfill for the seven inherited tools. ADR 0004. | Every registered tool passes the gate, registry-derived with no exceptions list. Precedence verified across all eight sources. |
+| **2b — OS sandbox** | Filesystem read/write restriction, network host allowlist, violation store, interactive escalation. ADR 0005. | The sandbox blocks a write outside the workspace and a request to a non-allowlisted host, and both surface as violations rather than silent failures. |
+
+**Phase 4 is gated on 2a only.** What Phase 4 needs is the `ruleContent` grammar its
+fifteen tools declare against; it does not need OS enforcement to exist. Keeping the
+two joined would let a platform-divergent sandbox block a phase that never depended
+on it — the exact overrun this phase's own Risks note predicted.
+
+2b is not descoped and not deprioritized. It remains a Phase 2 obligation, and the
+safety floor is not complete until it lands; a rule model without enforcement
+underneath constrains a cooperative model and nothing else. It is sequenced second
+because it is the half that can slip.
+
 ---
 
 ## Phase 3 — Context engineering
@@ -378,8 +400,8 @@ takes the next free number instead of a reserved one.
 | 0001 | Fork boundary: `coding-agent` + `agent-core` forked; `pi-ai`, `pi-tui` consumed | 0 | ✅ |
 | 0002 | Clean-room rule regarding `c-code`; behavior may be described, code never copied | 0 | ✅ |
 | 0003 | Upstream merge cadence, patch-surface ceiling, and abandonment tripwire | 0 | ✅ (ceiling pending) |
-| 0004 | Permission rule model and source precedence | 2 | reserved |
-| 0005 | What the sandbox boundary does and does not guarantee | 2 | reserved |
+| 0004 | Permission rule model and source precedence | 2a | ✅ |
+| 0005 | What the sandbox boundary does and does not guarantee | 2b | reserved |
 | 0006 | Session format ownership and the migration guarantee owed to users | 6 | reserved |
 | 0007 | Evidence capture in core; policy layer stays a bundled extension | 7 | reserved |
 | 0008 | Delegation authority: `pi-subagents` dependency vs. owning it | 5 | reserved |
