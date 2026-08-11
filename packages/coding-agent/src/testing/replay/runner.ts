@@ -196,6 +196,7 @@ function productionPromptAndSchemas(toolNames: readonly string[]): { systemPromp
 	return {
 		systemPrompt: buildSystemPrompt({
 			cwd: "$HOME/replay-fixtures",
+			customPrompt: "You are an expert coding assistant operating inside Apex Code.",
 			selectedTools: selected.map((definition) => definition.name),
 			toolSnippets,
 			promptGuidelines,

@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phase 0 in progress (0.1–0.7 landed) · **Created:** 2026-08-08 · **Last updated:** 2026-08-10
+**Status:** Active — Phase 0 landed; Phase 1 specification active · **Created:** 2026-08-08 · **Last updated:** 2026-08-10
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -53,7 +53,7 @@ ADR 0003 sets the cadence, the ceiling, and the abandonment tripwires.
 **3. Every phase exits on a number, not a feeling.** The strongest thing in the
 current Thanos docs is the `≥50% keeps src/spec/` gate. Every phase below carries a
 criterion someone other than the author can check. Where a threshold depends on a
-baseline that does not exist yet, it is marked *(baseline from Phase 0)* rather than
+baseline that does not exist yet, it is marked **Phase 0 baseline: 935 tokens** (median of 1,117 un-compacted and 752 compacted turn-20 runs) rather than
 invented here.
 
 **4. Safety floor and context budget precede capability.** Permissions (2) and
@@ -78,8 +78,8 @@ capable and measurably worse.
 
 | Phase | Name | State | Spec | Plan |
 | --- | --- | --- | --- | --- |
-| 0 | Fork foundation | **in progress** — 5 of 10 tasks | [spec](specs/2026-08-08-fork-foundation.md) | [plan](plans/2026-08-08-fork-foundation.md) |
-| 1 | Provider & model layer | not started | — | — |
+| 0 | Fork foundation | **landed** — 10 of 10 tasks | [spec](specs/2026-08-08-fork-foundation.md) | — |
+| 1 | Provider & model layer | **specified** — planning next | [spec](specs/2026-08-10-provider-and-model-layer.md) | — |
 | 2 | Permissions & sandbox | not started | — | — |
 | 3 | Context engineering | not started | — | — |
 | 4 | Tool surface | not started | — | — |
@@ -130,7 +130,7 @@ two consecutive runs on the same input.
 | CI green on three platforms | **met as amended.** Run [`31298112668`](https://github.com/Fchery87/apex-code/actions/runs/31298112668) passed the frozen-package gate and completed green. Linux and macOS passed Build, Check, and Apex-owned tests. Windows passed Build and Check; its advisory Test step failed on inherited platform behavior, establishing the baseline Task 0.10 must characterise. The amended criterion is: *Linux green, macOS and Windows characterised.* |
 | Published artifact installs and completes a provider turn | **met.** `apex-code@0.0.1-alpha.0` clean-installed from npm, reported the expected version, passed registry signature/attestation audit, and completed a configured Google turn. Release run [`31326901954`](https://github.com/Fchery87/apex-code/actions/runs/31326901954). |
 | Upstream release merged, hunk count recorded | **met, and the criterion was wrong.** `v0.84.0` → `v0.84.1` merged: 1 conflicted hunk, 0 in forked paths. But at fork+0 divergence a hunk count is zero by construction and cannot found a ceiling. ADR 0003 was amended to move the ceiling basis past Phase 2; the honest Phase 0 metric is upstream churn — 57 files / ~2,000 lines per patch release. |
-| Replay corpus deterministic across two runs | **not started.** Tasks 0.6–0.9. Still the highest-leverage item in the phase and the one most likely to be skipped as "not real work." |
+| Replay corpus deterministic across two runs | **met.** Eight scrubbed synthetic native-v3 sessions replay offline through the Agent loop. The stable metrics schema and lexically ordered corpus output are byte-identical across consecutive runs (Task 0.9). |
 
 Two criteria above are recorded as *amended* rather than ticked. Task 0.10 closes this
 phase against the amended wording, not the original — a criterion that turned out to be
@@ -226,7 +226,7 @@ exists.
   auto-compaction.
 
 **Exit criterion.** On the replay corpus: median context tokens at turn 20 down ≥40%
-*(baseline from Phase 0)*, baseline system-prompt tokens down by the deferred-schema
+from the **Phase 0 baseline of 1,563 tokens** (median of the two turn-20-capable fixtures: 1,745 un-compacted and 1,380 compacted), baseline system-prompt tokens down from **707 tokens** by the deferred-schema
 saving, and **no regression in task completion**. That last clause is the one that
 matters — the other two are trivially gameable alone.
 
