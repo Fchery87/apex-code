@@ -127,14 +127,14 @@ two consecutive runs on the same input.
 
 | Criterion | State |
 | --- | --- |
-| CI green on three platforms | **met as amended.** Run [`31298112668`](https://github.com/Fchery87/apex-code/actions/runs/31298112668) passed the frozen-package gate and completed green. Linux and macOS passed Build, Check, and Apex-owned tests. Windows passed Build and Check; its advisory Test step failed on inherited platform behavior, establishing the baseline Task 0.10 must characterise. The amended criterion is: *Linux green, macOS and Windows characterised.* |
+| CI green on three platforms | **met as amended.** Run [`31454315906`](https://github.com/Fchery87/apex-code/actions/runs/31454315906) passed the frozen-package gate and concluded success. Ubuntu passed all required steps. macOS passed Build and Check, with one advisory inherited timing failure; Windows passed Build and Check, with its characterised advisory platform failures. The amended criterion is: *Linux green, macOS and Windows characterised.* |
 | Published artifact installs and completes a provider turn | **met.** `apex-code@0.0.1-alpha.0` clean-installed from npm, reported the expected version, passed registry signature/attestation audit, and completed a configured Google turn. Release run [`31326901954`](https://github.com/Fchery87/apex-code/actions/runs/31326901954). |
 | Upstream release merged, hunk count recorded | **met, and the criterion was wrong.** `v0.84.0` → `v0.84.1` merged: 1 conflicted hunk, 0 in forked paths. But at fork+0 divergence a hunk count is zero by construction and cannot found a ceiling. ADR 0003 was amended to move the ceiling basis past Phase 2; the honest Phase 0 metric is upstream churn — 57 files / ~2,000 lines per patch release. |
 | Replay corpus deterministic across two runs | **met.** Eight scrubbed synthetic native-v3 sessions replay offline through the Agent loop. The stable metrics schema and lexically ordered corpus output are byte-identical across consecutive runs (Task 0.9). |
 
-Two criteria above are recorded as *amended* rather than ticked. Task 0.10 closes this
-phase against the amended wording, not the original — a criterion that turned out to be
-unmeasurable is corrected on the record, never quietly marked done.
+Two criteria above are recorded as *amended* rather than ticked. Phase 0 closed against
+the amended wording, not the original — a criterion that turned out to be unmeasurable
+was corrected on the record, never quietly marked done.
 
 **Risks.** The corpus is the task most likely to be skipped as "not real work." It is
 the highest-leverage item in the phase. Sessions also carry live API keys and repo
