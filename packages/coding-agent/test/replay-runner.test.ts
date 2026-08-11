@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -110,11 +111,74 @@ describe("offline session replay", () => {
 		}
 	});
 
+	it("reconciles a nonzero recorded cost within 5%, verified against an independent extraction of the same fixture", async () => {
+		const scratch = await mkdtemp(join(tmpdir(), "apex-replay-"));
+		try {
+			const source = await readFile(corpusFixture("short-single-turn.jsonl"), "utf8");
+			const session = join(scratch, "nonzero-cost.jsonl");
+			await writeFile(
+				session,
+				source.replace('"cacheRead":0,"cacheWrite":0,"total":0', '"cacheRead":0.012,"cacheWrite":0.004,"total":0.153'),
+			);
+
+			const result = await replay(session);
+			const expectedCost = recordedCostFromFixture(session);
+
+			expect(expectedCost).toBeCloseTo(0.153, 5);
+			expect(result.metrics.costUsd).toBe(expectedCost);
+		} finally {
+			await rm(scratch, { recursive: true, force: true });
+		}
+	});
+
 	it("produces byte-identical metrics for two consecutive corpus runs", async () => {
 		const first = await replayCorpus(corpusDirectory);
 		const second = await replayCorpus(corpusDirectory);
 
 		expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+	});
+
+	/**
+	 * Sums recorded assistant `usage.cost.total` directly from a fixture's raw
+	 * JSONL, independent of the replay pipeline entirely — the "provider-reported
+	 * cost" ground truth this gate reconciles against. Reading the file a second,
+	 * unrelated way is what makes this a real regression guard: it can't drift in
+	 * lockstep with a bug in `buildReplayMetrics`.
+	 */
+	function recordedCostFromFixture(path: string): number {
+		let total = 0;
+		for (const line of readFileSync(path, "utf8").split("\n")) {
+			if (!line.trim()) continue;
+			const entry = JSON.parse(line);
+			if (entry.type === "message" && entry.message?.role === "assistant") {
+				total += entry.message.usage?.cost?.total ?? 0;
+			}
+		}
+		return total;
+	}
+
+	it("reconciles replay-reported cost with recorded fixture cost within 5%, per corpus result, with zero network calls", async () => {
+		const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("replay attempted network access"));
+
+		const metricsByFixture = await replayCorpus(corpusDirectory);
+		const fixtureNames = readdirSync(corpusDirectory)
+			.filter((name) => name.endsWith(".jsonl"))
+			.sort();
+		expect(Object.keys(metricsByFixture).sort()).toEqual(fixtureNames);
+
+		for (const name of fixtureNames) {
+			const expectedCost = recordedCostFromFixture(join(corpusDirectory, name));
+			const actualCost = metricsByFixture[name].costUsd;
+			if (expectedCost === 0) {
+				expect(actualCost, `${name}: expected zero recorded cost`).toBe(0);
+				continue;
+			}
+			const relativeDifference = Math.abs(actualCost - expectedCost) / expectedCost;
+			expect(relativeDifference, `${name}: recorded ${expectedCost}, replay-reported ${actualCost}`).toBeLessThanOrEqual(
+				0.05,
+			);
+		}
+		expect(fetchSpy).not.toHaveBeenCalled();
 	});
 
 	it("returns deterministic output for the same recording", async () => {
