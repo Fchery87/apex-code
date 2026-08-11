@@ -3,6 +3,7 @@ import {
 	type Api,
 	type ApiStreamOptions,
 	type AssistantMessage,
+	type AssistantMessageEvent,
 	type AssistantMessageEventStream,
 	type AuthCheck,
 	type AuthInteraction,
@@ -13,6 +14,7 @@ import {
 	type Credential,
 	type CredentialInfo,
 	type CredentialStore,
+	createAssistantMessageEventStream,
 	createModels,
 	type DeferredCancelOptions,
 	type DeferredFetchOptions,
@@ -40,7 +42,13 @@ import * as builtinProviderCatalog from "@earendil-works/pi-ai/providers/all";
 import { getAgentDir } from "../config.ts";
 import { operationSignal, raceWithAbortSignal } from "../utils/abort.ts";
 import { AuthStorage as DefaultAuthStorage } from "./auth-storage.ts";
-import { classifyCredentialFailure, drainAttempt, replayAttempt, type ResultStream } from "./credential-failover.ts";
+import {
+	classifyCredentialFailure,
+	drainAttempt,
+	type DrainedAttempt,
+	replayAttempt,
+	type ResultStream,
+} from "./credential-failover.ts";
 import type { CredentialIdentity, CredentialPool } from "./credential-pool.ts";
 import { ModelConfig } from "./model-config.ts";
 import { resolveModelRoles, type RoleResolutionResult } from "./model-resolver.ts";
@@ -671,14 +679,91 @@ export class ModelRuntime implements Models {
 	}
 
 	streamSimple(model: Model<Api>, context: Context, options?: ModelsSimpleStreamOptions): AssistantMessageEventStream {
-		return lazyStream(model, async () => {
-			const pool = this.credentialPool;
-			if (pool?.snapshot().some((entry) => entry.providerId === model.provider)) {
-				return this.streamSimpleWithCredentialFailover(pool, model, context, options);
-			}
-			const prepared = await this.prepareRequest(model, options);
-			return prepared.provider.streamSimple(prepared.model, context, prepared.options as SimpleStreamOptions);
-		});
+		return lazyStream(model, () => this.attemptModel(model, context, options, undefined));
+	}
+
+	/** One model attempt: pool-based credential failover when configured, single-credential resolution otherwise. */
+	private async attemptModel(
+		model: Model<Api>,
+		context: Context,
+		options: ModelsSimpleStreamOptions | undefined,
+		role: string | undefined,
+	): Promise<ResultStream> {
+		const pool = this.credentialPool;
+		if (pool?.snapshot().some((entry) => entry.providerId === model.provider)) {
+			return this.streamSimpleWithCredentialFailover(pool, model, context, options, role);
+		}
+		const prepared = await this.prepareRequest(model, options);
+		return prepared.provider.streamSimple(prepared.model, context, prepared.options as SimpleStreamOptions) as ResultStream;
+	}
+
+	/**
+	 * Opt-in role-based resolution: attempt each of a role's ordered model
+	 * candidates in turn, exhausting that candidate's credential pool (Task 1.3)
+	 * before advancing. A model visits at most once; since each visited model
+	 * gets its own fresh credential-attempt set, no (credential, model) pair
+	 * repeats across the whole call. A non-retryable failure on any candidate is
+	 * terminal for the whole call — model fallback never masks a non-retryable
+	 * error. Explicit CLI/session model selection is unaffected: callers must
+	 * opt into this method instead of streamSimple().
+	 */
+	streamSimpleForRole(roleName: string, context: Context, options?: ModelsSimpleStreamOptions): AssistantMessageEventStream {
+		const outer = createAssistantMessageEventStream();
+		this.attemptRole(roleName, context, options)
+			.then((drained) => {
+				for (const event of drained.events) outer.push(event);
+				outer.end(drained.message);
+			})
+			.catch((error) => {
+				const message: AssistantMessage = {
+					role: "assistant",
+					content: [],
+					api: "role",
+					provider: "role",
+					model: roleName,
+					usage: {
+						input: 0,
+						output: 0,
+						cacheRead: 0,
+						cacheWrite: 0,
+						totalTokens: 0,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
+					stopReason: "error",
+					errorMessage: error instanceof Error ? error.message : String(error),
+					timestamp: Date.now(),
+				};
+				outer.push({ type: "error", reason: "error", error: message });
+				outer.end(message);
+			});
+		return outer;
+	}
+
+	private async attemptRole(
+		roleName: string,
+		context: Context,
+		options: ModelsSimpleStreamOptions | undefined,
+	): Promise<{ events: readonly AssistantMessageEvent[]; message: AssistantMessage }> {
+		const { roles } = this.resolveModelRoles();
+		const candidates = roles.get(roleName);
+		if (!candidates || candidates.length === 0) {
+			throw new ModelsError("model_source", `Unknown or unresolved role: ${roleName}`);
+		}
+
+		let originalFailure: DrainedAttempt | undefined;
+		for (const candidate of candidates) {
+			options?.signal?.throwIfAborted();
+			const attemptStream = await this.attemptModel(candidate, context, options, roleName);
+			const drained = await drainAttempt(attemptStream);
+			if (drained.message.stopReason !== "error") return drained;
+			if (!originalFailure) originalFailure = drained;
+			// Non-retryable (or aborted) is terminal for the whole role: model fallback
+			// never masks an error rotation itself already declined to retry.
+			if (!classifyCredentialFailure(drained.message)) return drained;
+		}
+		// originalFailure is always set here: candidates is non-empty, so the loop
+		// ran at least once, and every path that returns early also sets it first.
+		return originalFailure as DrainedAttempt;
 	}
 
 	/**
@@ -693,6 +778,7 @@ export class ModelRuntime implements Models {
 		model: Model<Api>,
 		context: Context,
 		options: ModelsSimpleStreamOptions | undefined,
+		role: string | undefined,
 	): Promise<ResultStream> {
 		const attempted = new Set<CredentialIdentity>();
 		let originalFailure: ResultStream | undefined;
