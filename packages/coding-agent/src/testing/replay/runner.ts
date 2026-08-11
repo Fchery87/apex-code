@@ -182,7 +182,8 @@ function assertToolResultsMatch(actual: readonly ToolResultMessage[], expected: 
 
 function productionPromptAndSchemas(toolNames: readonly string[]): { systemPrompt: string; tools: Tool[] } {
 	const definitions = createAllToolDefinitions("$HOME/replay-fixtures");
-	const selected = [...new Set(toolNames)].sort().flatMap((name) => {
+	const defaultToolNames = ["read", "bash", "edit", "write"];
+	const selected = [...new Set([...defaultToolNames, ...toolNames])].sort().flatMap((name) => {
 		const definition = Reflect.get(definitions, name);
 		return definition && typeof definition === "object" ? [definition] : [];
 	});
@@ -308,7 +309,7 @@ export async function replay(filePath: string): Promise<ReplayResult> {
 		const lastContext = turnContexts.at(-1);
 		if (!lastContext) throw new Error(`User turn ${contextTokensByTurn.length + 1} made no provider request`);
 		const staticInputTokens = Math.ceil(
-			`${lastContext.systemPrompt ?? ""}\n${JSON.stringify(lastContext.tools ?? [])}`.length / 4,
+			`${promptBaseline.systemPrompt}\n${JSON.stringify(promptBaseline.tools)}`.length / 4,
 		);
 		contextTokensByTurn.push(
 			staticInputTokens + lastContext.messages.reduce((total, message) => total + estimateTokens(message), 0),
