@@ -700,6 +700,83 @@ export async function findInitialModel(options: {
 	return { model: undefined, thinkingLevel: DEFAULT_THINKING_LEVEL, fallbackMessage: undefined };
 }
 
+export interface RoleResolutionDiagnostic {
+	type: "warning";
+	code: "empty-chain" | "unknown-model" | "duplicate-candidate";
+	roleName: string;
+	reference?: string;
+	message: string;
+}
+
+export interface RoleResolutionResult {
+	/** Successfully resolved roles only; a role with any invalid reference is omitted entirely. */
+	roles: ReadonlyMap<string, Model<Api>[]>;
+	diagnostics: RoleResolutionDiagnostic[];
+}
+
+/**
+ * Resolve additive role configuration (role name -> ordered "provider/modelId"
+ * references) against the runtime's known models. Pure and credential-blind: it
+ * never resolves auth and never mutates configuration. A role with an empty chain,
+ * an unknown model reference, or a duplicate candidate is rejected in full — never
+ * partially resolved or silently cast — with a diagnostic explaining why.
+ */
+export function resolveModelRoles(
+	roles: ReadonlyMap<string, readonly string[]> | undefined,
+	availableModels: readonly Model<Api>[],
+): RoleResolutionResult {
+	const resolvedRoles = new Map<string, Model<Api>[]>();
+	const diagnostics: RoleResolutionDiagnostic[] = [];
+	if (!roles) return { roles: resolvedRoles, diagnostics };
+
+	const models = [...availableModels];
+	for (const [roleName, references] of roles) {
+		if (references.length === 0) {
+			diagnostics.push({
+				type: "warning",
+				code: "empty-chain",
+				roleName,
+				message: `Role "${roleName}" has no model candidates.`,
+			});
+			continue;
+		}
+
+		const candidates: Model<Api>[] = [];
+		const seenKeys = new Set<string>();
+		let valid = true;
+		for (const reference of references) {
+			const match = findExactModelReferenceMatch(reference, models);
+			if (!match) {
+				diagnostics.push({
+					type: "warning",
+					code: "unknown-model",
+					roleName,
+					reference,
+					message: `Role "${roleName}" references unknown model "${reference}".`,
+				});
+				valid = false;
+				continue;
+			}
+			const key = `${match.provider}/${match.id}`;
+			if (seenKeys.has(key)) {
+				diagnostics.push({
+					type: "warning",
+					code: "duplicate-candidate",
+					roleName,
+					reference,
+					message: `Role "${roleName}" lists model "${key}" more than once.`,
+				});
+				valid = false;
+				continue;
+			}
+			seenKeys.add(key);
+			candidates.push(match);
+		}
+		if (valid) resolvedRoles.set(roleName, candidates);
+	}
+	return { roles: resolvedRoles, diagnostics };
+}
+
 /**
  * Restore model from session, with fallback to available models
  */
