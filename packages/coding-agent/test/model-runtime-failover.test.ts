@@ -1,5 +1,8 @@
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fauxAssistantMessage, fauxProvider, type FauxResponseFactory } from "@earendil-works/pi-ai";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { createCredentialIdentity, CredentialPool } from "../src/core/credential-pool.ts";
 import { ModelRuntime } from "../src/core/model-runtime.ts";
@@ -126,5 +129,127 @@ describe("ModelRuntime credential failover", () => {
 
 		expect(message.stopReason).toBe("stop");
 		expect(faux.state.callCount).toBe(1);
+	});
+});
+
+const roleTempDir = join(tmpdir(), `pi-model-role-failover-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
+beforeAll(() => {
+	mkdirSync(roleTempDir, { recursive: true });
+});
+
+afterAll(() => {
+	if (existsSync(roleTempDir)) rmSync(roleTempDir, { recursive: true });
+});
+
+const p1 = createCredentialIdentity("p1");
+const s1 = createCredentialIdentity("s1");
+const p2 = createCredentialIdentity("p2");
+const s2 = createCredentialIdentity("s2");
+
+function authByRoleIdentity(identity: ReturnType<typeof createCredentialIdentity>): { apiKey?: string } | undefined {
+	if (identity === p1) return { apiKey: "p1-key" };
+	if (identity === s1) return { apiKey: "s1-key" };
+	if (identity === p2) return { apiKey: "p2-key" };
+	if (identity === s2) return { apiKey: "s2-key" };
+	return undefined;
+}
+
+/** A role "default" resolving, in order, to primaryProviderId/model-a then secondaryProviderId/model-b, each with its own two-credential pool. */
+async function createRoledRuntime(primaryProviderId: string, secondaryProviderId: string, testName: string) {
+	const fauxA = fauxProvider({ provider: primaryProviderId, models: [{ id: "model-a" }] });
+	const fauxB = fauxProvider({ provider: secondaryProviderId, models: [{ id: "model-b" }] });
+	const pool = new CredentialPool({
+		entries: [
+			{ identity: p1, providerId: primaryProviderId },
+			{ identity: s1, providerId: primaryProviderId },
+			{ identity: p2, providerId: secondaryProviderId },
+			{ identity: s2, providerId: secondaryProviderId },
+		],
+	});
+	const modelsPath = join(roleTempDir, `${testName}.json`);
+	writeFileSync(
+		modelsPath,
+		JSON.stringify({
+			providers: {},
+			roles: { default: { models: [`${primaryProviderId}/model-a`, `${secondaryProviderId}/model-b`] } },
+		}),
+		"utf-8",
+	);
+
+	const runtime = await ModelRuntime.create({
+		credentials: AuthStorage.inMemory(),
+		modelsPath,
+		allowModelNetwork: false,
+		credentialPool: pool,
+		resolveCredentialPoolAuth: authByRoleIdentity,
+	});
+	runtime.registerNativeProvider(fauxA.provider);
+	runtime.registerNativeProvider(fauxB.provider);
+	await runtime.refresh({ allowNetwork: false, providers: [primaryProviderId, secondaryProviderId] });
+	return { runtime, fauxA, fauxB, pool };
+}
+
+describe("ModelRuntime role-based model fallback (streamSimpleForRole)", () => {
+	it("exhausts the primary candidate's credentials in order, then advances to the next candidate and completes", async () => {
+		const { runtime, fauxA, fauxB, pool } = await createRoledRuntime("role-fb-a1", "role-fb-b1", "advance");
+		const failA: FauxResponseFactory = () =>
+			fauxAssistantMessage("", { stopReason: "error", errorMessage: "429 Too Many Requests" });
+		fauxA.setResponses([failA, failA]);
+		fauxB.setResponses([fauxAssistantMessage("completed by role-fb-b1")]);
+
+		const message = await runtime.streamSimpleForRole("default", { messages: [] }).result();
+
+		expect(message.stopReason).toBe("stop");
+		// Both of model-a's credentials were exhausted (in order) before model-b was tried once.
+		expect(fauxA.state.callCount).toBe(2);
+		expect(fauxB.state.callCount).toBe(1);
+		const snapshot = pool.snapshot();
+		expect(snapshot.find((entry) => entry.identity === p1)?.blockedUntil).toBeDefined();
+		expect(snapshot.find((entry) => entry.identity === s1)?.blockedUntil).toBeDefined();
+		// model-b's own credentials are untouched: no (credential, model) pair repeats.
+		expect(snapshot.find((entry) => entry.identity === p2)?.blockedUntil).toBeUndefined();
+		expect(snapshot.find((entry) => entry.identity === s2)?.blockedUntil).toBeUndefined();
+	});
+
+	it("preserves the original (first) failure when every candidate and credential fails", async () => {
+		const { runtime, fauxA, fauxB } = await createRoledRuntime("role-fb-a2", "role-fb-b2", "all-fail");
+		const failA: FauxResponseFactory = () =>
+			fauxAssistantMessage("", { stopReason: "error", errorMessage: "429 from role-fb-a2" });
+		const failB: FauxResponseFactory = () =>
+			fauxAssistantMessage("", { stopReason: "error", errorMessage: "401 from role-fb-b2" });
+		fauxA.setResponses([failA, failA]);
+		fauxB.setResponses([failB, failB]);
+
+		const message = await runtime.streamSimpleForRole("default", { messages: [] }).result();
+
+		expect(message.stopReason).toBe("error");
+		expect(message.errorMessage).toBe("429 from role-fb-a2");
+		expect(fauxA.state.callCount).toBe(2);
+		expect(fauxB.state.callCount).toBe(2);
+	});
+
+	it("does not fall back to the next candidate for a non-retryable error", async () => {
+		const { runtime, fauxA, fauxB } = await createRoledRuntime("role-fb-a3", "role-fb-b3", "non-retryable");
+		fauxA.setResponses([
+			fauxAssistantMessage("", { stopReason: "error", errorMessage: "insufficient_quota: billing limit reached" }),
+		]);
+		fauxB.setResponses([fauxAssistantMessage("should never be reached")]);
+
+		const message = await runtime.streamSimpleForRole("default", { messages: [] }).result();
+
+		expect(message.stopReason).toBe("error");
+		expect(message.errorMessage).toContain("insufficient_quota");
+		expect(fauxA.state.callCount).toBe(1);
+		expect(fauxB.state.callCount).toBe(0);
+	});
+
+	it("rejects an unknown role rather than silently falling back", async () => {
+		const { runtime } = await createRoledRuntime("role-fb-a4", "role-fb-b4", "unknown-role");
+
+		const message = await runtime.streamSimpleForRole("does-not-exist", { messages: [] }).result();
+
+		expect(message.stopReason).toBe("error");
+		expect(message.errorMessage).toContain("does-not-exist");
 	});
 });
