@@ -5,9 +5,9 @@
 | Field | Value |
 | --- | --- |
 | Author | Fchery87 |
-| Status | `Active` — implementation in progress, see the plan |
+| Status | `Active` — landed; original CI and merge-ceiling goals were amended on the record |
 | Created | 2026-08-08 |
-| Last updated | 2026-08-09 |
+| Last updated | 2026-08-10 |
 | Roadmap phase | 0 — Fork foundation |
 | Tracking issue/PR | none |
 | Compatibility posture | **Not applicable — greenfield.** Apex Code has no users, no released version, and no published format. Nothing can break. This is the only phase where that is true, and it is why the format-defining work (session identity, config directory, package name) belongs here rather than later: after Phase 9 every one of these is a compatibility promise (ADR 0006). |
@@ -184,7 +184,7 @@ is equivalent.
 
 ## Rollout
 
-Needs `docs/plans/2026-08-08-fork-foundation.md`: multi-step, spans repo setup, two
+Implemented through the now-deleted Phase 0 plan (retained in Git history): multi-step, spans repo setup, two
 forked packages, CI, release, and the corpus, and needs its own status tracking
 across sessions.
 
