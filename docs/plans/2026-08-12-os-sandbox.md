@@ -9,9 +9,9 @@ order; each task must be verified before it is marked done.
 | Task | State | Commit | Verification |
 | --- | --- | --- | --- |
 | 2b.1 Add Apex sandbox domain types, configuration validation, bounded violations, and fail-closed preflight tests | Done | `269302eb0` | `test/sandbox/` passed after red module-import failures |
-| 2b.2 Implement Linux supervisor/backend and process-child launch sentinel | Not started | — | Fake-backend launch/lifecycle tests pass |
-| 2b.3 Add Linux OS integration fixtures for workspace write, outside-write refusal, blocked network, and grandchild containment | Not started | — | Real commands pass on provisioned Linux; explicit skipped reason otherwise |
-| 2b.4 Wire CLI diagnostics/lifecycle and package distributable dependency | Not started | — | CLI routing tests, build, install-lock check |
+| 2b.2 Implement Linux supervisor/backend and process-child launch sentinel | Done | `79ce14d60` | Fake-backend routing/lifecycle tests pass; public entry launches a separate child entry |
+| 2b.3 Add Linux OS integration fixtures for workspace write, outside-write refusal, blocked network, and grandchild containment | Done | `79ce14d60` | Real Bubblewrap child/grandchild write, host-home, and direct TCP-denial tests pass |
+| 2b.4 Wire CLI diagnostics/lifecycle and package distributable dependency | Done | `79ce14d60` | CLI routing/fail-closed process tests, typecheck, and package build pass |
 | 2b.5 Add macOS backend only after native CI proof; document unsupported Windows | Not started | — | macOS integration tests pass |
 | 2b.6 Full verification and documentation closure | Not started | — | Focused suites, typecheck, build, full test; plan deleted |
 
