@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0 and 1 landed; Phase 2a landed; Phase 2b not started · **Created:** 2026-08-08 · **Last updated:** 2026-08-11
+**Status:** Active — Phases 0, 1, and 2a landed; Phase 2b not started · **Created:** 2026-08-08 · **Last updated:** 2026-08-12
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -80,7 +80,7 @@ capable and measurably worse.
 | --- | --- | --- | --- | --- |
 | 0 | Fork foundation | **landed** — 10 of 10 tasks · `9d79cc6c6b` | [spec](specs/2026-08-08-fork-foundation.md) | — |
 | 1 | Provider & model layer | **landed** — 7 of 7 tasks · `ad79a98fe` | [spec](specs/2026-08-10-provider-and-model-layer.md) | — |
-| 2a | Permissions — rule model | **landed** — 8 of 8 tasks · `d0a437c1b` | [spec](specs/2026-08-11-permission-rule-model.md) | — |
+| 2a | Permissions — rule model | **landed** — live enforcement completed · `8dff33f41` | [spec](specs/2026-08-11-permission-rule-model.md) | — |
 | 2b | Permissions — OS sandbox | not started | — | — |
 | 3 | Context engineering | not started | — | — |
 | 4 | Tool surface | not started | — | — |
@@ -253,47 +253,40 @@ safety floor is not complete until it lands; a rule model without enforcement
 underneath constrains a cooperative model and nothing else. It is sequenced second
 because it is the half that can slip.
 
-**Progress against 2a's exit criterion** (verified, not asserted):
+**Phase 2a closure — completed 2026-08-12.** The permission gate is now constructed
+for every `main.ts` runtime creation, including runtime replacement after session
+switch/reload. The live gate receives a cwd-bound `FilePermissionRuleStore`, resolves
+persisted and `--permission-mode` modes for every call, binds the interactive responder
+only after the TUI is available, and fails closed in print, JSON, and RPC modes. A
+headless session without `--permission-mode` fails before session creation (metadata
+commands remain exempt).
 
-| Criterion | State |
-| --- | --- |
-| Every registered tool passes the gate, registry-derived, no exceptions list | **met as a mechanism; not yet live in the CLI — see gap below.** `gate-universal.test.ts` drives real `Agent` turns per registered tool (via `fauxProvider`/`fauxToolCall` and a real `ModelRuntime`) and asserts `evaluateToolCall` intercepts every one. `contract` is mandatory at the type level on `ApexToolDefinition`; foreign/MCP tools without one resolve through `UNCLASSIFIED` (`ask`, never a silent bypass), per ADR 0010. |
-| Precedence verified across all eight sources | **met.** `precedence.test.ts` (36 tests): highest-precedence *matching* rule wins regardless of behavior, exercised across every `policy > flag > local > project > user > cliArg > command > session` ordering, same-source tie-breaks, and no-match fallthrough to the tool's `defaultBehavior`. |
+The close-out also fixed the review findings that made a configured gate incomplete:
 
-**Regression found and fixed during close-out.** Task 2a.7 wired
-`resolvePermissionModeForStartup()` into `main.ts` as a hard `process.exit(1)` for
-any non-interactive invocation lacking `--permission-mode` — enforcing a real
-behavioral requirement for a safety mechanism that wasn't active yet (the gate isn't
-constructed in any live session path; see below), for zero present benefit. It broke
-`session-file-invalid`, `session-id-readonly`, and `stdout-cleanliness`. Caught by
-this close-out's full-suite run, fixed same-session (`843f26e95`) by removing the
-`main.ts` wiring; the `--permission-mode` flag parsing and
-`resolvePermissionModeForStartup()`/`resolveEffectiveMode()` stay in place, unit-tested
-(`headless-startup.test.ts`), for when the integration below lands.
+- nonblocking extension `tool_call` results and extension-mutated input now proceed to
+  the gate; only `{ block: true }` remains an early return;
+- policy rules cannot be overridden by `bypassPermissions`, while `plan` retains its
+  mutating-operation safety floor;
+- unreadable or malformed authorization sources fail closed, persisted modes are
+  validated, and `--allowed-tools` supplies the documented low-precedence `cliArg`
+  rule layer;
+- bash treats redirections, expansion, glob, brace, tilde, and other unsupported shell
+  grammar as unparseable, which resolves to `ask` rather than authorizing by prefix;
+- foreign tools are marked `unclassified` in the registry and reported as an
+  approval-required runtime diagnostic.
 
-**Known gap — called out, not folded in silently.** The gate
-(`evaluateToolCall`/`createPermissionGate`) is wired into `AgentSession` as an opt-in
-config field (`permissionGate?`, undefined by default) and is proven end-to-end
-against every registered tool, but `main.ts` does not yet construct it in any of its
-four live paths (interactive/print/json/rpc). Phase 2a delivers the mechanism;
-turning it on for real CLI usage — together with re-enabling the non-interactive
-startup check above once there is something for it to actually gate — is the
-concrete next step, not a follow-on phase.
+**Verification run for this completion:**
 
-Full verification: `npx tsgo --noEmit` clean; package build
-(`npm --workspace packages/coding-agent run build`) clean; replay corpus
-(`replay-runner.test.ts`) byte-identical across two consecutive runs, 16/16 both
-times; permissions suite (`test/permissions/`, 9 files, 137 tests) green.
-`npm --workspace packages/coding-agent test` surfaced 26 failures across 13 files on
-the first full run: one was the regression above (now fixed and re-verified); the
-rest are either the already-catalogued pre-Phase-1 failures (`external-editor`,
-`radius`, `skills`, `startup-session-name`, `tools` grep-flag tests,
-`6999-models-json-hot-reload`, and `agent-session-concurrent`'s known raw-`setTimeout`
-timing flakiness) or CPU/IO-heavy tests (`tool-result-images`,
-`session-manager/file-operations`, `suite/agent-session-tool-result-images`, one
-`session-id-readonly` case, `stdout-cleanliness`) that fail only under that run's
-combined parallel load and pass cleanly when rerun standalone — confirmed by rerunning
-each in isolation, not assumed.
+- `npx tsgo --noEmit` — passed.
+- `npx biome check $(git diff --name-only)` — passed.
+- `npm run build` — passed.
+- `npm --prefix packages/coding-agent test -- test/permissions test/stdout-cleanliness.test.ts test/suite/agent-session-model-extension.test.ts test/agent-session-dynamic-tools.test.ts` — 12 files / 167 tests passed.
+- `npm test` — scripts and `packages/agent` passed; the coding-agent full run remained
+  red with 23 failures across 14 files plus one error. The failures were in the
+  existing parallel/CPU-sensitive full-suite seams (including `agent-session-concurrent`,
+  external editor/TUI rendering, and path-spawn tests); the changed permission and
+  stdout tests passed in the targeted run above. This is not represented as a green
+  full-suite verification.
 
 ---
 
