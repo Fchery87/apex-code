@@ -19,7 +19,8 @@ import { type AuthStorageBackend, FileAuthStorageBackend } from "../auth-storage
 import type { PermissionBehavior } from "../tools/contract.ts";
 import type { PermissionRule, PermissionSource } from "./rules.ts";
 
-export type PermissionMode = "default" | "plan" | "acceptEdits" | "bypassPermissions" | "dontAsk";
+export const PERMISSION_MODES = ["default", "plan", "acceptEdits", "bypassPermissions", "dontAsk"] as const;
+export type PermissionMode = (typeof PERMISSION_MODES)[number];
 
 /** Sources a PermissionUpdate may target. Excludes `policy` (administrator-managed,
  * never user-writable) and `flag`/`cliArg` (parsed once from argv at startup, not
@@ -120,7 +121,8 @@ function applyToScope(scope: StoredPermissionScope, update: PermissionUpdate): S
 			return {
 				...scope,
 				rules: scope.rules.filter(
-					(rule) => !update.matching.some((m) => m.toolName === rule.toolName && m.ruleContent === rule.ruleContent),
+					(rule) =>
+						!update.matching.some((m) => m.toolName === rule.toolName && m.ruleContent === rule.ruleContent),
 				),
 			};
 		case "setMode":
@@ -163,7 +165,9 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 		this.policyPath = options.policyPath ?? defaultPolicyPath();
 	}
 
-	private async readFileBackedScope(source: FileBackedSource): Promise<{ scope: StoredPermissionScope; error?: Error }> {
+	private async readFileBackedScope(
+		source: FileBackedSource,
+	): Promise<{ scope: StoredPermissionScope; error?: Error }> {
 		try {
 			let content: string | undefined;
 			await this.backends[source].withLockAsync(async (current) => {

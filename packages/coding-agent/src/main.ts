@@ -47,6 +47,7 @@ import { applyHttpProxySettings, configureHttpDispatcher } from "./core/http-dis
 import { resolveCliModel, resolveModelScope, type ScopedModel } from "./core/model-resolver.ts";
 import { ModelRuntime } from "./core/model-runtime.ts";
 import { restoreStdout, takeOverStdout } from "./core/output-guard.ts";
+import { resolvePermissionModeForStartup } from "./core/permissions/startup.ts";
 import { type AppMode, resolveProjectTrusted } from "./core/project-trust.ts";
 import type { CreateAgentSessionOptions } from "./core/sdk.ts";
 import {
@@ -641,6 +642,20 @@ export async function main(args: string[], options?: MainOptions) {
 	const shouldTakeOverStdout = appMode !== "interactive" && !isPlainRuntimeMetadataCommand(parsed);
 	if (shouldTakeOverStdout) {
 		takeOverStdout();
+	}
+
+	// ADR 0004: a non-interactive session with no explicit --permission-mode fails
+	// fast here, rather than denying every tool call mid-run once the permission
+	// gate is active (ask has no responder to answer it outside an interactive
+	// session, and fails closed). Plain metadata commands (--help, --list-models)
+	// never run a real session and are exempt, matching shouldTakeOverStdout above.
+	const permissionModeStartup = resolvePermissionModeForStartup({
+		interactive: appMode === "interactive",
+		requestedMode: parsed.permissionMode,
+	});
+	if (!permissionModeStartup.ok && !isPlainRuntimeMetadataCommand(parsed)) {
+		console.error(chalk.red(`Error: ${permissionModeStartup.message}`));
+		process.exit(1);
 	}
 
 	if (parsed.mode === "rpc" && parsed.fileArgs.length > 0) {
