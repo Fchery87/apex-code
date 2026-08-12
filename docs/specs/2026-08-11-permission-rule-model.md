@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Author | Fchery87 |
-| Status | `Active` — landed (gate mechanism and rule model; not yet constructed in `main.ts`'s live CLI paths — see roadmap Phase 2a closure) |
+| Status | `Landed` — gate constructed for every CLI runtime path; see roadmap Phase 2a closure. |
 | Created | 2026-08-11 |
 | Last updated | 2026-08-11 |
 | Roadmap phase | 2a — Permissions (rule model half of Phase 2) |
