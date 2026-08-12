@@ -19,6 +19,7 @@ import { AgentSession, type AgentSessionEvent } from "../../src/core/agent-sessi
 import { AuthStorage } from "../../src/core/auth-storage.ts";
 import type { ExtensionRunner } from "../../src/core/extensions/index.ts";
 import { convertToLlm } from "../../src/core/messages.ts";
+import type { PermissionGateOptions } from "../../src/core/permissions/gate.ts";
 import { SessionManager } from "../../src/core/session-manager.ts";
 import type { Settings } from "../../src/core/settings-manager.ts";
 import { SettingsManager } from "../../src/core/settings-manager.ts";
@@ -70,6 +71,7 @@ export interface HarnessOptions {
 	excludedToolNames?: string[];
 	resourceLoader?: ResourceLoader;
 	extensionFactories?: Array<InlineExtension | CreateTestExtensionsResultInput>;
+	permissionGate?: Omit<PermissionGateOptions, "getContract">;
 	withConfiguredAuth?: boolean;
 	modelsJson?: Record<string, unknown>;
 }
@@ -191,6 +193,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 		allowedToolNames: options.allowedToolNames,
 		excludedToolNames: options.excludedToolNames,
 		extensionRunnerRef,
+		permissionGate: options.permissionGate,
 	});
 
 	const events: AgentSessionEvent[] = [];

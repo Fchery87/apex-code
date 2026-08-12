@@ -44,6 +44,25 @@ describe("bash PermissionSpec (ADR 0004)", () => {
 		expect(bash.matches("echo", { command: "echo 'unterminated" })).toBe(false);
 	});
 
+	it("never authorizes shell redirections or other unsupported expansion grammar", () => {
+		for (const command of [
+			"git status > /tmp/overwritten",
+			"git status >> /tmp/appended",
+			"git status 2>/tmp/stderr",
+			"git status <<EOF\ninput\nEOF",
+			"git status <<< input",
+			"git status $HOME",
+			'git status "$HOME"',
+			"git status {a,b}",
+			"git status *.ts",
+			"git status ?",
+			"git status ~/work",
+		]) {
+			expect(bash.matches("git status:*", { command }), command).toBe(false);
+			expect(bash.ruleForCall({ command }), command).toBeNull();
+		}
+	});
+
 	it("never matches an empty command, even against a wildcard-shaped rule", () => {
 		expect(bash.matches(":*", { command: "" })).toBe(false);
 		expect(bash.matches("", { command: "   " })).toBe(false);

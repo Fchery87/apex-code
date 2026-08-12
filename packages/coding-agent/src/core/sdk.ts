@@ -3,7 +3,7 @@ import { clampThinkingLevel, type Message, type Model, streamSimple } from "@ear
 import { Agent, type AgentMessage, setDefaultStreamFn, type ThinkingLevel } from "apex-code-agent-core";
 import { getAgentDir } from "../config.ts";
 import { resolvePath } from "../utils/paths.ts";
-import { AgentSession } from "./agent-session.ts";
+import { AgentSession, type AgentSessionConfig } from "./agent-session.ts";
 import { formatNoModelsAvailableMessage } from "./auth-guidance.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
@@ -82,6 +82,8 @@ export interface CreateAgentSessionOptions {
 	settingsManager?: SettingsManager;
 	/** Session start event metadata for extension runtime startup. */
 	sessionStartEvent?: SessionStartEvent;
+	/** Authorization configuration for every registered tool call. */
+	permissionGate?: AgentSessionConfig["permissionGate"];
 }
 
 /** Result from createAgentSession */
@@ -387,6 +389,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		excludedToolNames,
 		extensionRunnerRef,
 		sessionStartEvent: options.sessionStartEvent,
+		permissionGate: options.permissionGate,
 	});
 	const extensionsResult = resourceLoader.getExtensions();
 

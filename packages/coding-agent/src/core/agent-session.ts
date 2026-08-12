@@ -99,7 +99,7 @@ import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
 import { evaluateToolCall, type PermissionGateOptions } from "./permissions/gate.ts";
-import type { ApexToolDefinition } from "./tools/contract.ts";
+import { createInteractiveResponder } from "./permissions/responder.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
 import type { BranchSummaryEntry, CompactionEntry, SessionEntry, SessionManager } from "./session-manager.ts";
@@ -109,6 +109,7 @@ import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.ts";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
+import type { ApexToolDefinition } from "./tools/contract.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
 import { addUsageToTotals, createUsageTotals } from "./usage-totals.ts";
@@ -508,10 +509,10 @@ export class AgentSession {
 					}
 					throw new Error(`Extension failed, blocking execution: ${String(err)}`);
 				}
-				// An extension with an explicit opinion (block or an override) is
-				// authoritative; only "no opinion" (undefined) falls through to the
-				// permission gate below.
-				if (extensionResult) return extensionResult;
+				// A blocking extension remains authoritative. A non-blocking result
+				// (including a mutation-only `{}`) must still pass the permission gate,
+				// which evaluates the extension's final input below.
+				if (extensionResult?.block === true) return extensionResult;
 			}
 
 			// Permission gate (roadmap Phase 2a, ADR 0004). Off by default — see
@@ -521,7 +522,12 @@ export class AgentSession {
 			if (this._permissionGate) {
 				const decision = await evaluateToolCall(toolCall.name, args, {
 					...this._permissionGate,
-					getContract: (name) => (this.getToolDefinition(name) as Partial<ApexToolDefinition> | undefined)?.contract,
+					getContract: (name) =>
+						(this.getToolDefinition(name) as Partial<ApexToolDefinition> | undefined)?.contract,
+					getResponder: () =>
+						this._extensionMode === "tui" && this._extensionUIContext
+							? createInteractiveResponder(this._extensionUIContext)
+							: undefined,
 				});
 				if (decision.block) return { block: true, reason: decision.reason };
 			}
@@ -943,6 +949,7 @@ export class AgentSession {
 			parameters: definition.parameters,
 			promptGuidelines: definition.promptGuidelines,
 			sourceInfo,
+			unclassified: !("contract" in definition),
 		}));
 	}
 
