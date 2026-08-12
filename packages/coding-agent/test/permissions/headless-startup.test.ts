@@ -9,6 +9,11 @@ describe("parseArgs --permission-mode", () => {
 		expect(args.diagnostics).toEqual([]);
 	});
 
+	it("parses --allowed-tools as a low-precedence permission default", () => {
+		const args = parseArgs(["--allowed-tools", "read, grep"]);
+		expect(args.allowedTools).toEqual(["read", "grep"]);
+	});
+
 	it("errors, listing valid modes, on an invalid value", () => {
 		const args = parseArgs(["--permission-mode", "yolo"]);
 		expect(args.permissionMode).toBeUndefined();

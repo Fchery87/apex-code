@@ -50,6 +50,8 @@ export interface Args {
 	tuiMode?: TuiMode;
 	/** ADR 0004 permission mode, registered at the `flag` source (outranks project/user config). */
 	permissionMode?: PermissionMode;
+	/** ADR 0004 convenience allowlist, registered at the low-precedence `cliArg` source. */
+	allowedTools?: string[];
 	verbose?: boolean;
 	projectTrustOverride?: boolean;
 	messages: string[];
@@ -194,6 +196,13 @@ export function parseArgs(args: string[]): Args {
 					message: `Invalid TUI mode "${mode}". Valid values: regular, fullscreen`,
 				});
 			}
+		} else if (arg === "--allowed-tools" && i + 1 < args.length) {
+			result.allowedTools = args[++i]
+				.split(",")
+				.map((name) => name.trim())
+				.filter((name) => name.length > 0);
+		} else if (arg === "--allowed-tools") {
+			result.diagnostics.push({ type: "error", message: "--allowed-tools requires a value" });
 		} else if (arg === "--permission-mode") {
 			const mode = args[i + 1];
 			if (mode !== undefined && (PERMISSION_MODES as readonly string[]).includes(mode)) {
@@ -281,6 +290,7 @@ ${chalk.bold("Options:")}
   --print, -p                    Non-interactive mode: process prompt and exit
   --permission-mode <mode>       default, plan, acceptEdits, bypassPermissions, or dontAsk.
                                   Required for non-interactive sessions (--print, json, or rpc mode).
+  --allowed-tools <tools>        Comma-separated permission defaults; project/local policy still wins.
   --continue, -c                 Continue previous session
   --resume, -r                   Select a session to resume
   --session <path|id>            Use specific session file or partial UUID

@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { PermissionRule } from "../../src/core/permissions/rules.ts";
 import { FilePermissionRuleStore, type StoredPermissionRule } from "../../src/core/permissions/store.ts";
 
 const sharedTempDir = join(tmpdir(), `pi-permission-store-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -23,10 +24,25 @@ function createStore(name: string, policyPath?: string) {
 	const agentDir = join(sharedTempDir, name, "agent");
 	mkdirSync(cwd, { recursive: true });
 	mkdirSync(agentDir, { recursive: true });
-	return new FilePermissionRuleStore({ cwd, agentDir, policyPath: policyPath ?? join(sharedTempDir, name, "missing-policy.json") });
+	return new FilePermissionRuleStore({
+		cwd,
+		agentDir,
+		policyPath: policyPath ?? join(sharedTempDir, name, "missing-policy.json"),
+	});
 }
 
 describe("FilePermissionRuleStore", () => {
+	it("includes immutable command-line rule layers in its snapshots", async () => {
+		const cliArgRules: PermissionRule[] = [{ source: "cliArg", toolName: "read", behavior: "allow" }];
+		const store = new FilePermissionRuleStore({
+			cwd: join(sharedTempDir, "cli-args", "project"),
+			agentDir: join(sharedTempDir, "cli-args", "agent"),
+			policyPath: join(sharedTempDir, "cli-args", "missing-policy.json"),
+			initialRules: cliArgRules,
+		});
+		expect((await store.snapshot()).rules).toContainEqual(cliArgRules[0]);
+	});
+
 	it("round-trips addRules to its stated destination, re-read by a fresh store instance", async () => {
 		const cwd = join(sharedTempDir, "roundtrip-add", "project");
 		const agentDir = join(sharedTempDir, "roundtrip-add", "agent");
@@ -58,7 +74,11 @@ describe("FilePermissionRuleStore", () => {
 			destination: "local",
 			rules: [rule({ toolName: "read", ruleContent: "a" }), rule({ toolName: "read", ruleContent: "b" })],
 		});
-		await store.apply({ type: "removeRules", destination: "local", matching: [{ toolName: "read", ruleContent: "a" }] });
+		await store.apply({
+			type: "removeRules",
+			destination: "local",
+			matching: [{ toolName: "read", ruleContent: "a" }],
+		});
 
 		const { rules } = await store.snapshot();
 		expect(rules).toEqual([{ ...rule({ toolName: "read", ruleContent: "b" }), source: "local" }]);
@@ -145,6 +165,24 @@ describe("FilePermissionRuleStore", () => {
 		expect(rules.some((r) => r.toolName === "user-tool" && r.source === "user")).toBe(true);
 	});
 
+	it("rejects an invalid persisted mode instead of returning it as an effective mode", async () => {
+		const cwd = join(sharedTempDir, "invalid-mode", "project");
+		const agentDir = join(sharedTempDir, "invalid-mode", "agent");
+		mkdirSync(join(cwd, ".apex-code"), { recursive: true });
+		mkdirSync(agentDir, { recursive: true });
+		writeFileSync(
+			join(cwd, ".apex-code", "permissions.json"),
+			JSON.stringify({ version: 1, rules: [], mode: "invalid" }),
+		);
+		const snapshot = await new FilePermissionRuleStore({
+			cwd,
+			agentDir,
+			policyPath: join(sharedTempDir, "invalid-mode", "missing-policy.json"),
+		}).snapshot();
+		expect(snapshot.errors.map((error) => error.source)).toContain("project");
+		expect(snapshot.modesBySource.has("project")).toBe(false);
+	});
+
 	it("treats a missing or absent policy file as empty, without an error", async () => {
 		const store = createStore("no-policy");
 		const { rules, errors } = await store.snapshot();
@@ -154,11 +192,7 @@ describe("FilePermissionRuleStore", () => {
 
 	it("reads a real policy file read-only, tagging its rules with source policy", async () => {
 		const policyPath = join(sharedTempDir, "real-policy.json");
-		writeFileSync(
-			policyPath,
-			JSON.stringify({ version: 1, rules: [rule({ toolName: "policy-tool" })] }),
-			"utf-8",
-		);
+		writeFileSync(policyPath, JSON.stringify({ version: 1, rules: [rule({ toolName: "policy-tool" })] }), "utf-8");
 		const store = createStore("with-policy", policyPath);
 		const { rules } = await store.snapshot();
 		expect(rules).toEqual([{ ...rule({ toolName: "policy-tool" }), source: "policy" }]);

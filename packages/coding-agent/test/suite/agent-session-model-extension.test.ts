@@ -2,8 +2,25 @@ import { fauxAssistantMessage, fauxToolCall, type Model, type Usage } from "@ear
 import type { AgentTool, ThinkingLevel } from "apex-code-agent-core";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
+import { FilePermissionRuleStore } from "../../src/core/permissions/store.ts";
 import type { BuildSystemPromptOptions, ExtensionAPI } from "../../src/index.ts";
 import { createHarness, getAssistantTexts, type Harness } from "./harness.ts";
+
+function memoryBackend(initialValue?: string) {
+	let value = initialValue;
+	return {
+		withLock: <T>(fn: (current: string | undefined) => { result: T; next?: string }) => {
+			const result = fn(value);
+			if (result.next !== undefined) value = result.next;
+			return result.result;
+		},
+		withLockAsync: async <T>(fn: (current: string | undefined) => Promise<{ result: T; next?: string }>) => {
+			const result = await fn(value);
+			if (result.next !== undefined) value = result.next;
+			return result.result;
+		},
+	};
+}
 
 describe("AgentSession model and extension characterization", () => {
 	const harnesses: Harness[] = [];
@@ -393,5 +410,43 @@ describe("AgentSession model and extension characterization", () => {
 		await harness.session.reload();
 
 		expect(lifecycleEvents).toEqual(["start:startup", "shutdown:reload", "start:reload"]);
+	});
+
+	it("runs a configured permission gate after non-blocking extension handlers", async () => {
+		let executed = false;
+		const store = new FilePermissionRuleStore({
+			cwd: "/nonexistent",
+			agentDir: "/nonexistent/agent",
+			policyPath: "/nonexistent/policy.json",
+			backends: {
+				local: memoryBackend(JSON.stringify({ version: 1, rules: [{ toolName: "echo", behavior: "deny" }] })),
+				project: memoryBackend(),
+				user: memoryBackend(),
+			},
+		});
+		const echoTool: AgentTool = {
+			name: "echo",
+			label: "Echo",
+			description: "Echo text back",
+			parameters: Type.Object({ text: Type.String() }),
+			execute: async () => {
+				executed = true;
+				return { content: [{ type: "text", text: "executed" }], details: undefined };
+			},
+		};
+		const harness = await createHarness({
+			tools: [echoTool],
+			permissionGate: { store, getMode: () => "default" },
+			extensionFactories: [(pi) => pi.on("tool_call", async () => ({ block: false }))],
+		});
+		harnesses.push(harness);
+		harness.setResponses([
+			fauxAssistantMessage([fauxToolCall("echo", { text: "hello" })], { stopReason: "toolUse" }),
+			fauxAssistantMessage("done", { stopReason: "stop" }),
+		]);
+
+		await harness.session.prompt("hi");
+
+		expect(executed).toBe(false);
 	});
 });

@@ -47,6 +47,8 @@ import { applyHttpProxySettings, configureHttpDispatcher } from "./core/http-dis
 import { resolveCliModel, resolveModelScope, type ScopedModel } from "./core/model-resolver.ts";
 import { ModelRuntime } from "./core/model-runtime.ts";
 import { restoreStdout, takeOverStdout } from "./core/output-guard.ts";
+import { resolveEffectiveMode, resolvePermissionModeForStartup } from "./core/permissions/startup.ts";
+import { FilePermissionRuleStore } from "./core/permissions/store.ts";
 import { type AppMode, resolveProjectTrusted } from "./core/project-trust.ts";
 import type { CreateAgentSessionOptions } from "./core/sdk.ts";
 import {
@@ -643,6 +645,17 @@ export async function main(args: string[], options?: MainOptions) {
 		takeOverStdout();
 	}
 
+	// A headless caller cannot answer an `ask`; require an explicit operator
+	// decision before creating a session. Metadata commands never create one.
+	const permissionModeStartup = resolvePermissionModeForStartup({
+		interactive: appMode === "interactive",
+		requestedMode: parsed.permissionMode,
+	});
+	if (!permissionModeStartup.ok && !parsed.help && parsed.listModels === undefined) {
+		console.error(chalk.red(`Error: ${permissionModeStartup.message}`));
+		process.exit(1);
+	}
+
 	if (parsed.mode === "rpc" && parsed.fileArgs.length > 0) {
 		console.error(chalk.red("Error: @file arguments are not supported in RPC mode"));
 		process.exit(1);
@@ -777,6 +790,15 @@ export async function main(args: string[], options?: MainOptions) {
 			},
 		});
 		const { settingsManager, modelRuntime, resourceLoader } = services;
+		const permissionStore = new FilePermissionRuleStore({
+			cwd,
+			agentDir,
+			initialRules: (parsed.allowedTools ?? []).map((toolName) => ({
+				source: "cliArg" as const,
+				toolName,
+				behavior: "allow" as const,
+			})),
+		});
 		const diagnostics: AgentSessionRuntimeDiagnostic[] = [
 			...projectTrustDiagnostics,
 			...services.diagnostics,
@@ -827,7 +849,22 @@ export async function main(args: string[], options?: MainOptions) {
 			excludeTools: sessionOptions.excludeTools,
 			noTools: sessionOptions.noTools,
 			customTools: sessionOptions.customTools,
+			permissionGate: {
+				store: permissionStore,
+				getMode: async () =>
+					resolveEffectiveMode(parsed.permissionMode, (await permissionStore.snapshot()).modesBySource),
+			},
 		});
+		const unclassifiedToolNames = created.session
+			.getAllTools()
+			.filter((tool) => tool.unclassified)
+			.map((tool) => tool.name);
+		if (unclassifiedToolNames.length > 0) {
+			diagnostics.push({
+				type: "warning",
+				message: `Unclassified tool contracts (approval required): ${unclassifiedToolNames.join(", ")}`,
+			});
+		}
 		const cliThinkingOverride = parsed.thinking !== undefined || cliThinkingFromModel;
 		if (created.session.model && cliThinkingOverride) {
 			created.session.setThinkingLevel(created.session.thinkingLevel);

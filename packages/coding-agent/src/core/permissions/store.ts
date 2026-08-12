@@ -95,6 +95,7 @@ function parseScope(content: string | undefined): StoredPermissionScope {
 	}
 	if (
 		parsed.version !== STORE_VERSION ||
+		(parsed.mode !== undefined && !(PERMISSION_MODES as readonly string[]).includes(parsed.mode)) ||
 		!Array.isArray(parsed.rules) ||
 		!parsed.rules.every(
 			(rule: unknown) =>
@@ -144,12 +145,15 @@ export interface CreateFilePermissionRuleStoreOptions {
 	policyPath?: string;
 	/** Test seam: inject backends for the three writable file-backed sources instead of touching real files. */
 	backends?: Partial<Record<FileBackedSource, AuthStorageBackend>>;
+	/** Immutable argv layers (`flag` / `cliArg`), validated by the CLI before construction. */
+	initialRules?: readonly PermissionRule[];
 }
 
 /** File-backed store for policy/local/project/user, in-memory for command/session. */
 export class FilePermissionRuleStore implements PermissionRuleStore {
 	private readonly backends: Record<FileBackedSource, AuthStorageBackend>;
 	private readonly policyPath: string;
+	private readonly initialRules: readonly PermissionRule[];
 	private readonly runtimeRules: Record<RuntimeSource, StoredPermissionRule[]> = { command: [], session: [] };
 	private readonly runtimeModes: Partial<Record<RuntimeSource, PermissionMode>> = {};
 
@@ -163,6 +167,7 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 			...options.backends,
 		};
 		this.policyPath = options.policyPath ?? defaultPolicyPath();
+		this.initialRules = options.initialRules ?? [];
 	}
 
 	private async readFileBackedScope(
@@ -208,6 +213,7 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 
 		const rules: PermissionRule[] = [
 			...withSource("policy", policy),
+			...this.initialRules,
 			...withSource("local", local),
 			...withSource("project", project),
 			...withSource("user", user),

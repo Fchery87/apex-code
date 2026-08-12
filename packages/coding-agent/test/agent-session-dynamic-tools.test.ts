@@ -203,6 +203,7 @@ describe("AgentSession dynamic tool registration", () => {
 			scope: "temporary",
 			origin: "top-level",
 		});
+		expect(sdkTool?.unclassified).toBe(true);
 		expect(session.getActiveToolNames()).toContain("sdk_tool");
 
 		session.dispose();

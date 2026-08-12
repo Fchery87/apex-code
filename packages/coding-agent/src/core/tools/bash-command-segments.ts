@@ -64,6 +64,7 @@ export function classifyBashCommand(command: string): BashCommandClassification 
 				i++;
 				continue;
 			}
+			if (ch === "$") return { type: "unparseable" };
 			if (ch === "\\" && next !== undefined && ESCAPABLE_IN_DOUBLE_QUOTES.has(next)) {
 				current += ch + next;
 				i += 2;
@@ -85,6 +86,25 @@ export function classifyBashCommand(command: string): BashCommandClassification 
 			current += ch + next;
 			i += 2;
 			continue;
+		}
+		// These forms make a seemingly read-only command perform I/O, expand into
+		// different arguments, or introduce grammar this deliberately small parser
+		// cannot prove safe. A permission rule must never authorize them by prefix.
+		if (
+			ch === "<" ||
+			ch === ">" ||
+			ch === "$" ||
+			ch === "{" ||
+			ch === "}" ||
+			ch === "(" ||
+			ch === ")" ||
+			ch === "*" ||
+			ch === "?" ||
+			ch === "[" ||
+			ch === "]" ||
+			ch === "~"
+		) {
+			return { type: "unparseable" };
 		}
 		if (ch === "\n" || ch === ";") {
 			pushSegment();

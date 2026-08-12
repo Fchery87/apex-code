@@ -5,12 +5,12 @@ import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-work
 import { Agent, type BeforeToolCallContext, type BeforeToolCallResult } from "apex-code-agent-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AuthStorage } from "../../src/core/auth-storage.ts";
-import { evaluateToolCall, createPermissionGate } from "../../src/core/permissions/gate.ts";
+import { ModelRuntime } from "../../src/core/model-runtime.ts";
+import { createPermissionGate, evaluateToolCall } from "../../src/core/permissions/gate.ts";
 import type { PermissionResponder } from "../../src/core/permissions/responder.ts";
 import { FilePermissionRuleStore } from "../../src/core/permissions/store.ts";
-import { UNCLASSIFIED, type ToolContract } from "../../src/core/tools/contract.ts";
-import { allToolNames, createAllTools, createAllToolDefinitions, type ToolName } from "../../src/core/tools/index.ts";
-import { ModelRuntime } from "../../src/core/model-runtime.ts";
+import { type ToolContract, UNCLASSIFIED } from "../../src/core/tools/contract.ts";
+import { allToolNames, createAllToolDefinitions, createAllTools, type ToolName } from "../../src/core/tools/index.ts";
 
 /** Schema-valid representative params per tool, so a call reaches the gate rather than failing argument validation first. */
 const REPRESENTATIVE_PARAMS: Record<ToolName, unknown> = {
@@ -144,12 +144,12 @@ describe("permission gate — decision plumbing (evaluateToolCall)", () => {
 	function memoryBackend() {
 		let value: string | undefined;
 		return {
-			withLock: <T,>(fn: (current: string | undefined) => { result: T; next?: string }) => {
+			withLock: <T>(fn: (current: string | undefined) => { result: T; next?: string }) => {
 				const { result, next } = fn(value);
 				if (next !== undefined) value = next;
 				return result;
 			},
-			withLockAsync: async <T,>(fn: (current: string | undefined) => Promise<{ result: T; next?: string }>) => {
+			withLockAsync: async <T>(fn: (current: string | undefined) => Promise<{ result: T; next?: string }>) => {
 				const { result, next } = await fn(value);
 				if (next !== undefined) value = next;
 				return result;
@@ -178,7 +178,11 @@ describe("permission gate — decision plumbing (evaluateToolCall)", () => {
 			...UNCLASSIFIED,
 			permission: { ...UNCLASSIFIED.permission, defaultBehavior: "ask" },
 		};
-		const result = await evaluateToolCall("custom-tool", { x: 1 }, { getContract: () => contract, store, getMode: () => "default" });
+		const result = await evaluateToolCall(
+			"custom-tool",
+			{ x: 1 },
+			{ getContract: () => contract, store, getMode: () => "default" },
+		);
 		expect(result.block).toBe(true);
 	});
 
@@ -211,6 +215,28 @@ describe("permission gate — decision plumbing (evaluateToolCall)", () => {
 			{ getContract: () => contract, store, getMode: () => "default" },
 		);
 		expect(second.block).toBe(false);
+	});
+
+	it("fails closed when an authorization source cannot be loaded", async () => {
+		const contract: ToolContract = {
+			...UNCLASSIFIED,
+			permission: { ...UNCLASSIFIED.permission, defaultBehavior: "allow" },
+		};
+		const store = {
+			snapshot: async () => ({
+				rules: [],
+				modesBySource: new Map(),
+				errors: [{ source: "policy" as const, error: new Error("unreadable") }],
+			}),
+			apply: async () => {},
+		};
+		const result = await evaluateToolCall(
+			"custom-tool",
+			{},
+			{ getContract: () => contract, store, getMode: () => "default" },
+		);
+		expect(result).toMatchObject({ block: true });
+		expect(result.reason).toContain("policy");
 	});
 
 	it("a foreign tool with no contract receives UNCLASSIFIED rather than being rejected or silently allowed", async () => {

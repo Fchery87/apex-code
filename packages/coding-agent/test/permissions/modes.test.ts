@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Capability } from "../../src/core/tools/contract.ts";
 import { resolveWithMode } from "../../src/core/permissions/modes.ts";
 import type { PermissionResolution, PermissionRule } from "../../src/core/permissions/rules.ts";
+import type { Capability } from "../../src/core/tools/contract.ts";
 
 function caps(...values: Capability[]): ReadonlySet<Capability> {
 	return new Set(values);
@@ -42,6 +42,11 @@ describe("resolveWithMode", () => {
 		it("is a hard safety floor: overrides even an explicit allow rule for a mutating capability", () => {
 			expect(resolveWithMode("plan", withRule(explicitAllow), caps("exec"))).toEqual({ behavior: "deny" });
 		});
+
+		it("remains a hard safety floor over a policy allow", () => {
+			const policyAllow: PermissionRule = { source: "policy", behavior: "allow", toolName: "bash" };
+			expect(resolveWithMode("plan", withRule(policyAllow), caps("exec"))).toEqual({ behavior: "deny" });
+		});
 	});
 
 	describe("acceptEdits", () => {
@@ -72,6 +77,10 @@ describe("resolveWithMode", () => {
 			expect(resolveWithMode("bypassPermissions", withRule(explicitDeny), caps("fs.write"))).toEqual({
 				behavior: "allow",
 			});
+		});
+		it("does not override a matching administrator policy rule", () => {
+			const policyDeny: PermissionRule = { source: "policy", behavior: "deny", toolName: "bash" };
+			expect(resolveWithMode("bypassPermissions", withRule(policyDeny), caps("exec"))).toEqual(withRule(policyDeny));
 		});
 	});
 

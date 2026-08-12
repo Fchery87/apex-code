@@ -38,11 +38,17 @@ export function resolveWithMode(
 	ruleResolution: PermissionResolution,
 	capabilities: ReadonlySet<Capability>,
 ): PermissionResolution {
-	if (mode === "bypassPermissions") {
-		return { behavior: "allow" };
-	}
+	// Plan mode is a hard mutating safety floor. Managed policy is otherwise
+	// explicitly non-overridable (ADR 0004); bypass remains an escape hatch only
+	// for lower-precedence sources.
 	if (mode === "plan" && isMutating(capabilities)) {
 		return { behavior: "deny" };
+	}
+	if (ruleResolution.rule?.source === "policy") {
+		return ruleResolution;
+	}
+	if (mode === "bypassPermissions") {
+		return { behavior: "allow" };
 	}
 	if (ruleResolution.rule) {
 		// An explicit matching rule is authoritative for every remaining mode.

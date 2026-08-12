@@ -23,9 +23,11 @@ export interface PermissionGateOptions {
 	/** Resolve a tool's contract by name. Foreign tools with no contract get UNCLASSIFIED, never rejected or silently defaulted (ADR 0010). */
 	getContract: (toolName: string) => ToolContract | undefined;
 	store: PermissionRuleStore;
-	getMode: () => PermissionMode;
+	getMode: () => PermissionMode | Promise<PermissionMode>;
 	/** Absent in a non-interactive session: an `ask` resolution then fails closed (deny). */
 	responder?: PermissionResponder;
+	/** Resolves a responder at call time because the interactive UI binds after session construction. */
+	getResponder?: () => PermissionResponder | undefined;
 }
 
 export interface GateDecision {
@@ -46,9 +48,16 @@ export async function evaluateToolCall(
 ): Promise<GateDecision> {
 	const contract = options.getContract(toolName) ?? UNCLASSIFIED;
 	const spec = contract.permission;
-	const { rules } = await options.store.snapshot();
-	const ruleResolution = resolvePermission(rules, toolName, spec, params as never);
-	const resolution = resolveWithMode(options.getMode(), ruleResolution, contract.capabilities);
+	const snapshot = await options.store.snapshot();
+	if (snapshot.errors.length > 0) {
+		const sources = [...new Set(snapshot.errors.map((entry) => entry.source))].join(", ");
+		return {
+			block: true,
+			reason: `Permission configuration could not be loaded (${sources}); refusing to run ${toolName}.`,
+		};
+	}
+	const ruleResolution = resolvePermission(snapshot.rules, toolName, spec, params as never);
+	const resolution = resolveWithMode(await options.getMode(), ruleResolution, contract.capabilities);
 
 	if (resolution.behavior === "allow") return { block: false };
 
@@ -57,14 +66,15 @@ export async function evaluateToolCall(
 	}
 
 	// ask
-	if (!options.responder) {
+	const responder = options.getResponder?.() ?? options.responder;
+	if (!responder) {
 		return {
 			block: true,
 			reason: `${toolName} requires approval, and no responder is available in this session.`,
 		};
 	}
 	const ruleForCall = spec.ruleForCall(params as never);
-	const answer = await options.responder.ask({
+	const answer = await responder.ask({
 		toolName,
 		description: ruleForCall !== null ? spec.describe(ruleForCall) : `Run ${toolName}`,
 	});

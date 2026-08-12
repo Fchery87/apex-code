@@ -1574,6 +1574,8 @@ export type GetActiveToolsHandler = () => string[];
 /** Tool info with name, description, parameter schema, prompt guidelines, and source metadata. */
 export type ToolInfo = Pick<ToolDefinition, "name" | "description" | "parameters" | "promptGuidelines"> & {
 	sourceInfo: SourceInfo;
+	/** True when a foreign tool receives the conservative UNCLASSIFIED contract. */
+	unclassified: boolean;
 };
 
 export type GetAllToolsHandler = () => ToolInfo[];
