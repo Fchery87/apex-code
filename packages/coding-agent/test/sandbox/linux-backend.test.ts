@@ -54,18 +54,20 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		}
 	});
 
-	it("blocks an attempted connection to a host that is absent from the allowlist", async () => {
+	it("blocks and records an attempted connection to a host absent from the allowlist", async () => {
 		const cwd = workspace();
-		const backend = createLinuxSandboxBackend();
+		const violations = new SandboxViolationStore();
+		const backend = createLinuxSandboxBackend({ violationStore: violations });
 		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
 
 		try {
 			await expect(
 				supervisor.launch({
 					command: "/bin/bash",
-					args: ["-c", "echo > /dev/tcp/127.0.0.1/9"],
+					args: ["-c", "echo > /dev/tcp/198.51.100.1/443"],
 				}),
 			).resolves.not.toBe(0);
+			expect(violations.list()).toMatchObject([{ kind: "network" }]);
 		} finally {
 			await supervisor.close();
 		}

@@ -1,21 +1,37 @@
 #!/usr/bin/env node
-/**
- * CLI entry point for the refactored coding agent.
- * Uses main.ts with AgentSession and new mode modules.
- *
- * Test with: npx tsx src/cli-new.ts [args...]
- */
-import { APP_NAME } from "./config.ts";
+import { dirname } from "node:path";
+/** The public CLI either supervises a sandbox child or starts an ordinary runtime. */
+import { fileURLToPath } from "node:url";
+import { APP_NAME, getPackageDir } from "./config.ts";
 import { configureHttpDispatcher } from "./core/http-dispatcher.ts";
-import { main } from "./main.ts";
+import { requiresSandboxedChild } from "./core/sandbox/cli-launch.ts";
+import { launchSandboxedCli } from "./core/sandbox/cli-supervisor.ts";
 
-process.title = APP_NAME;
-process.env.PI_CODING_AGENT = "true";
-process.env.AI_AGENT = "apex-code";
-process.emitWarning = (() => {}) as typeof process.emitWarning;
+async function run(): Promise<void> {
+	const args = process.argv.slice(2);
+	if (requiresSandboxedChild(args)) {
+		process.exitCode = await launchSandboxedCli({
+			command: process.execPath,
+			args: [
+				fileURLToPath(
+					new URL(`./core/sandbox/child-entry${import.meta.url.endsWith(".ts") ? ".ts" : ".js"}`, import.meta.url),
+				),
+				...args,
+			],
+			environment: process.env,
+			workspace: process.cwd(),
+			readOnlyPaths: [getPackageDir(), dirname(getPackageDir())],
+		});
+		return;
+	}
 
-// Configure undici's global dispatcher before provider SDKs issue requests.
-// Runtime settings are applied once SettingsManager has loaded global/project settings.
-configureHttpDispatcher();
+	process.title = APP_NAME;
+	process.env.PI_CODING_AGENT = "true";
+	process.env.AI_AGENT = "apex-code";
+	process.emitWarning = (() => {}) as typeof process.emitWarning;
+	configureHttpDispatcher();
+	const { main } = await import("./main.ts");
+	await main(args);
+}
 
-main(process.argv.slice(2));
+await run();

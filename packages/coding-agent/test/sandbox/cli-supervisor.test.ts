@@ -1,0 +1,83 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { launchSandboxedCli } from "../../src/core/sandbox/cli-supervisor.ts";
+import type { SandboxBackend, SandboxLaunch } from "../../src/core/sandbox/supervisor.ts";
+
+const directories: string[] = [];
+afterEach(() => {
+	for (const directory of directories.splice(0)) rmSync(directory, { force: true, recursive: true });
+});
+
+function workspace(): string {
+	const directory = mkdtempSync(join(tmpdir(), "apex-sandbox-supervisor-"));
+	directories.push(directory);
+	return directory;
+}
+
+function backend(
+	status: SandboxBackend["status"],
+	exitCode = 0,
+): SandboxBackend & { launches: SandboxLaunch[]; closed: boolean } {
+	const launches: SandboxLaunch[] = [];
+	let closed = false;
+	return {
+		status,
+		launches,
+		get closed() {
+			return closed;
+		},
+		async launch(launch) {
+			launches.push(launch);
+			return exitCode;
+		},
+		async close() {
+			closed = true;
+		},
+	};
+}
+
+describe("CLI sandbox supervisor", () => {
+	it("runs only the normal child entry beneath an enforcing backend and closes it", async () => {
+		const enforcing = backend({ kind: "enforced" }, 23);
+		const code = await launchSandboxedCli({
+			command: "/usr/bin/node",
+			args: ["child-entry.js", "--print", "hello"],
+			environment: { PATH: "/usr/bin:/bin" },
+			workspace: workspace(),
+			dependencies: { createBackend: () => enforcing },
+		});
+		expect(code).toBe(23);
+		expect(enforcing.launches).toHaveLength(1);
+		expect(enforcing.launches[0]).toMatchObject({
+			command: "/usr/bin/node",
+			args: ["child-entry.js", "--print", "hello"],
+		});
+		expect(enforcing.closed).toBe(true);
+	});
+
+	it("fails closed and does not start a child when enforcement is unavailable", async () => {
+		const unavailable = backend({ kind: "unavailable", reason: "Bubblewrap unavailable" });
+		let stderr = "";
+		const code = await launchSandboxedCli({
+			command: "/usr/bin/node",
+			args: ["child-entry.js"],
+			environment: {},
+			workspace: workspace(),
+			dependencies: {
+				createBackend: () => unavailable,
+				stderr: {
+					write: (message) => {
+						stderr += message;
+						return true;
+					},
+				},
+			},
+		});
+		expect(code).toBe(1);
+		expect(unavailable.launches).toEqual([]);
+		expect(unavailable.closed).toBe(true);
+		expect(stderr).toContain("Bubblewrap unavailable");
+	});
+});

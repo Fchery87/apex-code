@@ -4,6 +4,9 @@ export interface SandboxLaunch {
 	readonly command: string;
 	readonly args: readonly string[];
 	readonly policy: SandboxPolicy;
+	readonly environment?: NodeJS.ProcessEnv;
+	/** Application/runtime paths needed by the child but never writable by it. */
+	readonly readOnlyPaths?: readonly string[];
 }
 
 /** A platform adapter. Its sole job is to launch a normal Apex child inside an OS boundary. */
@@ -15,7 +18,7 @@ export interface SandboxBackend {
 
 export interface SandboxSupervisor {
 	readonly status: SandboxStatus;
-	launch(options: { command: string; args: readonly string[] }): Promise<number>;
+	launch(options: Omit<SandboxLaunch, "policy">): Promise<number>;
 	close(): Promise<void>;
 }
 
@@ -29,9 +32,9 @@ export function createSandboxSupervisor(options: {
 }): SandboxSupervisor {
 	return {
 		status: options.backend.status,
-		async launch({ command, args }) {
+		async launch(launch) {
 			requireSandboxEnforcement(options.backend.status);
-			return options.backend.launch({ command, args, policy: options.policy });
+			return options.backend.launch({ ...launch, policy: options.policy });
 		},
 		async close() {
 			await options.backend.close();
