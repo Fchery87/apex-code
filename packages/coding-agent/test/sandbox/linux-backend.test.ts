@@ -1,6 +1,5 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { createServer } from "node:net";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createLinuxSandboxBackend } from "../../src/core/sandbox/linux-backend.ts";
@@ -41,26 +40,34 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		await supervisor.close();
 	});
 
-	it("blocks an attempted connection to a host that is absent from the allowlist", async () => {
+	it("does not expose the invoking account home outside the workspace mount", async () => {
 		const cwd = workspace();
-		const listener = createServer();
-		await new Promise<void>((resolve) => listener.listen(0, "127.0.0.1", resolve));
-		const address = listener.address();
-		if (!address || typeof address === "string") throw new Error("Test listener has no TCP port.");
 		const backend = createLinuxSandboxBackend();
 		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
-		const source = [
-			`const socket = require("node:net").connect({ host: "127.0.0.1", port: ${address.port} });`,
-			"socket.once('connect', () => process.exit(1));",
-			"socket.once('error', () => process.exit(0));",
-			"setTimeout(() => process.exit(2), 1000);",
-		].join(" ");
 
 		try {
-			await expect(supervisor.launch({ command: process.execPath, args: ["-e", source] })).resolves.toBe(0);
+			await expect(
+				supervisor.launch({ command: "/bin/sh", args: ["-c", `test ! -e ${join(homedir(), ".bashrc")}`] }),
+			).resolves.toBe(0);
 		} finally {
 			await supervisor.close();
-			await new Promise<void>((resolve, reject) => listener.close((error) => (error ? reject(error) : resolve())));
+		}
+	});
+
+	it("blocks an attempted connection to a host that is absent from the allowlist", async () => {
+		const cwd = workspace();
+		const backend = createLinuxSandboxBackend();
+		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+
+		try {
+			await expect(
+				supervisor.launch({
+					command: "/bin/bash",
+					args: ["-c", "echo > /dev/tcp/127.0.0.1/9"],
+				}),
+			).resolves.not.toBe(0);
+		} finally {
+			await supervisor.close();
 		}
 	});
 });

@@ -72,6 +72,8 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 					"--ro-bind",
 					"/",
 					"/",
+					"--tmpfs",
+					"/home",
 					"--bind",
 					launch.policy.workspace,
 					launch.policy.workspace,
