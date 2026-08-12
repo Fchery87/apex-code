@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { SandboxBackend, SandboxLaunch } from "./supervisor.ts";
 import type { SandboxViolationStore } from "./violations.ts";
 
@@ -21,6 +21,17 @@ function waitForExit(child: ReturnType<typeof spawn>): Promise<number> {
 		child.once("error", reject);
 		child.once("exit", (code) => resolve(code ?? 1));
 	});
+}
+
+function readOnlyMountArguments(path: string): string[] {
+	const directory = dirname(resolve(path));
+	const ancestors: string[] = [];
+	let current = directory;
+	while (current !== "/" && current !== "/home") {
+		ancestors.push(current);
+		current = dirname(current);
+	}
+	return [...ancestors.reverse().flatMap((ancestor) => ["--dir", ancestor]), "--ro-bind", directory, directory];
 }
 
 function classifySandboxFailure(stderr: string): "filesystem" | "network" | "unknown" {
@@ -61,6 +72,7 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 		async launch(launch: SandboxLaunch): Promise<number> {
 			const stateDirectory = join(launch.policy.workspace, ".apex-code", "sandbox-state");
 			mkdirSync(stateDirectory, { recursive: true });
+			const readOnlyMounts = [launch.command, ...(launch.readOnlyPaths ?? [])].flatMap(readOnlyMountArguments);
 			const child = spawn(
 				"bwrap",
 				[
@@ -74,6 +86,7 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 					"/",
 					"--tmpfs",
 					"/home",
+					...readOnlyMounts,
 					"--bind",
 					launch.policy.workspace,
 					launch.policy.workspace,
@@ -85,18 +98,15 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 					launch.policy.workspace,
 					"--setenv",
 					"HOME",
-					stateDirectory,
+					launch.environment?.HOME ?? stateDirectory,
 					"--setenv",
 					"TMPDIR",
-					stateDirectory,
-					"--setenv",
-					"APEX_CODE_SANDBOX_ENFORCED",
-					"1",
+					launch.environment?.TMPDIR ?? stateDirectory,
 					"--",
 					launch.command,
 					...launch.args,
 				],
-				{ stdio: ["inherit", "inherit", "pipe"] },
+				{ env: launch.environment, stdio: ["inherit", "inherit", "pipe"] },
 			);
 			let stderr = "";
 			child.stderr?.setEncoding("utf8");

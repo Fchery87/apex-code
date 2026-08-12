@@ -16,8 +16,9 @@
 
 Phase 2b adds an OS-enforced sandbox around the normal Apex CLI child process, so
 native file tools, bash descendants, and in-process extensions share one boundary.
-The first delivery supports Linux through Bubblewrap with an isolated network namespace
-and proxy-mediated host allowlisting. macOS Seatbelt support is a follow-up task inside
+The first delivery supports Linux through Bubblewrap with an isolated, deny-all network
+namespace. Proxy-mediated host allowlisting is deferred until it has its own reviewed
+bridge and OS integration evidence. macOS Seatbelt support is a follow-up task inside
 this phase only after native integration proof. The boundary records Apex-owned
 violations and fails closed if its supported backend cannot start.
 
@@ -89,17 +90,17 @@ record that a lower boundary rejected an operation.
 | Component | Change | File(s) |
 | --- | --- | --- |
 | Sandbox abstraction | Add a typed Apex-owned supervisor facade with preflight, status, launch, cleanup, and a bounded violation store. | new `core/sandbox/` |
-| Linux platform adapter | Invoke Bubblewrap directly with a workspace-only write mount and an isolated, initially empty network policy, then wrap a normal CLI child. | new `core/sandbox/linux-backend.ts` |
-| CLI launch | Detect child sentinel before `main()`. The outer process supervises the child with inherited stdio; the child never re-launches itself. | `cli.ts`, new launcher module |
-| Child environment | Supply only explicit workspace, private temporary/state, runtime/toolchain mounts and controlled proxy bridge; do not mount host home/credential/session directories by default. | platform adapter / supervisor |
+| Linux platform adapter | Invoke Bubblewrap directly with a workspace-only write mount and a deny-all isolated network namespace, then wrap a normal CLI child. Proxy-mediated host allowlisting is deferred. | new `core/sandbox/linux-backend.ts` |
+| CLI launch | The public entry starts a distinct internal child entry under the supervisor with inherited stdio; the child cannot recursively supervise itself. | `cli.ts`, new launcher module |
+| Child environment | Supply only explicit workspace, private temporary/state, and required runtime/toolchain mounts; do not mount host home/credential/session directories by default. | platform adapter / supervisor |
 | Violations | Record known runtime rejections and native monitor entries in Apex's bounded store; transmit only structured events across the supervisor boundary. | new `core/sandbox/violations.ts` |
 
 The `beforeToolCall` gate remains inside the child: authorization prevents tool work,
 while the outer sandbox constrains every allowed operation afterward. This preserves
 one authority decision and one OS boundary rather than creating a special bash route.
-The child sentinel is authenticated by an inherited private descriptor/token rather
-than a public environment variable alone, so a user cannot invoke an unsandboxed
-binary with a claimed-enforced status.
+The public entry uses a distinct internal child entry rather than an environment
+sentinel. No child environment variable is accepted as proof of enforcement or shown
+as a claimed-enforced status.
 
 ## Deletion inventory
 
@@ -111,17 +112,17 @@ already been confined before they execute.
 
 | Risk | Signal | Mitigation |
 | --- | --- | --- |
-| Host lacks Bubblewrap, Socat, or Ripgrep | startup diagnostic and agent-session refusal | dependency probe before supervisor launch; document packages |
-| Sandbox runtime global state leaks across runs | proxy processes remain after child exits | one supervisor owner; idempotent reset |
+| Host lacks Bubblewrap | startup diagnostic and agent-session refusal | dependency probe before supervisor launch; document package prerequisite |
+| Supervisor lifecycle leaks across runs | child or future bridge resources remain after exit | one supervisor owner; idempotent cleanup |
 | Native runtime cannot identify a Linux filesystem rejection | violation test lacks operation/path | record an Apex execution refusal fallback with raw sandbox output; do not fabricate a path |
-| Network proxy bypass | child reaches a blocked test host | isolated network namespace plus proxy test against loopback-controlled server |
-| Child-sentinel spoofing skips supervision | direct child invocation reports enforced | private inherited launch credential, verified before child executes |
+| Network namespace escape | child reaches a blocked test host directly | isolated network namespace plus direct TCP refusal test |
+| Recursive launch weakens containment | public child starts another supervisor | a separate internal child entry imports `main()` directly |
 | Misleading scope | docs/UI imply native tools or host process are confined | ADR 0005 non-guarantees copied into public diagnostics/help |
 
 ## Verification
 
 - Unit tests construct the supervisor facade with a fake backend and cover preflight,
-  child sentinel verification, fail-closed status, and violation normalization.
+  child-entry routing, fail-closed status, and violation normalization.
 - Linux/macOS integration tests are conditionally skipped only when their documented
   system prerequisites are absent, reporting the reason; on supported CI they launch
   a real sandboxed child in a scratch directory.

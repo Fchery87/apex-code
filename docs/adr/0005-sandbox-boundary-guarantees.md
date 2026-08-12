@@ -10,8 +10,7 @@ semantics under Apex control rather than promoting the existing beta sandbox-run
 example, whose bash-only shape and Linux violation limitations do not meet this ADR.
 A later macOS backend may use Seatbelt (`sandbox-exec`) only after native integration
 proof. The unsandboxed supervisor starts the normal Apex CLI as a sandboxed child. The child owns
-its TUI, session, tools, extensions, and descendants; the supervisor owns teardown
-and the host-side proxy. This whole-CLI launch shape is mandatory: wrapping only the
+its TUI, session, tools, extensions, and descendants; the supervisor owns teardown. This whole-CLI launch shape is mandatory: wrapping only the
 `bash` tool would leave native file tools, extensions, and future child processes
 outside the claimed boundary.
 
@@ -23,8 +22,8 @@ unsandboxed.
 The initial policy mounts the workspace read/write, only necessary runtime/toolchain
 paths read-only, and private temporary/state paths; it denies host-home and normal
 credential/session directories unless a later reviewed policy explicitly supplies
-one. It denies all direct outbound network and routes permitted HTTP/SOCKS traffic to
-the supervisor proxy, whose allowlist initially has no hosts.
+one. It denies all direct outbound network. Proxy-mediated allowlists are deferred
+until their proxy bridge, DNS/IP semantics, and OS integration evidence exist.
 
 The boundary is deliberately not described as a complete machine, account, VM, or
 container security boundary. It cannot protect against kernel, Bubblewrap, Seatbelt,
