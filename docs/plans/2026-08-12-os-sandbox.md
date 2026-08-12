@@ -8,7 +8,7 @@ order; each task must be verified before it is marked done.
 
 | Task | State | Commit | Verification |
 | --- | --- | --- | --- |
-| 2b.1 Add Apex sandbox domain types, configuration validation, bounded violations, and fail-closed preflight tests | In progress | — | New unit tests fail first, then pass |
+| 2b.1 Add Apex sandbox domain types, configuration validation, bounded violations, and fail-closed preflight tests | Done | `269302eb0` | `test/sandbox/` passed after red module-import failures |
 | 2b.2 Implement Linux supervisor/backend and process-child launch sentinel | Not started | — | Fake-backend launch/lifecycle tests pass |
 | 2b.3 Add Linux OS integration fixtures for workspace write, outside-write refusal, blocked network, and grandchild containment | Not started | — | Real commands pass on provisioned Linux; explicit skipped reason otherwise |
 | 2b.4 Wire CLI diagnostics/lifecycle and package distributable dependency | Not started | — | CLI routing tests, build, install-lock check |
