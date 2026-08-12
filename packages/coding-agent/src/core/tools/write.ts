@@ -5,8 +5,10 @@ import { dirname } from "path";
 import { type Static, Type } from "typebox";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
 import { getLanguageFromPath, highlightCode, type Theme } from "../../modes/interactive/theme/theme.ts";
-import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
+import type { ToolRenderResultOptions } from "../extensions/types.ts";
+import type { ApexToolDefinition } from "./contract.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
+import { createPathPermissionSpec } from "./path-permission.ts";
 import { resolveToCwd } from "./path-utils.ts";
 import { normalizeDisplayText, renderToolPath, replaceTabs, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -186,7 +188,7 @@ function formatWriteResult(
 export function createWriteToolDefinition(
 	cwd: string,
 	options?: WriteToolOptions,
-): ToolDefinition<typeof writeSchema, undefined> {
+): ApexToolDefinition<typeof writeSchema, undefined> {
 	const ops = options?.operations ?? defaultWriteOperations;
 	return {
 		name: "write",
@@ -196,6 +198,20 @@ export function createWriteToolDefinition(
 		promptSnippet: writeToolSystemPromptContribution.snippet,
 		promptGuidelines: [...writeToolSystemPromptContribution.guidelines],
 		parameters: writeSchema,
+		contract: {
+			capabilities: new Set(["fs.write"]),
+			permission: createPathPermissionSpec({
+				cwd,
+				defaultBehavior: "ask",
+				verb: "Write",
+				getPath: (params) => params.path,
+			}),
+			context: { resultRecoverable: true, deferSchema: false },
+			evidence: {
+				emits: new Set(["diff"]),
+				capture: (params) => [{ kind: "diff", path: params.path }],
+			},
+		},
 		async execute(
 			_toolCallId,
 			{ path, content }: { path: string; content: string },

@@ -8,7 +8,9 @@ import { type Static, Type } from "typebox";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import { ensureTool } from "../../utils/tools-manager.ts";
-import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
+import type { ToolRenderResultOptions } from "../extensions/types.ts";
+import type { ApexToolDefinition } from "./contract.ts";
+import { createPathPermissionSpec } from "./path-permission.ts";
 import { resolveToCwd } from "./path-utils.ts";
 import { getTextOutput, invalidArgText, shortenPath, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -128,7 +130,7 @@ function formatGrepResult(
 export function createGrepToolDefinition(
 	cwd: string,
 	options?: GrepToolOptions,
-): ToolDefinition<typeof grepSchema, GrepToolDetails | undefined> {
+): ApexToolDefinition<typeof grepSchema, GrepToolDetails | undefined> {
 	const customOps = options?.operations;
 	return {
 		name: "grep",
@@ -136,6 +138,17 @@ export function createGrepToolDefinition(
 		description: `Search file contents for a pattern. Returns matching lines with file paths and line numbers. Respects .gitignore. Output is truncated to ${DEFAULT_LIMIT} matches or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Long lines are truncated to ${GREP_MAX_LINE_LENGTH} chars.`,
 		promptSnippet: grepToolSystemPromptContribution.snippet,
 		parameters: grepSchema,
+		contract: {
+			capabilities: new Set(["fs.read"]),
+			permission: createPathPermissionSpec({
+				cwd,
+				defaultBehavior: "allow",
+				verb: "Search",
+				getPath: (params) => params.path,
+			}),
+			context: { resultRecoverable: true, deferSchema: false },
+			evidence: { emits: new Set(), capture: () => [] },
+		},
 		async execute(
 			_toolCallId,
 			{

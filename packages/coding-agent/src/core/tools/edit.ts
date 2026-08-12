@@ -5,7 +5,8 @@ import { access as fsAccess, readFile as fsReadFile, writeFile as fsWriteFile } 
 import { type Static, Type } from "typebox";
 import { renderDiff } from "../../modes/interactive/components/diff.ts";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
-import type { ToolDefinition } from "../extensions/types.ts";
+import type { ApexToolDefinition } from "./contract.ts";
+import { createPathPermissionSpec } from "./path-permission.ts";
 import {
 	applyEditsToNormalizedContent,
 	computeEditsDiff,
@@ -297,7 +298,7 @@ function setEditPreview(
 export function createEditToolDefinition(
 	cwd: string,
 	options?: EditToolOptions,
-): ToolDefinition<typeof editSchema, EditToolDetails | undefined, EditRenderState> {
+): ApexToolDefinition<typeof editSchema, EditToolDetails | undefined, EditRenderState> {
 	const ops = options?.operations ?? defaultEditOperations;
 	return {
 		name: "edit",
@@ -307,6 +308,20 @@ export function createEditToolDefinition(
 		promptSnippet: editToolSystemPromptContribution.snippet,
 		promptGuidelines: [...editToolSystemPromptContribution.guidelines],
 		parameters: editSchema,
+		contract: {
+			capabilities: new Set(["fs.read", "fs.write"]),
+			permission: createPathPermissionSpec({
+				cwd,
+				defaultBehavior: "ask",
+				verb: "Edit",
+				getPath: (params) => params.path,
+			}),
+			context: { resultRecoverable: true, deferSchema: false },
+			evidence: {
+				emits: new Set(["diff"]),
+				capture: (params) => [{ kind: "diff", path: params.path }],
+			},
+		},
 		renderShell: "self",
 		prepareArguments: prepareEditArguments,
 		async execute(_toolCallId, input: EditToolInput, signal?: AbortSignal, _onUpdate?, _ctx?) {

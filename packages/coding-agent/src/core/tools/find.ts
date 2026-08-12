@@ -7,7 +7,9 @@ import { type Static, Type } from "typebox";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import { ensureTool } from "../../utils/tools-manager.ts";
-import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
+import type { ToolRenderResultOptions } from "../extensions/types.ts";
+import type { ApexToolDefinition } from "./contract.ts";
+import { createPathPermissionSpec } from "./path-permission.ts";
 import { pathExists, resolveToCwd } from "./path-utils.ts";
 import { getTextOutput, invalidArgText, shortenPath, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -123,7 +125,7 @@ function formatFindResult(
 export function createFindToolDefinition(
 	cwd: string,
 	options?: FindToolOptions,
-): ToolDefinition<typeof findSchema, FindToolDetails | undefined> {
+): ApexToolDefinition<typeof findSchema, FindToolDetails | undefined> {
 	const customOps = options?.operations;
 	return {
 		name: "find",
@@ -131,6 +133,17 @@ export function createFindToolDefinition(
 		description: `Search for files by glob pattern. Returns matching file paths relative to the search directory. Respects .gitignore. Output is truncated to ${DEFAULT_LIMIT} results or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first).`,
 		promptSnippet: findToolSystemPromptContribution.snippet,
 		parameters: findSchema,
+		contract: {
+			capabilities: new Set(["fs.read"]),
+			permission: createPathPermissionSpec({
+				cwd,
+				defaultBehavior: "allow",
+				verb: "Search",
+				getPath: (params) => params.path,
+			}),
+			context: { resultRecoverable: true, deferSchema: false },
+			evidence: { emits: new Set(), capture: () => [] },
+		},
 		async execute(
 			_toolCallId,
 			{ pattern, path: searchDir, limit }: { pattern: string; path?: string; limit?: number },

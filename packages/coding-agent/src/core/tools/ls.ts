@@ -5,7 +5,9 @@ import nodePath from "path";
 import { type Static, Type } from "typebox";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
-import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
+import type { ToolRenderResultOptions } from "../extensions/types.ts";
+import type { ApexToolDefinition } from "./contract.ts";
+import { createPathPermissionSpec } from "./path-permission.ts";
 import { pathExists, resolveToCwd } from "./path-utils.ts";
 import { getTextOutput, renderToolPath, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -100,7 +102,7 @@ function formatLsResult(
 export function createLsToolDefinition(
 	cwd: string,
 	options?: LsToolOptions,
-): ToolDefinition<typeof lsSchema, LsToolDetails | undefined> {
+): ApexToolDefinition<typeof lsSchema, LsToolDetails | undefined> {
 	const ops = options?.operations ?? defaultLsOperations;
 	return {
 		name: "ls",
@@ -108,6 +110,17 @@ export function createLsToolDefinition(
 		description: `List directory contents. Returns entries sorted alphabetically, with '/' suffix for directories. Includes dotfiles. Output is truncated to ${DEFAULT_LIMIT} entries or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first).`,
 		promptSnippet: lsToolSystemPromptContribution.snippet,
 		parameters: lsSchema,
+		contract: {
+			capabilities: new Set(["fs.read"]),
+			permission: createPathPermissionSpec({
+				cwd,
+				defaultBehavior: "allow",
+				verb: "List",
+				getPath: (params) => params.path,
+			}),
+			context: { resultRecoverable: true, deferSchema: false },
+			evidence: { emits: new Set(), capture: () => [] },
+		},
 		async execute(
 			_toolCallId,
 			{ path, limit }: { path?: string; limit?: number },
