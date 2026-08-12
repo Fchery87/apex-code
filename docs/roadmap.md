@@ -81,7 +81,7 @@ capable and measurably worse.
 | 0 | Fork foundation | **landed** — 10 of 10 tasks · `9d79cc6c6b` | [spec](specs/2026-08-08-fork-foundation.md) | — |
 | 1 | Provider & model layer | **landed** — 7 of 7 tasks · `ad79a98fe` | [spec](specs/2026-08-10-provider-and-model-layer.md) | — |
 | 2a | Permissions — rule model | **landed** — live enforcement completed · `8dff33f41` | [spec](specs/2026-08-11-permission-rule-model.md) | — |
-| 2b | Permissions — OS sandbox | not started | — | — |
+| 2b | Permissions — OS sandbox | **active** | [spec](specs/2026-08-12-os-sandbox.md) | [plan](plans/2026-08-12-os-sandbox.md) |
 | 3 | Context engineering | not started | — | — |
 | 4 | Tool surface | not started | — | — |
 | 5 | Delegation & multi-agent | not started | — | — |
