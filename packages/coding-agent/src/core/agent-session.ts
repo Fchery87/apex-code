@@ -43,6 +43,7 @@ import type {
 	AgentMessage,
 	AgentState,
 	AgentTool,
+	BeforeToolCallResult,
 	PrepareNextTurnContext,
 	ThinkingLevel,
 } from "apex-code-agent-core";
@@ -97,6 +98,8 @@ import { emitSessionShutdownEvent } from "./extensions/runner.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
+import { evaluateToolCall, type PermissionGateOptions } from "./permissions/gate.ts";
+import type { ApexToolDefinition } from "./tools/contract.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
 import type { BranchSummaryEntry, CompactionEntry, SessionEntry, SessionManager } from "./session-manager.ts";
@@ -225,6 +228,15 @@ export interface AgentSessionConfig {
 	extensionRunnerRef?: { current?: ExtensionRunner };
 	/** Session start event metadata emitted when extensions bind to this runtime. */
 	sessionStartEvent?: SessionStartEvent;
+	/**
+	 * Permission gate (roadmap Phase 2a, ADR 0004). Optional and off by default: an
+	 * `AgentSession` created without this is unaffected — the same behavior as
+	 * before this phase. The CLI wires a real one in once a permission mode is
+	 * resolved (Task 2a.7). `getContract` is not part of this config: AgentSession
+	 * supplies it itself from its own tool registry, which does not exist yet at
+	 * construction time — a caller cannot pass a lookup into its own future state.
+	 */
+	permissionGate?: Omit<PermissionGateOptions, "getContract">;
 }
 
 export interface ExtensionBindings {
@@ -353,6 +365,7 @@ export class AgentSession {
 	private _excludedToolNames?: Set<string>;
 	private _baseToolsOverride?: Record<string, AgentTool>;
 	private _sessionStartEvent: SessionStartEvent;
+	private _permissionGate?: Omit<PermissionGateOptions, "getContract">;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionMode: ExtensionMode = "print";
 	private _extensionCommandContextActions?: ExtensionCommandContextActions;
@@ -389,6 +402,7 @@ export class AgentSession {
 		this._excludedToolNames = config.excludedToolNames ? new Set(config.excludedToolNames) : undefined;
 		this._baseToolsOverride = config.baseToolsOverride;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
+		this._permissionGate = config.permissionGate;
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, extensions, auto-compaction, retry logic)
@@ -479,23 +493,40 @@ export class AgentSession {
 	private _installAgentToolHooks(): void {
 		this.agent.beforeToolCall = async ({ toolCall, args }) => {
 			const runner = this._extensionRunner;
-			if (!runner.hasHandlers("tool_call")) {
-				return undefined;
+			if (runner.hasHandlers("tool_call")) {
+				let extensionResult: BeforeToolCallResult | undefined;
+				try {
+					extensionResult = await runner.emitToolCall({
+						type: "tool_call",
+						toolName: toolCall.name,
+						toolCallId: toolCall.id,
+						input: args as Record<string, unknown>,
+					});
+				} catch (err) {
+					if (err instanceof Error) {
+						throw err;
+					}
+					throw new Error(`Extension failed, blocking execution: ${String(err)}`);
+				}
+				// An extension with an explicit opinion (block or an override) is
+				// authoritative; only "no opinion" (undefined) falls through to the
+				// permission gate below.
+				if (extensionResult) return extensionResult;
 			}
 
-			try {
-				return await runner.emitToolCall({
-					type: "tool_call",
-					toolName: toolCall.name,
-					toolCallId: toolCall.id,
-					input: args as Record<string, unknown>,
+			// Permission gate (roadmap Phase 2a, ADR 0004). Off by default — see
+			// AgentSessionConfig.permissionGate. When present, every registered tool
+			// call passes through it (contracts.md invariant 2): this is the seam,
+			// not a per-tool opt-in.
+			if (this._permissionGate) {
+				const decision = await evaluateToolCall(toolCall.name, args, {
+					...this._permissionGate,
+					getContract: (name) => (this.getToolDefinition(name) as Partial<ApexToolDefinition> | undefined)?.contract,
 				});
-			} catch (err) {
-				if (err instanceof Error) {
-					throw err;
-				}
-				throw new Error(`Extension failed, blocking execution: ${String(err)}`);
+				if (decision.block) return { block: true, reason: decision.reason };
 			}
+
+			return undefined;
 		};
 
 		this.agent.afterToolCall = async ({ toolCall, args, result, isError }) => {
