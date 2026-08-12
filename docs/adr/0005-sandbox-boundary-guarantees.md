@@ -4,11 +4,12 @@
 
 Phase 2a authorizes tool calls, but an authorization decision does not confine an
 allowed tool or its subprocesses. Phase 2b therefore places the normal Apex runtime
-and its complete child-process tree inside an OS sandbox. We use the already-present, Apache-2.0
-`@anthropic-ai/sandbox-runtime` dependency behind an Apex-owned supervisor rather
-than inventing platform profiles: it uses Bubblewrap plus a proxy bridge on Linux and
-Seatbelt (`sandbox-exec`) on macOS. The unsandboxed supervisor initializes the proxy
-and OS backend, then starts the normal Apex CLI as a sandboxed child. The child owns
+and its complete child-process tree inside an OS sandbox. The initial Linux backend invokes Bubblewrap directly behind an Apex-owned
+supervisor. This keeps the boundary's mounts, lifecycle, diagnostics, and evidence
+semantics under Apex control rather than promoting the existing beta sandbox-runtime
+example, whose bash-only shape and Linux violation limitations do not meet this ADR.
+A later macOS backend may use Seatbelt (`sandbox-exec`) only after native integration
+proof. The unsandboxed supervisor starts the normal Apex CLI as a sandboxed child. The child owns
 its TUI, session, tools, extensions, and descendants; the supervisor owns teardown
 and the host-side proxy. This whole-CLI launch shape is mandatory: wrapping only the
 `bash` tool would leave native file tools, extensions, and future child processes

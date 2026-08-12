@@ -89,11 +89,10 @@ record that a lower boundary rejected an operation.
 | Component | Change | File(s) |
 | --- | --- | --- |
 | Sandbox abstraction | Add a typed Apex-owned supervisor facade with preflight, status, launch, cleanup, and a bounded violation store. | new `core/sandbox/` |
-| Linux platform adapter | Initialize `@anthropic-ai/sandbox-runtime` in the supervisor with workspace-only write and empty network policy, then wrap a normal CLI child. | new `core/sandbox/supervisor.ts` |
+| Linux platform adapter | Invoke Bubblewrap directly with a workspace-only write mount and an isolated, initially empty network policy, then wrap a normal CLI child. | new `core/sandbox/linux-backend.ts` |
 | CLI launch | Detect child sentinel before `main()`. The outer process supervises the child with inherited stdio; the child never re-launches itself. | `cli.ts`, new launcher module |
 | Child environment | Supply only explicit workspace, private temporary/state, runtime/toolchain mounts and controlled proxy bridge; do not mount host home/credential/session directories by default. | platform adapter / supervisor |
 | Violations | Record known runtime rejections and native monitor entries in Apex's bounded store; transmit only structured events across the supervisor boundary. | new `core/sandbox/violations.ts` |
-| Packaging | Promote the existing exact sandbox runtime dependency to the distributable coding-agent package and regenerate its install lock. | `package.json`, `package-lock.json`, `install-lock/` |
 
 The `beforeToolCall` gate remains inside the child: authorization prevents tool work,
 while the outer sandbox constrains every allowed operation afterward. This preserves
@@ -118,7 +117,6 @@ already been confined before they execute.
 | Network proxy bypass | child reaches a blocked test host | isolated network namespace plus proxy test against loopback-controlled server |
 | Child-sentinel spoofing skips supervision | direct child invocation reports enforced | private inherited launch credential, verified before child executes |
 | Misleading scope | docs/UI imply native tools or host process are confined | ADR 0005 non-guarantees copied into public diagnostics/help |
-| Dependency API changes | typecheck or adapter integration fails on upgrade | exact pinned dependency, narrow facade, integration test |
 
 ## Verification
 
