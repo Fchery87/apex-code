@@ -2,9 +2,10 @@ import { buildSandboxedCliLaunch } from "./cli-launch.ts";
 import { createLinuxSandboxBackend } from "./linux-backend.ts";
 import { createSandboxPolicy } from "./policy.ts";
 import { createSandboxSupervisor, type SandboxBackend } from "./supervisor.ts";
+import { SandboxViolationStore } from "./violations.ts";
 
 export interface CliSandboxDependencies {
-	createBackend: () => SandboxBackend;
+	createBackend: (options: { violationStore: SandboxViolationStore }) => SandboxBackend;
 	stderr: { write(message: string): boolean };
 }
 
@@ -31,7 +32,8 @@ export async function launchSandboxedCli(options: {
 		dependencies.stderr.write(`Error: OS sandbox is not enforcing this agent session: ${policyResult.reason}\n`);
 		return 1;
 	}
-	const backend = dependencies.createBackend();
+	const violationStore = new SandboxViolationStore();
+	const backend = dependencies.createBackend({ violationStore });
 	const supervisor = createSandboxSupervisor({ backend, policy: policyResult.policy });
 	const launch = buildSandboxedCliLaunch({
 		workspace: policyResult.policy.workspace,
@@ -47,6 +49,11 @@ export async function launchSandboxedCli(options: {
 		dependencies.stderr.write(`Error: ${message}\n`);
 		return 1;
 	} finally {
+		for (const violation of violationStore.list()) {
+			dependencies.stderr.write(
+				`Sandbox violation (${violation.kind}): ${violation.command} — ${violation.detail}\n`,
+			);
+		}
 		await supervisor.close();
 	}
 }
