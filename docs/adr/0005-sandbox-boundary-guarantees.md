@@ -48,3 +48,24 @@ Consequences accepted: this is a launch-architecture change and requires documen
 host dependencies. It is preferable to silently substituting a best-effort Node path
 check or a bash-only wrapper for an OS boundary that claims to cover Apex tool
 execution.
+
+## Amendment (2026-08-12): proxy bridge feasibility evidence
+
+This ADR deferred proxy-mediated host allowlisting until "its own reviewed bridge
+and OS integration evidence" existed. That evidence now exists — see the amendment
+in `docs/specs/2026-08-12-os-sandbox.md`. A prototype confirmed a Unix-domain-socket
+relay through the existing, unchanged `--unshare-net` isolation: the child keeps
+zero network interfaces beyond loopback (verified with a real `bwrap` child, whose
+direct outbound connect attempt failed with `Network is unreachable`), while the
+supervisor's allowlist proxy is reachable only via a bind-mounted Unix socket, not a
+network path. This needs no new privileged primitive and no new runtime dependency —
+an alternative using a veth pair between nested unprivileged network namespaces was
+prototyped and rejected because it would have required `pasta` or `slirp4netns` as a
+new dependency to bootstrap connectivity, for no isolation benefit over the socket
+relay.
+
+This amendment records feasibility only. It does not change this ADR's decision to
+ship deny-all network first, and it does not itself authorize implementation —
+DNS/CONNECT handling, the allowlist config surface, violation-store wiring, and
+integration test coverage remain open and are tracked in the Phase 2b spec and
+plan, not settled by this ADR.

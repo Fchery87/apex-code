@@ -138,3 +138,83 @@ already been confined before they execute.
 Needs `docs/plans/2026-08-12-os-sandbox.md`: it crosses package distribution,
 platform-dependent execution, lifecycle management, diagnostics, and real OS
 integration tests. ADR 0005 is required and has been accepted before implementation.
+
+## Amendment (2026-08-12): network allowlist feasibility spike
+
+Deny-all network (`--unshare-net`, tasks 2b.1–2b.4) is shipped and correct, but it
+means an online agent session cannot reach its model provider. ADR 0005 explicitly
+deferred a proxy-mediated allowlist until it had "its own reviewed bridge and OS
+integration evidence." This amendment records that evidence. **It is a design
+finding, not an implementation** — no production code changed; tasks 2 (violation
+evidence wiring), 3 (live-agent boundary test), and 4 (CLI suite reconciliation)
+from the originating review remain future work, tracked separately from this spec.
+
+**Options considered:**
+
+1. **veth pair between two unprivileged-nested network namespaces, proxy on the
+   host-side end.** Prototyped and confirmed working (see evidence below): an
+   unprivileged `unshare --user --net --map-root-user` owns a user namespace `U`;
+   a second `unshare --net` inside it creates a sibling namespace also owned by
+   `U`; a veth pair created in one can be moved into the other (`ip link set
+   veth1 netns <pid>` succeeds). Moving a device from a namespace owned by `U`
+   back into the *true* host namespace (owned by `init_user_ns`) fails with
+   `Operation not permitted` — confirming real root is required to bridge a
+   custom-userns network namespace back to the host's, which is exactly the
+   problem tools like `slirp4netns`/`pasta` exist to solve via TAP-fd-passing
+   rather than device migration. Rejected as the final design: it would add
+   `pasta` or `slirp4netns` as a new runtime dependency (neither is installed
+   today) purely to bootstrap connectivity for a component that doesn't need a
+   real IP stack at all — see option 2.
+2. **Unix domain socket relay through the existing fully-isolated netns
+   (recommended, prototyped, and confirmed working).** Keep today's
+   `--unshare-net` unchanged — the child keeps zero network interfaces beyond
+   loopback, exactly as already shipped. The supervisor (already unsandboxed,
+   already network-capable) runs an HTTP CONNECT allowlist proxy listening on a
+   Unix domain socket instead of a TCP port. That socket's containing directory
+   is bind-mounted read-write into the child alongside its existing workspace/
+   temp mounts. A UDS is filesystem-scoped, not network-namespace-scoped, so it
+   is reachable from inside a fully net-isolated child without any veth,
+   namespace nesting, or new dependency. A small relay process, started inside
+   the child's own namespace tree (same net/pid confinement as the agent
+   itself), listens on the child's private `127.0.0.1:<port>` and pipes bytes to
+   the UDS, so `HTTP_PROXY`/`HTTPS_PROXY` work unmodified for any HTTP client —
+   Node, git, curl, or an arbitrary native binary — not just a custom Node
+   dispatcher. Chosen because it needs no new external dependency, no privilege
+   beyond what `--unshare-net` already uses, and is additive to the shipped
+   tasks 2b.1–2b.4 rather than a replacement of them.
+
+**Why the OS-level guarantee holds regardless of app cooperation:** the relay's
+loopback listener is a convenience for clients that honor proxy env vars. The
+actual boundary is that the child's network namespace has no interface capable of
+reaching anything but its own loopback — confirmed below by a direct-connect
+attempt from inside a real `bwrap --unshare-net` child failing with `Network is
+unreachable`, not a timeout or a policy-level refusal. A process that ignores
+`HTTPS_PROXY` and dials a hardcoded IP has nowhere to send the packet; there is no
+route to fall back on.
+
+**Prototype evidence** (ad hoc scripts, not committed — this session's
+scratchpad only):
+
+- `unshare --user --net --map-root-user` → `ip link add veth0 type veth peer name
+  veth1` succeeds; a second `unshare --net` inside the same user namespace
+  creates a sibling namespace; `ip link set veth1 netns <sibling-pid>` succeeds
+  (`MOVE_RESULT=SUCCESS`). The same move attempted back into the true host
+  namespace fails: `RTNETLINK answers: Operation not permitted`.
+- With the sibling-netns veth wired up (`10.200.7.1` supervisor side,
+  `10.200.7.2` child side, default route via `.1`, host `ip_forward=0`): the
+  child side reaches a listener on `10.200.7.1:8899` (`PROXY_REACHABLE` /
+  `PROXY_OK`) and cannot reach `1.1.1.1:443` (`DIRECT_INTERNET_BLOCKED`, an
+  immediate no-route failure, not a hang).
+- A real `bwrap --unshare-net` child (same isolation flags as today's shipped
+  deny-all backend) with a host directory bind-mounted read-write reached a Unix
+  domain socket listener in that directory (`CHILD_UDS_RESULT:
+  b'ALLOWLIST_PROXY_OK\n'`) while a direct `AF_INET` connect from inside the same
+  child to `1.1.1.1:443` failed with `[Errno 101] Network is unreachable`.
+
+**Open work, not done in this session** (scoped separately, see roadmap Phase 2b):
+DNS resolution ownership and CONNECT-request parsing in the proxy; the
+`network.allowedHosts` config schema and its precedence against the existing rule
+model; wiring proxy rejections into `core/sandbox/violations.ts`'s bounded store;
+lifecycle/cleanup for the UDS and relay process; and an integration test proving
+an allowed host succeeds and a non-allowlisted host fails closed with a recorded
+violation, run from a scratch workspace per `AGENTS.md`.
