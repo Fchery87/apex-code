@@ -12,12 +12,12 @@
  */
 
 import type { BeforeToolCallContext, BeforeToolCallResult } from "apex-code-agent-core";
-import { resolveWithMode } from "./modes.ts";
-import { resolvePermission } from "./rules.ts";
-import type { PermissionResponder } from "./responder.ts";
-import type { PermissionMode, PermissionRuleStore } from "./store.ts";
 import type { ToolContract } from "../tools/contract.ts";
 import { UNCLASSIFIED } from "../tools/contract.ts";
+import { resolveWithMode } from "./modes.ts";
+import type { PermissionResponder } from "./responder.ts";
+import { resolvePermission } from "./rules.ts";
+import type { PermissionMode, PermissionRuleStore } from "./store.ts";
 
 export interface PermissionGateOptions {
 	/** Resolve a tool's contract by name. Foreign tools with no contract get UNCLASSIFIED, never rejected or silently defaulted (ADR 0010). */

@@ -6,6 +6,7 @@ import type { ThinkingLevel } from "apex-code-agent-core";
 import chalk from "chalk";
 import { APP_NAME, CONFIG_DIR_NAME, ENV_AGENT_DIR, ENV_SESSION_DIR } from "../config.ts";
 import type { ExtensionFlag } from "../core/extensions/types.ts";
+import { PERMISSION_MODES, type PermissionMode } from "../core/permissions/store.ts";
 import type { TuiMode } from "../core/settings-manager.ts";
 
 export type Mode = "text" | "json" | "rpc";
@@ -47,6 +48,8 @@ export interface Args {
 	listModels?: string | true;
 	offline?: boolean;
 	tuiMode?: TuiMode;
+	/** ADR 0004 permission mode, registered at the `flag` source (outranks project/user config). */
+	permissionMode?: PermissionMode;
 	verbose?: boolean;
 	projectTrustOverride?: boolean;
 	messages: string[];
@@ -191,6 +194,23 @@ export function parseArgs(args: string[]): Args {
 					message: `Invalid TUI mode "${mode}". Valid values: regular, fullscreen`,
 				});
 			}
+		} else if (arg === "--permission-mode") {
+			const mode = args[i + 1];
+			if (mode !== undefined && (PERMISSION_MODES as readonly string[]).includes(mode)) {
+				result.permissionMode = mode as PermissionMode;
+				i++;
+			} else if (mode === undefined || mode.startsWith("-")) {
+				result.diagnostics.push({
+					type: "error",
+					message: `--permission-mode requires a value. Valid modes: ${PERMISSION_MODES.join(", ")}`,
+				});
+			} else {
+				i++;
+				result.diagnostics.push({
+					type: "error",
+					message: `Invalid permission mode "${mode}". Valid modes: ${PERMISSION_MODES.join(", ")}`,
+				});
+			}
 		} else if (arg === "--verbose") {
 			result.verbose = true;
 		} else if (arg === "--approve" || arg === "-a") {
@@ -259,6 +279,8 @@ ${chalk.bold("Options:")}
   --append-system-prompt <text>  Append text or file contents to the system prompt (can be used multiple times)
   --mode <mode>                  Output mode: text (default), json, or rpc
   --print, -p                    Non-interactive mode: process prompt and exit
+  --permission-mode <mode>       default, plan, acceptEdits, bypassPermissions, or dontAsk.
+                                  Required for non-interactive sessions (--print, json, or rpc mode).
   --continue, -c                 Continue previous session
   --resume, -r                   Select a session to resume
   --session <path|id>            Use specific session file or partial UUID
