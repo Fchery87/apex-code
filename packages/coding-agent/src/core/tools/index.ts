@@ -69,8 +69,8 @@ export {
 } from "./write.ts";
 
 import type { AgentTool } from "apex-code-agent-core";
-import type { ToolDefinition } from "../extensions/types.ts";
 import { type BashToolOptions, createBashTool, createBashToolDefinition } from "./bash.ts";
+import type { ApexToolDefinition } from "./contract.ts";
 import { createEditTool, createEditToolDefinition, type EditToolOptions } from "./edit.ts";
 import { createFindTool, createFindToolDefinition, type FindToolOptions } from "./find.ts";
 import { createGrepTool, createGrepToolDefinition, type GrepToolOptions } from "./grep.ts";
@@ -79,7 +79,7 @@ import { createReadTool, createReadToolDefinition, type ReadToolOptions } from "
 import { createWriteTool, createWriteToolDefinition, type WriteToolOptions } from "./write.ts";
 
 export type Tool = AgentTool<any>;
-export type ToolDef = ToolDefinition<any, any>;
+export type ToolDef = ApexToolDefinition<any, any>;
 export type ToolName = "read" | "bash" | "edit" | "write" | "grep" | "find" | "ls";
 export const allToolNames: Set<ToolName> = new Set(["read", "bash", "edit", "write", "grep", "find", "ls"]);
 

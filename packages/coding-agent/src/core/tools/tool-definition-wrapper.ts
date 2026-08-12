@@ -1,11 +1,22 @@
 import type { AgentTool } from "apex-code-agent-core";
+import type { TSchema } from "typebox";
 import type { ExtensionContext, ToolDefinition } from "../extensions/types.ts";
 
-/** Wrap a ToolDefinition into an AgentTool for the core runtime. */
-export function wrapToolDefinition<TDetails = unknown>(
-	definition: ToolDefinition<any, TDetails>,
+/**
+ * Wrap a ToolDefinition into an AgentTool for the core runtime.
+ *
+ * `TParams` is generic here rather than fixed to `any`, so a caller passing a
+ * concretely-typed definition (e.g. one carrying a `contract`, per ADR 0010) gets
+ * `TParams` inferred as that concrete schema. Fixing it to `any` would instantiate
+ * every optional renderer's `Static<TParams>` as `Static<any>`, which TypeScript
+ * does not treat as `any` — it structurally resolves to `unknown` — and that turns a
+ * harmless assignability check into a real error for any definition with a
+ * concretely-typed `renderCall`/`renderResult`.
+ */
+export function wrapToolDefinition<TParams extends TSchema = TSchema, TDetails = unknown>(
+	definition: ToolDefinition<TParams, TDetails>,
 	ctxFactory?: () => ExtensionContext,
-): AgentTool<any, TDetails> {
+): AgentTool<TParams, TDetails> {
 	return {
 		name: definition.name,
 		label: definition.label,

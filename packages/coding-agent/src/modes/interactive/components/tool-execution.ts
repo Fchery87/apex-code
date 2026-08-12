@@ -1,5 +1,6 @@
 import { Box, type Component, Container, getCapabilities, Image, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
 import type { ToolDefinition, ToolRenderContext } from "../../../core/extensions/types.ts";
+import type { ApexToolDefinition } from "../../../core/tools/contract.ts";
 import { createAllToolDefinitions, type ToolName } from "../../../core/tools/index.ts";
 import { getTextOutput as getRenderedTextOutput } from "../../../core/tools/render-utils.ts";
 import { convertToPng } from "../../../utils/image-convert.ts";
@@ -26,8 +27,8 @@ export class ToolExecutionComponent extends Container {
 	private showImages: boolean;
 	private imageWidthCells: number;
 	private isPartial = true;
-	private toolDefinition?: ToolDefinition<any, any>;
-	private builtInToolDefinition?: ToolDefinition<any, any>;
+	private toolDefinition?: ToolDefinition<any, any> | ApexToolDefinition<any, any>;
+	private builtInToolDefinition?: ToolDefinition<any, any> | ApexToolDefinition<any, any>;
 	private ui: TUI;
 	private cwd: string;
 	private executionStarted = false;
@@ -45,7 +46,7 @@ export class ToolExecutionComponent extends Container {
 		toolCallId: string,
 		args: any,
 		options: ToolExecutionOptions = {},
-		toolDefinition: ToolDefinition<any, any> | undefined,
+		toolDefinition: ToolDefinition<any, any> | ApexToolDefinition<any, any> | undefined,
 		ui: TUI,
 		cwd: string,
 	) {

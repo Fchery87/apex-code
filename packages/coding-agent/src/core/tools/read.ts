@@ -11,7 +11,9 @@ import { getLanguageFromPath, highlightCode, type Theme } from "../../modes/inte
 import { processImage } from "../../utils/image-process.ts";
 import { detectSupportedImageMimeTypeFromFile } from "../../utils/mime.ts";
 import { formatPathRelativeToCwdOrAbsolute } from "../../utils/paths.ts";
-import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
+import type { ToolRenderResultOptions } from "../extensions/types.ts";
+import type { ApexToolDefinition } from "./contract.ts";
+import { createPathPermissionSpec } from "./path-permission.ts";
 import { resolveReadPathAsync, resolveToCwd } from "./path-utils.ts";
 import { getTextOutput, renderToolPath, replaceTabs, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -208,7 +210,7 @@ function formatReadResult(
 export function createReadToolDefinition(
 	cwd: string,
 	options?: ReadToolOptions,
-): ToolDefinition<typeof readSchema, ReadToolDetails | undefined> {
+): ApexToolDefinition<typeof readSchema, ReadToolDetails | undefined> {
 	const autoResizeImages = options?.autoResizeImages ?? true;
 	const ops = options?.operations ?? defaultReadOperations;
 	return {
@@ -218,6 +220,17 @@ export function createReadToolDefinition(
 		promptSnippet: readToolSystemPromptContribution.snippet,
 		promptGuidelines: [...readToolSystemPromptContribution.guidelines],
 		parameters: readSchema,
+		contract: {
+			capabilities: new Set(["fs.read"]),
+			permission: createPathPermissionSpec({
+				cwd,
+				defaultBehavior: "allow",
+				verb: "Read",
+				getPath: (params) => params.path,
+			}),
+			context: { resultRecoverable: true, deferSchema: false },
+			evidence: { emits: new Set(), capture: () => [] },
+		},
 		async execute(
 			_toolCallId,
 			{ path, offset, limit }: { path: string; offset?: number; limit?: number },
