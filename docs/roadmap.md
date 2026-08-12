@@ -80,7 +80,7 @@ capable and measurably worse.
 | --- | --- | --- | --- | --- |
 | 0 | Fork foundation | **landed** — 10 of 10 tasks · `9d79cc6c6b` | [spec](specs/2026-08-08-fork-foundation.md) | — |
 | 1 | Provider & model layer | **landed** — 7 of 7 tasks · `ad79a98fe` | [spec](specs/2026-08-10-provider-and-model-layer.md) | — |
-| 2a | Permissions — rule model | **landed** — 8 of 8 tasks · `843f26e95` | [spec](specs/2026-08-11-permission-rule-model.md) | — |
+| 2a | Permissions — rule model | **landed** — 8 of 8 tasks · `d0a437c1b` | [spec](specs/2026-08-11-permission-rule-model.md) | — |
 | 2b | Permissions — OS sandbox | not started | — | — |
 | 3 | Context engineering | not started | — | — |
 | 4 | Tool surface | not started | — | — |
