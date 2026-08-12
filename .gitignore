@@ -57,6 +57,10 @@ collect.sh
 .apex-code_config/
 apex-code-*.html
 
+# Project-local permission grants (ADR 0004 `local` source) — personal, not shared
+# with the team. `.apex-code/permissions.json` (the `project` source) IS versioned.
+.apex-code/permissions.local.json
+
 # Secrets — never commit. See AGENTS.md § Secrets.
 .env.*
 !.env.example
