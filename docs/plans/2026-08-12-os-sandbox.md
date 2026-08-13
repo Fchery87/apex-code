@@ -19,6 +19,7 @@ order; each task must be verified before it is marked done.
 | 2b.4e Close two of 2b.4d's known gaps: double violation-recording and no port dimension on the allowlist | Done | `000478304` | `test/sandbox/network-proxy.test.ts` (new, 3 tests); `network-allowlist.test.ts` assertion flipped; full `test/sandbox/` + `test/permissions/gate-universal.test.ts` (10 files/44 tests), `--no-file-parallelism` under elevated load; `npx tsgo --noEmit`; `npm run build`; see notes below |
 | 2b.5 Add macOS backend only after native CI proof; document unsupported Windows | Done | `56fb976ff`, fixed through `52dcc77f1` | Real `macos-latest` CI, not local (this dev environment has no macOS host): `test/sandbox/macos-backend.test.ts` (new, 3 tests), `test/sandbox/cli-supervisor.test.ts` real-macOS-backend case, `network-proxy.test.ts` TCP-listen mode (2 new tests). Final clean run: 238 test files / 2112 tests passed, 0 failed, on macOS 26.5.2. `npx tsgo --noEmit` and `npm run build` clean. Five real, hardware-only bugs found and fixed across six CI iterations — see notes below. Windows remains unsupported per ADR 0005, unchanged. |
 | 2b.6 Full verification of the Linux-only scope landed so far (2b.1–2b.4e) | Done | — (verification only, no code change) | First genuinely clean full `npm test` run this phase — not killed, not truncated, not scoped down. `npm run test:scripts` (21 tests), `packages/agent` (397 passed/1 skipped), `packages/coding-agent` (2104 passed/6 failed/49 skipped) under `--no-file-parallelism`; the 6 failures are the same 4 pre-existing files re-confirmed unrelated to sandboxing in 2b.4c (`external-editor`, `radius`, `skills`, `6999-models-json-hot-reload`) — no new failures. `npx tsgo --noEmit` and `npm run build` both clean. See note below on why the plan is not deleted. |
+| 2b.7 Fix `ubuntu-latest` CI so the Linux sandbox suite actually runs (bubblewrap install + the RTM_NEWADDR gap 2b.5 surfaced and deferred) | Done | `<pending>` | Real `ubuntu-latest` CI spike (`.github/workflows/linux-bwrap-netns-spike.yml`, deleted after use) isolated the cause and confirmed the fix: `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` before `bwrap`. With it, `test/sandbox/` on real `ubuntu-latest`: 10 files, 29 passed, 4 skipped (macOS-only tests, correctly gated), 0 failed. `ci.yml` updated to install `bubblewrap` and set the sysctl. See notes below. |
 
 ## Order changes
 
@@ -331,3 +332,41 @@ investigation (likely a `sysctl` adjustment for unprivileged user namespaces, a
 well-known fix for this exact bwrap-in-GitHub-Actions combination, but not one to
 rush through under this task's banner) before Linux's own sandbox suite can run in
 CI. Filed as follow-up, not silently dropped.
+
+## 2b.7 investigation
+
+Same discipline as 2b.5: no local reproduction is possible (this dev environment's
+Linux is not the GitHub-hosted runner image), so a throwaway `workflow_dispatch`
+diagnostic ran on real `ubuntu-latest` CI
+(`.github/workflows/linux-bwrap-netns-spike.yml`, deleted once findings were folded
+in here).
+
+Findings, in order:
+
+1. **Root cause confirmed, not guessed.** `uname -a` / `/etc/os-release` showed the
+   runner is Ubuntu 24.04.4 LTS (`noble`). `/proc/sys/kernel/apparmor_restrict_unprivileged_userns`
+   read `1`. `sudo aa-status` listed an enforce-mode profile literally named
+   `unprivileged_userns`. A bare `unshare --user --map-root-user --net -- /bin/true`
+   (no bwrap involved at all) failed with `unshare: write failed /proc/self/uid_map:
+   Operation not permitted` -- proving the block is at unprivileged user-namespace
+   *creation* itself, not something specific to bwrap's own loopback setup inside an
+   already-created namespace.
+2. **The fix.** `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`
+   (passwordless sudo, as GitHub-hosted runners provide) immediately let
+   `bwrap --unshare-net --dev-bind / / -- /bin/true` exit 0 in the same job, no
+   other change needed. This disables an Ubuntu 24.04 AppArmor hardening default
+   for the ephemeral runner VM only -- the same adjustment commonly used by other
+   projects running Bubblewrap/Podman rootless containers in GitHub Actions.
+3. **Confirmed against this repo's real suite, not just a synthetic `/bin/true`
+   probe.** The same spike job installed dependencies, built, and ran
+   `npx vitest run packages/coding-agent/test/sandbox` after the sysctl fix:
+   **10 test files, 29 tests passed, 4 skipped, 0 failed**, on real `ubuntu-latest`.
+   The 4 skips are the macOS-only tests in `macos-backend.test.ts` and
+   `cli-supervisor.test.ts`'s real-macOS-backend case, correctly gated by
+   `describe.skipIf` on a Linux runner -- not a coverage gap.
+
+`ci.yml`'s Linux `System dependencies` step now installs `bubblewrap` and runs the
+sysctl fix, with a comment pointing back to this section. The real CI matrix will
+confirm this same result on the next push (not re-verified via a second throwaway
+workflow -- the spike already proved the fix against this repo's actual test suite,
+so the production `ci.yml` run is the confirmation).
