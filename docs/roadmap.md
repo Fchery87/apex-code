@@ -412,10 +412,17 @@ assertion above is the real, sound signal; the median added no information a
 zero-tool-call fixture pair couldn't already predict.
 
 **Risks.** Eviction interacts with prompt caching: evicting a prefix invalidates the
-cache and can cost more than it saves. Measure cache hit rate as part of the gate, not
-after. Until 2026-08-13 this was unmeasurable — every corpus fixture recorded
-`cacheRead`/`cacheWrite` of 0 — so `long-tool-heavy.jsonl` was added carrying real cache
-usage (`cacheHitRate` 0.8569) to make the risk detectable rather than merely stated.
+cache and can cost more than it saves. Until 2026-08-13 this was unmeasurable — every
+corpus fixture recorded `cacheRead`/`cacheWrite` of 0 — so `long-tool-heavy.jsonl` was
+added carrying real cache usage (`cacheHitRate` 0.8569). A second, deeper gap surfaced
+once eviction was actually wired into the replay harness: `cacheHitRate` is computed
+from each fixture's recorded assistant-message usage, fixed at authoring time, and
+verified to stay byte-identical (0.8569384835479256) whether eviction is on or off —
+the offline harness replays pre-recorded responses rather than simulating a live
+cache, so it cannot detect this risk at all, not even in principle. Prefix-oldest
+eviction's cache safety rests on the structural argument in
+`docs/architecture/contracts.md` § 2 alone; real validation is a stated follow-up for
+a later phase, not something Phase 3's corpus can close.
 
 ---
 

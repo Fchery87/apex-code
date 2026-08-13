@@ -301,11 +301,25 @@ The four questions this contract was opened to answer:
   end only, never a hole in the middle, so the cache boundary moves forward
   monotonically instead of invalidating everything after a gap. This was decided on
   structural grounds because the corpus could not measure it: every fixture recorded
-  `cacheRead`/`cacheWrite` of 0, making `cacheHitRate` a constant zero. That is now
-  fixed — `long-tool-heavy.jsonl` carries real cache usage (`cacheHitRate` 0.8569), and
-  Phase 3 compares it pre/post eviction. **If that measurement contradicts
-  prefix-oldest eviction, it reverses a load-bearing decision and gets its own ADR
-  rather than a quiet redesign.**
+  `cacheRead`/`cacheWrite` of 0, making `cacheHitRate` a constant zero.
+  `long-tool-heavy.jsonl` fixed that half — it carries real cache usage
+  (`cacheHitRate` 0.8569) — but a second gap surfaced once eviction was actually wired
+  into the replay harness and this was checked for real (2026-08-13): `cacheHitRate`
+  is computed from each fixture's *recorded* assistant-message usage, baked in at
+  authoring time, and never reacts to what eviction actually sends outbound. Measured
+  directly: running `long-tool-heavy.jsonl` with eviction disabled versus enabled
+  produces the *identical* `cacheHitRate` (0.8569384835479256) even though turn-20
+  tokens drop from 15,272 to 1,769. The offline replay harness replays pre-recorded
+  responses rather than simulating a live, cache-aware provider, so a pre/post
+  comparison is not merely unmeasured — it is structurally incapable of detecting
+  anything, and this is true regardless of implementation quality. **Prefix-oldest
+  eviction therefore remains a structural decision, not a measured one — the
+  reasoning above (monotonic cache boundary vs. a scattered pattern) is the entire
+  basis for it. There is no ADR trigger here, because there is no measurement that
+  could contradict it: an ADR fires on a contradicting result, and this harness
+  cannot produce a result of either kind.** Real cache-impact validation (a live
+  provider, or a simulated prefix-match metric) is a stated follow-up for a later
+  phase, not a Phase 3 blocker.
 - **Evidence survival (Phase 7 constraint).** Satisfied by construction: eviction
   rewrites only the outbound provider context and never the stored session. Phase 3
   carries a test asserting the on-disk session is byte-identical before and after an

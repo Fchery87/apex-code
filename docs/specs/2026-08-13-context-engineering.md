@@ -252,16 +252,22 @@ behind a marker, so anything the summary loses is by construction regenerable. T
 reverse order pays a summarization call on content that was about to be dropped, which
 is the worse trade.
 
-**Prompt-cache interaction: measured, not assumed — and the honest answer is that this
-corpus cannot decide it.** Problem 2 above means `cacheHitRate` is a constant zero
-today. Rather than assert a cache-safe design against a number that does not exist,
-this spec requires the corpus gain a cache-carrying fixture (Goal 7) **before** the
-ordering is locked, and the eviction stage is built cache-aware in shape: it evicts a
-contiguous run from the *oldest* end of the transcript, never a hole in the middle.
-Prefix-oldest eviction moves the cache boundary forward monotonically instead of
-punching a hole that invalidates everything after it. If the new fixture shows
-prefix-oldest eviction still costs more than it saves, that is a finding to record in
-an ADR, not a result to design around silently.
+**Prompt-cache interaction: structural, not measured — and now confirmed the corpus
+genuinely cannot decide it.** Problem 2 above meant `cacheHitRate` was a constant zero
+before `long-tool-heavy.jsonl`. That fixture fixed the zero, but a deeper check
+(2026-08-13, once eviction was actually wired into the replay harness — see the
+"Current state" correction) found `cacheHitRate` is computed from each fixture's
+*recorded* usage, fixed at authoring time: it measures byte-identical
+(0.8569384835479256) whether eviction runs or not. The offline harness replays
+pre-recorded responses rather than simulating a live cache, so a pre/post comparison
+cannot detect anything — not "no effect found," but "no measurement is possible with
+this instrument." The eviction stage is still built cache-aware in shape: it evicts a
+contiguous run from the *oldest* end of the transcript only, never a hole in the
+middle, moving the cache boundary forward monotonically instead of punching a hole
+that invalidates everything after it. That structural argument is now the entire
+basis for the decision — there is no ADR trigger, because an ADR fires on a
+contradicting measurement, and this harness cannot produce a result of either kind.
+Real cache validation is a stated follow-up, not a Phase 3 blocker.
 
 **Evidence survival:** eviction touches only the outbound provider context and never
 the stored session, so any Phase 7 evidence path reading the session is unaffected by
@@ -315,9 +321,13 @@ left intact (see Non-goals).
 ## Risks
 
 **Eviction invalidates a cached prefix and costs more than it saves.** The failure is
-silent: token count falls, bill rises. Signal: `cacheHitRate` on the new cache-carrying
-fixture, compared before and after the eviction stage. This is why the fixture is a
-goal and not a nice-to-have — without it this risk has no detector.
+silent: token count falls, bill rises. **This risk has no detector in the current
+harness** — `cacheHitRate` is computed from each fixture's recorded usage and measures
+identically whether eviction runs or not (verified 2026-08-13: 0.8569384835479256 in
+both cases on `long-tool-heavy.jsonl`). The mitigation is the structural design itself
+(prefix-oldest, never a middle hole — see `docs/architecture/contracts.md` § 2), not a
+measurement; real detection needs a live or simulated cache, which is a stated
+follow-up, not something this phase's offline corpus can provide.
 
 **Evicting something that was not actually regenerable.** `resultRecoverable` is a
 per-tool assertion, and a wrong `true` destroys information the transcript was the only
@@ -346,7 +356,7 @@ Against `fixtures/corpus/` via `replayCorpus()`, which is offline and determinis
 | `long-tool-heavy` turn-20, on its own | 15,272 | **≤3,054** (≥80%) — the real eviction signal | **Met — 1,769 (88.4%)** |
 | `systemPromptTokens` | 707 (960 on `long-tool-heavy`) | below both, with ≥1 tool deferred | **Unmet by design** — no default tool deferred; see Goals |
 | `turnsCompleted` + replay equality | all fixtures pass | unchanged | **Met** |
-| `cacheHitRate` on `long-tool-heavy` | 0.8569 | compared pre/post eviction; a fall indicates prefix invalidation | Pending task 3.6 |
+| `cacheHitRate` on `long-tool-heavy` | 0.8569 | ~~compared pre/post eviction~~ **retired — structurally unmeasurable** | **Confirmed unmeasurable**, not merely unmet: identical (0.8569384835479256) with eviction on or off. See task 3.6 |
 
 **Why the median was retired rather than re-targeted a second time.** Adding
 `long-tool-heavy` first raised the median baseline from 935 to 1,117 (the first
