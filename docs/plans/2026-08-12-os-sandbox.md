@@ -16,6 +16,7 @@ order; each task must be verified before it is marked done.
 | 2b.4b Add a live-agent boundary test through the real CLI entry point | Done | `a2fb44ccc` | `test/sandbox/live-agent-boundary.test.ts` (new, 1 test); full `test/sandbox/` (7 files/21 tests); `test/permissions/gate-universal.test.ts` (19 tests); `npx tsgo --noEmit`; `npm run build`; manual positive control (see below) |
 | 2b.4c Reconcile CLI tests broken by sandboxing becoming the default launch route | Done | `8465f033f` | `test/session-file-invalid.test.ts`, `test/session-id-readonly.test.ts`, `test/startup-session-name.test.ts` (10 tests) green individually and combined; full `test/sandbox/` + `test/permissions/gate-universal.test.ts` (40 tests) green; `npx tsgo --noEmit` clean; remaining pre-existing baseline failures re-confirmed unrelated (see below) |
 | 2b.4d Implement the network allowlist proxy (UDS relay + supervisor-side allowlist) | Done | `a149cc43b`, cleaned up `66c53cc79` | `test/sandbox/network-allowlist.test.ts` (new, 1 test); full `test/sandbox/` + `test/permissions/gate-universal.test.ts` (9 files/41 tests); `npx tsgo --noEmit`; `npm run build`; see review findings below |
+| 2b.4e Close two of 2b.4d's known gaps: double violation-recording and no port dimension on the allowlist | Done | `000478304` | `test/sandbox/network-proxy.test.ts` (new, 3 tests); `network-allowlist.test.ts` assertion flipped; full `test/sandbox/` + `test/permissions/gate-universal.test.ts` (10 files/44 tests), `--no-file-parallelism` under elevated load; `npx tsgo --noEmit`; `npm run build`; see notes below |
 | 2b.5 Add macOS backend only after native CI proof; document unsupported Windows | Not started | — | macOS integration tests pass |
 | 2b.6 Full verification and documentation closure | Not started | — | Focused suites, typecheck, build, full test; plan deleted |
 
@@ -163,23 +164,46 @@ in follow-up commit `66c53cc79`:
    leave a stale Unix socket file blocking every subsequent launch in the same
    workspace.
 
-**Known limitation carried forward, not fixed here:** a blocked connection is
-currently recorded twice — once accurately by the proxy (`kind: "network"`), and a
-second time by `linux-backend.ts`'s existing process-exit classifier, which falls
-back to a generic `kind: "unknown"` record whenever the whole sandboxed process
-exits non-zero for a reason its stderr regex doesn't recognize (here, the launched
-command's own clean `process.exit(1)` after being refused at the HTTP layer, not an
-OS-level message). This predates 2b.4d — the classifier's fallback behavior is
-unchanged — but the network proxy makes it more visible, since an allowed HTTP
-client now regularly exits non-zero for reasons that have nothing to do with an OS
-refusal. Not addressed here to keep this task's scope to what was reviewed; a
-future evidence-protocol pass (see 2b.4b's finding) should decide whether the outer
-classifier ought to suppress its own record when a more specific one was already
-recorded for the same launch.
+**Known limitation carried forward from 2b.4d, fixed in 2b.4e (below):** a blocked
+connection used to be recorded twice — once accurately by the proxy
+(`kind: "network"`), and a second time by `linux-backend.ts`'s process-exit
+classifier, which fell back to a generic `kind: "unknown"` record whenever the whole
+sandboxed process exited non-zero for a reason its stderr regex didn't recognize
+(the launched command's own clean `process.exit(1)` after being refused at the HTTP
+layer, not an OS-level message).
 
-The allowlist proxy also does hostname-string equality only, not a resolved-IP
-check at connect time as the spec amendment's design described, and does not
-enforce port as part of the allowlist (`network.allowedHosts` is a bare hostname
-list with no port field) — both are described in the amendment as the target
-design; this implementation is a first cut against it, not a full match, and both
-gaps remain open.
+The allowlist proxy also did hostname-string equality only, and did not enforce
+port as part of the allowlist (`network.allowedHosts` was a bare hostname list with
+no port field). Port enforcement is fixed in 2b.4e; a resolved-IP check at connect
+time (verifying the hostname's actual DNS resolution rather than trusting the
+CONNECT request's string) remains open — see below.
+
+**2b.4e.** Closed two of 2b.4d's three carried-forward gaps via TDD:
+
+1. **Double violation-recording.** `linux-backend.ts` now snapshots
+   `violationStore.totalCount` before spawning the sandboxed child and, after it
+   exits, only invokes the generic process-exit classifier's fallback record if that
+   count did not already increase during this launch — i.e. only when nothing more
+   specific (like the proxy's own `network` record) was recorded. A blocked CONNECT
+   now produces exactly one violation record instead of two. Verified by flipping
+   `network-allowlist.test.ts`'s assertion from asserting the duplicate's presence to
+   asserting its absence (`stderr.match(/Sandbox violation/g)` has length 1), watching
+   it fail against the old code first, then implementing.
+2. **No port dimension on the allowlist.** `network-proxy.ts`'s match now accepts
+   either a bare hostname (any port, existing behavior, unchanged) or a
+   `hostname:port` entry (that exact port only) in `allowedHosts` — no config schema
+   change needed since it was already a plain `string[]`. New
+   `test/sandbox/network-proxy.test.ts` exercises this directly against the proxy
+   (real UDS, real sockets, no `bwrap` dependency, so it runs on any host this suite
+   runs on) rather than only through the slower real-sandbox integration test:
+   a `host:port` entry allows that port and blocks a different port on the same
+   host, the refusal is recorded with the actual refused port in `command`, and a
+   bare-hostname entry still allows any port.
+
+**Still open, not addressed here:** the resolved-IP-at-connect-time check. The proxy
+still allows any DNS resolution of an allowed hostname string; it does not verify
+that resolution against anything before connecting. Left open because closing it is
+a design question (what should be pinned — the IP at policy-authoring time, or the
+IP at connect time re-checked against something?) rather than a small fix like the
+two above, and no concrete threat scenario for this repo's usage has required it
+yet.

@@ -228,7 +228,15 @@ state directory and run inside the unchanged `--unshare-net` isolation, and a
 backend. See `docs/plans/2026-08-12-os-sandbox.md` task 2b.4d for the full record,
 including five review findings fixed after the initial commit (a non-portable
 hardcoded test path, a fabricated violation message, debug output and scratch files
-left in the commit, and added stale-socket hardening) and two known gaps carried
-forward: the allowlist check is hostname-string equality rather than a
-resolved-IP check at connect time, and it has no port dimension — `allowedHosts` is
-a bare hostname list. Both remain open, not settled by this amendment.
+left in the commit, and added stale-socket hardening) and three known gaps carried
+forward: double violation-recording for a single blocked connection, no port
+dimension on the allowlist, and hostname-string equality rather than a resolved-IP
+check at connect time.
+
+### Amendment (2026-08-12, third): two of the three gaps closed — task 2b.4e
+
+`linux-backend.ts` no longer records a generic fallback violation when the network
+proxy already recorded a more specific one for the same launch, and
+`allowedHosts` entries may now be `hostname:port` to pin an exact port (a bare
+hostname still matches any port, unchanged). See task 2b.4e for the full record.
+The resolved-IP-at-connect-time check remains open, not settled by this amendment.
