@@ -76,6 +76,8 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 			const stateDirectory = join(launch.policy.workspace, ".apex-code", "sandbox-state");
 			mkdirSync(stateDirectory, { recursive: true });
 
+			const violationCountBeforeLaunch = violationStore?.totalCount ?? 0;
+
 			const socketPath = join(stateDirectory, "proxy.sock");
 			proxy = await createSandboxNetworkProxy({
 				socketPath,
@@ -171,7 +173,8 @@ server.on("error", (err) => {
 			});
 			const exitCode = await waitForExit(child);
 			await proxy?.close();
-			if (exitCode !== 0) {
+			const proxyAlreadyRecordedAViolation = (violationStore?.totalCount ?? 0) > violationCountBeforeLaunch;
+			if (exitCode !== 0 && !proxyAlreadyRecordedAViolation) {
 				const kind = classifySandboxFailure(stderr);
 				violationStore?.add({
 					kind,
