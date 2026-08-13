@@ -91,22 +91,23 @@ jobs:
           (import "bsd.sb")
           (allow process-exec*)
           (allow file-read* (subpath "/opt/homebrew"))
+          (allow file-read* (subpath (param "SCRIPT_DIR")))
           (deny network*)
           (allow network-outbound (remote ip (param "ALLOWED_ADDR")))
           EOF
 
           echo "--- connect to the allowed pinned port (expect CONNECTED) ---"
-          sandbox-exec -f "$RUNNER_TEMP/net-candidate.sb" -D ALLOWED_ADDR="localhost:$ALLOWED_PORT" \
+          sandbox-exec -f "$RUNNER_TEMP/net-candidate.sb" -D ALLOWED_ADDR="localhost:$ALLOWED_PORT" -D SCRIPT_DIR="$RUNNER_TEMP" \
             node "$RUNNER_TEMP/probe-connect.js" "$ALLOWED_PORT"
           echo "exit: $?"
 
           echo "--- connect to a DIFFERENT local port not in the allow rule (expect ERROR, tests whether pinning actually narrows exposure) ---"
-          sandbox-exec -f "$RUNNER_TEMP/net-candidate.sb" -D ALLOWED_ADDR="localhost:$ALLOWED_PORT" \
+          sandbox-exec -f "$RUNNER_TEMP/net-candidate.sb" -D ALLOWED_ADDR="localhost:$ALLOWED_PORT" -D SCRIPT_DIR="$RUNNER_TEMP" \
             node "$RUNNER_TEMP/probe-connect.js" "$OTHER_PORT"
           echo "exit: $?"
 
           echo "--- connect to an external host on 443 (expect ERROR) ---"
-          sandbox-exec -f "$RUNNER_TEMP/net-candidate.sb" -D ALLOWED_ADDR="localhost:$ALLOWED_PORT" \
+          sandbox-exec -f "$RUNNER_TEMP/net-candidate.sb" -D ALLOWED_ADDR="localhost:$ALLOWED_PORT" -D SCRIPT_DIR="$RUNNER_TEMP" \
             node "$RUNNER_TEMP/probe-connect.js" 443 example.com
           echo "exit: $?"
 
@@ -144,12 +145,13 @@ jobs:
           (import "bsd.sb")
           (allow process-exec*)
           (allow file-read* (subpath "/opt/homebrew"))
+          (allow file-read* (subpath (param "SCRIPT_DIR")))
           (deny network*)
           (allow file-read* file-write* (subpath (param "WORKSPACE")))
           EOF
 
           echo "--- connect to a UDS under the allowed workspace, with NO network-outbound allow at all ---"
-          sandbox-exec -f "$RUNNER_TEMP/uds-candidate.sb" -D WORKSPACE="$WORKSPACE" \
+          sandbox-exec -f "$RUNNER_TEMP/uds-candidate.sb" -D WORKSPACE="$WORKSPACE" -D SCRIPT_DIR="$RUNNER_TEMP" \
             node "$RUNNER_TEMP/uds-probe-connect.js" "$SOCKET_PATH"
           echo "exit: $?"
 
