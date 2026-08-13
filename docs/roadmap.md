@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0, 1, and 2a landed; Phase 2b Linux and macOS backends verified · **Created:** 2026-08-08 · **Last updated:** 2026-08-13
+**Status:** Active — Phases 0, 1, 2a, and 2b landed · **Created:** 2026-08-08 · **Last updated:** 2026-08-13
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -81,7 +81,7 @@ capable and measurably worse.
 | 0 | Fork foundation | **landed** — 10 of 10 tasks · `9d79cc6c6b` | [spec](specs/2026-08-08-fork-foundation.md) | — |
 | 1 | Provider & model layer | **landed** — 7 of 7 tasks · `ad79a98fe` | [spec](specs/2026-08-10-provider-and-model-layer.md) | — |
 | 2a | Permissions — rule model | **landed** — live enforcement completed · `8dff33f41` | [spec](specs/2026-08-11-permission-rule-model.md) | — |
-| 2b | Permissions — OS sandbox | **active** | [spec](specs/2026-08-12-os-sandbox.md) | [plan](plans/2026-08-12-os-sandbox.md) |
+| 2b | Permissions — OS sandbox | **landed** — Linux + macOS backends verified in CI · `b9a7bb337` | [spec](specs/2026-08-12-os-sandbox.md) | — |
 | 3 | Context engineering | not started | — | — |
 | 4 | Tool surface | not started | — | — |
 | 5 | Delegation & multi-agent | not started | — | — |
@@ -313,9 +313,37 @@ a distributed binary remain unaddressed. Fixing `npm run check` (a pre-existing,
 unrelated lint failure that had silently blocked `npm test` from running in CI on
 *any* platform for a while) also surfaced that Linux's own sandbox suite has never
 actually run in CI either — `bubblewrap` isn't installed on `ubuntu-latest`, and
-installing it hits a separate, unrelated network-namespace CI restriction. Filed as
-a known follow-up, not fixed here. The plan is not yet deleted; Windows remains
-unsupported per ADR 0005.
+installing it hits a separate, unrelated network-namespace CI restriction.
+
+**That follow-up (task 2b.7) is now closed too, and Phase 2b is landed.** Root
+cause, confirmed on real `ubuntu-latest` CI: Ubuntu 24.04 runner images restrict
+unprivileged user-namespace creation via AppArmor by default, which blocks the
+`unshare(CLONE_NEWUSER|CLONE_NEWNET)` `bwrap --unshare-net` depends on — not a bug
+in this repo. Fix: `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`
+before `bwrap` runs, scoped to the ephemeral runner. `ci.yml` now installs
+`bubblewrap` and sets this; the required `ubuntu-latest` CI job runs the real
+Linux sandbox suite end to end (240 files / 2114 tests passed / 53 skipped / 0
+failed).
+
+Closure verification for the whole of Phase 2b (both backends, current tree):
+`npx tsgo --noEmit` and `npm run build` both clean. A full unscoped `npm test`
+under normal parallelism showed 6 failed files / 8 failed tests — 4 of those files
+(`external-editor`, `radius`, `skills`, `6999-models-json-hot-reload`) are the
+same pre-existing, sandboxing-unrelated failures characterized in 2b.4c; the other
+two (`agent-session-concurrent`, `sandbox/live-agent-boundary`) are CPU-contention
+timeouts under full-suite parallel load, not regressions — confirmed by rerunning
+the full suite with `--no-file-parallelism`, which came back with only the same 4
+pre-existing failures (237 passed / 6 skipped of 247 files; 2123 tests passed / 53
+skipped), and by running `test/sandbox` alone, which was fully clean (10 files /
+29 passed / 4 skipped / 0 failed), with the two heavy subprocess-spawning tests
+each legitimately taking 18-19s.
+
+Per `AGENTS.md`'s plan lifecycle convention, `docs/plans/2026-08-12-os-sandbox.md`
+is deleted now that Phase 2b is landed (recoverable via
+`git show <commit>:docs/plans/2026-08-12-os-sandbox.md`); its durable content
+lives in this section and in the spec/ADR amendments. Windows remains unsupported
+per ADR 0005. Apple Events/Launch Services denial and code-signing behavior for a
+distributed macOS binary remain open, out of Phase 2b's stated scope.
 
 ---
 
