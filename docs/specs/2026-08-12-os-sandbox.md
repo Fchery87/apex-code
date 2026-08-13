@@ -370,3 +370,138 @@ Sources consulted: [anthropic-experimental/sandbox-runtime](https://github.com/a
 [openai/codex#215](https://github.com/openai/codex/issues/215),
 [Sandboxing subprocesses in Python on macOS](https://zameermanji.com/blog/2025/4/1/sandboxing-subprocesses-in-python-on-macos/),
 [Claude Code Sandboxing: How /sandbox Works](https://www.claudecodecamp.com/p/claude-code-sandboxing-how-sandbox-works-and-what-it-doesn-t-protect).
+
+### Amendment (2026-08-13): macOS prototype evidence — task 2b.5
+
+The fourth amendment's design was run for real, via a `workflow_dispatch`-only
+GitHub Actions job (`macos-sandbox-spike.yml`, `macos-latest`, deleted after this
+amendment recorded its output — the same "ad hoc, not carried forward" treatment
+the first amendment's Linux prototype scripts got) against **macOS 26.5.2, Darwin
+25.5.0, arm64 (`macos-26-arm64` runner image, `sandbox-exec` at `/usr/bin/sandbox-exec`)**.
+Four runs were needed, not one — each failure was real evidence about a wrong
+assumption, not noise, and is recorded below because the wrong assumptions are as
+informative as the right design:
+
+1. **Run 1 — both candidate profiles unusable as designed.** `(import "bsd.sb")`
+   does not grant `process-exec*`. Every probe that tried to launch a child
+   (`/bin/sh`, `node`) was denied before reaching the filesystem or network logic
+   under test: `sandbox-exec: execvp() of '/bin/sh' failed: Operation not
+   permitted`, exit 71, confirmed in the unified log as `deny(1) process-exec*
+   /bin/sh`. **The fourth amendment's profile sketches were incomplete** — an
+   explicit `(allow process-exec*)` is required.
+2. **Run 2 — filesystem candidate now fully validated; network/UDS candidates
+   crash before reaching the sandbox logic.** With `(allow process-exec*)` added,
+   the filesystem candidate worked exactly as designed (see validated profile
+   below). The network and UDS candidates instead aborted: `dyld[…]: Library not
+   loaded: @rpath/libnode.137.dylib … 'file system sandbox blocked open()'`, exit
+   134 (`SIGABRT`). `bsd.sb`'s baseline covers standard system paths (`/bin/sh`'s
+   own dependencies) but not a Homebrew-installed `node`'s shared-library tree at
+   `/opt/homebrew/…` — the runtime's own install directory needs an explicit
+   `file-read*` allow, exactly what `linux-backend.ts`'s `readOnlyMountArguments()`
+   already does by walking the runtime path's ancestors.
+3. **Run 3 — same fix applied, new failure: the probe scripts themselves were
+   unreadable.** `node:fs:441 … Error: EPERM: operation not permitted, open
+   '/Users/runner/work/_temp/probe-connect.js'`. The candidate profiles allowed the
+   runtime's own lib path and (for the UDS case) the workspace, but never the
+   directory holding the script `node` was told to run — a spike-scaffolding gap,
+   not a sandbox-design finding, fixed by allowing that directory too.
+4. **Run 4 — clean run, both headline open questions answered:**
+
+**Filesystem candidate, validated as designed:**
+
+```scheme
+(version 1)
+(import "bsd.sb")
+(allow process-exec*)
+(deny file-write*)
+(allow file-write* (subpath (param "WORKSPACE")))
+```
+
+Write inside the workspace: `WRITE_INSIDE_OK`, exit 0. Write outside: `/bin/sh:
+.../outside.txt: Operation not permitted`, exit 1 — the shell's own error, not a
+`sandbox-exec` wrapper message, exactly the same shape Linux's own fs probes
+already rely on (the launched command's own syscall fails and prints its own
+error; nothing macOS-specific needs to parse `sandbox-exec`'s own output).
+
+**Network candidate — headline question 1 answered: does pinning to one exact
+port actually narrow exposure, or is it cosmetic given the shared host loopback?**
+**It narrows exposure — confirmed, not assumed:**
+
+```scheme
+(version 1)
+(import "bsd.sb")
+(allow process-exec*)
+(allow file-read* (subpath "<runtime install path>"))
+(allow file-read* (subpath "<script/workspace path>"))
+(deny network*)
+(allow network-outbound (remote ip (param "ALLOWED_ADDR")))
+```
+
+- Connect to the allowed pinned port: `RESULT:CONNECTED`, exit 0.
+- Connect to a **different** local port, also on `127.0.0.1`, not named in the
+  allow rule: `RESULT:ERROR:EPERM`, exit 1. This is the load-bearing result: the
+  Seatbelt rule genuinely discriminates between two ports on the same loopback
+  address rather than opening the whole `localhost` range the way the wildcard
+  `localhost:*` pattern (used in some published profiles, including reportedly
+  Anthropic's own) would. Pinning is real, not cosmetic.
+- Connect to `example.com:443`: `RESULT:ERROR:ENOTFOUND` — a DNS-resolution
+  failure, not a connection-level refusal. Node's `net.connect()` resolves the
+  hostname before attempting the TCP connect, and that resolution itself did not
+  succeed under this profile (the unified log shows `node(…) deny(1)
+  file-read-data /Library/Preferences/com.apple.networkd.plist` and `deny(1)
+  file-read-data /private/etc/hosts` around the same moment, suggesting the
+  resolver path itself hit sandbox denials). The practical effect is what
+  matters — a non-allowed external host is unreachable — but this repo cannot
+  state with confidence *which* layer is responsible for macOS the way the first
+  amendment could cite an exact Linux errno; that would need a literal-IP probe
+  (bypassing DNS entirely) to isolate, not done here.
+
+**UDS candidate — headline question 2 answered: does `(deny network*)` also gate
+AF_UNIX, or is a Unix-domain-socket filesystem-scoped the way it is on Linux?**
+**It is gated — the Linux-style UDS-relay design does not transfer to macOS "for
+free":**
+
+```scheme
+(version 1)
+(import "bsd.sb")
+(allow process-exec*)
+(allow file-read* (subpath "<runtime install path>"))
+(allow file-read* (subpath "<script path>"))
+(deny network*)
+(allow file-read* file-write* (subpath (param "WORKSPACE")))
+```
+
+No `network-outbound` allow at all — only `file-read*`/`file-write*` on the
+workspace subpath containing the socket. Connecting to a UDS at that path still
+produced `RESULT:ERROR:EPERM`, exit 1. Seatbelt treats an `AF_UNIX` `connect()` as
+subject to `(deny network*)`, not as a plain filesystem operation exempted by
+allowing the socket's path. **This rules out the "closes the shared-loopback
+exposure entirely" alternative the fourth amendment left open** — at least for the
+one profile shape tested here; whether some other, more specific Seatbelt clause
+could scope network access to a single `AF_UNIX` path was not explored and remains
+genuinely unknown, not ruled out on principle. The localhost-port model above is
+the confirmed, working path forward; the UDS alternative is not a free win and
+would need its own dedicated investigation to even determine feasibility.
+
+**A finding about evidence-recording, not about the boundary itself:** the
+`log show --predicate 'sender == "Sandbox" …'` best-effort step reliably captured
+`process-exec*` and `file-read`/`file-write` denials across all four runs, but did
+**not** log the network-outbound or AF_UNIX denials from run 4, even though the
+child unambiguously received `EPERM` from the kernel. A macOS backend's
+violation-evidence strategy should therefore lean on the sandboxed child's own
+observable failure (exit code and stderr) for network refusals — exactly what
+`linux-backend.ts` already does today — rather than on `log show` or OSLog
+integration, which this evidence shows is unreliable for this category of denial,
+not merely more complex to wire up.
+
+**What this amendment does and does not settle.** It replaces "assembled from
+secondary sources" with "run on the real primitive" for the specific profile
+shapes above, on one specific OS build. It does not reduce the network guarantee's
+categorical gap from Linux recorded in ADR 0005's second amendment: pinning to one
+port is confirmed to exclude a *different* port, but nothing here tests or rules
+out a collision with something else already listening on that exact port when the
+sandbox launches — that is a structural property of a shared host loopback, not a
+bug a sharper profile can close. It also does not cover Apple Events/Launch
+Services denial, code-signing behavior for a distributed (not locally-built)
+binary, or a real `network-proxy.ts` TCP-listen mode — all still open, unstarted
+work for whenever an implementation task opens.
