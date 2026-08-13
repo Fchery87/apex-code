@@ -17,7 +17,7 @@ order; each task must be verified before it is marked done.
 | 2b.4c Reconcile CLI tests broken by sandboxing becoming the default launch route | Done | `8465f033f` | `test/session-file-invalid.test.ts`, `test/session-id-readonly.test.ts`, `test/startup-session-name.test.ts` (10 tests) green individually and combined; full `test/sandbox/` + `test/permissions/gate-universal.test.ts` (40 tests) green; `npx tsgo --noEmit` clean; remaining pre-existing baseline failures re-confirmed unrelated (see below) |
 | 2b.4d Implement the network allowlist proxy (UDS relay + supervisor-side allowlist) | Done | `a149cc43b`, cleaned up `66c53cc79` | `test/sandbox/network-allowlist.test.ts` (new, 1 test); full `test/sandbox/` + `test/permissions/gate-universal.test.ts` (9 files/41 tests); `npx tsgo --noEmit`; `npm run build`; see review findings below |
 | 2b.4e Close two of 2b.4d's known gaps: double violation-recording and no port dimension on the allowlist | Done | `000478304` | `test/sandbox/network-proxy.test.ts` (new, 3 tests); `network-allowlist.test.ts` assertion flipped; full `test/sandbox/` + `test/permissions/gate-universal.test.ts` (10 files/44 tests), `--no-file-parallelism` under elevated load; `npx tsgo --noEmit`; `npm run build`; see notes below |
-| 2b.5 Add macOS backend only after native CI proof; document unsupported Windows | Not started | — | macOS integration tests pass |
+| 2b.5 Add macOS backend only after native CI proof; document unsupported Windows | Done | `56fb976ff`, fixed through `52dcc77f1` | Real `macos-latest` CI, not local (this dev environment has no macOS host): `test/sandbox/macos-backend.test.ts` (new, 3 tests), `test/sandbox/cli-supervisor.test.ts` real-macOS-backend case, `network-proxy.test.ts` TCP-listen mode (2 new tests). Final clean run: 238 test files / 2112 tests passed, 0 failed, on macOS 26.5.2. `npx tsgo --noEmit` and `npm run build` clean. Five real, hardware-only bugs found and fixed across six CI iterations — see notes below. Windows remains unsupported per ADR 0005, unchanged. |
 | 2b.6 Full verification of the Linux-only scope landed so far (2b.1–2b.4e) | Done | — (verification only, no code change) | First genuinely clean full `npm test` run this phase — not killed, not truncated, not scoped down. `npm run test:scripts` (21 tests), `packages/agent` (397 passed/1 skipped), `packages/coding-agent` (2104 passed/6 failed/49 skipped) under `--no-file-parallelism`; the 6 failures are the same 4 pre-existing files re-confirmed unrelated to sandboxing in 2b.4c (`external-editor`, `radius`, `skills`, `6999-models-json-hot-reload`) — no new failures. `npx tsgo --noEmit` and `npm run build` both clean. See note below on why the plan is not deleted. |
 
 ## Order changes
@@ -249,3 +249,85 @@ macOS still has no private per-process loopback, only a narrower allow rule on t
 shared one. Filesystem denial (`deny file-write*` + workspace allow) validated
 cleanly on the first working run. An implementation task can now start from a
 profile shape that has actually run, not just been assembled from documentation.
+
+**2b.5 implementation.** Turned the prototype design into real code:
+`core/sandbox/macos-backend.ts` (new, mirrors `linux-backend.ts`'s
+`SandboxBackend` shape), `network-proxy.ts` gained a `tcpHost` TCP-listen mode
+alongside its existing UDS mode (no in-child relay script needed on macOS --
+Seatbelt permits a specific loopback port directly), and `cli-supervisor.ts` now
+routes to the macOS or Linux backend by `process.platform`.
+
+This landed as commit `56fb976ff`, verified locally against everything except the
+platform-gated integration tests (no macOS host in this dev environment), then
+pushed and iterated against real `macos-latest` CI six times before it went green.
+Each of the first five runs found one genuine, hardware-only bug -- none of them
+CI flakiness, all confirmed by the sandboxed child's own forwarded stderr or the
+unified log:
+
+1. **`npm run check` had been silently failing on every CI platform for a while**,
+   for a reason unrelated to sandboxing (`path-permission.ts`'s
+   `path && path.trim()` triggering a biome `useOptionalChain` warning under
+   `--error-on-warnings`) -- meaning `npm test` had never actually run in CI on
+   any platform, macOS or Linux, until this was fixed (`ca43b7064`). This is why
+   none of the following was caught earlier.
+2. **`bsd.sb`'s baseline does not grant `process-exec*`.** Every candidate profile
+   that tried to launch a child (`/bin/sh`, `node`) was denied before reaching the
+   filesystem or network logic under test -- `sandbox-exec: execvp() of '/bin/sh'
+   failed: Operation not permitted`, confirmed in the unified log as
+   `deny(1) process-exec* /bin/sh`.
+3. **The workspace can be reached through a symlink** (`os.tmpdir()`'s `/var` is
+   itself a symlink to `/private/var` on macOS), and Seatbelt's `subpath` match is
+   against the canonicalized path, not whichever form a caller happened to use;
+   and **`spawn()` never had its `cwd` set**, so the sandboxed child inherited the
+   supervisor's own (denied) working directory and `process.cwd()` itself failed
+   with `EPERM` (`node:internal/bootstrap ... uv_cwd`). Fixed together
+   (`d97e6d84f`): the workspace and every read-only directory are now
+   `realpathSync()`'d before being embedded in the profile, and `spawn()` gets an
+   explicit `cwd`.
+4. **A read-only allowlist (this design's first cut) is not what Linux actually
+   does, and breaks ordinary process startup.** Even with the fixes above,
+   `getcwd()` itself failed: `shell-init: error retrieving current directory:
+   getcwd: cannot access parent directories: Operation not permitted`. Linux's
+   bwrap grants broad read via `--ro-bind / /` and hides only `/home`; this
+   design's narrow read-allowlist (workspace and runtime paths only) never covered
+   the workspace's own ancestor directories. Fixed (`d78618e4b`) to match Linux's
+   actual posture: `(allow file-read*)` broadly, an explicit
+   `(deny file-read* (subpath USER_HOME))` on the invoking account's real home
+   directory, then targeted re-allows for the runtime paths and the workspace
+   layered after the deny -- a coding agent's own workspace is very plausibly
+   under `$HOME` in real usage, unlike in a CI tmpdir.
+5. **`process-fork` is a separate Seatbelt operation from `process-exec*`.** A
+   nested `sh -c 'a' && sh -c 'b'` script -- exactly the shape of the existing
+   filesystem-boundary test shared with the Linux suite -- failed with
+   `/bin/sh: fork: Operation not permitted` even with exec already allowed. Fixed
+   by adding `(allow process-fork)` (`d5a6e0644`), matching the separate
+   `process-fork` allow shown in the very first minimal example profile found
+   during the original desk research.
+
+The sixth run was clean except for two of this repo's own new tests asserting
+`kind: "filesystem"` for a denial `classifySandboxFailure()` deliberately reports
+as `"unknown"` on macOS (documented reasoning: the platform's own denial text does
+not reliably distinguish filesystem from network refusals the way Linux's bwrap
+stderr does) -- fixed to match the already-documented, intentional design rather
+than the accidental expectation (`52dcc77f1`). The seventh run: **238 test files,
+2112 tests, 0 failures, on real macOS 26.5.2.**
+
+Also fixed along the way, found only because CI could finally run at all: two
+pre-existing, unrelated test bugs that had never been exercised on macOS before
+today -- `cli-process.test.ts` hardcoded Linux's "Bubblewrap (bwrap) is required"
+message for the generic sandbox-unavailable case, and `violations.test.ts`'s own
+"canonicalizes" test compared against the raw, non-canonicalized workspace path,
+which only ever happened to hold on Linux.
+
+**Known, separate gap surfaced and deliberately not fixed here:** fixing
+`npm run check` also revealed that `ubuntu-latest`'s CI runner has never had
+`bubblewrap` installed, so the Linux sandbox has never actually been exercised in
+CI either. Installing it was tried and reverted in the same session
+(`d97e6d84f` then `d78618e4b`) after it surfaced a different, unrelated,
+pre-existing problem: `bwrap: loopback: Failed RTM_NEWADDR: Operation not
+permitted` -- a network-namespace/capability restriction under GitHub's hosted
+`ubuntu-latest` runners, not a bug in this repo's code. This needs its own
+investigation (likely a `sysctl` adjustment for unprivileged user namespaces, a
+well-known fix for this exact bwrap-in-GitHub-Actions combination, but not one to
+rush through under this task's banner) before Linux's own sandbox suite can run in
+CI. Filed as follow-up, not silently dropped.

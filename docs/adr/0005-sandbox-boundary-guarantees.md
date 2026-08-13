@@ -113,3 +113,25 @@ port-pinning narrows the shared-loopback exposure, it does not eliminate the
 category. macOS remains gated on native integration proof for an actual
 implementation task; this amendment narrows what that task still needs to prove,
 it does not stand in for it.
+
+## Amendment (2026-08-13): macOS backend implemented and verified on real hardware
+
+The native integration proof this ADR required now exists. `core/sandbox/
+macos-backend.ts` is a real, shipped `SandboxBackend`, verified with 238 test
+files / 2112 tests passing, 0 failed, on `macos-latest` CI (macOS 26.5.2) — see
+the 2026-08-12 spec's sixth amendment and the plan's 2b.5 record for the full
+account, including five real bugs the prototype amendment's paper design did not
+anticipate (missing `process-exec*`/`process-fork` allows, unresolved symlinks in
+`subpath` matching, a missing `spawn()` `cwd`, and a read-only allowlist that
+broke ordinary process startup and had to be replaced with Linux's actual
+broad-read/narrow-write posture: `(allow file-read*)` plus an explicit deny on the
+invoking account's home directory, not a read allowlist).
+
+**This ADR's guarantee language is now backed by two enforced backends, not one.**
+The categorical gap recorded in the prior amendment stands exactly as written:
+macOS's network guarantee is real (a blocked port genuinely gets `EPERM`, not a
+theoretical claim) but remains weaker than Linux's, because macOS has no private
+per-process loopback. Apple Events/Launch Services denial and code-signing
+behavior for a distributed (not locally-built) binary are not yet addressed and
+are not claimed as covered by this amendment. Windows remains unsupported,
+unchanged.
