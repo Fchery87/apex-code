@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0, 1, 2a, and 2b landed · **Created:** 2026-08-08 · **Last updated:** 2026-08-13
+**Status:** Active — Phases 0, 1, 2a, and 2b landed; Phase 3 active · **Created:** 2026-08-08 · **Last updated:** 2026-08-13
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -85,7 +85,7 @@ capable and measurably worse.
 | 1 | Provider & model layer | **landed** — 7 of 7 tasks · `ad79a98fe` | [spec](specs/2026-08-10-provider-and-model-layer.md) | — |
 | 2a | Permissions — rule model | **landed** — live enforcement completed · `8dff33f41` | [spec](specs/2026-08-11-permission-rule-model.md) | — |
 | 2b | Permissions — OS sandbox | **landed** — Linux + macOS backends verified in CI · `b9a7bb337` | [spec](specs/2026-08-12-os-sandbox.md) | — |
-| 3 | Context engineering | not started | — | — |
+| 3 | Context engineering | **active** | [spec](specs/2026-08-13-context-engineering.md) | [plan](plans/2026-08-13-context-engineering.md) |
 | 4 | Tool surface | not started | — | — |
 | 5 | Delegation & multi-agent | not started | — | — |
 | 6 | Durable state & daemon | not started | — | — |
