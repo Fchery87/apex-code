@@ -159,27 +159,48 @@ consults the answers, so the declarations are currently unverified assertions.
 
 ## Goals
 
-- [ ] Median turn-20 context tokens across the three turn-20-capable corpus fixtures is
-      **≤670** (≥40% below the measured baseline of 1,117), reported by `replayCorpus()`.
-- [ ] **`long-tool-heavy.jsonl`'s turn-20 drops ≥80% on its own** (15,272 → ≤3,054).
-      This is a separate, per-fixture assertion because the median under-credits
-      eviction: the heavy fixture is the outlier, so a median can improve without
-      eviction doing anything. Deferred schemas alone cannot reach ≥80% here — they can
-      cut at most the 960-token static prefix, ~6% of this fixture — so only working
-      eviction passes it.
-- [ ] `systemPromptTokens` is **below 707** on the six-and-two default-tool fixtures and
-      **below 960** on `long-tool-heavy`, with at least one tool set to
-      `deferSchema: true`, reported by the same harness.
-- [ ] **No regression in task completion**: `turnsCompleted` and the response/tool-result
-      equality assertions in `replay()` (`runner.ts:329`) hold unchanged for every
-      fixture. This is the clause that matters; the other two are gameable alone.
-- [ ] Eviction evicts a result **only** when its tool declares `resultRecoverable: true`;
+- [x] ~~Median turn-20 context tokens across the three turn-20-capable corpus fixtures
+      is ≤670~~ **Retired 2026-08-13 — proven mathematically unreachable, not merely
+      difficult.** `compacted-session.jsonl` (752) and `long-multi-turn.jsonl` (1,117)
+      both carry zero tool calls, so eviction cannot touch either; no real tool defers
+      its schema (see the next goal), so neither moves via that path either.
+      `long-tool-heavy.jsonl`'s own eviction floor (budget 0, evict everything eligible)
+      measures 1,769 — still above `long-multi-turn.jsonl`'s fixed 1,117 — so it is
+      always the maximum of the three, and the median is invariant at exactly 1,117 for
+      any eviction quality whatsoever. See `docs/roadmap.md` Phase 3's second
+      2026-08-13 correction for the full proof. Replaced by the per-fixture goal below,
+      which was always the real signal.
+- [x] **`long-tool-heavy.jsonl`'s turn-20 drops ≥80% on its own** (15,272 → ≤3,054).
+      **Done — measures 1,769, an 88.4% drop**, verified against the theoretical
+      eviction floor (budget 0 produces the same 1,769, confirming the replay harness's
+      `REPLAY_EVICTION_BUDGET` isn't under-tuned). This remains the real exit signal:
+      the heavy fixture is the only one where eviction has anything to evict at all.
+- [x] ~~`systemPromptTokens` is below 707 / 960, with at least one tool set to
+      `deferSchema: true`~~ **Revised 2026-08-13 — no tool declares `deferSchema: true`,
+      by deliberate choice, not oversight.** `compacted-session.jsonl` only exercises
+      the four always-on default tools (`read`/`bash`/`edit`/`write`); hitting a lower
+      `systemPromptTokens` there would require deferring one of *those*, which fights
+      deferred-schema's actual motivation (rarely-used tools, not defaults). A human
+      stakeholder was consulted and chose to revise this goal rather than force that
+      change. `systemPromptTokens` stays at its unchanged baseline (707 / 960) — not a
+      regression, just an unmet stretch goal, honestly recorded as such rather than
+      quietly dropped.
+- [x] **No regression in task completion**: `turnsCompleted` and the response/tool-result
+      equality assertions in `replay()` hold unchanged for every fixture. **Done** —
+      verified via the full `test/replay-runner.test.ts` and `test/context/` suites,
+      all green, plus a full `replayCorpus()` run across all nine fixtures with no
+      thrown assertion. This is the clause that matters most; the others were gameable
+      alone.
+- [x] Eviction evicts a result **only** when its tool declares `resultRecoverable: true`;
       a test asserts a `bash` result survives eviction while a `read` result does not.
-- [ ] The context pipeline order is settled in writing, with all four
+      **Done** — `test/context/eviction.test.ts` and `test/context/wiring.test.ts` both
+      assert this directly.
+- [x] The context pipeline order is settled in writing, with all four
       `contracts.md` § 2 questions answered, and `contracts.md` § 2 is moved from
-      **open** to **settled**.
-- [ ] `docs/roadmap.md` § Phase 3's baseline figures are corrected to the measured
-      values, and ground rule 3 and the Phase 3 criterion agree.
+      **open** to **settled**. **Done.**
+- [x] `docs/roadmap.md` § Phase 3's baseline figures are corrected to the measured
+      values, and ground rule 3 and the Phase 3 criterion agree. **Done**, including the
+      second correction above.
 - [x] The corpus gains a fixture that carries nonzero `cacheRead`/`cacheWrite`, so
       `cacheHitRate` is a real signal rather than a constant zero. **Done —
       `long-tool-heavy.jsonl`, `280616593`, `cacheHitRate` 0.8569.**
@@ -319,34 +340,43 @@ to record that it fired.
 
 Against `fixtures/corpus/` via `replayCorpus()`, which is offline and deterministic:
 
-| Metric | Baseline (measured 2026-08-13) | Threshold |
-| --- | ---: | ---: |
-| Median turn-20 context tokens | **1,117** (752 / 1,117 / 15,272) | **≤670** (≥40% reduction) |
-| `long-tool-heavy` turn-20, on its own | 15,272 | **≤3,054** (≥80%) — the eviction-only assertion |
-| `systemPromptTokens` | 707 (960 on `long-tool-heavy`) | **below both**, with ≥1 tool deferred |
-| `turnsCompleted` + replay equality | all fixtures pass | **unchanged** |
-| `cacheHitRate` on `long-tool-heavy` | 0.8569 | **compared pre/post eviction**; a fall indicates prefix invalidation |
+| Metric | Baseline (measured 2026-08-13) | Threshold | Result |
+| --- | ---: | ---: | --- |
+| Median turn-20 context tokens | 1,117 (752 / 1,117 / 15,272) | ~~≤670~~ **retired** — proven mathematically invariant at 1,117, see Goals | n/a |
+| `long-tool-heavy` turn-20, on its own | 15,272 | **≤3,054** (≥80%) — the real eviction signal | **Met — 1,769 (88.4%)** |
+| `systemPromptTokens` | 707 (960 on `long-tool-heavy`) | below both, with ≥1 tool deferred | **Unmet by design** — no default tool deferred; see Goals |
+| `turnsCompleted` + replay equality | all fixtures pass | unchanged | **Met** |
+| `cacheHitRate` on `long-tool-heavy` | 0.8569 | compared pre/post eviction; a fall indicates prefix invalidation | Pending task 3.6 |
 
-**Why ≤670 is a real gate and not an easier one.** Adding `long-tool-heavy` raised the
-median from 935 to 1,117, which raises the absolute target from 561 to 670. That is a
-weaker-looking number attached to a stronger gate: the old 935 baseline was computed
-over two fixtures containing no tool results, where the ≤561 target was unreachable by
-eviction under any implementation and demanded a 53% cut of the static prefix from
-deferred schemas alone. Passing ≤670 now requires at least two of three fixtures under
-the threshold, and the achievable pair is `compacted-session` (needs a modest static
-cut) plus `long-tool-heavy` (needs real eviction) — so the gate can only be met by
-**both** techniques working, which is what the phase is for.
+**Why the median was retired rather than re-targeted a second time.** Adding
+`long-tool-heavy` first raised the median baseline from 935 to 1,117 (the first
+correction, still valid). But once eviction was actually wired into the replay harness
+and measured — a gap the original ≤670 target didn't anticipate, since replay bypassed
+the pipeline entirely until this was found and fixed — `long-tool-heavy`'s own
+best-possible floor (1,769, at eviction budget 0) turned out to still exceed
+`long-multi-turn.jsonl`'s fixed 1,117. That makes the median provably constant, not
+just hard to move: no retuned target number would ever make it pass, because it isn't
+a threshold problem, it's a structural one. The standalone `long-tool-heavy` assertion
+was always the mechanism eviction could actually be judged against; the median added
+apparent rigor without adding real information once two of its three inputs turned out
+to be permanently fixed.
 
 Named tests:
 
-- `test/replay-runner.test.ts` — existing gate, must stay green unchanged.
-- `test/context/eviction.test.ts` (new) — a `read` result is evicted, a `bash` result is
-  not; eviction takes the oldest contiguous run, never a middle hole; the on-disk
-  session is byte-identical before and after.
-- `test/context/deferred-schemas.test.ts` (new) — a deferred tool announces without its
-  parameter schema and materializes it on explicit load; `systemPromptTokens` falls.
-- `fixtures/__tests__/corpus-hygiene.test.ts` — the new cache fixture must pass the
-  existing hygiene gate (no credentials, no personal paths, valid v3 JSONL).
+- `test/replay-runner.test.ts` — existing gate plus new assertions: `long-tool-heavy`'s
+  turn-20 drops (with an outbound eviction marker present), `heavy-tool-output`'s
+  single huge result evicts to its real measured value (748, down from >8,000).
+- `test/context/eviction.test.ts` — a `read` result is evicted, a `bash` result is not;
+  eviction takes the oldest contiguous run, never a middle hole; repeat runs are
+  byte-identical.
+- `test/context/deferred-schemas.test.ts` — a deferred tool announces without its
+  parameter schema and materializes it on explicit load.
+- `test/context/wiring.test.ts` — both stages land in the same outbound `AgentSession`
+  request; the on-disk session is byte-identical before and after an eviction pass.
+- `test/context/reactive-compaction.test.ts` — overflow-triggered compaction is
+  independently observable, distinct from the threshold path.
+- `fixtures/__tests__/corpus-hygiene.test.ts` — the cache fixture passes the existing
+  hygiene gate (no credentials, no personal paths, valid v3 JSONL).
 
 Per AGENTS.md test discipline, each behavior is written test-first and watched fail for
 the right reason before implementation.
