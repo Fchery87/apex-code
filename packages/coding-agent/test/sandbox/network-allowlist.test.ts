@@ -88,11 +88,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("CLI sandbox network allowlist", () =
 		expect(stderr).toContain(`CONNECT 127.0.0.1:${testServerPort}`);
 		expect(stderr).toContain("refused by allowlist policy");
 		expect(stderr).not.toContain("Network is unreachable");
-		// The whole sandboxed process also exits non-zero (the probe script exits 1
-		// once refused), so the outer process-exit classifier records its own generic
-		// "unknown" fallback alongside the proxy's precise "network" record. Both are
-		// expected here; only the proxy's record needs to describe the real cause.
-		expect(stderr).toContain("Sandbox violation (unknown)");
+		// The proxy already recorded the precise cause; the outer process-exit
+		// classifier must not also record its own generic fallback for the same launch.
+		expect(stderr).not.toContain("Sandbox violation (unknown)");
+		expect(stderr.match(/Sandbox violation/g)).toHaveLength(1);
 
 		let stderrAllowed = "";
 		const codeAllowed = await launchSandboxedCli({
