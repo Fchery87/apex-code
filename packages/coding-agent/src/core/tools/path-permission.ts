@@ -22,7 +22,7 @@ export function createPathPermissionSpec<TParams extends TSchema>(options: {
 	const { cwd, defaultBehavior, verb, getPath } = options;
 
 	const normalize = (path: string | undefined): string =>
-		formatPathRelativeToCwdOrAbsolute(path && path.trim() ? path : ".", cwd);
+		formatPathRelativeToCwdOrAbsolute(path?.trim() ? path : ".", cwd);
 
 	return {
 		defaultBehavior,
