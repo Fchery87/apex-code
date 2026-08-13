@@ -65,8 +65,7 @@ import {
 	prepareCompaction,
 	shouldCompact,
 } from "./compaction/index.ts";
-import { type DeferrableTool, announceToolsByName } from "./context/deferred-schemas.ts";
-import { type ContractLookup, evictToolResults } from "./context/eviction.ts";
+import { evictionBudget, installContextPipeline } from "./context/pipeline.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.ts";
 import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
@@ -604,100 +603,36 @@ export class AgentSession {
 	 * because the request it is reacting to is smaller. It does not call into
 	 * compaction and does not need to.
 	 *
-	 * Both stages are the pure functions from `./context/` (tasks 3.1 and 3.2) —
-	 * this method is wiring only. It chains onto whatever `transformContext` /
-	 * `streamFunction` the caller (`sdk.ts`) already installed on `Agent` rather
-	 * than replacing it, the same pattern `_installAgentNextTurnRefresh` above uses
-	 * for `prepareNextTurnWithContext`.
-	 *
-	 * The two stages land in different seams because they operate on different
-	 * halves of the outbound request. Eviction (task 3.1) is a pure function of
-	 * `AgentMessage[]`, which is exactly what `transformContext` sees, immediately
-	 * before `convertToLlm` — so it is wired there. Deferred-schema resolution
-	 * (task 3.2) operates on the *tool list*, not messages; `transformContext`'s
-	 * signature has no tools parameter, and `AgentContext.tools` is a snapshot
-	 * taken once per prompt rather than rebuilt per request (see `agent-loop.ts`'s
-	 * `streamAssistantResponse`, which reads `context.tools` unchanged on every
-	 * turn). The seam that actually sees the assembled outbound tool list on every
-	 * request is `streamFunction` — it receives the full `Context`, tools
-	 * included, immediately before the provider call — so the projection is
-	 * applied there instead. Because the two stages act on disjoint fields of the
-	 * request with no data dependency between them, this does not change the
-	 * observable pipeline order: nothing eviction does depends on whether a tool's
-	 * schema was announced or deferred, and nothing about tool-schema projection
-	 * depends on message content.
+	 * The wiring itself — where each stage attaches, and why they land in different
+	 * seams (`transformContext` for eviction, `streamFunction` for schema
+	 * projection) — lives in `./context/pipeline.ts`'s `installContextPipeline`,
+	 * shared with the offline replay harness so there is one implementation, not
+	 * two. This method only supplies this session's two dependencies: a contract
+	 * lookup backed by `getToolDefinition`, and a budget thunk (never cached — see
+	 * `_evictionBudget`, which reads live `this.model` / `this.settingsManager` on
+	 * every call, so a model switch or settings edit mid-session takes effect on
+	 * the very next request).
 	 */
 	private _installContextPipeline(): void {
-		const previousTransformContext = this.agent.transformContext;
-		this.agent.transformContext = async (messages, signal) => {
-			const afterPrevious = previousTransformContext ? await previousTransformContext(messages, signal) : messages;
-			const contractLookup: ContractLookup = (name) =>
-				(this.getToolDefinition(name) as Partial<ApexToolDefinition> | undefined)?.contract;
-			return evictToolResults(afterPrevious, contractLookup, this._evictionBudget());
-		};
-
-		const previousStreamFunction = this.agent.streamFunction;
-		this.agent.streamFunction = (model, context, options) => {
-			if (!context.tools || context.tools.length === 0) {
-				return previousStreamFunction(model, context, options);
-			}
-			return previousStreamFunction(model, { ...context, tools: this._projectToolSchemas(context.tools) }, options);
-		};
+		installContextPipeline(this.agent, {
+			contractLookup: (name) => (this.getToolDefinition(name) as Partial<ApexToolDefinition> | undefined)?.contract,
+			evictionBudget: () => this._evictionBudget(),
+		});
 	}
 
 	/**
-	 * Token budget for `evictToolResults`'s outbound pass (task 3.1's `budget`
-	 * parameter). There is no dedicated eviction setting (task 3.3 scope); this
-	 * derives one from the same quantities compaction already uses for its own
-	 * threshold (`getCompactionSettings()`; see `shouldCompact` in
-	 * `core/compaction/compaction.ts`). Compaction fires once total context tokens
-	 * exceed `contextWindow - reserveTokens`. Budgeting eviction — counted purely
-	 * against tool-result tokens, per task 3.1's contract — at half of that
-	 * headroom leaves the other half free for system prompt and conversational
-	 * growth, so eviction (cheap, structure-preserving) gets a chance to shrink the
-	 * transcript before the expensive compaction stage is ever reached, matching
-	 * contracts.md § 2's "why this order" (eviction before compaction, so
-	 * compaction is reached later and less often). `Math.max(0, ...)` mirrors
-	 * `shouldCompact`'s own behavior when `contextWindow` is unknown (0): evict
-	 * aggressively rather than not at all, rather than inventing a different,
-	 * unproven fallback.
+	 * Token budget for `evictToolResults`'s outbound pass, derived from the same
+	 * quantities compaction already uses for its own threshold
+	 * (`getCompactionSettings()`; see `shouldCompact` in
+	 * `core/compaction/compaction.ts`). The formula itself is `./context/
+	 * pipeline.ts`'s `evictionBudget` — see that function's comment for the "why
+	 * half of headroom" reasoning; this method only supplies production's real
+	 * `contextWindow` / `reserveTokens` inputs.
 	 */
 	private _evictionBudget(): number {
 		const contextWindow = this.model?.contextWindow ?? 0;
 		const { reserveTokens } = this.settingsManager.getCompactionSettings();
-		return Math.max(0, Math.floor((contextWindow - reserveTokens) / 2));
-	}
-
-	/**
-	 * Adapter between this session's tool registry (`getToolDefinition`, which
-	 * carries `contract.context.deferSchema`) and `announceToolsByName` (task 3.2),
-	 * which operates on a minimal `DeferrableTool` shape that has no notion of a
-	 * tool registry. This function exists so 3.2's public API stays exactly as
-	 * tested — only `parameters` is ever replaced; every other field of the
-	 * outbound tool (name, description, and on `AgentTool` specifically, `execute`,
-	 * `label`, etc.) passes through unchanged via the object spread. A tool with no
-	 * registered definition (a foreign/unclassified tool) is treated as
-	 * `deferSchema: false` here — the safe default on this axis is to keep
-	 * describing it fully, the mirror image of eviction's "no contract => don't
-	 * evict" default: when unsure, don't withhold information the model needs.
-	 */
-	private _projectToolSchemas<T extends { name: string; description: string; parameters: unknown }>(
-		tools: readonly T[],
-	): T[] {
-		const deferrable: DeferrableTool[] = tools.map((tool) => ({
-			name: tool.name,
-			description: tool.description,
-			parameters: tool.parameters,
-			contract: {
-				context: {
-					deferSchema:
-						(this.getToolDefinition(tool.name) as Partial<ApexToolDefinition> | undefined)?.contract?.context
-							.deferSchema === true,
-				},
-			},
-		}));
-		const announced = announceToolsByName(deferrable);
-		return tools.map((tool, index) => ({ ...tool, parameters: announced[index].parameters }));
+		return evictionBudget(contextWindow, reserveTokens);
 	}
 
 	// =========================================================================
