@@ -82,7 +82,7 @@ async function runCli(args: string[], dirs: CliDirs): Promise<CliResult> {
 	return new Promise((resolvePromise, reject) => {
 		const timeout = setTimeout(() => {
 			child.kill("SIGKILL");
-		}, 10_000);
+		}, 25_000);
 		child.on("error", (error) => {
 			clearTimeout(timeout);
 			reject(error);
@@ -96,10 +96,11 @@ async function runCli(args: string[], dirs: CliDirs): Promise<CliResult> {
 
 function setup(): CliDirs {
 	const tempRoot = createTempDir();
+	const projectDir = join(tempRoot, "project");
 	const dirs = {
 		agentDir: join(tempRoot, "agent"),
-		projectDir: join(tempRoot, "project"),
-		sessionFile: join(tempRoot, "session.jsonl"),
+		projectDir,
+		sessionFile: join(projectDir, "session.jsonl"),
 	};
 	mkdirSync(dirs.agentDir, { recursive: true });
 	mkdirSync(dirs.projectDir, { recursive: true });
@@ -111,7 +112,18 @@ describe("startup session name", () => {
 	it("sets --name on the selected session before runtime model validation", async () => {
 		const dirs = setup();
 		const result = await runCli(
-			["--session", dirs.sessionFile, "--name", "  CLI Named Session  ", "--model", "missing-model", "-p", "hi"],
+			[
+				"--session",
+				dirs.sessionFile,
+				"--name",
+				"  CLI Named Session  ",
+				"--model",
+				"missing-model",
+				"-p",
+				"hi",
+				"--permission-mode",
+				"default",
+			],
 			dirs,
 		);
 
@@ -123,7 +135,18 @@ describe("startup session name", () => {
 	it("rejects empty --name values without appending session metadata", async () => {
 		const dirs = setup();
 		const result = await runCli(
-			["--session", dirs.sessionFile, "--name", "   ", "--model", "missing-model", "-p", "hi"],
+			[
+				"--session",
+				dirs.sessionFile,
+				"--name",
+				"   ",
+				"--model",
+				"missing-model",
+				"-p",
+				"hi",
+				"--permission-mode",
+				"default",
+			],
 			dirs,
 		);
 

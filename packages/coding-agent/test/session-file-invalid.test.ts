@@ -54,7 +54,11 @@ describe("--session invalid file handling", () => {
 		mkdirSync(projectDir, { recursive: true });
 		writeFileSync(sessionFile, originalContent);
 
-		const result = await runCli(["--session", sessionFile, "-p", "hi"], projectDir, agentDir);
+		const result = await runCli(
+			["--session", sessionFile, "-p", "hi", "--permission-mode", "default"],
+			projectDir,
+			agentDir,
+		);
 
 		expect(result.code).toBe(1);
 		expect(result.stderr).toContain(`Error: Session file is not a valid pi session: ${sessionFile}`);
