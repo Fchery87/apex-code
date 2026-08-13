@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0, 1, 2a, and 2b landed; Phase 3 active · **Created:** 2026-08-08 · **Last updated:** 2026-08-13
+**Status:** Active — Phases 0, 1, 2a, 2b, and 3 landed · **Created:** 2026-08-08 · **Last updated:** 2026-08-13
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -85,7 +85,7 @@ capable and measurably worse.
 | 1 | Provider & model layer | **landed** — 7 of 7 tasks · `ad79a98fe` | [spec](specs/2026-08-10-provider-and-model-layer.md) | — |
 | 2a | Permissions — rule model | **landed** — live enforcement completed · `8dff33f41` | [spec](specs/2026-08-11-permission-rule-model.md) | — |
 | 2b | Permissions — OS sandbox | **landed** — Linux + macOS backends verified in CI · `b9a7bb337` | [spec](specs/2026-08-12-os-sandbox.md) | — |
-| 3 | Context engineering | **active** | [spec](specs/2026-08-13-context-engineering.md) | [plan](plans/2026-08-13-context-engineering.md) |
+| 3 | Context engineering | **landed** — eviction + deferred schemas verified against the replay corpus · `72a2fefe4` | [spec](specs/2026-08-13-context-engineering.md) | — |
 | 4 | Tool surface | not started | — | — |
 | 5 | Delegation & multi-agent | not started | — | — |
 | 6 | Durable state & daemon | not started | — | — |
@@ -423,6 +423,27 @@ cache, so it cannot detect this risk at all, not even in principle. Prefix-oldes
 eviction's cache safety rests on the structural argument in
 `docs/architecture/contracts.md` § 2 alone; real validation is a stated follow-up for
 a later phase, not something Phase 3's corpus can close.
+
+**Closure.** All six plan tasks landed (`72a2fefe4`). Eviction and deferred-schema
+resolution are wired into `AgentSession` in the settled order and, after fixing a real
+gap where `replay()` bypassed that wiring entirely, into the replay gate too — measured
+for real: `long-tool-heavy.jsonl` turn-20 drops 88.4% (15,272 → 1,769), past the 80%
+goal. The median-based exit criterion was retired as mathematically unreachable (proof
+above) and replaced with that standalone assertion. Reactive compaction on provider
+overflow turned out to already exist, inherited pre-fork; the cache pre/post comparison
+turned out to be structurally unmeasurable offline — both honestly recorded rather than
+forced. `npx tsgo --noEmit` clean; a full `npm test --no-file-parallelism` from
+`packages/coding-agent` showed 7 failed files / 240 passed / 6 skipped (2142 passed /
+53 skipped tests) — 4 are the same pre-existing, unrelated failures characterized in
+2b.4c (`external-editor`, `radius`, `skills`, `6999-models-json-hot-reload`); a 5th,
+`agent-session-compaction.test.ts`'s "throws when compacting without configured auth",
+was newly found but confirmed pre-existing by reproducing it against `c21f5b878` (the
+commit immediately before this phase's replay-gate fix) in an isolated worktree — it
+fails identically there, so it predates and is unrelated to this phase's work. Per
+`AGENTS.md`'s plan lifecycle convention, `docs/plans/2026-08-13-context-engineering.md`
+is deleted now that Phase 3 is landed (recoverable via
+`git show <commit>:docs/plans/2026-08-13-context-engineering.md`); its durable content
+lives in this section, the spec, and `docs/architecture/contracts.md` § 2.
 
 ---
 
