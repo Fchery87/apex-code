@@ -505,3 +505,23 @@ bug a sharper profile can close. It also does not cover Apple Events/Launch
 Services denial, code-signing behavior for a distributed (not locally-built)
 binary, or a real `network-proxy.ts` TCP-listen mode — all still open, unstarted
 work for whenever an implementation task opens.
+
+### Amendment (2026-08-13, second): implementation landed — task 2b.5
+
+The prototype design above was implemented against real code: `core/sandbox/
+macos-backend.ts` (new, mirrors `linux-backend.ts`'s `SandboxBackend` shape),
+`network-proxy.ts` gained a `tcpHost` TCP-listen mode, and `cli-supervisor.ts`
+routes to the macOS or Linux backend by `process.platform`. See
+`docs/plans/2026-08-12-os-sandbox.md` task 2b.5 for the full record, including
+five real, hardware-only bugs found and fixed across six `macos-latest` CI
+iterations (a missing `process-exec*`/`process-fork` allow, unresolved symlinks
+in `subpath` matching, a missing `spawn()` `cwd`, and a read-only allowlist that
+broke ordinary process startup until it was replaced with Linux's actual
+broad-read-narrow-write posture). Final verified state: 238 test files / 2112
+tests passed, 0 failed, on real macOS 26.5.2 — not a local run, this development
+environment has no macOS host. Apple Events/Launch Services denial and
+code-signing behavior for a distributed binary remain out of scope, not settled by
+this amendment. The Linux sandbox's own CI-testability gap found along the way
+(`bubblewrap` was never installed on `ubuntu-latest`, and installing it surfaces a
+separate, unrelated network-namespace CI restriction) is tracked in the plan as a
+deliberate follow-up, not fixed here.

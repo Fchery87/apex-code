@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0, 1, and 2a landed; Phase 2b Linux scope verified, macOS open · **Created:** 2026-08-08 · **Last updated:** 2026-08-12
+**Status:** Active — Phases 0, 1, and 2a landed; Phase 2b Linux and macOS backends verified · **Created:** 2026-08-08 · **Last updated:** 2026-08-13
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -288,8 +288,8 @@ The close-out also fixed the review findings that made a configured gate incompl
   stdout tests passed in the targeted run above. This is not represented as a green
   full-suite verification.
 
-**Phase 2b progress — Linux scope (2b.1–2b.4e) verified 2026-08-12, macOS (2b.5) still
-open.** The Linux backend (Bubblewrap: filesystem read/write restriction, an
+**Phase 2b progress — both Linux and macOS backends land and verify, 2026-08-12 to
+2026-08-13.** The Linux backend (Bubblewrap: filesystem read/write restriction, an
 `--unshare-net` deny-all default, a supervisor-owned HTTP CONNECT allowlist proxy
 bridged over a Unix domain socket, and a bounded violation store wired into the
 production CLI) meets the Phase 2 exit criterion stated above — a write outside the
@@ -299,10 +299,23 @@ agent turn, not just the backend in isolation. Task 2b.6 (see
 [plan](plans/2026-08-12-os-sandbox.md)) obtained this phase's first genuinely clean
 full `npm test` run — not killed, truncated, or scoped down by the environment —
 confirming no regression beyond the same 4 pre-existing, sandboxing-unrelated files
-already characterized in 2b.4c. macOS support (2b.5) has not been attempted; this
-development environment is Linux-only, so any macOS work will need native evidence
-gathered elsewhere. The plan is not yet deleted for this reason — Phase 2b is not
-closed, only its Linux scope is.
+already characterized in 2b.4c.
+
+**macOS support (2b.5) has since landed too** — Seatbelt (`sandbox-exec`), verified
+238 test files / 2112 tests / 0 failures on real `macos-latest` CI (macOS 26.5.2);
+this development environment is Linux-only and has no macOS host, so every bit of
+that verification happened on GitHub Actions across six real CI iterations, not
+locally. Five real, hardware-only bugs surfaced and were fixed along the way — see
+the plan's 2b.5 record for the full account. macOS's network guarantee is real but
+categorically weaker than Linux's (no private per-process loopback; see ADR 0005's
+amendments), and Apple Events/Launch Services denial plus code-signing behavior for
+a distributed binary remain unaddressed. Fixing `npm run check` (a pre-existing,
+unrelated lint failure that had silently blocked `npm test` from running in CI on
+*any* platform for a while) also surfaced that Linux's own sandbox suite has never
+actually run in CI either — `bubblewrap` isn't installed on `ubuntu-latest`, and
+installing it hits a separate, unrelated network-namespace CI restriction. Filed as
+a known follow-up, not fixed here. The plan is not yet deleted; Windows remains
+unsupported per ADR 0005.
 
 ---
 
