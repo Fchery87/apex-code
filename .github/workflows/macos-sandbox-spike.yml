@@ -44,6 +44,7 @@ jobs:
           cat > "$RUNNER_TEMP/fs-candidate.sb" <<'EOF'
           (version 1)
           (import "bsd.sb")
+          (allow process-exec*)
           (deny file-write*)
           (allow file-write* (subpath (param "WORKSPACE")))
           EOF
@@ -88,6 +89,7 @@ jobs:
           cat > "$RUNNER_TEMP/net-candidate.sb" <<'EOF'
           (version 1)
           (import "bsd.sb")
+          (allow process-exec*)
           (deny network*)
           (allow network-outbound (remote ip (param "ALLOWED_ADDR")))
           EOF
@@ -139,6 +141,7 @@ jobs:
           cat > "$RUNNER_TEMP/uds-candidate.sb" <<'EOF'
           (version 1)
           (import "bsd.sb")
+          (allow process-exec*)
           (deny network*)
           (allow file-read* file-write* (subpath (param "WORKSPACE")))
           EOF
