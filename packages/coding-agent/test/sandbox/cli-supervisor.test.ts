@@ -158,6 +158,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("CLI sandbox supervisor with the real
 	});
 });
 
+// macOS's own denial text doesn't reliably distinguish filesystem from network
+// refusals the way Linux's bwrap stderr does (see macos-backend.ts's
+// classifySandboxFailure), so this asserts "unknown", not "filesystem" -- the
+// enforcement itself (the write is blocked) is what this test actually verifies.
 describe.skipIf(!canEnforceMacosSandbox())("CLI sandbox supervisor with the real macOS backend", () => {
 	it("records and reports a real outside-workspace write through the default production dependencies", async () => {
 		const cwd = workspace();
@@ -178,6 +182,6 @@ describe.skipIf(!canEnforceMacosSandbox())("CLI sandbox supervisor with the real
 			},
 		});
 		expect(code).not.toBe(0);
-		expect(stderr).toContain("Sandbox violation (filesystem)");
+		expect(stderr).toContain("Sandbox violation (unknown)");
 	});
 });
