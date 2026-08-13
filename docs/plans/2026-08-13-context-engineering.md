@@ -10,7 +10,7 @@ verified before it is marked done.
 
 | Task | State | Commit | Verification |
 | --- | --- | --- | --- |
-| 3.1 Eviction core — a pure `evictToolResults(messages, contract lookup, budget)` that replaces the oldest contiguous run of recoverable tool results with markers | Not started | — | New `test/context/eviction.test.ts`: a `read` result is evicted; a `bash` result (`resultRecoverable: false`) is preserved; eviction takes an oldest-contiguous run and never punches a middle hole; repeat runs are byte-identical |
+| 3.1 Eviction core — a pure `evictToolResults(messages, contract lookup, budget)` that replaces the oldest contiguous run of recoverable tool results with markers | Done | `75e7bb61e` | New `test/context/eviction.test.ts`: a `read` result is evicted; a `bash` result (`resultRecoverable: false`) is preserved; eviction takes an oldest-contiguous run and never punches a middle hole; repeat runs are byte-identical |
 | 3.2 Deferred-schema core — announce-by-name projection plus an explicit load path | Done | `3ab596a25` | New `test/context/deferred-schemas.test.ts`: a `deferSchema: true` tool announces without its parameter schema; an explicit load materializes the real one; the static prefix measurably shrinks |
 | 3.3 Wire the three stages at the `transformContext` seam in the settled order | Not started | — | Order asserted end to end; the on-disk session is byte-identical before and after an eviction pass (the Phase 7 constraint); `npx tsgo --noEmit` and `npm run build` clean |
 | 3.4 Reactive compaction on provider `prompt_too_long`, distinct from the threshold path | Not started | — | Fires on overflow without the threshold being crossed, records that it fired, and leaves the existing threshold path's behavior unchanged |
