@@ -14,6 +14,7 @@ order; each task must be verified before it is marked done.
 | 2b.4 Wire CLI diagnostics/lifecycle and package distributable dependency | Done | `79ce14d60` | CLI routing/fail-closed process tests, typecheck, and package build pass |
 | 2b.4a Wire live violation evidence into the production CLI supervisor | Done | `1fd20fb24` | `test/sandbox/cli-supervisor.test.ts` (fake-backend store threading + real-Bubblewrap default-dependency case), full `test/sandbox/` (6 files/20 tests), `test/permissions/gate-universal.test.ts` (19 tests), `npx tsgo --noEmit`, `npm run build` all pass |
 | 2b.4b Add a live-agent boundary test through the real CLI entry point | Done | `a2fb44ccc` | `test/sandbox/live-agent-boundary.test.ts` (new, 1 test); full `test/sandbox/` (7 files/21 tests); `test/permissions/gate-universal.test.ts` (19 tests); `npx tsgo --noEmit`; `npm run build`; manual positive control (see below) |
+| 2b.4c Reconcile CLI tests broken by sandboxing becoming the default launch route | Done | `8465f033f` | `test/session-file-invalid.test.ts`, `test/session-id-readonly.test.ts`, `test/startup-session-name.test.ts` (10 tests) green individually and combined; full `test/sandbox/` + `test/permissions/gate-universal.test.ts` (40 tests) green; `npx tsgo --noEmit` clean; remaining pre-existing baseline failures re-confirmed unrelated (see below) |
 | 2b.5 Add macOS backend only after native CI proof; document unsupported Windows | Not started | — | macOS integration tests pass |
 | 2b.6 Full verification and documentation closure | Not started | — | Focused suites, typecheck, build, full test; plan deleted |
 
@@ -64,3 +65,54 @@ live multi-tool-call session that completes successfully overall (exit 0, as thi
 does) never reaches that path, even though individual in-session tool calls were
 denied. This confirms the "structured supervisor→child diagnostic protocol" gap
 above is real, not hypothetical, and remains open.
+
+**2b.4c.** A full `npm --workspace packages/coding-agent test` baseline (taken before
+any 2b.4c change) showed 15 failing tests across 8 files. Triaged individually, not
+assumed from the roadmap's older baseline list, since that list predates this phase:
+
+- **Three files were genuine regressions from sandboxing becoming the default
+  launch route**, not pre-existing: `session-file-invalid.test.ts`,
+  `session-id-readonly.test.ts` (3 tests), and `startup-session-name.test.ts` (2
+  tests) all spawn the CLI in `-p`/print mode without `--permission-mode`. Since a
+  headless session now fails closed without it (2a), every one of these tests hit
+  `Error: Non-interactive sessions require an explicit --permission-mode` before
+  ever reaching its actual assertion. Fixed by adding `--permission-mode default`
+  (chosen because none of these tests exercise a tool call — they fail on
+  session-level validation first, so the choice of mode doesn't affect what's being
+  asserted). One test in `session-id-readonly.test.ts` ("does not warn when
+  --session-id opens an existing session") had the same bug but was passing
+  *vacuously* — its assertion is `not.toContain(...)`, which stayed true once the
+  stderr content changed to the unrelated permission-mode error. Fixed alongside
+  the rest even though it wasn't in the failing list, since a green test that isn't
+  testing its claim is worse than a red one.
+- `startup-session-name.test.ts` also had a fixture bug independent of the flag:
+  `dirs.sessionFile` was a *sibling* of `dirs.projectDir` (`tempRoot/session.jsonl`
+  vs. `tempRoot/project/`), not inside it, while `cwd: dirs.projectDir` is what
+  becomes the sandbox workspace — the exact "fixtures place mutable session files
+  outside the workspace" failure mode flagged going into this task. Fixed by moving
+  the session file under `projectDir`.
+- The same file's client-side kill watchdog (`setTimeout(() => child.kill(...),
+  10_000)`) proved too tight under real load now that every spawn is a real
+  Bubblewrap child with real startup cost, not a plain Node process — it passed
+  clean in isolation but intermittently hit the 10s SIGKILL under concurrent test
+  load. Bumped to 25s (safely under the file's 30s `testTimeout`).
+- **Five files were re-confirmed as pre-existing and structurally unrelated to
+  sandboxing** — none of them spawn `cli.ts` as a subprocess at all:
+  `external-editor.test.ts` (in-process `editInExternalEditor()`; root cause
+  identified as unquoted shell-string interpolation breaking on the space in this
+  repo's own directory name, `.../Coding Projects/apex-code` — a pre-existing
+  fragility, not something 2b introduced or this task's scope to fix),
+  `radius.test.ts` (in-process `ModelRuntime.create()` fetch-spy timeout),
+  `skills.test.ts` (in-process tilde-expansion logic), `tools.test.ts` (missing
+  `rg` binary, a host dependency gap), and
+  `6999-models-json-hot-reload.test.ts` (in-process TUI model-selector
+  rendering).
+
+A full clean `npm test` run proved infeasible to obtain in this environment during
+this task — repeated attempts (full monorepo, coding-agent-only, reduced
+concurrency, fully serial) were killed by the surrounding environment partway
+through regardless of approach, load-average evidence pointing at resource
+contention from this session's own accumulated background activity rather than a
+product issue. Verification instead used targeted runs covering the full set of
+originally-failing files plus the sandbox and permission-gate suites, which is a
+narrower but complete guarantee for the surface this task touched.
