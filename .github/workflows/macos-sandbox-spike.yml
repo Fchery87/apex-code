@@ -90,6 +90,7 @@ jobs:
           (version 1)
           (import "bsd.sb")
           (allow process-exec*)
+          (allow file-read* (subpath "/opt/homebrew"))
           (deny network*)
           (allow network-outbound (remote ip (param "ALLOWED_ADDR")))
           EOF
@@ -142,6 +143,7 @@ jobs:
           (version 1)
           (import "bsd.sb")
           (allow process-exec*)
+          (allow file-read* (subpath "/opt/homebrew"))
           (deny network*)
           (allow file-read* file-write* (subpath (param "WORKSPACE")))
           EOF
