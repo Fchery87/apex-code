@@ -132,6 +132,10 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 				// that lets a normal Unix child process (dyld, /bin/sh) actually start.
 				'(import "bsd.sb")',
 				"(allow process-exec*)",
+				// Separate from process-exec* -- confirmed empirically: a shell that
+				// forks a child shell (e.g. `sh -c 'a' && sh -c 'b'`) failed with
+				// "fork: Operation not permitted" without this, even with exec allowed.
+				"(allow process-fork)",
 				// Matches Linux's actual posture (bwrap's `--ro-bind / /`): broad read,
 				// narrow write. A read-only allowlist alone (this design's first cut)
 				// breaks ordinary process startup -- confirmed empirically, getcwd()

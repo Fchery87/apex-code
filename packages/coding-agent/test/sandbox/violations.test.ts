@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -29,7 +29,11 @@ describe("sandbox policy", () => {
 		const workspace = temporaryWorkspace();
 		const result = createSandboxPolicy({ workspace });
 
-		expect(result).toEqual({ kind: "valid", policy: { workspace, allowedHosts: [] } });
+		// realpathSync(workspace), not workspace itself: canonicalization is a no-op
+		// on platforms without a relevant symlink (Linux's /tmp), but on macOS
+		// os.tmpdir() resolves through /var -> /private/var, and the whole point of
+		// this test is that createSandboxPolicy resolves that, not that it doesn't.
+		expect(result).toEqual({ kind: "valid", policy: { workspace: realpathSync(workspace), allowedHosts: [] } });
 	});
 
 	it("rejects a relative or missing workspace before an OS process is started", () => {
