@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Author | Apex Code |
-| Status | `Draft` |
+| Status | `Active` |
 | Created | `2026-08-13` |
 | Last updated | `2026-08-13` |
 | Roadmap phase | `4 — Tool surface` |
@@ -113,6 +113,19 @@ growth.
 runs on every request. `loadDeferredSchema` (`deferred-schemas.ts:102`) is called only
 from `test/context/deferred-schemas.test.ts`.
 
+**Review decisions before implementation.** Grounding exposed three points that must
+not remain open in the plan. First, "loaded" means that the model-callable schema tool
+returns the real schema as a tool result; it does not mutate the already-issued tool
+list. The end-to-end proof therefore has two provider requests: schema-tool call, then
+a valid call to the deferred tool. Second, the canonical absent-contract fallback keeps
+foreign/MCP tools fully announced: `UNCLASSIFIED.context.deferSchema` is changed to
+`false`, and both the permission gate and context projection consume that same fallback.
+Foreign tools remain conservative (`ask`, all capabilities, never evicted, no evidence)
+without silently changing their schema behavior. Third, plan mode's hard floor denies
+filesystem writes, execution, and delegation, but permits explicit harness-state tools
+such as `todo_write`; otherwise plan mode cannot maintain the plan it is presenting.
+These are compatibility and usability decisions, not implementation details.
+
 **Four capabilities have no implementor.** `Capability` declares `fs.read`, `fs.write`,
 `exec`, `net`, `delegate`, `ui`, `state` (`core/tools/contract.ts:15`). Only the first
 three are used. `resolveWithMode` (`core/permissions/modes.ts:19`) already classifies
@@ -161,12 +174,12 @@ two independent derivations of one classification, which is the exact failure mo
 contracts.md cites ADR 0021 to avoid. The load path is what removes the reason for the
 divergence, so this phase is where it must be reconciled rather than inherited.
 
-**4. Four capabilities are enforced but unexercised, and at least one interaction looks
-wrong.** `state` is classified as mutating, so plan mode denies it outright. `TodoWrite`
-is the natural `state` tool and planning is exactly when it is most useful, so the first
-real `state` implementor appears to be denied in the mode it most belongs to. Whether
-that is a bug in the classification or correct-and-surprising cannot be settled by
-reading `modes.ts`; it needs a tool and a test.
+**4. Four capabilities are enforced but unexercised, and one interaction is wrong.**
+`state` is classified as mutating, and the current plan-mode floor denies it outright.
+`TodoWrite` is the natural `state` tool and planning is exactly when it is most useful.
+Phase 4 therefore narrows the hard floor to filesystem writes, execution, and
+delegation; explicit harness-state tools remain callable in plan mode and are covered by
+mode tests.
 
 ## Goals
 
@@ -211,10 +224,10 @@ reading `modes.ts`; it needs a tool and a test.
       trades a one-time prefix saving for a per-session extra round trip, and the
       decision to exclude them is already settled. `grep`, `find`, and `ls` are
       candidates and are evaluated by measurement in task 4.1, not assumed.
-- [ ] **MCP and extension tools do not gain deferral defaults here.** They keep passing
-      through with real schemas. Flipping them is a behavior change for third-party
-      tools whose descriptions this project does not control, and it should follow at
-      least one release of the load path proving itself on first-party tools.
+- [ ] **MCP and extension tools do not gain deferral defaults here.** They continue
+      passing through with real schemas. The canonical absent-contract fallback is
+      conservative for permission/capability/evidence/eviction, but deliberately does
+      not alter the provider-facing schema for third-party tools.
 - [ ] **The replay corpus is not re-recorded.** The static-prefix gate gets its own
       direct test instead. Re-recording fixtures so a context change looks good would
       destroy the only baseline the phase is measured against — the same reasoning
@@ -233,21 +246,23 @@ An explicit tool rather than automatic injection, because the model needs the sc
 *construct* a call — by the time a deferred tool's call arrives, the arguments are
 already wrong, so there is no seam at which the harness could inject the schema in
 time. This is an irreversible interface decision (it becomes part of the model-facing
-surface and every deferred tool's usability depends on it), so it gets an ADR.
+surface and every deferred tool's usability depends on it), settled by ADR 0011.
 
 | Component | Change | File(s) |
 | --- | --- | --- |
 | Schema-load tool | New tool wrapping `loadDeferredSchema` over the live registry | `core/tools/tool-schema.ts` (new) |
 | Registry | Add to `ToolName`, `allToolNames`, and the `createAllTool*` factories | `core/tools/index.ts` |
-| Absent-contract default | One derivation shared by `gate.ts` and `pipeline.ts` | `core/tools/contract.ts`, `core/context/pipeline.ts` |
+| Absent-contract default | One `UNCLASSIFIED` fallback shared by `gate.ts` and `pipeline.ts`; foreign schemas remain fully announced | `core/tools/contract.ts`, `core/context/pipeline.ts`, `core/permissions/gate.ts` |
 | Prefix budget test | Measure `createAllToolDefinitions` + `buildSystemPrompt`, assert budget | `test/context/static-prefix.test.ts` (new) |
 
 The schema-load tool itself must never defer (it would be unreachable) and must be
 callable in every permission mode including `plan`, so it declares an empty capability
-set — legal, and `isMutating` on it is correctly `false`. It performs no I/O and has no
-side effects; `defaultBehavior` is `allow` and `ruleForCall` returns `null`, since
-"allow reading the schema of tool X but not tool Y" is not a distinction worth a
-grammar.
+set — legal, and `isMutating` on it is correctly `false`. It performs no external I/O
+and has no workspace side effects; `defaultBehavior` is `allow` and `ruleForCall`
+returns `null`, since "allow reading the schema of tool X but not tool Y" is not a
+distinction worth a grammar. It only returns schemas for tools in the live active
+registry and rejects unknown names; it does not expose inactive or extension-private
+registrations.
 
 ### The tools
 
@@ -292,7 +307,7 @@ structurally impossible here rather than merely avoided.
 | --- | --- | --- |
 | `contract.test.ts`'s "covers exactly the seven inherited tools" | test | Superseded — same no-silent-omission property, restated over the grown registry |
 | `gate-universal.test.ts`'s `REPRESENTATIVE_PARAMS` seven-key map | test | Superseded — extended, and its exhaustiveness assertion kept |
-| `pipeline.ts`'s independent absent-contract default | behavior | Superseded by one derivation shared with `gate.ts` |
+| `pipeline.ts`'s independent absent-contract default | behavior | Superseded by the shared `UNCLASSIFIED` fallback; its full-schema behavior remains |
 | `2026-08-13-context-engineering.md`'s `systemPromptTokens` "Unmet by design" row | doc | Superseded — amended in place to cite this phase's measured result |
 | Roadmap Phase 4's "under the ceiling established in Phase 3" exit criterion | doc | Superseded by the measured budget from task 4.1, with the arithmetic recorded |
 
@@ -363,8 +378,7 @@ grammar and tests," which the roadmap explicitly counts as not done.
 Needs one ADR, for the decision that deferred schemas are resolved through an explicit
 model-callable tool rather than harness-side injection. It is irreversible in the sense
 that matters — it lands in the model-facing surface, and every deferred tool's
-usability routes through it. To be written as `docs/adr/0011-deferred-schema-load-path.md`
-and cited here once settled.
+usability routes through it. Settled as `docs/adr/0011-deferred-schema-load-path.md` and cited here.
 
 Two items are carried as open questions for the plan rather than settled here, because
 both need a measurement that does not exist yet: whether `grep`/`find`/`ls` defer, and

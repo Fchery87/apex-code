@@ -53,7 +53,7 @@ for a new consumer.
 Foreign tools — from MCP servers and third-party extensions — cannot supply a
 contract. They are neither rejected nor silently defaulted. They receive a
 conservative `UNCLASSIFIED` contract (full capability set, `ask`, never evicted,
-schema deferred, emits nothing) **and are reported as unclassified** wherever the
+schema fully announced, emits nothing) **and are reported as unclassified** wherever the
 snapshot is displayed. A conservative default nobody can see is indistinguishable
 from a bug, which is the specific way the predecessor's version of this failed.
 
@@ -61,3 +61,14 @@ Consequences accepted: seven upstream-inherited tools must be backfilled with
 contracts in Phase 2, and every future tool costs four declarations it would not
 otherwise carry. That is the price of the axes being answered once each instead of
 three times each, and it is paid at the only moment when the answers are cheap.
+
+## Amendment (2026-08-13): foreign schemas remain fully announced
+
+Phase 4's deferred-schema load-path review retains `UNCLASSIFIED` as the shared
+fallback for foreign and extension tools, but changes only its provider-facing schema
+posture: `context.deferSchema` is `false`. The fallback remains conservative for
+capabilities, permission (`ask`), result eviction, and evidence. Foreign tools cannot
+be made usable by a load path they do not explicitly participate in, and keeping their
+real schemas announced preserves the existing extension/MCP behavior. ADR 0011 records
+the explicit first-party load path and the single-fallback rule that prevents the gate
+and context pipeline from deriving different classifications.

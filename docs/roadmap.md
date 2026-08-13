@@ -86,7 +86,7 @@ capable and measurably worse.
 | 2a | Permissions — rule model | **landed** — live enforcement completed · `8dff33f41` | [spec](specs/2026-08-11-permission-rule-model.md) | — |
 | 2b | Permissions — OS sandbox | **landed** — Linux + macOS backends verified in CI · `b9a7bb337` | [spec](specs/2026-08-12-os-sandbox.md) | — |
 | 3 | Context engineering | **landed** — eviction + deferred schemas verified against the replay corpus · `72a2fefe4` | [spec](specs/2026-08-13-context-engineering.md) | — |
-| 4 | Tool surface | **spec drafted** — implementation not started | [spec](specs/2026-08-13-tool-surface.md) | — |
+| 4 | Tool surface | **active** — plan approved, implementation not started | [spec](specs/2026-08-13-tool-surface.md) | [plan](plans/2026-08-13-tool-surface.md) |
 | 5 | Delegation & multi-agent | not started | — | — |
 | 6 | Durable state & daemon | not started | — | — |
 | 7 | Evidence & verification | not started | — | — |
@@ -593,7 +593,7 @@ takes the next free number instead of a reserved one.
 | 0008 | Delegation authority: `pi-subagents` dependency vs. owning it | 5 | reserved |
 | 0009 | Telemetry: opt-in only, and exactly what is collected | 9 | reserved |
 | 0010 | One canonical tool contract, declared by the tool and never re-derived | pre-2 | ✅ |
-| 0011 | Deferred schemas resolve through an explicit model-callable tool, not harness-side injection | 4 | reserved |
+| 0011 | Deferred schemas resolve through an explicit model-callable tool, not harness-side injection | 4 | ✅ |
 
 ## Cross-phase contracts
 

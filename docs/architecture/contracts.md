@@ -203,17 +203,24 @@ ADR 0021 bug happened.
 export const UNCLASSIFIED: ToolContract<TSchema, unknown> = {
   capabilities: ALL_CAPABILITIES,          // assume the worst
   permission: { defaultBehavior: "ask", /* exact-argument matching only */ },
-  context: { resultRecoverable: false, deferSchema: true },
+  context: { resultRecoverable: false, deferSchema: false },
   evidence: { emits: new Set(), capture: () => [] },
 };
 ```
 
 Conservative on every axis: full capability set (so it cannot widen a ceiling),
-`ask` by default, never evicted, schema deferred, emits nothing.
+`ask` by default, never evicted, schema fully announced, emits nothing.
 
 And it must be **visible**. Any tool carrying `UNCLASSIFIED` is reported as
 unclassified by the projection below and shown as such in `/tools` and `/doctor`. A
 conservative default that nobody can see is indistinguishable from a bug.
+
+
+**Phase 4 amendment (2026-08-13):** `UNCLASSIFIED.context.deferSchema` is `false`.
+Foreign/MCP tools remain fully announced because they do not participate in the
+first-party schema-load protocol; the fallback is still conservative on every
+security and retention axis. ADR 0011 settles the explicit load path and its shared
+fallback consumption.
 
 ## One projection, never re-derived
 
