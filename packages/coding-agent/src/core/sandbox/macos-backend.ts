@@ -97,11 +97,7 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 			});
 			const proxyPort = proxy.port as number;
 
-			const readOnlyDirs = readOnlyDirectories([
-				process.execPath,
-				launch.command,
-				...(launch.readOnlyPaths ?? []),
-			]);
+			const readOnlyDirs = readOnlyDirectories([process.execPath, launch.command, ...(launch.readOnlyPaths ?? [])]);
 
 			const profileLines = [
 				"(version 1)",
@@ -127,20 +123,16 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 			params.push("-D", `WORKSPACE=${launch.policy.workspace}`);
 			params.push("-D", `PROXY_ADDR=localhost:${proxyPort}`);
 
-			const child = spawn(
-				"sandbox-exec",
-				["-f", profilePath, ...params, "--", launch.command, ...launch.args],
-				{
-					env: {
-						...launch.environment,
-						HOME: launch.environment?.HOME ?? stateDirectory,
-						TMPDIR: launch.environment?.TMPDIR ?? stateDirectory,
-						HTTP_PROXY: `http://127.0.0.1:${proxyPort}`,
-						HTTPS_PROXY: `http://127.0.0.1:${proxyPort}`,
-					},
-					stdio: ["inherit", "inherit", "pipe"],
+			const child = spawn("sandbox-exec", ["-f", profilePath, ...params, "--", launch.command, ...launch.args], {
+				env: {
+					...launch.environment,
+					HOME: launch.environment?.HOME ?? stateDirectory,
+					TMPDIR: launch.environment?.TMPDIR ?? stateDirectory,
+					HTTP_PROXY: `http://127.0.0.1:${proxyPort}`,
+					HTTPS_PROXY: `http://127.0.0.1:${proxyPort}`,
 				},
-			);
+				stdio: ["inherit", "inherit", "pipe"],
+			});
 			let stderr = "";
 			child.stderr?.setEncoding("utf8");
 			child.stderr?.on("data", (chunk: string) => {

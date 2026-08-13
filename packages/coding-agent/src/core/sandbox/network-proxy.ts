@@ -32,7 +32,8 @@ export function createSandboxNetworkProxy(
 			const hostname = match[1];
 			const port = Number.parseInt(match[2], 10);
 
-			const isAllowed = options.allowedHosts.includes(hostname) || options.allowedHosts.includes(`${hostname}:${port}`);
+			const isAllowed =
+				options.allowedHosts.includes(hostname) || options.allowedHosts.includes(`${hostname}:${port}`);
 			if (!isAllowed) {
 				clientSocket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
 				clientSocket.destroy();
