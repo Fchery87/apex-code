@@ -1,0 +1,156 @@
+name: macOS sandbox-exec spike
+
+# Manual-only evidence gathering for the 2b.5 design spike (see
+# docs/specs/2026-08-12-os-sandbox.md, fourth amendment). Not part of the product
+# test suite and not run on push/PR: several steps are *expected* to fail as part
+# of the probe (that failure is the evidence), so this must never gate a build.
+# Throwaway: delete this workflow once its output has been folded into the spec.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Probe sandbox-exec on macos-latest
+    runs-on: macos-latest
+    steps:
+      - name: Environment
+        run: |
+          sw_vers
+          uname -a
+          which sandbox-exec
+          sandbox-exec 2>&1 | head -5 || true
+
+      - name: "Probe 0 — positive control: (allow default) must work"
+        run: |
+          set +e
+          sandbox-exec -p '(version 1)(allow default)' /bin/echo "POSITIVE_CONTROL_OK"
+          echo "exit: $?"
+
+      - name: "Probe 1 — negative baseline: bare (deny default) against a trivial command"
+        run: |
+          set +e
+          sandbox-exec -p '(version 1)(deny default)' /bin/echo "SHOULD_NOT_PRINT"
+          echo "exit: $?"
+
+      - name: "Probe 2 — filesystem candidate: bsd.sb baseline + deny file-write* + allow subpath(WORKSPACE)"
+        run: |
+          set +e
+          WORKSPACE="$RUNNER_TEMP/workspace"
+          OUTSIDE="$RUNNER_TEMP/outside"
+          mkdir -p "$WORKSPACE" "$OUTSIDE"
+          cat > "$RUNNER_TEMP/fs-candidate.sb" <<'EOF'
+          (version 1)
+          (import "bsd.sb")
+          (deny file-write*)
+          (allow file-write* (subpath (param "WORKSPACE")))
+          EOF
+
+          echo "--- write inside workspace (expect success) ---"
+          sandbox-exec -f "$RUNNER_TEMP/fs-candidate.sb" -D WORKSPACE="$WORKSPACE" \
+            /bin/sh -c "echo inside > '$WORKSPACE/inside.txt' && echo WRITE_INSIDE_OK"
+          echo "exit: $?"
+          cat "$WORKSPACE/inside.txt" 2>&1 || echo "(inside.txt missing)"
+
+          echo "--- write outside workspace (expect failure) ---"
+          sandbox-exec -f "$RUNNER_TEMP/fs-candidate.sb" -D WORKSPACE="$WORKSPACE" \
+            /bin/sh -c "echo outside > '$OUTSIDE/outside.txt' && echo WRITE_OUTSIDE_OK"
+          echo "exit: $?"
+          cat "$OUTSIDE/outside.txt" 2>&1 || echo "(outside.txt missing, expected)"
+
+      - name: "Probe 3 — network candidate: deny network* + allow network-outbound to one pinned localhost port"
+        run: |
+          set +e
+          cat > "$RUNNER_TEMP/listener.js" <<'EOF'
+          const net = require("node:net");
+          const port = Number(process.argv[2]);
+          const server = net.createServer((c) => c.end("hello\n"));
+          server.listen(port, "127.0.0.1", () => console.log("LISTENING:" + port));
+          EOF
+          cat > "$RUNNER_TEMP/probe-connect.js" <<'EOF'
+          const net = require("node:net");
+          const port = Number(process.argv[2]);
+          const host = process.argv[3] || "127.0.0.1";
+          const c = net.connect(port, host);
+          const t = setTimeout(() => { console.log("RESULT:TIMEOUT"); process.exit(1); }, 3000);
+          c.on("connect", () => { clearTimeout(t); console.log("RESULT:CONNECTED"); c.end(); process.exit(0); });
+          c.on("error", (e) => { clearTimeout(t); console.log("RESULT:ERROR:" + e.code); process.exit(1); });
+          EOF
+
+          ALLOWED_PORT=18881
+          OTHER_PORT=18882
+          node "$RUNNER_TEMP/listener.js" "$ALLOWED_PORT" & ALLOWED_PID=$!
+          node "$RUNNER_TEMP/listener.js" "$OTHER_PORT" & OTHER_PID=$!
+          sleep 1
+
+          cat > "$RUNNER_TEMP/net-candidate.sb" <<'EOF'
+          (version 1)
+          (import "bsd.sb")
+          (deny network*)
+          (allow network-outbound (remote ip (param "ALLOWED_ADDR")))
+          EOF
+
+          echo "--- connect to the allowed pinned port (expect CONNECTED) ---"
+          sandbox-exec -f "$RUNNER_TEMP/net-candidate.sb" -D ALLOWED_ADDR="localhost:$ALLOWED_PORT" \
+            node "$RUNNER_TEMP/probe-connect.js" "$ALLOWED_PORT"
+          echo "exit: $?"
+
+          echo "--- connect to a DIFFERENT local port not in the allow rule (expect ERROR, tests whether pinning actually narrows exposure) ---"
+          sandbox-exec -f "$RUNNER_TEMP/net-candidate.sb" -D ALLOWED_ADDR="localhost:$ALLOWED_PORT" \
+            node "$RUNNER_TEMP/probe-connect.js" "$OTHER_PORT"
+          echo "exit: $?"
+
+          echo "--- connect to an external host on 443 (expect ERROR) ---"
+          sandbox-exec -f "$RUNNER_TEMP/net-candidate.sb" -D ALLOWED_ADDR="localhost:$ALLOWED_PORT" \
+            node "$RUNNER_TEMP/probe-connect.js" 443 example.com
+          echo "exit: $?"
+
+          kill "$ALLOWED_PID" "$OTHER_PID" 2>/dev/null || true
+
+      - name: "Probe 4 — open question: does deny network* also block AF_UNIX (filesystem-scoped), unlocking a Linux-style UDS relay?"
+        run: |
+          set +e
+          WORKSPACE="$RUNNER_TEMP/uds-workspace"
+          mkdir -p "$WORKSPACE"
+          SOCKET_PATH="$WORKSPACE/proxy.sock"
+
+          cat > "$RUNNER_TEMP/uds-listener.js" <<'EOF'
+          const net = require("node:net");
+          const fs = require("node:fs");
+          const path = process.argv[2];
+          try { fs.unlinkSync(path); } catch {}
+          const server = net.createServer((c) => c.end("uds-hello\n"));
+          server.listen(path, () => console.log("UDS_LISTENING:" + path));
+          EOF
+          cat > "$RUNNER_TEMP/uds-probe-connect.js" <<'EOF'
+          const net = require("node:net");
+          const path = process.argv[2];
+          const c = net.connect(path);
+          const t = setTimeout(() => { console.log("RESULT:TIMEOUT"); process.exit(1); }, 3000);
+          c.on("connect", () => { clearTimeout(t); console.log("RESULT:CONNECTED"); c.end(); process.exit(0); });
+          c.on("error", (e) => { clearTimeout(t); console.log("RESULT:ERROR:" + e.code); process.exit(1); });
+          EOF
+
+          node "$RUNNER_TEMP/uds-listener.js" "$SOCKET_PATH" & UDS_PID=$!
+          sleep 1
+
+          cat > "$RUNNER_TEMP/uds-candidate.sb" <<'EOF'
+          (version 1)
+          (import "bsd.sb")
+          (deny network*)
+          (allow file-read* file-write* (subpath (param "WORKSPACE")))
+          EOF
+
+          echo "--- connect to a UDS under the allowed workspace, with NO network-outbound allow at all ---"
+          sandbox-exec -f "$RUNNER_TEMP/uds-candidate.sb" -D WORKSPACE="$WORKSPACE" \
+            node "$RUNNER_TEMP/uds-probe-connect.js" "$SOCKET_PATH"
+          echo "exit: $?"
+
+          kill "$UDS_PID" 2>/dev/null || true
+
+      - name: "Best-effort: unified log entries for Sandbox denials during this run"
+        if: always()
+        run: |
+          log show --style syslog --predicate 'sender == "Sandbox" or subsystem == "com.apple.sandbox"' --last 5m 2>&1 | tail -100 || true
