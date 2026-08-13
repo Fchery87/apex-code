@@ -58,14 +58,22 @@ replays a corpus fixture fully offline, and `metrics.ts:26` emits `contextTokens
 `systemPromptTokens`, and `cacheHitRate`. Measured against `fixtures/corpus/` on the
 current tree (`replayCorpus()`, 2026-08-13):
 
-| Fixture | Turns | Turn-20 context tokens |
-| --- | ---: | ---: |
-| `long-multi-turn.jsonl` | 22 | **1,117** |
-| `compacted-session.jsonl` | 22 | **752** |
-| all six others | 1–3 | n/a (fewer than 20 turns) |
+| Fixture | Turns | Turn-20 context tokens | `systemPromptTokens` | `cacheHitRate` |
+| --- | ---: | ---: | ---: | ---: |
+| `long-multi-turn.jsonl` | 22 | **1,117** | 707 | 0.0000 |
+| `compacted-session.jsonl` | 22 | **752** | 707 | 0.0000 |
+| `long-tool-heavy.jsonl` (added 2026-08-13) | 22 | **15,272** | 960 | **0.8569** |
+| all six others | 1–3 | n/a (fewer than 20 turns) | 707 | 0.0000 |
 
-Median turn-20 = **934.5**. `systemPromptTokens` = **707**, identical across all eight
-fixtures. `cacheHitRate` = **0.0000**, also across all eight.
+Median turn-20 = **1,117**. Before `long-tool-heavy` was added it was 934.5 — a median
+over three values is the middle one, not a mean of two.
+
+`long-tool-heavy.jsonl` was authored as part of grounding this spec, because the two
+pre-existing turn-20 fixtures contain **zero tool calls and zero tool results** and
+every fixture recorded `cacheRead: 0`/`cacheWrite: 0`. It carries 10 interleaved
+`read`/`grep` calls and realistic cache usage; of its 15,272 turn-20 tokens, ~14,300
+are evictable tool output. Its `systemPromptTokens` is 960 rather than 707 because it
+exercises `grep` beyond the four default tools.
 
 **`ContextSpec` is declared but unconsumed.** All seven tools answer both axes
 (`contract.ts:96`, defaults at `contract.ts:136`):
@@ -106,37 +114,52 @@ un-compacted and 1,380 compacted)." The real measured values are 1,117 and 752, 
 
 This is not cosmetic. ≥40% off the erroneous 1,563 is a target of **≤938 tokens**. The
 corpus already sits at **935** with no work done at all, so the gate as written passes
-on day one and measures nothing. Off the true 935 baseline the target is **≤561**,
+on day one and measures nothing. Off the then-true 935 baseline the target is **≤561**
+(itself since superseded — see Problem 2 and Verification, where adding a fixture the
+gate was missing moves the baseline to 1,117 and the target to ≤670),
 which requires real reduction. A phase whose exit criterion is satisfied before the
 phase begins cannot be checked by someone other than the author, which is exactly what
 ground rule 3 demands.
 
-**2. The cache-hit-rate signal the phase's own Risks section requires cannot be
-produced by the corpus.** The Risks entry says "Measure cache hit rate as part of the
-gate, not after," and `contracts.md` § 2 says the ordering decision "must be made
-against that number, not in the abstract." But every recorded response in
-`fixtures/corpus/` carries `cacheRead: 0` and `cacheWrite: 0` (44 of each in
-`long-multi-turn.jsonl`), so `buildReplayMetrics` computes `cacheHitRate = 0.0000` for
-every fixture. The number the design is supposed to be decided against is structurally
-absent. Designing eviction "against cache hit rate" using this corpus would be
-measuring nothing and reporting a decision.
+**2. The gate was structurally blind to the phase's headline technique — now fixed.**
+Both pre-existing turn-20 fixtures contain zero tool calls and zero tool results
+(verified by JSON parse, not grep). Tool-result eviction, which the research doc calls
+"the highest-value context technique in the review," had **nothing to evict** in either
+and could not move the gate metric by one token. The corroborating measurement: a
+single tool result in `heavy-tool-output.jsonl` costs >8,000 tokens, against 410 tokens
+for an entire 22-turn tool-free conversation — tool results are roughly 18× the cost of
+everything else, and the gate contained none of them. Closed by adding
+`long-tool-heavy.jsonl` (commit `280616593`).
 
-**3. The scope's eviction whitelist contradicts a tool's own contract.** The roadmap
+**3. The cache-hit-rate signal the Risks section requires could not be produced — now
+fixed.** The Risks entry says "Measure cache hit rate as part of the gate, not after,"
+and `contracts.md` § 2 says the ordering decision "must be made against that number,
+not in the abstract." Every recorded response carried `cacheRead: 0`/`cacheWrite: 0`
+(44 of each in `long-multi-turn.jsonl`), so `cacheHitRate` was 0.0000 everywhere.
+`long-tool-heavy.jsonl` now reports **0.8569**, the corpus's first real value.
+
+**4. The scope's eviction whitelist contradicts a tool's own contract.** The roadmap
 lists the whitelist as "(read, shell, grep, glob, web search, web fetch, edit, write)"
 — shell included. `bash.ts` declares `resultRecoverable: false`, and per
 `contracts.md` § 1.3 "**ONLY** recoverable results may be evicted." Following the
 roadmap's whitelist would evict `bash` results in defiance of the contract, which is
 precisely the second-independent-classification failure ADR 0010 exists to prevent.
 
-**4. Nothing reads `ContextSpec`.** Seven tools answer two questions each and no code
+**5. Nothing reads `ContextSpec`.** Seven tools answer two questions each and no code
 consults the answers, so the declarations are currently unverified assertions.
 
 ## Goals
 
-- [ ] Median turn-20 context tokens across the two turn-20-capable corpus fixtures is
-      **≤561** (≥40% below the true measured baseline of 935), reported by
-      `replayCorpus()`.
-- [ ] `systemPromptTokens` is **below 707** with at least one tool set to
+- [ ] Median turn-20 context tokens across the three turn-20-capable corpus fixtures is
+      **≤670** (≥40% below the measured baseline of 1,117), reported by `replayCorpus()`.
+- [ ] **`long-tool-heavy.jsonl`'s turn-20 drops ≥80% on its own** (15,272 → ≤3,054).
+      This is a separate, per-fixture assertion because the median under-credits
+      eviction: the heavy fixture is the outlier, so a median can improve without
+      eviction doing anything. Deferred schemas alone cannot reach ≥80% here — they can
+      cut at most the 960-token static prefix, ~6% of this fixture — so only working
+      eviction passes it.
+- [ ] `systemPromptTokens` is **below 707** on the six-and-two default-tool fixtures and
+      **below 960** on `long-tool-heavy`, with at least one tool set to
       `deferSchema: true`, reported by the same harness.
 - [ ] **No regression in task completion**: `turnsCompleted` and the response/tool-result
       equality assertions in `replay()` (`runner.ts:329`) hold unchanged for every
@@ -148,18 +171,22 @@ consults the answers, so the declarations are currently unverified assertions.
       **open** to **settled**.
 - [ ] `docs/roadmap.md` § Phase 3's baseline figures are corrected to the measured
       values, and ground rule 3 and the Phase 3 criterion agree.
-- [ ] The corpus gains a fixture that carries nonzero `cacheRead`/`cacheWrite`, so
-      `cacheHitRate` is a real signal rather than a constant zero.
+- [x] The corpus gains a fixture that carries nonzero `cacheRead`/`cacheWrite`, so
+      `cacheHitRate` is a real signal rather than a constant zero. **Done —
+      `long-tool-heavy.jsonl`, `280616593`, `cacheHitRate` 0.8569.**
 - [ ] Reactive compaction on provider `prompt_too_long` is distinct from, and testable
       independently of, threshold-based auto-compaction.
 
 ## Non-goals
 
-- [ ] **Not re-recording `fixtures/corpus/` to change the baseline.** The corpus is the
-      only artifact that makes this phase's number checkable by someone else; adjusting
-      it in the same phase that is measured against it destroys the measurement. The one
-      permitted change is *adding* a fixture for cache metrics (Goal 7), which does not
-      alter the two turn-20 fixtures the gate reads.
+- [ ] **Not re-recording the existing `fixtures/corpus/` entries to change the
+      baseline.** The corpus is the only artifact that makes this phase's number
+      checkable by someone else; adjusting it in the same phase that is measured against
+      it destroys the measurement. *Adding* `long-tool-heavy.jsonl` is a deliberate
+      exception, taken before implementation and recorded in the corpus README: without
+      it the gate cannot observe eviction at all. The two pre-existing turn-20 fixtures
+      are byte-untouched, and their individual numbers (1,117 and 752) are unchanged —
+      only the median moved, and visibly.
 - [ ] **Not rewriting Pi's compaction.** It is upstream code that works, and ADR 0003
       prices wide refactors of forked files in merge cost. Eviction is added as a stage
       around compaction, not inside it.
@@ -246,7 +273,7 @@ is what holds the invariant honest.
 
 | Item | Type | Disposition |
 | --- | --- | --- |
-| `docs/roadmap.md` Phase 3 baseline figures (1,563 / 1,745 / 1,380) | doc | **Removed** — replaced with the measured 935 / 1,117 / 752, matching ground rule 3 |
+| `docs/roadmap.md` Phase 3 baseline figures (1,563 / 1,745 / 1,380) | doc | **Removed** — replaced with the measured median **1,117** over three fixtures (752 / 1,117 / 15,272); ground rule 3's 935 is superseded by the same measurement and updated with it |
 | `docs/architecture/contracts.md` § 2 "open" status and its four open questions | doc | **Superseded** by the settled ordering recorded in this spec |
 | Roadmap scope phrase "whitelist of replayable tools (read, shell, …)" | behavior | **Superseded** by `ContextSpec.resultRecoverable` as the single predicate; `bash` is not evicted, per its own contract |
 
@@ -269,8 +296,8 @@ required, reviewed contract field rather than an easily-stale name whitelist.
 
 **Deferred schemas cause a model to call a tool with malformed arguments** because it
 never saw the parameter schema. Signal: `turnsCompleted` falling, and tool-result
-equality failing, in the replay gate. This is why the ≤561 token goal alone is not the
-gate — Goal 3 is.
+equality failing, in the replay gate. This is why the ≤670 token goal alone is not the
+gate — the no-regression goal is.
 
 **Reactive compaction masking a real overflow bug.** If `prompt_too_long` handling
 silently retries, a genuine context-accounting error looks like a slow session rather
@@ -283,10 +310,21 @@ Against `fixtures/corpus/` via `replayCorpus()`, which is offline and determinis
 
 | Metric | Baseline (measured 2026-08-13) | Threshold |
 | --- | ---: | ---: |
-| Median turn-20 context tokens | 935 (1,117 / 752) | **≤561** (≥40% reduction) |
-| `systemPromptTokens` | 707 | **<707**, with ≥1 tool deferred |
+| Median turn-20 context tokens | **1,117** (752 / 1,117 / 15,272) | **≤670** (≥40% reduction) |
+| `long-tool-heavy` turn-20, on its own | 15,272 | **≤3,054** (≥80%) — the eviction-only assertion |
+| `systemPromptTokens` | 707 (960 on `long-tool-heavy`) | **below both**, with ≥1 tool deferred |
 | `turnsCompleted` + replay equality | all fixtures pass | **unchanged** |
-| `cacheHitRate` | 0.0000 (unmeasurable) | **>0 on the new fixture**, compared pre/post eviction |
+| `cacheHitRate` on `long-tool-heavy` | 0.8569 | **compared pre/post eviction**; a fall indicates prefix invalidation |
+
+**Why ≤670 is a real gate and not an easier one.** Adding `long-tool-heavy` raised the
+median from 935 to 1,117, which raises the absolute target from 561 to 670. That is a
+weaker-looking number attached to a stronger gate: the old 935 baseline was computed
+over two fixtures containing no tool results, where the ≤561 target was unreachable by
+eviction under any implementation and demanded a 53% cut of the static prefix from
+deferred schemas alone. Passing ≤670 now requires at least two of three fixtures under
+the threshold, and the achievable pair is `compacted-session` (needs a modest static
+cut) plus `long-tool-heavy` (needs real eviction) — so the gate can only be met by
+**both** techniques working, which is what the phase is for.
 
 Named tests:
 
