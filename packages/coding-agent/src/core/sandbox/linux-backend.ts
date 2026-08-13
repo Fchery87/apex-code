@@ -47,7 +47,6 @@ function classifySandboxFailure(stderr: string): "filesystem" | "network" | "unk
  * removes all direct network interfaces for the child and every descendant.
  */
 export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions): SandboxBackend {
-	console.error("BACKEND ARGS:", Array.from(arguments));
 	const platform = options?.platform ?? process.platform;
 	if (platform !== "linux") {
 		return {
@@ -121,7 +120,9 @@ server.on("error", (err) => {
 `.trim(),
 			);
 
-			const readOnlyMounts = [process.execPath, launch.command, ...(launch.readOnlyPaths ?? [])].flatMap(readOnlyMountArguments);
+			const readOnlyMounts = [process.execPath, launch.command, ...(launch.readOnlyPaths ?? [])].flatMap(
+				readOnlyMountArguments,
+			);
 			const child = spawn(
 				"bwrap",
 				[
@@ -181,7 +182,6 @@ server.on("error", (err) => {
 							: stderr.trim(),
 					timestamp: new Date(),
 				});
-				console.error("BACKEND ADDING VIOLATION, TOTAL AFTER:", violationStore?.totalCount);
 			}
 			return exitCode;
 		},

@@ -1,3 +1,4 @@
+import { existsSync, unlinkSync } from "node:fs";
 import * as http from "node:http";
 import * as net from "node:net";
 import type { SandboxViolationStore } from "./violations.ts";
@@ -13,7 +14,7 @@ export function createSandboxNetworkProxy(options: {
 	violationStore?: SandboxViolationStore;
 }): Promise<SandboxNetworkProxy> {
 	return new Promise((resolve, reject) => {
-		const server = http.createServer((req, res) => {
+		const server = http.createServer((_req, res) => {
 			res.writeHead(405, { "Content-Type": "text/plain" });
 			res.end("Method Not Allowed\n");
 		});
@@ -33,8 +34,8 @@ export function createSandboxNetworkProxy(options: {
 				clientSocket.destroy();
 				options.violationStore?.add({
 					kind: "network",
-					command: "proxy",
-					detail: `Network is unreachable: connection to ${hostname} refused by allowlist policy.`,
+					command: `CONNECT ${hostname}:${port}`,
+					detail: `Host ${hostname} refused by allowlist policy.`,
 					timestamp: new Date(),
 				});
 				return;
@@ -60,6 +61,13 @@ export function createSandboxNetworkProxy(options: {
 		});
 
 		server.on("error", reject);
+
+		// A prior sandboxed launch that never called close() (a crash, a SIGKILL)
+		// leaves a stale socket file behind; Node's listen() refuses to bind over
+		// one even though nothing is listening on it.
+		if (existsSync(options.socketPath)) {
+			unlinkSync(options.socketPath);
+		}
 
 		server.listen(options.socketPath, () => {
 			server.off("error", reject);
