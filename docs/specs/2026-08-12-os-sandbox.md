@@ -240,3 +240,133 @@ proxy already recorded a more specific one for the same launch, and
 `allowedHosts` entries may now be `hostname:port` to pin an exact port (a bare
 hostname still matches any port, unchanged). See task 2b.4e for the full record.
 The resolved-IP-at-connect-time check remains open, not settled by this amendment.
+
+### Amendment (2026-08-12, fourth): macOS feasibility spike — task 2b.5
+
+**This is desk research, not a prototype, and that distinction matters more here
+than it did for the Linux spike.** The Linux amendment above records commands
+actually run and their actual output. This one does not — this development
+environment has no macOS host, so nothing below was executed. Every claim is
+sourced from Apple's own (unofficial — Apple ships no first-party docs for this
+mechanism) profile grammar and from other credible, currently-shipping
+implementations, cited inline. Treat this as a design proposal to validate on real
+macOS hardware before task 2b.5 opens an implementation task, exactly as the Linux
+spike was validated by prototype before task 2b.4d did.
+
+**Options considered:**
+
+1. **App Sandbox (`com.apple.security.app-sandbox` entitlement).** Rejected outright,
+   not just deprioritized: it requires code signing and is designed for GUI apps
+   distributed through the Mac App Store. An npm-distributed CLI binary has no
+   Xcode project and no App Store distribution to entitle against.
+2. **`sandbox_init_with_parameters` (native C API).** The API real sandboxed browsers
+   use — Chrome, Firefox, and Nix all call it — but Apple has never published a
+   header for it, and a 2026-05 issue on Apple's own `apple/containerization` repo
+   asking for a supported non-App-Store process-sandboxing API remains open with no
+   Apple response
+   ([apple/containerization#737](https://github.com/apple/containerization/issues/737)).
+   Consuming it would mean an undocumented native binding from Node with no upgrade
+   guarantee across macOS versions. Rejected for now on engineering-cost and
+   stability grounds, not ruled out permanently.
+3. **`sandbox-exec` (recommended).** A thin CLI wrapper around the same underlying
+   Seatbelt mechanism as option 2, deprecated by Apple alongside it but still
+   functional on current macOS
+   ([openai/codex#215](https://github.com/openai/codex/issues/215) and multiple 2025
+   sources confirm it still works despite the deprecation warning). Chosen because
+   it shells out exactly like `bwrap` already does — no native binding, no FFI, same
+   spawn/wait/classify shape `linux-backend.ts` already has — and because Anthropic's
+   own shipped `sandbox-runtime`
+   ([anthropic-experimental/sandbox-runtime](https://github.com/anthropic-experimental/sandbox-runtime))
+   uses exactly this mechanism in production today, which is the strongest
+   available evidence that the deprecated primitive is still a viable foundation.
+4. **macOS 26 "containers."** A new, unproven mechanism with no adoption evidence
+   found. Noted as a possible future replacement, not the near-term path — the
+   same reasoning that rejected option 2 (undocumented, unstable-across-versions
+   surface) applies more strongly to something this new.
+
+**Recommended design**, matching the existing `SandboxBackend` interface
+(`core/sandbox/supervisor.ts`) so no other module changes shape — a new
+`macos-backend.ts` sits alongside `linux-backend.ts` as a second platform adapter:
+
+- **Filesystem.** Base the generated `.sb` profile on `(deny default)`, not the
+  read-allow-by-default pattern some other implementations use for convenience.
+  `(deny default)` denies reads and writes alike unless explicitly allowed —
+  matching Linux's `--ro-bind / /` posture and ADR 0005's existing commitment that
+  host-home and credential directories are denied unless explicitly supplied, not
+  allowed-then-denied. Explicit `(allow file-read* file-write* (subpath
+  (param "WORKSPACE")))` for the workspace, plus explicit read-only allows for the
+  runtime/toolchain paths `linux-backend.ts`'s `readOnlyMountArguments()` already
+  computes today (same ancestor-path logic, no macOS-specific change needed there).
+- **Network.** `(deny network*)` base, then `(allow network-outbound (remote ip
+  "localhost:<port>"))` scoped to the exact fixed port the existing
+  `core/sandbox/network-proxy.ts` allowlist proxy binds — not the wildcard
+  `localhost:*` pattern found in some published profiles (including, per available
+  documentation, Anthropic's own and other agent-sandbox examples), to minimize (see
+  below — not eliminate) the exposure that wildcard implies. `network-proxy.ts`
+  gains a TCP-listen mode (`127.0.0.1:<port>`) alongside its existing UDS mode; on
+  macOS no in-child relay script is needed at all — the Seatbelt profile permits the
+  proxy's port directly, simpler than Linux's UDS-plus-relay design, because macOS
+  can allow a specific network destination without an all-or-nothing interface
+  decision the way an unshared network namespace forces.
+- **Apple Events / Launch Services.** Explicitly deny these in the profile
+  (`(deny appleevent-send)` and the Launch Services equivalent). Unlike Linux's
+  `--unshare-pid`, Seatbelt's default profile does not automatically block a
+  sandboxed process from asking the system to launch an arbitrary application —
+  several other implementations found this necessary to close, not optional
+  hardening.
+- **Reused unchanged:** `core/sandbox/violations.ts` (already platform-agnostic) and
+  the `SandboxBackend` contract itself. The new backend's shape mirrors
+  `linux-backend.ts`: generate the profile per launch, `spawn("sandbox-exec", ["-f",
+  profilePath, "-D", `WORKSPACE=${workspace}`, "-D", `PROXY_PORT=${port}`, "--",
+  command, ...args])`, same `waitForExit`/stderr-classification pattern.
+
+**The load-bearing honest finding, and the reason this cannot be waved through as
+"the same design, different flag":** macOS has no primitive equivalent to Linux's
+network namespace. The Linux boundary's strongest claim — proven by prototype in
+the first amendment above — is that a direct-connect attempt from inside the child
+has *no route to fall back on*, confirmed by a real `Network is unreachable` errno,
+regardless of whether the calling process cooperates with `HTTPS_PROXY`. `localhost`
+on macOS is not a private, per-process loopback the way it is inside a Linux network
+namespace — it is the one shared host loopback that every other process on the same
+machine can also bind or connect to. Pinning the Seatbelt allow rule to the proxy's
+exact port (rather than the wildcard `localhost:*` other implementations use)
+narrows the child to reaching *only* that port, but it cannot make that port private
+to the child the way a network namespace makes loopback private to the sandboxed
+process tree. If anything else on the host is listening on that exact port —
+unlikely with a randomly chosen ephemeral port, not impossible — the sandboxed child
+could reach it, a category of exposure the Linux backend does not have at all. This
+must be stated plainly in ADR 0005 when a macOS amendment is written, not glossed
+over as an equivalent guarantee with a different implementation.
+
+**Deprecation risk, compared honestly against the Linux equivalent.** Both backends
+depend on a host tool outside this codebase's control — `bwrap` for Linux,
+`sandbox-exec`/Seatbelt for macOS — and ADR 0005 already accepts that class of risk
+for Linux. The macOS version is materially worse: `bwrap` is an actively maintained,
+non-deprecated open-source project, while `sandbox-exec` and `sandbox_init` have
+carried Apple's deprecation warning for years with no published non-App-Store
+replacement, and the open upstream issue cited above shows the situation is
+unresolved industry-wide, not just unresolved by this repo's research. A macOS
+backend built on it should be documented as riding a mechanism Apple could remove
+with less notice than an open-source dependency would.
+
+**Not resolved by this spike, left for real hardware:** the exact Seatbelt grammar
+above is assembled from multiple secondary sources, not one authoritative reference,
+and small syntax details (the precise `network-outbound`/`remote ip` clause,
+`sandbox-exec`'s exact exit code and stderr text on a filesystem or network refusal,
+whether `-D` parameter substitution behaves as documented across the currently
+shipping macOS versions) need to be confirmed by running real commands, the same way
+the Linux design was confirmed before task 2b.4d opened. Also unexplored: whether a
+Linux-style Unix-domain-socket relay (narrower than any `localhost` port allow,
+since a UDS path is filesystem-scoped like the workspace mount rather than
+network-scoped) is possible on macOS instead of the localhost-port model — no
+source found during this research addressed this either way, and if it works it
+would close the shared-loopback exposure above entirely. This repo already has
+macOS CI access (Phase 0's `macos-latest` runner passed Build/Check), which is the
+right place to run that prototype before opening an implementation task, mirroring
+how the Linux prototype gated task 2b.4d.
+
+Sources consulted: [anthropic-experimental/sandbox-runtime](https://github.com/anthropic-experimental/sandbox-runtime),
+[apple/containerization#737](https://github.com/apple/containerization/issues/737),
+[openai/codex#215](https://github.com/openai/codex/issues/215),
+[Sandboxing subprocesses in Python on macOS](https://zameermanji.com/blog/2025/4/1/sandboxing-subprocesses-in-python-on-macos/),
+[Claude Code Sandboxing: How /sandbox Works](https://www.claudecodecamp.com/p/claude-code-sandboxing-how-sandbox-works-and-what-it-doesn-t-protect).

@@ -214,3 +214,19 @@ a design question (what should be pinned — the IP at policy-authoring time, or
 IP at connect time re-checked against something?) rather than a small fix like the
 two above, and no concrete threat scenario for this repo's usage has required it
 yet.
+
+**2b.5 design spike (no code, no task-table row — same treatment as the network
+proxy's own feasibility spike above).** A macOS backend design (`sandbox-exec`/
+Seatbelt, mirroring the `SandboxBackend` shape, network allowlisting via a
+localhost-port Seatbelt rule feeding the existing `network-proxy.ts`) is recorded
+in the spec's fourth amendment and ADR 0005's second amendment. Unlike the network
+proxy spike, this one is desk research only — this environment has no macOS host,
+so nothing was prototyped, only sourced from Apple's own profile grammar and from
+other credible shipping implementations (notably Anthropic's own `sandbox-runtime`).
+The headline finding: macOS has no network-namespace primitive, so a macOS backend's
+network guarantee is real but categorically weaker than Linux's — the child would
+share the host's loopback with every other local process, narrowed only to one
+allowed port, not isolated into a private namespace the way `--unshare-net` gives
+Linux. This must be validated on real macOS hardware (this repo already has CI
+access — the `macos-latest` runner from Phase 0) before an implementation task
+opens, the same gate the Linux design passed via prototype before task 2b.4d.

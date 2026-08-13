@@ -69,3 +69,28 @@ ship deny-all network first, and it does not itself authorize implementation —
 DNS/CONNECT handling, the allowlist config surface, violation-store wiring, and
 integration test coverage remain open and are tracked in the Phase 2b spec and
 plan, not settled by this ADR.
+
+## Amendment (2026-08-12, second): macOS design spike — not empirically validated
+
+A design for a macOS backend (Seatbelt via `sandbox-exec`, mirroring the Linux
+`SandboxBackend` shape) is recorded in the 2026-08-12 fourth spec amendment. Unlike
+the Linux proxy-bridge amendment above, **this one is desk research, not a
+prototype** — this development environment has no macOS host, so nothing was run.
+
+One finding from that research changes what this ADR can claim if a macOS backend
+ships: **macOS has no primitive equivalent to Linux's network namespace.** The
+Linux boundary's "no route to fall back on" guarantee rests on the child's network
+namespace having zero interfaces beyond a loopback private to that namespace.
+macOS's `localhost` is the shared host loopback every process on the machine can
+already reach; a Seatbelt rule permitting the sandbox proxy's port narrows the
+child to that port but cannot make the port private to the child. A macOS backend
+would therefore carry a real, categorically weaker network guarantee than the
+Linux backend does, not an equivalent one implemented with different syntax. This
+ADR's boundary-guarantees language is Linux-specific until a macOS amendment states
+its own, separately, once the design is validated on real hardware.
+
+macOS remains gated on native integration proof, per this ADR's original text and
+the roadmap. This amendment does not lower that bar — it records what the paper
+design would claim and flags where that claim would need to be weaker than
+Linux's, so the eventual native validation is scoped to close a known gap rather
+than discover it.
