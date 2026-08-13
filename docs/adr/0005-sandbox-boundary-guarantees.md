@@ -94,3 +94,22 @@ the roadmap. This amendment does not lower that bar — it records what the pape
 design would claim and flags where that claim would need to be weaker than
 Linux's, so the eventual native validation is scoped to close a known gap rather
 than discover it.
+
+## Amendment (2026-08-13): macOS prototype ran — the gap above is confirmed, not resolved
+
+A real `sandbox-exec` prototype ran on `macos-latest` CI (macOS 26.5.2). See the
+2026-08-12 spec's fifth amendment for the full record. Two results worth stating
+here directly: pinning a Seatbelt network-outbound rule to one exact localhost
+port **does** genuinely exclude a different local port — confirmed by a real
+`EPERM`, not assumed — so the design in the prior amendment is not merely
+theoretical. And the Linux-style Unix-domain-socket relay, which might have closed
+the shared-loopback gap entirely, does **not** work on macOS as tested: Seatbelt's
+`(deny network*)` gates `AF_UNIX` connections too, not just `AF_INET`.
+
+Neither result changes this ADR's core finding: macOS has no primitive equivalent
+to a private, per-process network namespace, so a macOS backend's network
+guarantee remains categorically weaker than Linux's "no route exists at all" —
+port-pinning narrows the shared-loopback exposure, it does not eliminate the
+category. macOS remains gated on native integration proof for an actual
+implementation task; this amendment narrows what that task still needs to prove,
+it does not stand in for it.

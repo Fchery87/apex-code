@@ -230,3 +230,22 @@ allowed port, not isolated into a private namespace the way `--unshare-net` give
 Linux. This must be validated on real macOS hardware (this repo already has CI
 access — the `macos-latest` runner from Phase 0) before an implementation task
 opens, the same gate the Linux design passed via prototype before task 2b.4d.
+
+**2b.5 prototype (2026-08-13, still no task-table row — no production code
+changed).** The design above was run for real on `macos-latest` CI via a
+throwaway, `workflow_dispatch`-only workflow (`macos-sandbox-spike.yml`, deleted
+after this note recorded its output). Full record in the spec's fifth amendment
+and ADR 0005's second amendment. Four runs were needed — the first three each
+surfaced a real wrong assumption in the candidate profiles (`bsd.sb`'s baseline
+doesn't grant `process-exec*`; it doesn't cover a Homebrew-installed runtime's own
+shared-library path; the probe scripts' own directory needs an explicit read
+allow), not CI flakiness. The fourth run answered both open questions the fourth
+amendment left unresolved: pinning a network-outbound rule to one exact localhost
+port genuinely excludes a different local port (confirmed by a real `EPERM`), and
+`(deny network*)` also blocks `AF_UNIX`, so the Linux-style UDS-relay alternative
+does not work on macOS as tested — the localhost-port model is the validated path
+forward. Neither result closes the categorical gap ADR 0005 already recorded:
+macOS still has no private per-process loopback, only a narrower allow rule on the
+shared one. Filesystem denial (`deny file-write*` + workspace allow) validated
+cleanly on the first working run. An implementation task can now start from a
+profile shape that has actually run, not just been assembled from documentation.
