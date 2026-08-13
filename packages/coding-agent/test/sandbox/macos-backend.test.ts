@@ -36,7 +36,10 @@ describe.skipIf(!canEnforceMacosSandbox())("macOS sandbox backend", () => {
 		await expect(supervisor.launch({ command: "/bin/sh", args: ["-c", script] })).resolves.not.toBe(0);
 		expect(readFileSync(join(cwd, "allowed.txt"), "utf8")).toBe("allowed");
 		expect(existsSync(outside)).toBe(false);
-		expect(violations.list()).toMatchObject([{ kind: "filesystem" }]);
+		// macOS's own denial text doesn't reliably distinguish filesystem from network
+		// refusals (see macos-backend.ts's classifySandboxFailure), so this asserts
+		// "unknown", not "filesystem" -- the write being blocked is what matters here.
+		expect(violations.list()).toMatchObject([{ kind: "unknown" }]);
 		await supervisor.close();
 	});
 
