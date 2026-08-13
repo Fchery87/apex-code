@@ -95,10 +95,19 @@ This is upstream behavior, not something Apex Code has changed — the merge cos
 touching it is ADR 0003's concern, which is why this spec adds a stage around it rather
 than rewriting it.
 
-**Overflow handling partly exists.** `agent-session.ts:2032` already reacts to
-`isContextOverflow(assistantMessage, contextWindow)` on the retry path. It is not the
-same thing as the roadmap's "reactive compaction on `prompt_too_long`, distinct from
-threshold-based auto-compaction," but it is the seam that item lands on.
+**Correction (2026-08-13, task 3.4 investigation):** reactive compaction on provider
+`prompt_too_long` already fully exists and is already distinct from the threshold path
+— it is not merely "the seam that item lands on," as this section originally hedged.
+`isContextOverflow()` (`packages/ai/src/utils/overflow.ts`) matches real provider
+overflow errors across ~20 providers; `_checkCompaction` in `agent-session.ts` branches
+on it with its own `reason: "overflow"`, wired independently of the token-count-based
+`"threshold"` branch in the same function, and both are tagged distinctly on the
+`compaction_start`/`compaction_end` events. `git log -S'"overflow"'` traces this to
+upstream Pi (`a38e61909`, pre-fork) — inherited, not something Apex Code built. Existing
+integration coverage (`test/agent-session-auto-compaction-queue.test.ts`) already
+exercised it before this phase. The one genuine gap was a single, independent pin
+proving the two paths are distinct under one assertion; that test now exists
+(`test/context/reactive-compaction.test.ts`). No production code changed for this item.
 
 ## The problem
 
@@ -174,8 +183,10 @@ consults the answers, so the declarations are currently unverified assertions.
 - [x] The corpus gains a fixture that carries nonzero `cacheRead`/`cacheWrite`, so
       `cacheHitRate` is a real signal rather than a constant zero. **Done —
       `long-tool-heavy.jsonl`, `280616593`, `cacheHitRate` 0.8569.**
-- [ ] Reactive compaction on provider `prompt_too_long` is distinct from, and testable
-      independently of, threshold-based auto-compaction.
+- [x] Reactive compaction on provider `prompt_too_long` is distinct from, and testable
+      independently of, threshold-based auto-compaction. **Already existed
+      (inherited from upstream Pi, `a38e61909`) — see the "Current state" correction
+      above. `test/context/reactive-compaction.test.ts` is the new independent pin.**
 
 ## Non-goals
 
@@ -259,7 +270,7 @@ stages measure themselves against.
 | Contract lookup | Read `resultRecoverable` via the existing canonical projection; no second classifier | consumes `buildToolContractSnapshot()` |
 | Deferred schemas | Announce `deferSchema: true` tools by name/description with an empty parameter schema; explicit load path materializes the real one | `core/context/deferred-schemas.ts` (new) |
 | Pipeline wiring | Apply the three stages in the settled order | `core/agent-session.ts` |
-| Reactive compaction | Distinguish provider `prompt_too_long` from the threshold path | `core/agent-session.ts:2032` seam |
+| Reactive compaction | **Already existed** (inherited from upstream Pi, `a38e61909`); added one pinning test proving it is distinct from the threshold path | `test/context/reactive-compaction.test.ts` (new) |
 | Cache fixture | Add one corpus fixture carrying nonzero `cacheRead`/`cacheWrite` | `fixtures/corpus/` |
 | Contract doc | Move § 2 from open to settled, recording the answers above | `docs/architecture/contracts.md` |
 | Roadmap correction | Fix Phase 3's baseline figures to the measured values | `docs/roadmap.md` |
