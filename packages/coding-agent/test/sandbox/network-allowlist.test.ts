@@ -1,8 +1,8 @@
 import { mkdtempSync, rmSync } from "node:fs";
+import * as http from "node:http";
+import type * as net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as http from "node:http";
-import * as net from "node:net";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { launchSandboxedCli } from "../../src/core/sandbox/cli-supervisor.ts";
 import { createLinuxSandboxBackend } from "../../src/core/sandbox/linux-backend.ts";
@@ -22,60 +22,61 @@ function workspace(): string {
 	return directory;
 }
 
+/**
+ * A CONNECT request through the proxy at $HTTP_PROXY, exiting 0 on "200" and 1
+ * otherwise. Uses process.execPath (not a third-party runtime) so it runs on any
+ * host that can run this test suite at all, matching every other sandbox test.
+ */
+function connectProbeScript(port: number): string {
+	return `
+		const net = require("node:net");
+		const url = new URL(process.env.HTTP_PROXY);
+		const c = net.connect(Number(url.port), url.hostname, () => {
+			c.write("CONNECT 127.0.0.1:${port} HTTP/1.1\\r\\nHost: 127.0.0.1:${port}\\r\\n\\r\\n");
+		});
+		c.on("data", (d) => process.exit(d.toString().includes("200") ? 0 : 1));
+		c.on("error", () => process.exit(1));
+		c.on("close", () => process.exit(1));
+	`;
+}
+
 describe.skipIf(!canEnforceLinuxSandbox())("CLI sandbox network allowlist", () => {
 	let testServer: http.Server;
 	let testServerPort: number;
 
 	beforeAll(async () => {
-		testServer = http.createServer((req, res) => {
+		testServer = http.createServer((_req, res) => {
 			res.writeHead(200, { "Content-Type": "text/plain" });
 			res.end("hello from test server");
 		});
-		await new Promise<void>((resolve) => {
+		await new Promise<void>((resolvePromise) => {
 			testServer.listen(0, "127.0.0.1", () => {
 				testServerPort = (testServer.address() as net.AddressInfo).port;
-				resolve();
+				resolvePromise();
 			});
 		});
 	});
 
 	afterAll(async () => {
 		if (testServer) {
-			await new Promise<void>((resolve) => testServer.close(() => resolve()));
+			await new Promise<void>((resolvePromise) => testServer.close(() => resolvePromise()));
 		}
 	});
 
 	it("proves an allowed host succeeds and a blocked one fails closed with a recorded violation", async () => {
 		const cwd = workspace();
 		let stderr = "";
-		const stderrMsgs: string[] = [];
 
-		// Test blocked host (127.0.0.1 not in allowedHosts)
 		const codeBlocked = await launchSandboxedCli({
-			command: "/home/nochaserz/.bun/bin/bun",
-			args: ["-e", `
-				await new Promise((resolve) => {
-					const net = require('net');
-					const url = new URL(process.env.HTTP_PROXY);
-					const c = net.connect(url.port, url.hostname, () => {
-						c.write("CONNECT 127.0.0.1:" + ${testServerPort} + " HTTP/1.1\\r\\nHost: 127.0.0.1:" + ${testServerPort} + "\\r\\n\\r\\n");
-					});
-					c.on('data', d => {
-						if (d.toString().includes('200')) process.exit(0);
-						else process.exit(1);
-					});
-					c.on('error', () => process.exit(1));
-					c.on('close', () => process.exit(1));
-				});
-			`],
+			command: process.execPath,
+			args: ["-e", connectProbeScript(testServerPort)],
 			environment: {},
 			workspace: cwd,
 			allowedHosts: ["example.com"],
 			dependencies: {
 				stderr: {
 					write: (message) => {
-						stderrMsgs.push(message);
-						stderr = stderrMsgs.join("");
+						stderr += message;
 						return true;
 					},
 				},
@@ -84,27 +85,19 @@ describe.skipIf(!canEnforceLinuxSandbox())("CLI sandbox network allowlist", () =
 
 		expect(codeBlocked).not.toBe(0);
 		expect(stderr).toContain("Sandbox violation (network)");
-		expect(stderr).toContain("connection to 127.0.0.1 refused by allowlist policy");
+		expect(stderr).toContain(`CONNECT 127.0.0.1:${testServerPort}`);
+		expect(stderr).toContain("refused by allowlist policy");
+		expect(stderr).not.toContain("Network is unreachable");
+		// The whole sandboxed process also exits non-zero (the probe script exits 1
+		// once refused), so the outer process-exit classifier records its own generic
+		// "unknown" fallback alongside the proxy's precise "network" record. Both are
+		// expected here; only the proxy's record needs to describe the real cause.
+		expect(stderr).toContain("Sandbox violation (unknown)");
 
-		// Test allowed host (127.0.0.1 in allowedHosts)
 		let stderrAllowed = "";
 		const codeAllowed = await launchSandboxedCli({
-			command: "/home/nochaserz/.bun/bin/bun",
-			args: ["-e", `
-				await new Promise((resolve) => {
-					const net = require('net');
-					const url = new URL(process.env.HTTP_PROXY);
-					const c = net.connect(url.port, url.hostname, () => {
-						c.write("CONNECT 127.0.0.1:" + ${testServerPort} + " HTTP/1.1\\r\\nHost: 127.0.0.1:" + ${testServerPort} + "\\r\\n\\r\\n");
-					});
-					c.on('data', d => {
-						if (d.toString().includes('200')) process.exit(0);
-						else process.exit(1);
-					});
-					c.on('error', () => process.exit(1));
-					c.on('close', () => process.exit(1));
-				});
-			`],
+			command: process.execPath,
+			args: ["-e", connectProbeScript(testServerPort)],
 			environment: {},
 			workspace: cwd,
 			allowedHosts: ["127.0.0.1"],
