@@ -12,6 +12,8 @@ import {
 import { Agent, type AgentTool, type AgentToolResult } from "apex-code-agent-core";
 import { AuthStorage } from "../../core/auth-storage.ts";
 import { estimateTokens } from "../../core/compaction/compaction.ts";
+import type { ContractLookup } from "../../core/context/eviction.ts";
+import { installContextPipeline } from "../../core/context/pipeline.ts";
 import { ModelRuntime } from "../../core/model-runtime.ts";
 import {
 	buildSessionContext,
@@ -22,7 +24,7 @@ import {
 	type SessionMessageEntry,
 } from "../../core/session-manager.ts";
 import { buildSystemPrompt } from "../../core/system-prompt.ts";
-import { createAllToolDefinitions } from "../../core/tools/index.ts";
+import { createAllToolDefinitions, type ToolDef } from "../../core/tools/index.ts";
 import { buildReplayMetrics, type ReplayMetrics } from "./metrics.ts";
 import { registerRecordedProvider } from "./recorded-provider.ts";
 
@@ -33,6 +35,63 @@ export interface ReplayResult {
 	responses: AssistantMessage[];
 	toolResults: ToolResultMessage[];
 	metrics: ReplayMetrics;
+	/**
+	 * The final outbound provider request's messages for each user turn — the same
+	 * array `contextTokensByTurn` is measured from, exposed so tests can assert
+	 * directly on context-pipeline effects (eviction markers, deferred schemas)
+	 * without reaching into `RecordedProvider` internals.
+	 */
+	contextsByTurn: Message[][];
+}
+
+/**
+ * Dedicated eviction budget for the replay harness — deliberately **not** derived
+ * from the fixture model's `contextWindow` (`recorded-provider.ts` hardcodes
+ * `1_000_000` for unrelated reasons predating this pipeline, shared by every
+ * fixture in the corpus, and is not to be changed here). Feeding that real
+ * `contextWindow` through production's `evictionBudget` formula
+ * (`../../core/context/pipeline.ts`) would yield a budget of roughly 490,000 tokens
+ * — orders of magnitude above anything in this corpus, so eviction would never
+ * observably fire and the gate it is meant to measure would stay blind, which is
+ * exactly the gap this task closes.
+ *
+ * `1_000` was chosen empirically — measured directly against `replayCorpus()`, not
+ * estimated — against three constraints that all have to hold simultaneously:
+ *
+ *  - `tool-error-recovery.jsonl`'s single turn carries its entire ~759 tokens
+ *    (mostly the static system prompt/tool-schema prefix) under budget, so its
+ *    recorded `contextTokensByTurn: [759]` (`test/replay-runner.test.ts`) is
+ *    unaffected — confirmed unchanged at this budget.
+ *  - `heavy-tool-output.jsonl` carries a single ~8,400-token recoverable `read`
+ *    result — comfortably over budget, so it evicts, which is the fixture's
+ *    documented purpose ("Large deterministic result for eviction measurements",
+ *    `fixtures/corpus/README.md`). Measured post-eviction turn: 748 tokens.
+ *  - `long-tool-heavy.jsonl` accumulates roughly 14,300 evictable tokens by turn 20
+ *    across ten interleaved `read`/`grep` results. `1_000` was verified against
+ *    `REPLAY_EVICTION_BUDGET: 0` (the theoretical floor — evict every eligible
+ *    result unconditionally) and produces the *same* turn-20 result, 1,769 tokens
+ *    — an 88.4% drop from the pre-pipeline baseline of 15,272 — confirming `1_000`
+ *    already reaches that floor rather than under-evicting. A first pass at
+ *    `3_000` measured 3,195 (79.1%, just short of the phase's 80% per-fixture
+ *    goal); `1_000` was chosen after confirming the floor is actually lower.
+ *
+ * This constant governs replay measurement only; it has no effect on production,
+ * which always calls `evictionBudget` with the real model's `contextWindow`.
+ */
+export const REPLAY_EVICTION_BUDGET = 1_000;
+
+/**
+ * Builds a `ContractLookup` from the real production tool definitions — a second,
+ * independent call to `createAllToolDefinitions` alongside the one
+ * `productionPromptAndSchemas` already makes for the static-prompt baseline. Kept
+ * separate rather than threading that function's `definitions` out: the two
+ * concerns (building the static prompt/schema baseline vs. resolving a tool's
+ * contract for the pipeline) are unrelated, and `createAllToolDefinitions` is cheap
+ * and pure, so a second call costs nothing and keeps both call sites simple.
+ */
+function replayContractLookup(cwd: string): ContractLookup {
+	const definitions = createAllToolDefinitions(cwd);
+	return (name) => (Reflect.get(definitions, name) as Partial<ToolDef> | undefined)?.contract;
 }
 
 function isVersionThreeHeader(entry: unknown): entry is SessionHeader & { version: 3 } {
@@ -279,9 +338,17 @@ export async function replay(filePath: string): Promise<ReplayResult> {
 					continue;
 				}
 				if (message.role !== "toolResult") continue;
+				// Validate the call id is one this replay actually recorded, but send the
+				// *incoming* message — not a fresh lookup by id — so that whatever the
+				// context pipeline's eviction stage did to `message.content` upstream
+				// (in `transformContext`) is what reaches the provider request. Re-fetching
+				// the original recorded content here would silently discard eviction,
+				// since eviction never touches `recordedToolResults` itself (see
+				// `assertToolResultsMatch`, which intentionally still compares against the
+				// untouched recording).
 				const recordedResult = recordedToolResults.find((result) => result.toolCallId === message.toolCallId);
 				if (!recordedResult) throw new Error(`Missing recorded tool result for ${message.toolCallId}`);
-				converted.push(structuredClone(recordedResult));
+				converted.push(structuredClone(message));
 			}
 			return converted;
 		},
@@ -298,6 +365,19 @@ export async function replay(filePath: string): Promise<ReplayResult> {
 		toolExecution: "sequential",
 	});
 
+	// Same pipeline `AgentSession` installs in production (`_installContextPipeline`
+	// in `core/agent-session.ts`), via the shared `installContextPipeline` — deferred
+	// -schema resolution ahead of every request, then tool-result eviction — so the
+	// replay gate can observe both. The contract lookup is built from the real
+	// production tool definitions; the budget is `REPLAY_EVICTION_BUDGET`, a
+	// dedicated constant documented above (not derived from the fixture model's
+	// `contextWindow`; see that constant's comment for why).
+	installContextPipeline(agent, {
+		contractLookup: replayContractLookup("$HOME/replay-fixtures"),
+		evictionBudget: () => REPLAY_EVICTION_BUDGET,
+	});
+
+	const contextsByTurn: Message[][] = [];
 	for (const user of users) {
 		const historical = buildSessionContext(entries, user.id);
 		const nextResponse = responses[recorded.requestCount];
@@ -314,6 +394,25 @@ export async function replay(filePath: string): Promise<ReplayResult> {
 		);
 		contextTokensByTurn.push(
 			staticInputTokens + lastContext.messages.reduce((total, message) => total + estimateTokens(message), 0),
+		);
+		// Normalize toolResult timestamps to the recorded value before exposing this
+		// turn's context, mirroring the same normalization the `toolResults` field
+		// below already does and for the same reason: a toolResult's timestamp is
+		// stamped live (via `agent.state.messages`) rather than replayed from the
+		// fixture, so leaving it as-is would make `contextsByTurn` — and anything
+		// that serializes it, like the determinism test below — flaky across runs.
+		// Content (what eviction may have rewritten) is untouched.
+		contextsByTurn.push(
+			lastContext.messages.map((message) =>
+				message.role === "toolResult"
+					? {
+							...message,
+							timestamp:
+								recordedToolResults.find((result) => result.toolCallId === message.toolCallId)?.timestamp ??
+								message.timestamp,
+						}
+					: message,
+			),
 		);
 		for (const message of agent.state.messages.slice(historical.messages.length - 1)) {
 			if (message.role === "assistant") replayedResponses.push(message);
@@ -338,6 +437,7 @@ export async function replay(filePath: string): Promise<ReplayResult> {
 			...structuredClone(result),
 			timestamp: recordedToolResults[index]?.timestamp ?? result.timestamp,
 		})),
+		contextsByTurn,
 		metrics: buildReplayMetrics({
 			systemPrompt: promptBaseline.systemPrompt,
 			tools: promptBaseline.tools,

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_EVICTION_MARKER } from "../src/core/context/eviction.ts";
 import { replay, replayCorpus } from "../src/testing/replay/runner.ts";
 
 const corpusDirectory = fileURLToPath(new URL("../../../fixtures/corpus/", import.meta.url));
@@ -38,7 +39,18 @@ describe("offline session replay", () => {
 		expect(result.requests).toBe(2);
 		expect(result.responses.map((message) => message.stopReason)).toEqual(["toolUse", "stop"]);
 		expect(result.metrics.contextTokensByTurn).toHaveLength(1);
-		expect(result.metrics.contextTokensByTurn[0]).toBeGreaterThan(8_000);
+		// This fixture exists to demonstrate eviction on a single huge recoverable
+		// result ("Large deterministic result for eviction measurements",
+		// fixtures/corpus/README.md). Now that the context pipeline is wired into
+		// replay(), that result is evicted before it reaches the outbound request:
+		// the pre-wiring value here was >8,000 (the full unevicted result); the real,
+		// measured post-eviction value is 748 — the static prefix plus a handful of
+		// small messages plus the eviction marker, well under REPLAY_EVICTION_BUDGET.
+		expect(result.metrics.contextTokensByTurn[0]).toBe(748);
+		const [turnContext] = result.contextsByTurn;
+		expect(turnContext?.some((message) => message.role === "toolResult" && JSON.stringify(message.content).includes(DEFAULT_EVICTION_MARKER))).toBe(
+			true,
+		);
 	});
 
 	it("preserves a terminal assistant error followed by a later successful turn", async () => {
@@ -64,6 +76,33 @@ describe("offline session replay", () => {
 		expect(result.metrics.contextTokensByTurn).toHaveLength(22);
 		expect(result.metrics.contextTokensByTurn[18]).toBeLessThan(result.metrics.contextTokensByTurn[17]);
 		expect(result.metrics.contextTokensByTurn.slice(18)).toEqual([734, 752, 770, 788]);
+	});
+
+	it("evicts stale recoverable tool results from the outbound context by turn 20 (long-tool-heavy)", async () => {
+		const result = await replay(corpusFixture("long-tool-heavy.jsonl"));
+
+		expect(result.turns).toBe(22);
+		expect(result.metrics.contextTokensByTurn).toHaveLength(22);
+
+		// Before the context pipeline was wired into replay(), turn 20 here was
+		// 15,272 — completely unchanged from the pre-eviction baseline, because
+		// replay() built a bare Agent and never installed transformContext/
+		// streamFunction eviction at all. The real, measured post-wiring value is
+		// 1,769 (an 88.4% drop from that baseline; see REPLAY_EVICTION_BUDGET's
+		// comment in runner.ts for how that budget was verified against the
+		// theoretical eviction floor). 4,000 is a generous threshold — well below
+		// the old unwired value, comfortably above measurement noise — chosen so
+		// this test fails loudly if wiring regresses, without being so tight it
+		// breaks on a harmless budget retune.
+		const turn20Tokens = result.metrics.contextTokensByTurn[19];
+		expect(turn20Tokens).toBeLessThan(4_000);
+
+		const turn20Context = result.contextsByTurn[19];
+		expect(turn20Context).toBeDefined();
+		const hasEvictionMarker = turn20Context?.some(
+			(message) => message.role === "toolResult" && JSON.stringify(message.content).includes(DEFAULT_EVICTION_MARKER),
+		);
+		expect(hasEvictionMarker).toBe(true);
 	});
 
 	it("replays tool results through inert tools without touching the filesystem", async () => {
