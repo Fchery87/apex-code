@@ -53,8 +53,11 @@ ADR 0003 sets the cadence, the ceiling, and the abandonment tripwires.
 **3. Every phase exits on a number, not a feeling.** The strongest thing in the
 current Thanos docs is the `≥50% keeps src/spec/` gate. Every phase below carries a
 criterion someone other than the author can check. Where a threshold depends on a
-baseline that does not exist yet, it is marked **Phase 0 baseline: 935 tokens** (median of 1,117 un-compacted and 752 compacted turn-20 runs) rather than
-invented here.
+baseline that does not exist yet, it is marked **Phase 0 baseline: 1,117 tokens**
+(median turn-20 context across the three turn-20-capable corpus fixtures: 752
+compacted, 1,117 un-compacted, 15,272 tool-heavy) rather than invented here. Measured
+2026-08-13 via `replayCorpus()`; it was 935 over two fixtures until
+`long-tool-heavy.jsonl` was added to make tool-result eviction measurable at all.
 
 **4. Safety floor and context budget precede capability.** Permissions (2) and
 context engineering (3) both gate the tool surface (4). Adding tools first means
@@ -353,11 +356,13 @@ distributed macOS binary remain open, out of Phase 2b's stated scope.
 exists.
 
 **Scope.**
-- **Tool-result eviction** ("microcompact"): evict old tool results in place for a
-  whitelist of replayable tools (read, shell, grep, glob, web search, web fetch, edit,
-  write), leaving a marker. Reclaims most of the context cost with no summarization
-  call and no loss of conversational structure. The single highest-value context
-  technique in the systems reviewed.
+- **Tool-result eviction** ("microcompact"): evict old tool results in place, leaving a
+  marker. Reclaims most of the context cost with no summarization call and no loss of
+  conversational structure. The single highest-value context technique in the systems
+  reviewed. The eviction predicate is each tool's own `ContextSpec.resultRecoverable`
+  (ADR 0010), **not** a name whitelist — this scope previously read "(read, shell,
+  grep, glob, …)", but `bash` declares `resultRecoverable: false` because a shell
+  command is frequently not reproducible, and the contract wins over the list.
 - **Deferred tool schemas**: tools announce by name; full JSONSchema loads on demand
   via a search tool. MCP tools deferred by default with an always-load override.
 - Keep Pi's compaction and **branch summarization** — the latter falls out of the
@@ -366,13 +371,26 @@ exists.
   auto-compaction.
 
 **Exit criterion.** On the replay corpus: median context tokens at turn 20 down ≥40%
-from the **Phase 0 baseline of 1,563 tokens** (median of the two turn-20-capable fixtures: 1,745 un-compacted and 1,380 compacted), baseline system-prompt tokens down from **707 tokens** by the deferred-schema
-saving, and **no regression in task completion**. That last clause is the one that
-matters — the other two are trivially gameable alone.
+from the **measured baseline of 1,117 tokens** (median across the three turn-20-capable
+fixtures: 752 compacted, 1,117 un-compacted, 15,272 tool-heavy) — that is, **≤670**;
+baseline system-prompt tokens down from **707** (and from **960** on the tool-heavy
+fixture, which exercises `grep` beyond the four defaults) by the deferred-schema saving;
+`long-tool-heavy.jsonl`'s own turn-20 down **≥80%**, since the median under-credits
+eviction and only working eviction can pass that; and **no regression in task
+completion**. That last clause is the one that matters — the others are gameable alone.
+
+**Correction (2026-08-13).** This criterion previously cited a "Phase 0 baseline of
+1,563 tokens (1,745 / 1,380)." Those figures do not reproduce — `replayCorpus()`
+measures 1,117 and 752 — and they contradicted ground rule 3 above, which had the real
+numbers all along. The error made the gate vacuous: ≥40% off 1,563 is ≤938, and the
+corpus already sat at 935 before any work. See
+`docs/specs/2026-08-13-context-engineering.md`.
 
 **Risks.** Eviction interacts with prompt caching: evicting a prefix invalidates the
 cache and can cost more than it saves. Measure cache hit rate as part of the gate, not
-after.
+after. Until 2026-08-13 this was unmeasurable — every corpus fixture recorded
+`cacheRead`/`cacheWrite` of 0 — so `long-tool-heavy.jsonl` was added carrying real cache
+usage (`cacheHitRate` 0.8569) to make the risk detectable rather than merely stated.
 
 ---
 
@@ -510,7 +528,7 @@ recorded, decision deferred to the phase that first writes to it).
 | Contract | Status | Consumers | Settle by |
 | --- | --- | --- | --- |
 | Tool contract | Settled — ADR 0010 | 2, 3, 4, 5, 7 | done |
-| Context pipeline order | Open | 3, 7 | start of Phase 3 |
+| Context pipeline order | **Settled** 2026-08-13 | 3, 7 | — |
 | Session entry schema | Open | 1, 5, 6, 7, 9 | start of Phase 6 (entries logged as they land from Phase 1) |
 
 ---
