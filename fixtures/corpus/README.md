@@ -37,12 +37,32 @@ fixture was removed.
 | --- | ---: | ---: | ---: | ---: | --- |
 | `short-single-turn.jsonl` | 1 | 0 | 0 | 1 | Minimal user/assistant turn |
 | `long-multi-turn.jsonl` | 22 | 0 | 0 | 1 | Consecutive turns for turn-20 metrics |
+| `long-tool-heavy.jsonl` | 22 | 10 | 0 | 1 | Long *and* tool-heavy, with nonzero cache usage — the only fixture where tool-result eviction and `cacheHitRate` are measurable at turn 20 |
 | `compacted-session.jsonl` | 22 | 0 | 1 | 1 | Long run continuing through a compaction entry |
 | `heavy-tool-output.jsonl` | 1 | 1 | 0 | 1 | Large deterministic result for eviction measurements |
 | `model-switch.jsonl` | 2 | 0 | 0 | 2 | Provider/model change in the middle of a session |
 | `error-recovery.jsonl` | 2 | 0 | 0 | 1 | Assistant error followed by a successful retry |
 | `branched-session.jsonl` | 3 | 0 | 0 | 1 | Two children from one parent plus a branch summary |
 | `tool-error-recovery.jsonl` | 1 | 2 | 0 | 1 | Failed tool result followed by a fallback tool call |
+
+## Turn-20 metrics and why `long-tool-heavy.jsonl` exists
+
+Phase 3's exit criterion reads *median context tokens at turn 20*, so only fixtures
+with at least 20 user turns contribute to it. Until 2026-08-13 that was two fixtures,
+`long-multi-turn` and `compacted-session`, and **both contain zero tool calls and zero
+tool results**. Tool-result eviction — the technique that phase is largely about — had
+nothing to evict in either, so the gate could not observe it at all. Every fixture also
+recorded `cacheRead: 0`/`cacheWrite: 0`, making `cacheHitRate` a constant zero, even
+though `docs/architecture/contracts.md` § 2 requires the eviction ordering be decided
+against that number.
+
+`long-tool-heavy.jsonl` closes both gaps in one fixture: 22 user turns, 10 interleaved
+`read`/`grep` calls whose results accumulate in context, and realistic nonzero cache
+usage. Adding it moves the turn-20 median from 935 to 1,117, because a median over
+three values is the middle one rather than a mean of two. That is a deliberate,
+recorded change to the baseline, not a re-recording of the existing fixtures — those
+two are untouched, and the gate is only meaningful measured against a corpus where the
+technique under test is visible.
 
 ## Editing rules
 
