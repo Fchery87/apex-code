@@ -525,3 +525,23 @@ this amendment. The Linux sandbox's own CI-testability gap found along the way
 (`bubblewrap` was never installed on `ubuntu-latest`, and installing it surfaces a
 separate, unrelated network-namespace CI restriction) is tracked in the plan as a
 deliberate follow-up, not fixed here.
+
+### Amendment (2026-08-13, third): Linux CI-testability gap closed — task 2b.7
+
+The gap the prior amendment deferred is now closed. Root cause, confirmed on real
+`ubuntu-latest` CI (not guessed): the runner's Ubuntu 24.04 image restricts
+unprivileged user-namespace creation via AppArmor by default
+(`kernel.apparmor_restrict_unprivileged_userns=1`), which blocks the bare
+`unshare(CLONE_NEWUSER|CLONE_NEWNET)` that `bwrap --unshare-net` depends on — not
+something specific to Bubblewrap's own loopback setup, and not a bug in this
+repo's sandbox code. The fix is one line, run before `bwrap` is invoked:
+`sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`, scoped to the
+ephemeral runner VM. `ci.yml`'s Linux dependency step now installs `bubblewrap`
+and sets this. Verified twice: once via a throwaway diagnostic workflow that also
+ran this repo's real `test/sandbox/` suite (10 files / 29 passed / 4 skipped
+macOS-only / 0 failed), and again in the production CI matrix itself (240 files /
+2114 tests passed / 53 skipped / 0 failed on the required `ubuntu-latest` job).
+See `docs/plans/2026-08-12-os-sandbox.md` task 2b.7 for the full investigation
+record. This does not change any boundary guarantee — it only makes the guarantee
+ADR 0005 already claims for Linux actually checked by CI going forward, which it
+was not before.

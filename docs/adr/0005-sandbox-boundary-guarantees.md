@@ -135,3 +135,14 @@ per-process loopback. Apple Events/Launch Services denial and code-signing
 behavior for a distributed (not locally-built) binary are not yet addressed and
 are not claimed as covered by this amendment. Windows remains unsupported,
 unchanged.
+
+## Amendment (2026-08-13, second): Linux's own guarantee now actually checked by CI
+
+A gap surfaced while landing the macOS backend: `ubuntu-latest` never had
+`bubblewrap` installed, so this ADR's Linux guarantee — the one both backends are
+now measured against — had never itself run in CI. Root cause was a GitHub-hosted
+runner default (Ubuntu 24.04's AppArmor unprivileged-userns restriction, not a
+flaw in this repo's design), fixed with one `sysctl` line before `bwrap` runs. See
+the 2026-08-12 spec's third 2026-08-13 amendment and the plan's 2b.7 record. This
+does not change what this ADR claims — it closes the gap between what was claimed
+and what CI actually verified.
