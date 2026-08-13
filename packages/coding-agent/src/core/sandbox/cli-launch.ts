@@ -31,6 +31,7 @@ export function buildSandboxedCliLaunch(options: {
 	command: string;
 	args: readonly string[];
 	environment: NodeJS.ProcessEnv;
+	allowedHosts?: readonly string[];
 	readOnlyPaths?: readonly string[];
 }): SandboxedCliLaunch {
 	const stateDirectory = join(options.workspace, ".apex-code", "sandbox-state");
@@ -48,7 +49,7 @@ export function buildSandboxedCliLaunch(options: {
 	return {
 		command: options.command,
 		args: [...options.args],
-		policy: { workspace: options.workspace, allowedHosts: [] },
+		policy: { workspace: options.workspace, allowedHosts: options.allowedHosts ?? [] },
 		readOnlyPaths: options.readOnlyPaths ?? [],
 		environment: {
 			...options.environment,

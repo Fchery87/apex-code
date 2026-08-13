@@ -23,11 +23,12 @@ export async function launchSandboxedCli(options: {
 	args: readonly string[];
 	environment: NodeJS.ProcessEnv;
 	workspace: string;
+	allowedHosts?: readonly string[];
 	readOnlyPaths?: readonly string[];
 	dependencies?: Partial<CliSandboxDependencies>;
 }): Promise<number> {
 	const dependencies = { ...defaultDependencies, ...options.dependencies };
-	const policyResult = createSandboxPolicy({ workspace: options.workspace });
+	const policyResult = createSandboxPolicy({ workspace: options.workspace, allowedHosts: options.allowedHosts });
 	if (policyResult.kind === "invalid") {
 		dependencies.stderr.write(`Error: OS sandbox is not enforcing this agent session: ${policyResult.reason}\n`);
 		return 1;
@@ -40,6 +41,7 @@ export async function launchSandboxedCli(options: {
 		command: options.command,
 		args: options.args,
 		environment: options.environment,
+		allowedHosts: options.allowedHosts,
 		readOnlyPaths: options.readOnlyPaths,
 	});
 	try {

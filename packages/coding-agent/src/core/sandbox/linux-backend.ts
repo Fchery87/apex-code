@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { createSandboxNetworkProxy, type SandboxNetworkProxy } from "./network-proxy.ts";
 import type { SandboxBackend, SandboxLaunch } from "./supervisor.ts";
 import type { SandboxViolationStore } from "./violations.ts";
 
@@ -46,6 +47,7 @@ function classifySandboxFailure(stderr: string): "filesystem" | "network" | "unk
  * removes all direct network interfaces for the child and every descendant.
  */
 export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions): SandboxBackend {
+	console.error("BACKEND ARGS:", Array.from(arguments));
 	const platform = options?.platform ?? process.platform;
 	if (platform !== "linux") {
 		return {
@@ -58,6 +60,8 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 	}
 	const hasCommand = options?.commandExists ?? commandExists;
 	const violationStore = options?.violationStore;
+	let proxy: SandboxNetworkProxy | undefined;
+
 	if (!hasCommand("bwrap")) {
 		return {
 			status: { kind: "unavailable", reason: "Bubblewrap (bwrap) is required for OS sandboxing." },
@@ -72,7 +76,52 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 		async launch(launch: SandboxLaunch): Promise<number> {
 			const stateDirectory = join(launch.policy.workspace, ".apex-code", "sandbox-state");
 			mkdirSync(stateDirectory, { recursive: true });
-			const readOnlyMounts = [launch.command, ...(launch.readOnlyPaths ?? [])].flatMap(readOnlyMountArguments);
+
+			const socketPath = join(stateDirectory, "proxy.sock");
+			proxy = await createSandboxNetworkProxy({
+				socketPath,
+				allowedHosts: launch.policy.allowedHosts,
+				violationStore,
+			});
+
+			const relayScriptPath = join(stateDirectory, "relay.js");
+			writeFileSync(
+				relayScriptPath,
+				`
+const net = require("node:net");
+const child_process = require("node:child_process");
+
+const socketPath = process.env.APEX_UDS_PATH;
+const server = net.createServer((c) => {
+	const client = net.connect(socketPath);
+	c.pipe(client).pipe(c);
+	c.on("error", () => {});
+	client.on("error", () => {});
+});
+
+server.listen(0, "127.0.0.1", () => {
+	const port = server.address().port;
+	const env = Object.assign({}, process.env, {
+		HTTP_PROXY: \`http://127.0.0.1:\${port}\`,
+		HTTPS_PROXY: \`http://127.0.0.1:\${port}\`
+	});
+	const args = process.argv.slice(2);
+	const child = child_process.spawn(args[0], args.slice(1), {
+		stdio: "inherit",
+		env: env,
+	});
+	child.on("exit", (code, signal) => {
+		process.exit(code ?? (signal ? 128 : 1));
+	});
+});
+server.on("error", (err) => {
+	console.error("Relay error:", err);
+	process.exit(1);
+});
+`.trim(),
+			);
+
+			const readOnlyMounts = [process.execPath, launch.command, ...(launch.readOnlyPaths ?? [])].flatMap(readOnlyMountArguments);
 			const child = spawn(
 				"bwrap",
 				[
@@ -102,7 +151,12 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 					"--setenv",
 					"TMPDIR",
 					launch.environment?.TMPDIR ?? stateDirectory,
+					"--setenv",
+					"APEX_UDS_PATH",
+					socketPath,
 					"--",
+					process.execPath,
+					relayScriptPath,
 					launch.command,
 					...launch.args,
 				],
@@ -115,6 +169,7 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 				process.stderr.write(chunk);
 			});
 			const exitCode = await waitForExit(child);
+			await proxy?.close();
 			if (exitCode !== 0) {
 				const kind = classifySandboxFailure(stderr);
 				violationStore?.add({
@@ -126,9 +181,12 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 							: stderr.trim(),
 					timestamp: new Date(),
 				});
+				console.error("BACKEND ADDING VIOLATION, TOTAL AFTER:", violationStore?.totalCount);
 			}
 			return exitCode;
 		},
-		async close() {},
+		async close() {
+			await proxy?.close();
+		},
 	};
 }

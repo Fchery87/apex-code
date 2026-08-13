@@ -86,6 +86,10 @@ export type PackageSource =
 			themes?: string[];
 	  };
 
+export interface NetworkSettings {
+	allowedHosts?: string[];
+}
+
 export interface Settings {
 	lastChangelogVersion?: string;
 	defaultProvider?: string;
@@ -134,6 +138,7 @@ export interface Settings {
 	websocketConnectTimeoutMs?: number; // WebSocket connect/open handshake timeout in milliseconds; 0 disables it
 	tuiMode?: TuiMode; // default: "regular"
 	fullscreenScrollbar?: ScrollViewScrollbar; // default: "auto"; no effect in regular TUI mode
+	network?: NetworkSettings;
 }
 
 function isMergeableObject(value: unknown): value is Record<string, unknown> {
@@ -796,6 +801,10 @@ export class SettingsManager {
 			reserveTokens: this.settings.branchSummary?.reserveTokens ?? 16384,
 			skipPrompt: this.settings.branchSummary?.skipPrompt ?? false,
 		};
+	}
+
+	getNetworkSettings(): NetworkSettings | undefined {
+		return this.settings.network;
 	}
 
 	getBranchSummarySkipPrompt(): boolean {
