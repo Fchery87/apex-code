@@ -18,9 +18,16 @@ order; each task must be verified before it is marked done.
 | 2b.4d Implement the network allowlist proxy (UDS relay + supervisor-side allowlist) | Done | `a149cc43b`, cleaned up `66c53cc79` | `test/sandbox/network-allowlist.test.ts` (new, 1 test); full `test/sandbox/` + `test/permissions/gate-universal.test.ts` (9 files/41 tests); `npx tsgo --noEmit`; `npm run build`; see review findings below |
 | 2b.4e Close two of 2b.4d's known gaps: double violation-recording and no port dimension on the allowlist | Done | `000478304` | `test/sandbox/network-proxy.test.ts` (new, 3 tests); `network-allowlist.test.ts` assertion flipped; full `test/sandbox/` + `test/permissions/gate-universal.test.ts` (10 files/44 tests), `--no-file-parallelism` under elevated load; `npx tsgo --noEmit`; `npm run build`; see notes below |
 | 2b.5 Add macOS backend only after native CI proof; document unsupported Windows | Not started | — | macOS integration tests pass |
-| 2b.6 Full verification and documentation closure | Not started | — | Focused suites, typecheck, build, full test; plan deleted |
+| 2b.6 Full verification of the Linux-only scope landed so far (2b.1–2b.4e) | Done | — (verification only, no code change) | First genuinely clean full `npm test` run this phase — not killed, not truncated, not scoped down. `npm run test:scripts` (21 tests), `packages/agent` (397 passed/1 skipped), `packages/coding-agent` (2104 passed/6 failed/49 skipped) under `--no-file-parallelism`; the 6 failures are the same 4 pre-existing files re-confirmed unrelated to sandboxing in 2b.4c (`external-editor`, `radius`, `skills`, `6999-models-json-hot-reload`) — no new failures. `npx tsgo --noEmit` and `npm run build` both clean. See note below on why the plan is not deleted. |
 
 ## Order changes
+
+**2b.6 ran before 2b.5**, on explicit instruction, reversing the table's listed order.
+2b.6's original criterion ("plan deleted") assumed it would run last, after macOS
+landed. Run early, it can only verify and close out the Linux-only scope (2b.1–2b.4e)
+— macOS (2b.5) is still open, so the plan stays and is not deleted; deleting it now
+would drop the only tracker for the remaining task. The task table marks 2b.6 "Done"
+against this narrowed scope, not against the full original criterion.
 
 The inherited optional sandbox extension is not promoted as the implementation path:
 it wraps only bash and would leave native tools, extensions, and in-process execution
