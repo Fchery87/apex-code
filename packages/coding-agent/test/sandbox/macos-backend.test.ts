@@ -54,7 +54,13 @@ describe.skipIf(!canEnforceMacosSandbox())("macOS sandbox backend", () => {
 		}
 	});
 
-	it("blocks and records an attempted connection to a host absent from the allowlist, and allows one present in it", async () => {
+	it("blocks a direct connection attempt to a host outside the sandbox proxy and records a violation", async () => {
+		// This bypasses network-proxy.ts entirely (a direct net.connect, no
+		// HTTP_PROXY involved), so it exercises Seatbelt's own `deny network*`
+		// directly. classifySandboxFailure() deliberately reports "unknown" here,
+		// not "network" -- macOS's own denial text does not reliably distinguish
+		// filesystem from network refusals the way Linux's bwrap stderr does (see
+		// the 2b.5 prototype and the comment on classifySandboxFailure).
 		const cwd = workspace();
 		const violations = new SandboxViolationStore();
 		const backend = createMacosSandboxBackend({ violationStore: violations });
@@ -67,7 +73,7 @@ describe.skipIf(!canEnforceMacosSandbox())("macOS sandbox backend", () => {
 					args: ["-e", "require('node:net').connect(443,'198.51.100.1').on('error',()=>process.exit(1))"],
 				}),
 			).resolves.not.toBe(0);
-			expect(violations.list().some((violation) => violation.kind === "network")).toBe(true);
+			expect(violations.list()).toHaveLength(1);
 		} finally {
 			await supervisor.close();
 		}

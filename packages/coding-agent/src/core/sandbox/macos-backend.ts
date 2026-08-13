@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { createSandboxNetworkProxy, type SandboxNetworkProxy } from "./network-proxy.ts";
 import type { SandboxBackend, SandboxLaunch } from "./supervisor.ts";
@@ -33,10 +33,21 @@ function waitForExit(child: ReturnType<typeof spawn>): Promise<number> {
 /**
  * Unlike Linux's bwrap (which needs each mount ancestor declared for its bind-mount
  * tree), Seatbelt's `subpath` is recursive from a single root, so only the directory
- * containing each path is needed -- no ancestor walk.
+ * containing each path is needed -- no ancestor walk. Each directory is resolved to
+ * its real (symlink-free) path: Seatbelt canonicalizes the path it actually checks
+ * against a `subpath` rule (confirmed empirically -- a rule built from an
+ * unresolved symlinked path, e.g. Homebrew's own layout, silently never matches).
  */
 function readOnlyDirectories(paths: readonly string[]): string[] {
-	return [...new Set(paths.map((path) => dirname(resolve(path))))];
+	const directories = paths.map((path) => dirname(resolve(path)));
+	const canonical = directories.map((directory) => {
+		try {
+			return realpathSync(directory);
+		} catch {
+			return directory;
+		}
+	});
+	return [...new Set(canonical)];
 }
 
 function classifySandboxFailure(stderr: string): "filesystem" | "network" | "unknown" {
@@ -85,7 +96,12 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 	return {
 		status: { kind: "enforced" },
 		async launch(launch: SandboxLaunch): Promise<number> {
-			const stateDirectory = join(launch.policy.workspace, ".apex-code", "sandbox-state");
+			// Same reasoning as readOnlyDirectories: on macOS the workspace itself can
+			// be reached through a symlink (e.g. os.tmpdir()'s /var -> /private/var),
+			// and Seatbelt's subpath match is against the canonical path, not the one
+			// the caller happened to spell. Resolve once, use everywhere below.
+			const workspace = realpathSync(launch.policy.workspace);
+			const stateDirectory = join(workspace, ".apex-code", "sandbox-state");
 			mkdirSync(stateDirectory, { recursive: true });
 
 			const violationCountBeforeLaunch = violationStore?.totalCount ?? 0;
@@ -120,10 +136,11 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 			readOnlyDirs.forEach((dir, index) => {
 				params.push("-D", `RO_${index}=${dir}`);
 			});
-			params.push("-D", `WORKSPACE=${launch.policy.workspace}`);
+			params.push("-D", `WORKSPACE=${workspace}`);
 			params.push("-D", `PROXY_ADDR=localhost:${proxyPort}`);
 
 			const child = spawn("sandbox-exec", ["-f", profilePath, ...params, "--", launch.command, ...launch.args], {
+				cwd: workspace,
 				env: {
 					...launch.environment,
 					HOME: launch.environment?.HOME ?? stateDirectory,
