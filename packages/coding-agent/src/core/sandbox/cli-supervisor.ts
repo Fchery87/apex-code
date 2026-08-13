@@ -1,5 +1,6 @@
 import { buildSandboxedCliLaunch } from "./cli-launch.ts";
 import { createLinuxSandboxBackend } from "./linux-backend.ts";
+import { createMacosSandboxBackend } from "./macos-backend.ts";
 import { createSandboxPolicy } from "./policy.ts";
 import { createSandboxSupervisor, type SandboxBackend } from "./supervisor.ts";
 import { SandboxViolationStore } from "./violations.ts";
@@ -9,8 +10,16 @@ export interface CliSandboxDependencies {
 	stderr: { write(message: string): boolean };
 }
 
+/** Routes to the platform adapter for the running OS; each adapter self-reports
+ * `unavailable` on any other platform, so this only needs to pick the one whose
+ * enforcement is actually reachable here. */
+function createDefaultSandboxBackend(options: { violationStore: SandboxViolationStore }): SandboxBackend {
+	if (process.platform === "darwin") return createMacosSandboxBackend(options);
+	return createLinuxSandboxBackend(options);
+}
+
 const defaultDependencies: CliSandboxDependencies = {
-	createBackend: createLinuxSandboxBackend,
+	createBackend: createDefaultSandboxBackend,
 	stderr: process.stderr,
 };
 

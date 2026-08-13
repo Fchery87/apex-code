@@ -4,11 +4,16 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { launchSandboxedCli } from "../../src/core/sandbox/cli-supervisor.ts";
 import { createLinuxSandboxBackend } from "../../src/core/sandbox/linux-backend.ts";
+import { createMacosSandboxBackend } from "../../src/core/sandbox/macos-backend.ts";
 import type { SandboxBackend, SandboxLaunch } from "../../src/core/sandbox/supervisor.ts";
 import type { SandboxViolationStore } from "../../src/core/sandbox/violations.ts";
 
 function canEnforceLinuxSandbox(): boolean {
 	return process.platform === "linux" && createLinuxSandboxBackend().status.kind === "enforced";
+}
+
+function canEnforceMacosSandbox(): boolean {
+	return process.platform === "darwin" && createMacosSandboxBackend().status.kind === "enforced";
 }
 
 const directories: string[] = [];
@@ -130,6 +135,30 @@ describe("CLI sandbox supervisor", () => {
 });
 
 describe.skipIf(!canEnforceLinuxSandbox())("CLI sandbox supervisor with the real backend", () => {
+	it("records and reports a real outside-workspace write through the default production dependencies", async () => {
+		const cwd = workspace();
+		const outside = join(dirname(cwd), `cli-supervisor-outside-${Date.now()}.txt`);
+		let stderr = "";
+		const code = await launchSandboxedCli({
+			command: "/bin/sh",
+			args: ["-c", `printf blocked > ${outside}`],
+			environment: {},
+			workspace: cwd,
+			dependencies: {
+				stderr: {
+					write: (message) => {
+						stderr += message;
+						return true;
+					},
+				},
+			},
+		});
+		expect(code).not.toBe(0);
+		expect(stderr).toContain("Sandbox violation (filesystem)");
+	});
+});
+
+describe.skipIf(!canEnforceMacosSandbox())("CLI sandbox supervisor with the real macOS backend", () => {
 	it("records and reports a real outside-workspace write through the default production dependencies", async () => {
 		const cwd = workspace();
 		const outside = join(dirname(cwd), `cli-supervisor-outside-${Date.now()}.txt`);
