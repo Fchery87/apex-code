@@ -132,6 +132,8 @@ describe("--session-id read-only commands", () => {
 			"missing-model",
 			"-p",
 			"hi",
+			"--permission-mode",
+			"default",
 		]);
 
 		expect(result.code).toBe(1);
@@ -151,6 +153,8 @@ describe("--session-id read-only commands", () => {
 				"missing-model",
 				"-p",
 				"hi",
+				"--permission-mode",
+				"default",
 			],
 			(dirs) => {
 				mkdirSync(dirs.sessionDir, { recursive: true });
@@ -164,7 +168,18 @@ describe("--session-id read-only commands", () => {
 
 	it("rejects an existing fork target session id", async () => {
 		const result = await runCli(
-			(dirs) => ["--session-dir", dirs.sessionDir, "--fork", "source-id", "--session-id", "existing-id", "-p", "hi"],
+			(dirs) => [
+				"--session-dir",
+				dirs.sessionDir,
+				"--fork",
+				"source-id",
+				"--session-id",
+				"existing-id",
+				"-p",
+				"hi",
+				"--permission-mode",
+				"default",
+			],
 			(dirs) => {
 				mkdirSync(dirs.sessionDir, { recursive: true });
 				writeSession(dirs.sessionDir, dirs.projectDir, "source-id");
@@ -180,7 +195,7 @@ describe("--session-id read-only commands", () => {
 describe("--session-id validation", () => {
 	it("rejects ids invalid under SessionManager rules without stack traces", async () => {
 		for (const id of ["-bad", "bad id"]) {
-			const result = await runCli(["--session-id", id, "-p", "hi"]);
+			const result = await runCli(["--session-id", id, "-p", "hi", "--permission-mode", "default"]);
 
 			expect(result.code).toBe(1);
 			expect(result.stderr).toContain("Session id must be non-empty");
