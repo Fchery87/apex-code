@@ -218,3 +218,17 @@ model; wiring proxy rejections into `core/sandbox/violations.ts`'s bounded store
 lifecycle/cleanup for the UDS and relay process; and an integration test proving
 an allowed host succeeds and a non-allowlisted host fails closed with a recorded
 violation, run from a scratch workspace per `AGENTS.md`.
+
+### Amendment (2026-08-12, second): implementation landed — task 2b.4d
+
+The design above was implemented against real code: `core/sandbox/network-proxy.ts`
+(the supervisor-owned UDS allowlist proxy), a relay script written into the child's
+state directory and run inside the unchanged `--unshare-net` isolation, and a
+`network.allowedHosts` settings surface threaded from `cli.ts` through to the
+backend. See `docs/plans/2026-08-12-os-sandbox.md` task 2b.4d for the full record,
+including five review findings fixed after the initial commit (a non-portable
+hardcoded test path, a fabricated violation message, debug output and scratch files
+left in the commit, and added stale-socket hardening) and two known gaps carried
+forward: the allowlist check is hostname-string equality rather than a
+resolved-IP check at connect time, and it has no port dimension — `allowedHosts` is
+a bare hostname list. Both remain open, not settled by this amendment.
