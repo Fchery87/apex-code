@@ -13,7 +13,7 @@ would force a retrofit.
 | Contract | Status | Consumers | Settle by |
 | --- | --- | --- | --- |
 | Tool contract | **Settled** — ADR 0010 | Phases 2, 3, 4, 5, 7 | Now (gates Phase 2's spec) |
-| Context pipeline order | Open | Phases 3, 7 | Start of Phase 3 |
+| Context pipeline order | **Settled** — spec `2026-08-13-context-engineering` | Phases 3, 7 | Settled 2026-08-13 |
 | Session entry schema | Open | Phases 1, 5, 6, 7, 9 | Start of Phase 6, but see note |
 
 ---
@@ -270,30 +270,51 @@ declarations, written once, against a shape that does not move afterward.
 
 ---
 
-# 2. Context pipeline order — open
+# 2. Context pipeline order — settled
 
-**Settle by:** start of Phase 3. **Consumers:** Phases 3, 7.
+**Settled:** 2026-08-13, in `docs/specs/2026-08-13-context-engineering.md`.
+**Consumers:** Phases 3, 7.
 
 Compaction, tool-result eviction, and deferred-schema resolution all rewrite the
 message list at one seam (`transformContext`). Their ordering has correctness
 consequences that no single phase can settle alone.
 
-Open questions, to be answered in the Phase 3 spec:
+**The order is:**
 
-- **Eviction before or after compaction?** Evicting first means compaction summarizes
-  markers instead of content, losing detail the summary might have needed. Compacting
-  first means paying summarization cost on content that was about to be dropped.
-- **Prompt-cache interaction.** Rewriting a cached prefix invalidates it. Eviction
-  that saves tokens but forces a full cache rewrite can cost more than it saves.
-  `cacheHitRate` is already in the Phase 0 metrics schema for this reason; the
-  ordering decision must be made against that number, not in the abstract.
-- **Evidence survival (Phase 7 constraint).** Evidence is captured at execution time
-  and stored outside the transcript, so eviction must not be able to destroy it. If
-  any evidence path reads back from message content, that is a design error to catch
-  here rather than in Phase 7.
-- **Determinism.** The Phase 0 replay gate requires identical metrics across runs.
-  Any ordering that depends on wall-clock time (time-based eviction) needs an
-  injectable clock from the start.
+```
+deferred-schema resolution → tool-result eviction → compaction (threshold or reactive)
+```
+
+Schema resolution runs first because it changes the static prefix that both later
+stages measure themselves against.
+
+The four questions this contract was opened to answer:
+
+- **Eviction before or after compaction?** **Before.** Compaction is the expensive,
+  lossy, irreversible stage — it makes a summarization call and replaces structure
+  with prose. Eviction is cheap and structure-preserving, so running it first means
+  compaction is reached later, less often, and over a shorter transcript. The
+  objection that compaction then summarizes markers is real but bounded: only
+  `resultRecoverable: true` content is ever behind a marker, so anything the summary
+  loses is by construction regenerable.
+- **Prompt-cache interaction.** Eviction removes a contiguous run from the **oldest**
+  end only, never a hole in the middle, so the cache boundary moves forward
+  monotonically instead of invalidating everything after a gap. This was decided on
+  structural grounds because the corpus could not measure it: every fixture recorded
+  `cacheRead`/`cacheWrite` of 0, making `cacheHitRate` a constant zero. That is now
+  fixed — `long-tool-heavy.jsonl` carries real cache usage (`cacheHitRate` 0.8569), and
+  Phase 3 compares it pre/post eviction. **If that measurement contradicts
+  prefix-oldest eviction, it reverses a load-bearing decision and gets its own ADR
+  rather than a quiet redesign.**
+- **Evidence survival (Phase 7 constraint).** Satisfied by construction: eviction
+  rewrites only the outbound provider context and never the stored session. Phase 3
+  carries a test asserting the on-disk session is byte-identical before and after an
+  eviction pass, so a future evidence path that reads back from message content fails
+  loudly here rather than silently in Phase 7.
+- **Determinism.** Eviction is a pure function of (message list, per-tool
+  `ContextSpec`, token budget) — no clock, no randomness, no I/O. Time-based eviction
+  is explicitly a Phase 3 non-goal, so no injectable clock is required and the replay
+  gate's identical-metrics requirement holds.
 
 # 3. Session entry schema — open
 
