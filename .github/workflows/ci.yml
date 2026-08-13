@@ -67,8 +67,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev \
-            libgif-dev librsvg2-dev fd-find ripgrep
+            libgif-dev librsvg2-dev fd-find ripgrep bubblewrap
           sudo ln -s "$(which fdfind)" /usr/local/bin/fd
+          # Ubuntu 24.04 runner images restrict unprivileged user namespaces via
+          # AppArmor by default, which blocks the OS sandbox's `bwrap --unshare-net`
+          # with "loopback: Failed RTM_NEWADDR: Operation not permitted" -- not a bug
+          # in this repo. Confirmed via a real CI spike (docs/plans/2026-08-12-os-sandbox.md,
+          # task 2b.7). Scoped to this ephemeral runner only.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       - name: System dependencies (macOS)
         if: runner.os == 'macOS'
