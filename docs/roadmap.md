@@ -86,7 +86,7 @@ capable and measurably worse.
 | 2a | Permissions — rule model | **landed** — live enforcement completed · `8dff33f41` | [spec](specs/2026-08-11-permission-rule-model.md) | — |
 | 2b | Permissions — OS sandbox | **landed** — Linux + macOS backends verified in CI · `b9a7bb337` | [spec](specs/2026-08-12-os-sandbox.md) | — |
 | 3 | Context engineering | **landed** — eviction + deferred schemas verified against the replay corpus · `72a2fefe4` | [spec](specs/2026-08-13-context-engineering.md) | — |
-| 4 | Tool surface | not started | — | — |
+| 4 | Tool surface | **spec drafted** — implementation not started | [spec](specs/2026-08-13-tool-surface.md) | — |
 | 5 | Delegation & multi-agent | not started | — | — |
 | 6 | Durable state & daemon | not started | — | — |
 | 7 | Evidence & verification | not started | — | — |
@@ -458,8 +458,31 @@ isolation, LSP. Each tool ships with its permission rules, its `ruleContent` gra
 and tests — a tool without a rule grammar is not done.
 
 **Exit criterion.** Every tool has permission rules and tests. Total system-prompt
-token count stays under the ceiling established in Phase 3 — the deferred-schema
-mechanism is what makes this possible, and this gate is what proves it worked.
+token count stays under a measured budget — the deferred-schema mechanism is what makes
+this possible, and this gate is what proves it worked.
+
+**Correction (2026-08-13 — the "ceiling established in Phase 3" is restated as a
+measured budget.)** The original wording required the token count to stay under Phase
+3's ceiling. Phase 3 established 1,217 tokens for the production static prefix (28
+prompt + 1,189 tool schemas, measured with the replay harness's `ceil(length / 4)`
+formula), and 707 for the corpus, which measures only four tools. Holding either
+number while adding roughly seven tools is arithmetically impossible: an announced,
+schema-deferred tool still costs ~77 tokens for its name and description, so the new
+tools alone add roughly +540 before any schema. Reaching 1,217 would require deferring
+`read`/`bash`/`edit`/`write` as well, which is excluded by a standing decision. The
+gate is therefore a budget fixed by measurement in the phase's first task, proven
+against the naive no-deferral projection of roughly 2,400 — the deferred-schema
+mechanism has to absorb the majority of the added schema cost, and the gap between the
+enforced number and 2,400 is what evidences that. Recorded in full in
+[the Phase 4 spec](specs/2026-08-13-tool-surface.md); the corpus's `systemPromptTokens:
+707` is left untouched, because `productionPromptAndSchemas` selects only the four
+default tools plus fixture-recorded ones and so cannot observe this phase at all.
+
+**Blocking prerequisite.** Phase 3 wired the deferred-schema *announce* side into every
+request but left the *load* side unwired — `loadDeferredSchema` has no production
+caller. Until an on-demand schema-load path exists, `deferSchema: true` makes a tool
+unusable rather than cheap, so it is the phase's first task and blocks every tool after
+it.
 
 ---
 
@@ -570,6 +593,7 @@ takes the next free number instead of a reserved one.
 | 0008 | Delegation authority: `pi-subagents` dependency vs. owning it | 5 | reserved |
 | 0009 | Telemetry: opt-in only, and exactly what is collected | 9 | reserved |
 | 0010 | One canonical tool contract, declared by the tool and never re-derived | pre-2 | ✅ |
+| 0011 | Deferred schemas resolve through an explicit model-callable tool, not harness-side injection | 4 | reserved |
 
 ## Cross-phase contracts
 
