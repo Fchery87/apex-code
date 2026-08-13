@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createSandboxNetworkProxy, type SandboxNetworkProxy } from "./network-proxy.ts";
 import type { SandboxBackend, SandboxLaunch } from "./supervisor.ts";
@@ -64,10 +65,12 @@ function classifySandboxFailure(stderr: string): "filesystem" | "network" | "unk
 }
 
 /**
- * macOS's platform adapter. Seatbelt (`sandbox-exec`) denies filesystem writes and
- * network access by default; the workspace is the one writable subpath, and the
- * network proxy's exact loopback port is the one network destination allowed --
- * narrower than the wildcard `localhost:*` pattern some other sandboxes use.
+ * macOS's platform adapter. Seatbelt (`sandbox-exec`) allows reads broadly except
+ * the invoking account's home directory, denies writes outside the workspace, and
+ * denies network outside the sandbox proxy's exact loopback port -- narrower than
+ * the wildcard `localhost:*` pattern some other sandboxes use. This mirrors Linux's
+ * actual posture (`--ro-bind / /` plus a hidden `/home`) rather than the narrower
+ * read-allowlist this design started with, which broke ordinary process startup.
  */
 export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions): SandboxBackend {
 	const platform = options?.platform ?? process.platform;
@@ -114,6 +117,12 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 			const proxyPort = proxy.port as number;
 
 			const readOnlyDirs = readOnlyDirectories([process.execPath, launch.command, ...(launch.readOnlyPaths ?? [])]);
+			let userHome: string | undefined;
+			try {
+				userHome = realpathSync(homedir());
+			} catch {
+				userHome = homedir();
+			}
 
 			const profileLines = [
 				"(version 1)",
@@ -123,7 +132,15 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 				// that lets a normal Unix child process (dyld, /bin/sh) actually start.
 				'(import "bsd.sb")',
 				"(allow process-exec*)",
+				// Matches Linux's actual posture (bwrap's `--ro-bind / /`): broad read,
+				// narrow write. A read-only allowlist alone (this design's first cut)
+				// breaks ordinary process startup -- confirmed empirically, getcwd()
+				// itself needs to traverse the workspace's ancestor directories, which
+				// no read rule scoped only to the workspace or runtime paths covers.
+				"(allow file-read*)",
+				'(deny file-read* (subpath (param "USER_HOME")))',
 				...readOnlyDirs.map((_, index) => `(allow file-read* (subpath (param "RO_${index}")))`),
+				'(allow file-read* (subpath (param "WORKSPACE")))',
 				"(deny file-write*)",
 				'(allow file-write* (subpath (param "WORKSPACE")))',
 				"(deny network*)",
@@ -132,7 +149,7 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 			const profilePath = join(stateDirectory, "profile.sb");
 			writeFileSync(profilePath, profileLines.join("\n"));
 
-			const params: string[] = [];
+			const params: string[] = ["-D", `USER_HOME=${userHome}`];
 			readOnlyDirs.forEach((dir, index) => {
 				params.push("-D", `RO_${index}=${dir}`);
 			});
