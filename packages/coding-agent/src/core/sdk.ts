@@ -6,19 +6,24 @@ import { resolvePath } from "../utils/paths.ts";
 import { AgentSession, type AgentSessionConfig } from "./agent-session.ts";
 import { formatNoModelsAvailableMessage } from "./auth-guidance.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
+import type { AgentDefinitionResolver, DelegationRuntimeOptions } from "./delegation/runtime.ts";
 import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
 import { convertToLlm } from "./messages.ts";
 import { findInitialModel } from "./model-resolver.ts";
 import { ModelRuntime } from "./model-runtime.ts";
+import { DerivedPermissionRuleStore } from "./permissions/store.ts";
 import { mergeProviderAttributionHeaders } from "./provider-attribution.ts";
 import type { ResourceLoader } from "./resource-loader.ts";
 import { DefaultResourceLoader } from "./resource-loader.ts";
 import { getDefaultSessionDir, SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
 import { time } from "./timings.ts";
+import type { ApexToolDefinition, Capability } from "./tools/contract.ts";
 import {
+	createAllToolDefinitions,
 	createBashTool,
 	createCodingTools,
+	createDelegateToolDefinition,
 	createEditTool,
 	createFindTool,
 	createGrepTool,
@@ -84,6 +89,17 @@ export interface CreateAgentSessionOptions {
 	sessionStartEvent?: SessionStartEvent;
 	/** Authorization configuration for every registered tool call. */
 	permissionGate?: AgentSessionConfig["permissionGate"];
+	/**
+	 * Delegation entry point (roadmap Phase 5, ADR 0008). When set, `delegate`
+	 * executes real child sessions through `resolveAgent`, with the child's
+	 * authority derived from this session's live active tools and permission
+	 * store -- never reconstructed. When omitted, `delegate` stays inert (no agent
+	 * types resolve). Agent discovery is injected here as a caller-supplied
+	 * resolver rather than built in, until Phase 5 task 5.5 lands real
+	 * markdown/frontmatter discovery. Requires `permissionGate` to be set too: a
+	 * child's authority has nothing to derive from otherwise.
+	 */
+	delegation?: { resolveAgent: AgentDefinitionResolver };
 }
 
 /** Result from createAgentSession */
@@ -168,6 +184,23 @@ function getDefaultAgentDir(): string {
  * });
  * ```
  */
+/** The most recent assistant text in a completed session -- what a delegated child returns to its parent as its result. */
+function extractFinalAssistantText(session: AgentSession): string {
+	const messages = session.agent.state.messages;
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const message = messages[i];
+		if (message.role !== "assistant") continue;
+		const text = message.content
+			.filter((content): content is Extract<AgentMessage, { role: "assistant" }>["content"][number] & { type: "text" } =>
+				content.type === "text",
+			)
+			.map((content) => content.text)
+			.join("\n");
+		if (text) return text;
+	}
+	return "";
+}
+
 export async function createAgentSession(options: CreateAgentSessionOptions = {}): Promise<CreateAgentSessionResult> {
 	const cwd = resolvePath(options.cwd ?? options.sessionManager?.getCwd() ?? process.cwd());
 	const agentDir = options.agentDir ? resolvePath(options.agentDir) : getDefaultAgentDir();
@@ -375,6 +408,82 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		sessionManager.appendThinkingLevelChange(thinkingLevel);
 	}
 
+	// Forward ref, mirroring extensionRunnerRef above: the delegation runtime's
+	// closures are needed to build `customTools` before `session` exists, but they
+	// must read the *live* session (active tools can change after construction),
+	// not a snapshot frozen at this point.
+	const parentSessionRef: { current?: AgentSession } = {};
+	const customTools: ToolDefinition[] = options.customTools ? [...options.customTools] : [];
+	if (options.delegation) {
+		const parentPermissionGate = options.permissionGate;
+		const delegationRuntime: DelegationRuntimeOptions = {
+			resolveAgent: options.delegation.resolveAgent,
+			getParentCapabilities: () => {
+				const capabilities = new Set<Capability>();
+				for (const name of parentSessionRef.current?.getActiveToolNames() ?? []) {
+					const contract = (parentSessionRef.current?.getToolDefinition(name) as
+						| Partial<ApexToolDefinition>
+						| undefined)?.contract;
+					if (contract) for (const capability of contract.capabilities) capabilities.add(capability);
+				}
+				return capabilities;
+			},
+			getToolCapabilities: (toolName) => {
+				// Prefer the parent's own live registry first (it also covers
+				// extension/custom tools an agent definition might name), but fall back
+				// to the canonical built-in registry: "what capability does tool X
+				// need" is a property of the tool itself, independent of whether the
+				// parent's own session restricted it out of its active/allowed set via
+				// `tools`/`excludeTools` -- that restriction affects the parent's own
+				// *authority* (getParentCapabilities, above), not what a named tool is.
+				const fromParent = (parentSessionRef.current?.getToolDefinition(toolName) as
+					| Partial<ApexToolDefinition>
+					| undefined)?.contract?.capabilities;
+				if (fromParent) return fromParent;
+				return (createAllToolDefinitions(cwd)[toolName as ToolName] as ApexToolDefinition | undefined)?.contract
+					?.capabilities;
+			},
+			buildChildSession: async ({ definition, toolNames }) => {
+				if (!parentPermissionGate) {
+					throw new Error("delegate requires a permission gate configured on the parent session (ADR 0008).");
+				}
+				const childModel =
+					(definition.model && modelRuntime.getAvailableSnapshot().find((m) => m.id === definition.model)) || model;
+				if (!childModel) {
+					throw new Error(`Cannot delegate to "${definition.name}": no model is available for the child session.`);
+				}
+				const childSessionManager = SessionManager.inMemory(cwd, { parentSession: sessionManager.getSessionId() });
+				const derivedStore = new DerivedPermissionRuleStore({ parent: parentPermissionGate.store });
+				const { session: childSession } = await createAgentSession({
+					cwd,
+					agentDir,
+					model: childModel,
+					modelRuntime,
+					settingsManager,
+					sessionManager: childSessionManager,
+					resourceLoader,
+					tools: toolNames,
+					// No responder: a child's `ask` fails closed rather than prompting the
+					// human for a call the human did not make (ADR 0008, "Who answers a
+					// child's ask").
+					permissionGate: { store: derivedStore, getMode: parentPermissionGate.getMode },
+				});
+				await childSession.bindExtensions({});
+				return {
+					async run(task: string) {
+						const prompt = definition.systemPrompt ? `${definition.systemPrompt}\n\nTask: ${task}` : `Task: ${task}`;
+						await childSession.prompt(prompt);
+						return { output: extractFinalAssistantText(childSession) };
+					},
+					dispose() {
+						childSession.dispose();
+					},
+				};
+			},
+		};
+		customTools.push(createDelegateToolDefinition(delegationRuntime) as ToolDefinition<any, any>);
+	}
+
 	const session = new AgentSession({
 		agent,
 		sessionManager,
@@ -382,7 +491,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		cwd,
 		scopedModels: options.scopedModels,
 		resourceLoader,
-		customTools: options.customTools,
+		customTools,
 		modelRuntime,
 		initialActiveToolNames,
 		allowedToolNames,
@@ -391,6 +500,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		sessionStartEvent: options.sessionStartEvent,
 		permissionGate: options.permissionGate,
 	});
+	parentSessionRef.current = session;
 	const extensionsResult = resourceLoader.getExtensions();
 
 	return {

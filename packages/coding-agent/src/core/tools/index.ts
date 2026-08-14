@@ -10,7 +10,7 @@ export {
 	createLocalBashOperations,
 } from "./bash.ts";
 export { createAskUserTool, createAskUserToolDefinition, type AskUserDetails, type AskUserInput } from "./ask-user.ts";
-export { createDelegateTool, createDelegateToolDefinition, type DelegateInput } from "./delegate.ts";
+export { createDelegateTool, createDelegateToolDefinition, type DelegateDetails, type DelegateInput } from "./delegate.ts";
 export {
 	createEditTool,
 	createEditToolDefinition,
@@ -106,6 +106,7 @@ import { createAskUserTool, createAskUserToolDefinition } from "./ask-user.ts";
 import { type BashToolOptions, createBashTool, createBashToolDefinition } from "./bash.ts";
 import type { ApexToolDefinition } from "./contract.ts";
 import { createDelegateTool, createDelegateToolDefinition } from "./delegate.ts";
+import type { DelegationRuntimeOptions } from "../delegation/runtime.ts";
 import { createEditTool, createEditToolDefinition, type EditToolOptions } from "./edit.ts";
 import { createFindTool, createFindToolDefinition, type FindToolOptions } from "./find.ts";
 import { createGrepTool, createGrepToolDefinition, type GrepToolOptions } from "./grep.ts";
@@ -164,10 +165,29 @@ export interface ToolsOptions {
 	todo_write?: { store?: TodoWriteStore };
 	web_search?: WebSearchToolOptions;
 	web_fetch?: WebFetchToolOptions;
+	delegate?: { runtime?: DelegationRuntimeOptions };
 }
 
 /** Default store when no session/workspace context supplies one (mirrors emptyToolSchemaResolver below). */
 const noopTodoWriteStore: TodoWriteStore = { write: () => {} };
+
+/**
+ * Default runtime when no session supplies one (mirrors noopTodoWriteStore/
+ * emptyToolSchemaResolver above): every agent type is unresolvable, so `delegate`
+ * stays inert -- callable, but every call fails loudly with "unknown agent type"
+ * rather than silently spawning a child with no real authority derivation behind
+ * it. Real production wiring (a resolved parent capability set, a derived
+ * permission store, and a `buildChildSession` that calls `createAgentSession`) is
+ * supplied by `sdk.ts`'s `createAgentSession({ delegation })` option.
+ */
+const noopDelegationRuntime: DelegationRuntimeOptions = {
+	resolveAgent: () => undefined,
+	getParentCapabilities: () => new Set(),
+	getToolCapabilities: () => undefined,
+	buildChildSession: async () => {
+		throw new Error("delegate has no runtime configured in this context -- no agent types are resolvable.");
+	},
+};
 
 export function createToolDefinition(toolName: ToolName, cwd: string, options?: ToolsOptions): ToolDef {
 	switch (toolName) {
@@ -198,7 +218,7 @@ export function createToolDefinition(toolName: ToolName, cwd: string, options?: 
 		case "plan_present":
 			return createPlanPresentToolDefinition();
 		case "delegate":
-			return createDelegateToolDefinition();
+			return createDelegateToolDefinition(options?.delegate?.runtime ?? noopDelegationRuntime);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -233,7 +253,7 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 		case "plan_present":
 			return createPlanPresentTool();
 		case "delegate":
-			return createDelegateTool();
+			return createDelegateTool(options?.delegate?.runtime ?? noopDelegationRuntime);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -284,7 +304,7 @@ export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): R
 		web_fetch: createWebFetchToolDefinition(options?.web_fetch),
 		ask_user: createAskUserToolDefinition(),
 		plan_present: createPlanPresentToolDefinition(),
-		delegate: createDelegateToolDefinition(),
+		delegate: createDelegateToolDefinition(options?.delegate?.runtime ?? noopDelegationRuntime),
 	};
 }
 
@@ -326,6 +346,6 @@ export function createAllTools(cwd: string, options?: ToolsOptions): Record<Tool
 		web_fetch: createWebFetchTool(options?.web_fetch),
 		ask_user: createAskUserTool(),
 		plan_present: createPlanPresentTool(),
-		delegate: createDelegateTool(),
+		delegate: createDelegateTool(options?.delegate?.runtime ?? noopDelegationRuntime),
 	};
 }
