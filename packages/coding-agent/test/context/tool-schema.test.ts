@@ -120,4 +120,58 @@ describe("deferred schema load path (task 4.1)", () => {
 		);
 		expect(loaded).toEqual([]);
 	});
+
+	it("rejects a built-in tool that is registered but not in the active set, through the real AgentSession resolver", async () => {
+		const { streamFn, state: faux } = createFauxStreamFn([
+			{ toolCalls: [{ name: "tool_schema", args: { name: "write" } }] },
+			"done",
+		]);
+		const model = fauxModel;
+		const agent = new Agent({
+			getApiKey: () => "faux-key",
+			initialState: { model, systemPrompt: "test", tools: [] },
+			streamFn,
+		});
+		const authStorage = AuthStorage.inMemory({ [model.provider]: { type: "api_key", key: "faux-key" } });
+		const registry = await createInMemoryModelRegistry(authStorage);
+		registry.registerProvider(model.provider, {
+			baseUrl: model.baseUrl,
+			api: model.api,
+			models: [{
+				id: model.id,
+				name: model.name,
+				api: model.api,
+				reasoning: model.reasoning,
+				input: model.input,
+				cost: model.cost,
+				contextWindow: model.contextWindow,
+				maxTokens: model.maxTokens,
+				baseUrl: model.baseUrl,
+			}],
+		});
+
+		const session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settingsManager: SettingsManager.create(tempDir, tempDir),
+			cwd: tempDir,
+			modelRuntime: getModelRuntime(registry),
+			resourceLoader: createTestResourceLoader(),
+			// "write" is a built-in tool, always present in the definition registry, but
+			// deliberately left out of the active set here -- only "tool_schema" is active.
+			initialActiveToolNames: ["tool_schema"],
+		});
+
+		await session.prompt("try to load the inactive tool's schema");
+		await session.agent.waitForIdle();
+
+		const schemaResult = session.messages.find(
+			(message) => message.role === "toolResult" && message.toolName === "tool_schema",
+		);
+		expect(schemaResult).toMatchObject({ isError: true });
+		expect(JSON.stringify(schemaResult)).toMatch(/inactive or unknown.*write/i);
+
+		expect(faux.callCount).toBe(2);
+		session.dispose();
+	});
 });

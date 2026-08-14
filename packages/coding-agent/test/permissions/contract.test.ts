@@ -26,6 +26,7 @@ const REPRESENTATIVE_PARAMS: Record<string, unknown> = {
 	ls: { path: "src" },
 	bash: { command: "git status" },
 	tool_schema: { name: "read" },
+	todo_write: { todos: [{ content: "write the spec", status: "pending" }] },
 };
 
 describe("tool contracts", () => {
@@ -106,6 +107,13 @@ describe("tool contracts", () => {
 		expect(rule).not.toBeNull();
 		expect(tools.read.contract.permission.matches(rule as string, { path: "/etc/shadow" })).toBe(false);
 		expect(tools.read.contract.permission.matches(rule as string, { path: "src/other.ts" })).toBe(false);
+	});
+
+	it("the schema loader itself declares no capabilities and never defers, since it would be unreachable if it did", () => {
+		const schemaTool = registry().tool_schema;
+		expect(schemaTool.contract.capabilities.size).toBe(0);
+		expect(schemaTool.contract.context.deferSchema).toBe(false);
+		expect(schemaTool.contract.permission.defaultBehavior).toBe("allow");
 	});
 });
 

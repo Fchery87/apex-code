@@ -104,7 +104,7 @@ import { createInteractiveResponder } from "./permissions/responder.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
 import type { BranchSummaryEntry, CompactionEntry, SessionEntry, SessionManager } from "./session-manager.ts";
-import { CURRENT_SESSION_VERSION, getLatestCompactionEntry, type SessionHeader } from "./session-manager.ts";
+import { CURRENT_SESSION_VERSION, getLatestCompactionEntry, TODO_CUSTOM_ENTRY_TYPE, type SessionHeader } from "./session-manager.ts";
 import type { SettingsManager } from "./settings-manager.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
@@ -113,6 +113,7 @@ import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts"
 import type { ApexToolDefinition } from "./tools/contract.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
 import { createToolSchemaToolDefinition } from "./tools/tool-schema.ts";
+import { createTodoWriteToolDefinition } from "./tools/todo-write.ts";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
 import { addUsageToTotals, createUsageTotals } from "./usage-totals.ts";
 
@@ -2668,12 +2669,17 @@ export class AgentSession {
 				});
 		baseToolDefinitions.tool_schema = createToolSchemaToolDefinition({
 			getTool: (name) => {
-				if (!this._toolRegistry.has(name)) return undefined;
+				if (!this.getActiveToolNames().includes(name)) return undefined;
 				const definition = this._toolDefinitions.get(name)?.definition;
 				return definition ? { name: definition.name, parameters: definition.parameters } : undefined;
 			},
 			markLoaded: (name) => {
 				this._loadedDeferredSchemas.add(name);
+			},
+		}) as ToolDefinition<any, any>;
+		baseToolDefinitions.todo_write = createTodoWriteToolDefinition({
+			write: (todos) => {
+				this.sessionManager.appendCustomEntry(TODO_CUSTOM_ENTRY_TYPE, todos);
 			},
 		}) as ToolDefinition<any, any>;
 

@@ -19,6 +19,7 @@ import { createInterface } from "readline";
 import { StringDecoder } from "string_decoder";
 import { getAgentDir as getDefaultAgentDir, getSessionsDir } from "../config.ts";
 import { normalizePath, resolvePath } from "../utils/paths.ts";
+import type { TodoItem } from "./tools/todo-write.ts";
 import {
 	type BashExecutionMessage,
 	type CustomMessage,
@@ -320,6 +321,24 @@ export function getLatestCompactionEntry(entries: SessionEntry[]): CompactionEnt
 		}
 	}
 	return null;
+}
+
+/** customType used for `todo_write`'s session-facing state (task 4.3). */
+export const TODO_CUSTOM_ENTRY_TYPE = "todo";
+
+/**
+ * The task list is a full-replace snapshot, not a delta log: the latest `todo`
+ * custom entry is the entire current list, so reading it back is just finding that
+ * one entry, mirroring `getSessionName`'s "walk backward for the latest marker".
+ */
+export function getLatestTodos(entries: SessionEntry[]): TodoItem[] {
+	for (let i = entries.length - 1; i >= 0; i--) {
+		const entry = entries[i];
+		if (entry.type === "custom" && entry.customType === TODO_CUSTOM_ENTRY_TYPE) {
+			return (entry.data as TodoItem[] | undefined) ?? [];
+		}
+	}
+	return [];
 }
 
 function buildEntryIndex(entries: SessionEntry[], byId?: Map<string, SessionEntry>): Map<string, SessionEntry> {

@@ -51,6 +51,14 @@ export {
 	type ReadToolOptions,
 } from "./read.ts";
 export {
+	createTodoWriteTool,
+	createTodoWriteToolDefinition,
+	type TodoItem,
+	type TodoWriteDetails,
+	type TodoWriteInput,
+	type TodoWriteStore,
+} from "./todo-write.ts";
+export {
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
 	formatSize,
@@ -78,11 +86,22 @@ import { createLsTool, createLsToolDefinition, type LsToolOptions } from "./ls.t
 import { createReadTool, createReadToolDefinition, type ReadToolOptions } from "./read.ts";
 import { createWriteTool, createWriteToolDefinition, type WriteToolOptions } from "./write.ts";
 import { createToolSchemaTool, createToolSchemaToolDefinition, type ToolSchemaResolver } from "./tool-schema.ts";
+import { createTodoWriteTool, createTodoWriteToolDefinition, type TodoWriteStore } from "./todo-write.ts";
 
 export type Tool = AgentTool<any>;
 export type ToolDef = ApexToolDefinition<any, any>;
-export type ToolName = "read" | "bash" | "edit" | "write" | "grep" | "find" | "ls" | "tool_schema";
-export const allToolNames: Set<ToolName> = new Set(["read", "bash", "edit", "write", "grep", "find", "ls", "tool_schema"]);
+export type ToolName = "read" | "bash" | "edit" | "write" | "grep" | "find" | "ls" | "tool_schema" | "todo_write";
+export const allToolNames: Set<ToolName> = new Set([
+	"read",
+	"bash",
+	"edit",
+	"write",
+	"grep",
+	"find",
+	"ls",
+	"tool_schema",
+	"todo_write",
+]);
 
 export interface ToolsOptions {
 	read?: ReadToolOptions;
@@ -93,7 +112,11 @@ export interface ToolsOptions {
 	find?: FindToolOptions;
 	ls?: LsToolOptions;
 	tool_schema?: { resolver?: ToolSchemaResolver };
+	todo_write?: { store?: TodoWriteStore };
 }
+
+/** Default store when no session/workspace context supplies one (mirrors emptyToolSchemaResolver below). */
+const noopTodoWriteStore: TodoWriteStore = { write: () => {} };
 
 export function createToolDefinition(toolName: ToolName, cwd: string, options?: ToolsOptions): ToolDef {
 	switch (toolName) {
@@ -113,6 +136,8 @@ export function createToolDefinition(toolName: ToolName, cwd: string, options?: 
 			return createLsToolDefinition(cwd, options?.ls);
 		case "tool_schema":
 			return createToolSchemaToolDefinition(options?.tool_schema?.resolver ?? emptyToolSchemaResolver);
+		case "todo_write":
+			return createTodoWriteToolDefinition(options?.todo_write?.store ?? noopTodoWriteStore);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -136,6 +161,8 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 			return createLsTool(cwd, options?.ls);
 		case "tool_schema":
 			return createToolSchemaTool(options?.tool_schema?.resolver ?? emptyToolSchemaResolver);
+		case "todo_write":
+			return createTodoWriteTool(options?.todo_write?.store ?? noopTodoWriteStore);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -178,7 +205,11 @@ export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): R
 		getTool: (name: string) => definitions[name as keyof typeof definitions],
 		markLoaded: () => {},
 	};
-	return { ...definitions, tool_schema: createToolSchemaToolDefinition(resolver) };
+	return {
+		...definitions,
+		tool_schema: createToolSchemaToolDefinition(resolver),
+		todo_write: createTodoWriteToolDefinition(options?.todo_write?.store ?? noopTodoWriteStore),
+	};
 }
 
 export function createCodingTools(cwd: string, options?: ToolsOptions): Tool[] {
@@ -214,5 +245,6 @@ export function createAllTools(cwd: string, options?: ToolsOptions): Record<Tool
 		find: createFindTool(cwd, options?.find),
 		ls: createLsTool(cwd, options?.ls),
 		tool_schema: createToolSchemaTool(resolver),
+		todo_write: createTodoWriteTool(options?.todo_write?.store ?? noopTodoWriteStore),
 	};
 }

@@ -16,10 +16,16 @@ import type { Capability } from "../tools/contract.ts";
 import type { PermissionResolution } from "./rules.ts";
 import type { PermissionMode } from "./store.ts";
 
-const MUTATING_CAPABILITIES: readonly Capability[] = ["fs.write", "exec", "delegate", "state"];
+/**
+ * Plan mode's hard floor. `state` is deliberately excluded: an explicit harness-state
+ * tool such as `todo_write` is how plan mode maintains the plan it is presenting, so
+ * denying it outright would make plan mode unable to do its own job (spec
+ * `2026-08-13-tool-surface.md`, "The problem" item 4).
+ */
+const PLAN_MODE_DENIED_CAPABILITIES: readonly Capability[] = ["fs.write", "exec", "delegate"];
 
-function isMutating(capabilities: ReadonlySet<Capability>): boolean {
-	return MUTATING_CAPABILITIES.some((capability) => capabilities.has(capability));
+function isPlanModeDenied(capabilities: ReadonlySet<Capability>): boolean {
+	return PLAN_MODE_DENIED_CAPABILITIES.some((capability) => capabilities.has(capability));
 }
 
 /** fs.write only, with no exec/net/delegate/state — the shape acceptEdits auto-allows. */
@@ -41,7 +47,7 @@ export function resolveWithMode(
 	// Plan mode is a hard mutating safety floor. Managed policy is otherwise
 	// explicitly non-overridable (ADR 0004); bypass remains an escape hatch only
 	// for lower-precedence sources.
-	if (mode === "plan" && isMutating(capabilities)) {
+	if (mode === "plan" && isPlanModeDenied(capabilities)) {
 		return { behavior: "deny" };
 	}
 	if (ruleResolution.rule?.source === "policy") {
