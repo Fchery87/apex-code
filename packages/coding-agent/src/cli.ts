@@ -10,6 +10,17 @@ import { SettingsManager } from "./core/settings-manager.ts";
 
 async function run(): Promise<void> {
 	const args = process.argv.slice(2);
+	// Validate session IDs before entering the sandbox. Invalid metadata must fail fast
+	// without starting a child process or touching network/sandbox setup.
+	const sessionIdIndex = args.indexOf("--session-id");
+	const sessionId = sessionIdIndex >= 0 ? args[sessionIdIndex + 1] : undefined;
+	if (sessionId !== undefined && !/^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/.test(sessionId)) {
+		console.error(
+			"Error: Session id must be non-empty, contain only alphanumeric characters, '-', '_', and '.', and start and end with an alphanumeric character",
+		);
+		process.exitCode = 1;
+		return;
+	}
 	if (requiresSandboxedChild(args)) {
 		const settingsManager = SettingsManager.create(process.cwd());
 		const allowedHosts = settingsManager.getNetworkSettings()?.allowedHosts;
