@@ -251,3 +251,65 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 		this.runtimeRules[destination] = applyToScope(current, update).rules;
 	}
 }
+
+export interface DerivedPermissionRuleStoreOptions {
+	/** The parent's live store. Read fresh on every `snapshot()`, never cached, so a
+	 * rule the parent picks up mid-session (e.g. a human's "always allow") is visible
+	 * to the child on its very next call. */
+	parent: PermissionRuleStore;
+}
+
+/**
+ * A delegated child's permission store (roadmap Phase 5, ADR 0008). A read-through
+ * view over the parent's live snapshot -- including its runtime-only sources
+ * (`flag`, `cliArg`, `command`, `session`), which a subprocess-spawned child could
+ * never observe -- plus a child-local runtime overlay for the child's own writes.
+ *
+ * `apply()` never reaches the parent. It writes only into this instance's own
+ * overlay, and only for the two runtime-only writable sources (`command`, `session`);
+ * a file-backed destination (`local`, `project`, `user`) is rejected outright, not
+ * silently redirected -- a delegated child must never be able to persist to the
+ * parent's settings files, and "runtime-only" is enforced by construction here, not
+ * by a convention a future caller could forget. The overlay is discarded with the
+ * child: there is no code path from a child's approval back into the parent's store,
+ * which is what keeps a child's `persist: true` from widening its parent.
+ */
+export class DerivedPermissionRuleStore implements PermissionRuleStore {
+	private readonly parent: PermissionRuleStore;
+	private readonly overlayRules: Record<RuntimeSource, StoredPermissionRule[]> = { command: [], session: [] };
+	private readonly overlayModes: Partial<Record<RuntimeSource, PermissionMode>> = {};
+
+	constructor(options: DerivedPermissionRuleStoreOptions) {
+		this.parent = options.parent;
+	}
+
+	async snapshot(): Promise<PermissionStoreSnapshot> {
+		const parentSnapshot = await this.parent.snapshot();
+		const rules: PermissionRule[] = [
+			...parentSnapshot.rules,
+			...this.overlayRules.command.map((rule) => ({ ...rule, source: "command" as const })),
+			...this.overlayRules.session.map((rule) => ({ ...rule, source: "session" as const })),
+		];
+		const modesBySource = new Map(parentSnapshot.modesBySource);
+		if (this.overlayModes.command !== undefined) modesBySource.set("command", this.overlayModes.command);
+		if (this.overlayModes.session !== undefined) modesBySource.set("session", this.overlayModes.session);
+		return { rules, modesBySource, errors: parentSnapshot.errors };
+	}
+
+	async apply(update: PermissionUpdate): Promise<void> {
+		if (update.destination !== "command" && update.destination !== "session") {
+			throw new Error(
+				`A delegated child cannot persist permission rules to "${update.destination}" -- only "command" and "session" are writable from a derived store (ADR 0008).`,
+			);
+		}
+		if (update.type === "setMode") {
+			this.overlayModes[update.destination] = update.mode;
+			return;
+		}
+		const current: StoredPermissionScope = {
+			version: STORE_VERSION,
+			rules: this.overlayRules[update.destination],
+		};
+		this.overlayRules[update.destination] = applyToScope(current, update).rules;
+	}
+}
