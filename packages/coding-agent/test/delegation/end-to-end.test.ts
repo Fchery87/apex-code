@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
@@ -77,6 +77,49 @@ describe("delegation end-to-end through createAgentSession (task 5.2)", () => {
 		const text = toolResult.content.find((c) => c.type === "text")?.text;
 		expect(text).toContain("scout found it in config.ts");
 
+		session.dispose();
+	});
+
+	it("stores a real child's session only under its per-child artifact directory while a permitted workspace write succeeds", async () => {
+		const { faux, runtime } = await buildModelRuntime("delegation-artifacts-e2e");
+		const agentDir = join(scratch, "agent");
+		const settingsManager = SettingsManager.create(scratch, agentDir);
+		const store = new FilePermissionRuleStore({ cwd: scratch, agentDir, policyPath: join(scratch, "missing-policy.json") });
+		await store.apply({
+			type: "addRules", destination: "local", rules: [
+				{ toolName: "delegate", behavior: "allow" },
+				{ toolName: "write", behavior: "allow", ruleContent: "child-output.txt" },
+			],
+		});
+		const { session } = await createAgentSession({
+			cwd: scratch, agentDir, model: faux.getModel(), modelRuntime: runtime, settingsManager,
+			tools: ["read", "write", "delegate"], permissionGate: { store, getMode: () => "default" },
+			delegation: { resolveAgent: (agentType) => agentType === "writer" ? {
+				name: "writer", description: "writes workspace output", tools: ["write"], systemPrompt: "Write the requested file.",
+			} : undefined },
+		});
+		await session.bindExtensions({});
+		const delegateCall = fauxToolCall("delegate", { agentType: "writer", task: "write child-output.txt" });
+		const writeCall = fauxToolCall("write", { path: "child-output.txt", content: "workspace edit" });
+		faux.setResponses([
+			fauxAssistantMessage([delegateCall], { stopReason: "toolUse" }),
+			fauxAssistantMessage([writeCall], { stopReason: "toolUse" }),
+			fauxAssistantMessage("child wrote the workspace file", { stopReason: "stop" }),
+			fauxAssistantMessage("done", { stopReason: "stop" }),
+		]);
+		await session.prompt("delegate to writer");
+		expect(await readFile(join(scratch, "child-output.txt"), "utf8")).toBe("workspace edit");
+		const result = session.agent.state.messages.find((m) => m.role === "toolResult" && m.toolCallId === delegateCall.id);
+		if (result?.role !== "toolResult") throw new Error("expected a delegation result");
+		expect(result.isError).toBe(false);
+		const childJsonl = await (async () => {
+			const { readdir } = await import("node:fs/promises");
+			const roots = await readdir(join(session.sessionManager.getSessionDir(), "delegations"));
+			expect(roots).toHaveLength(1);
+			return join(session.sessionManager.getSessionDir(), "delegations", roots[0]!, (await readdir(join(session.sessionManager.getSessionDir(), "delegations", roots[0]!))).find((f) => f.endsWith(".jsonl"))!);
+		})();
+		await access(childJsonl);
+		expect(childJsonl).toContain(`${session.sessionManager.getSessionDir()}/delegations/`);
 		session.dispose();
 	});
 

@@ -6,6 +6,7 @@ import { resolvePath } from "../utils/paths.ts";
 import { AgentSession, type AgentSessionConfig } from "./agent-session.ts";
 import { formatNoModelsAvailableMessage } from "./auth-guidance.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
+import { createAgentDefinitionResolver } from "./delegation/agents.ts";
 import type { AgentDefinitionResolver, DelegationRuntimeOptions } from "./delegation/runtime.ts";
 import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
 import { convertToLlm } from "./messages.ts";
@@ -99,7 +100,7 @@ export interface CreateAgentSessionOptions {
 	 * markdown/frontmatter discovery. Requires `permissionGate` to be set too: a
 	 * child's authority has nothing to derive from otherwise.
 	 */
-	delegation?: { resolveAgent: AgentDefinitionResolver };
+	delegation?: { resolveAgent?: AgentDefinitionResolver };
 }
 
 /** Result from createAgentSession */
@@ -414,10 +415,19 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// not a snapshot frozen at this point.
 	const parentSessionRef: { current?: AgentSession } = {};
 	const customTools: ToolDefinition[] = options.customTools ? [...options.customTools] : [];
-	if (options.delegation) {
+	// A configured permission gate supplies the authority a child must derive, so
+	// discovery is enabled by default in real sessions. Callers that need fixture
+	// definitions may still provide an explicit resolver.
+	const delegation = options.delegation ?? (options.permissionGate ? {} : undefined);
+	if (delegation) {
 		const parentPermissionGate = options.permissionGate;
+		const resolveAgent = delegation.resolveAgent ?? createAgentDefinitionResolver({
+			cwd,
+			agentDir,
+			isProjectTrusted: () => settingsManager.isProjectTrusted(),
+		});
 		const delegationRuntime: DelegationRuntimeOptions = {
-			resolveAgent: options.delegation.resolveAgent,
+			resolveAgent,
 			getParentCapabilities: () => {
 				const capabilities = new Set<Capability>();
 				for (const name of parentSessionRef.current?.getActiveToolNames() ?? []) {
@@ -448,7 +458,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			// building, via the same sessionManager this closure already captures.
 			getDelegationDepth: () => sessionManager.getDelegationDepth(),
 			maxDelegationDepth: settingsManager.getDelegationMaxDepth(),
-			buildChildSession: async ({ definition, toolNames, depth }) => {
+			getParentSessionDir: () => sessionManager.getSessionDir(),
+			buildChildSession: async ({ definition, toolNames, depth, sessionId, artifactDir }) => {
 				if (!parentPermissionGate) {
 					throw new Error("delegate requires a permission gate configured on the parent session (ADR 0008).");
 				}
@@ -457,10 +468,16 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				if (!childModel) {
 					throw new Error(`Cannot delegate to "${definition.name}": no model is available for the child session.`);
 				}
-				const childSessionManager = SessionManager.inMemory(cwd, {
-					parentSession: sessionManager.getSessionId(),
-					delegationDepth: depth,
-				});
+				const childSessionManager = artifactDir
+					? SessionManager.create(cwd, artifactDir, {
+						id: sessionId,
+						parentSession: sessionManager.getSessionId(),
+						delegationDepth: depth,
+					})
+					: SessionManager.inMemory(cwd, {
+						parentSession: sessionManager.getSessionId(),
+						delegationDepth: depth,
+					});
 				const derivedStore = new DerivedPermissionRuleStore({ parent: parentPermissionGate.store });
 				const { session: childSession } = await createAgentSession({
 					cwd,
@@ -479,7 +496,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					// (bounded by the depth guard above, read fresh from its own session
 					// header on its next createAgentSession call) -- otherwise recursion
 					// would be silently capped at one level regardless of maxDelegationDepth.
-					delegation: options.delegation,
+					delegation,
 				});
 				await childSession.bindExtensions({});
 				return {

@@ -4,6 +4,7 @@ import {
 	type ApexToolDefinition,
 	UNCLASSIFIED,
 } from "../../src/core/tools/contract.ts";
+import { computeCapabilityCeiling } from "../../src/core/delegation/ceiling.ts";
 import { createAllToolDefinitions } from "../../src/core/tools/index.ts";
 
 const CWD = "/workspace";
@@ -82,6 +83,15 @@ describe("tool contracts", () => {
 		};
 		for (const [name, caps] of Object.entries(expected)) {
 			expect([...tools[name].contract.capabilities].sort(), name).toEqual(caps.sort());
+		}
+	});
+
+	it("rejects every registry-declared capability absent from a restricted parent (invariant 4)", () => {
+		for (const [name, tool] of Object.entries(registry())) {
+			for (const capability of tool.contract.capabilities) {
+				const ceiling = computeCapabilityCeiling(new Set(), new Set([capability]));
+				expect(ceiling, `${name} requires ${capability}`).toEqual({ allowed: false, deniedCapability: capability });
+			}
 		}
 	});
 
