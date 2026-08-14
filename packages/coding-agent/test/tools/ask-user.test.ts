@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ExtensionContext } from "../../src/core/extensions/types.ts";
-import { createAskUserToolDefinition } from "../../src/core/tools/ask-user.ts";
+import { createAskUserTool, createAskUserToolDefinition } from "../../src/core/tools/ask-user.ts";
 
-function fakeCtx(overrides: { hasUI: boolean; select?: (title: string, options: string[]) => Promise<string | undefined> }): ExtensionContext {
+function fakeCtx(overrides: {
+	hasUI: boolean;
+	select?: (title: string, options: string[]) => Promise<string | undefined>;
+}): ExtensionContext {
 	return {
 		hasUI: overrides.hasUI,
 		ui: {
@@ -74,14 +77,20 @@ describe("ask_user fails closed without interactive UI (task 4.5)", () => {
 		const definition = createAskUserToolDefinition();
 
 		await expect(
-			definition.execute("call-1", { question: "q", options: ["a"] }, undefined, undefined, fakeCtx({ hasUI: false, select })),
+			definition.execute(
+				"call-1",
+				{ question: "q", options: ["a"] },
+				undefined,
+				undefined,
+				fakeCtx({ hasUI: false, select }),
+			),
 		).rejects.toThrow(/interactive UI|not available|headless/i);
 		expect(select).not.toHaveBeenCalled();
 	});
 
 	it("throws when called with no context at all", async () => {
-		const definition = createAskUserToolDefinition();
-		await expect(definition.execute("call-1", { question: "q", options: ["a"] })).rejects.toThrow(
+		const tool = createAskUserTool();
+		await expect(tool.execute("call-1", { question: "q", options: ["a"] })).rejects.toThrow(
 			/interactive UI|not available|headless/i,
 		);
 	});

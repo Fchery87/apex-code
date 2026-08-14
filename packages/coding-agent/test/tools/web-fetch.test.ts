@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createWebFetchToolDefinition, type WebFetchOperations } from "../../src/core/tools/web-fetch.ts";
+import {
+	createWebFetchTool,
+	createWebFetchToolDefinition,
+	type WebFetchOperations,
+} from "../../src/core/tools/web-fetch.ts";
 
 function createRecordingOperations(text: string, status = 200): WebFetchOperations & { calls: string[] } {
 	const calls: string[] = [];
@@ -32,7 +36,9 @@ describe("web_fetch rule grammar: host + path glob (task 4.4)", () => {
 
 	it("an auto-generated rule matches only the exact call it came from", () => {
 		const definition = createWebFetchToolDefinition({ operations: createRecordingOperations("x") });
-		const rule = definition.contract.permission.ruleForCall({ url: "https://docs.example.com/guide/intro" }) as string;
+		const rule = definition.contract.permission.ruleForCall({
+			url: "https://docs.example.com/guide/intro",
+		}) as string;
 		expect(definition.contract.permission.matches(rule, { url: "https://docs.example.com/guide/intro" })).toBe(true);
 		expect(definition.contract.permission.matches(rule, { url: "https://docs.example.com/guide/other" })).toBe(false);
 		expect(definition.contract.permission.matches(rule, { url: "https://evil.example.com/guide/intro" })).toBe(false);
@@ -43,7 +49,9 @@ describe("web_fetch rule grammar: host + path glob (task 4.4)", () => {
 		const glob = "docs.example.com/**";
 		expect(definition.contract.permission.matches(glob, { url: "https://docs.example.com/guide/intro" })).toBe(true);
 		expect(definition.contract.permission.matches(glob, { url: "https://docs.example.com/" })).toBe(true);
-		expect(definition.contract.permission.matches(glob, { url: "https://other.example.com/guide/intro" })).toBe(false);
+		expect(definition.contract.permission.matches(glob, { url: "https://other.example.com/guide/intro" })).toBe(
+			false,
+		);
 	});
 
 	it("renders a human-readable description of the rule content", () => {
@@ -55,9 +63,9 @@ describe("web_fetch rule grammar: host + path glob (task 4.4)", () => {
 describe("web_fetch execution (task 4.4)", () => {
 	it("fetches through the injected operations and returns the content plus status details", async () => {
 		const ops = createRecordingOperations("hello from the page", 200);
-		const definition = createWebFetchToolDefinition({ operations: ops });
+		const tool = createWebFetchTool({ operations: ops });
 
-		const result = await definition.execute("call-1", { url: "https://example.com/page" });
+		const result = await tool.execute("call-1", { url: "https://example.com/page" });
 
 		expect(ops.calls).toEqual(["https://example.com/page"]);
 		expect(result.content[0]).toMatchObject({ type: "text", text: "hello from the page" });
@@ -67,9 +75,9 @@ describe("web_fetch execution (task 4.4)", () => {
 	it("truncates content larger than the output budget and records that it did", async () => {
 		const bigText = "x".repeat(60 * 1024);
 		const ops = createRecordingOperations(bigText, 200);
-		const definition = createWebFetchToolDefinition({ operations: ops });
+		const tool = createWebFetchTool({ operations: ops });
 
-		const result = await definition.execute("call-1", { url: "https://example.com/big" });
+		const result = await tool.execute("call-1", { url: "https://example.com/big" });
 
 		const text = result.content.find((c) => c.type === "text")?.text ?? "";
 		expect(text.length).toBeLessThan(bigText.length);
@@ -83,12 +91,12 @@ describe("web_fetch default operations use the global, proxy-aware fetch (task 4
 	});
 
 	it("delegates to globalThis.fetch when no operations are injected -- these tools never bypass the sandbox's proxy-aware dispatcher", async () => {
-		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-			new Response("real fetch content", { status: 200 }),
-		);
+		const fetchSpy = vi
+			.spyOn(globalThis, "fetch")
+			.mockResolvedValue(new Response("real fetch content", { status: 200 }));
 
-		const definition = createWebFetchToolDefinition();
-		const result = await definition.execute("call-1", { url: "https://example.com/real" });
+		const tool = createWebFetchTool();
+		const result = await tool.execute("call-1", { url: "https://example.com/real" });
 
 		expect(fetchSpy).toHaveBeenCalledWith("https://example.com/real", expect.anything());
 		expect(result.content[0]).toMatchObject({ type: "text", text: "real fetch content" });

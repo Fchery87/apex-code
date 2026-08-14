@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AgentDefinition, ChildSessionHandle, DelegationRuntimeOptions } from "../../src/core/delegation/runtime.ts";
+import type {
+	AgentDefinition,
+	ChildSessionHandle,
+	DelegationRuntimeOptions,
+} from "../../src/core/delegation/runtime.ts";
 import { retrieveDelegationResult, runDelegation } from "../../src/core/delegation/runtime.ts";
 import type { Capability } from "../../src/core/tools/contract.ts";
 
@@ -17,7 +21,11 @@ function scoutDefinition(overrides: Partial<AgentDefinition> = {}): AgentDefinit
 	};
 }
 
-function fakeChild(output = "scout output"): { handle: ChildSessionHandle; run: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> } {
+function fakeChild(output = "scout output"): {
+	handle: ChildSessionHandle;
+	run: ReturnType<typeof vi.fn>;
+	dispose: ReturnType<typeof vi.fn>;
+} {
 	const run = vi.fn(async () => ({ output }));
 	const dispose = vi.fn();
 	return { handle: { run, dispose }, run, dispose };
@@ -27,7 +35,8 @@ function baseOptions(overrides: Partial<DelegationRuntimeOptions> = {}): Delegat
 	return {
 		resolveAgent: (agentType) => (agentType === "scout" ? scoutDefinition() : undefined),
 		getParentCapabilities: () => caps("fs.read", "delegate"),
-		getToolCapabilities: (toolName) => (toolName === "read" ? caps("fs.read") : toolName === "bash" ? caps("exec") : undefined),
+		getToolCapabilities: (toolName) =>
+			toolName === "read" ? caps("fs.read") : toolName === "bash" ? caps("exec") : undefined,
 		getDelegationDepth: () => 0,
 		maxDelegationDepth: 2,
 		buildChildSession: vi.fn(async () => fakeChild().handle),
@@ -149,8 +158,13 @@ describe("runDelegation", () => {
 
 	it("returns a handle immediately for a background child and retrieves its result after completion", async () => {
 		let release: (() => void) | undefined;
-		const completed = new Promise<void>((resolve) => { release = resolve; });
-		const run = vi.fn(async () => { await completed; return { output: "finished later" }; });
+		const completed = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const run = vi.fn(async () => {
+			await completed;
+			return { output: "finished later" };
+		});
 		const child: ChildSessionHandle = { run, dispose: vi.fn() };
 		const options = baseOptions({ buildChildSession: vi.fn(async () => child) });
 		const started = await runDelegation(options, "scout", "task", { background: true });
@@ -161,7 +175,9 @@ describe("runDelegation", () => {
 		release?.();
 		await expect(retrieved).resolves.toEqual({ agentType: "scout", task: "task", output: "finished later" });
 		await expect(retrieveDelegationResult(options, started.handleId!, "scout")).resolves.toEqual({
-			agentType: "scout", task: "task", output: "finished later",
+			agentType: "scout",
+			task: "task",
+			output: "finished later",
 		});
 	});
 
@@ -176,13 +192,15 @@ describe("runDelegation", () => {
 		const parentDir = await mkdtemp(join(tmpdir(), "apex-delegation-artifacts-"));
 		try {
 			const { handle } = fakeChild();
-			const buildChildSession = vi.fn(async () => handle);
+			const buildChildSession = vi.fn<DelegationRuntimeOptions["buildChildSession"]>(async () => handle);
 			await runDelegation(baseOptions({ getParentSessionDir: () => parentDir, buildChildSession }), "scout", "task");
 			const request = buildChildSession.mock.calls[0]?.[0];
 			expect(request?.artifactDir).toMatch(new RegExp(`^${parentDir}/delegations/`));
 			expect(request?.sessionId).toBeTruthy();
 			expect((await stat(request?.artifactDir ?? "")).isDirectory()).toBe(true);
-		} finally { await rm(parentDir, { recursive: true, force: true }); }
+		} finally {
+			await rm(parentDir, { recursive: true, force: true });
+		}
 	});
 
 	it("disposes the child even when run() rejects", async () => {

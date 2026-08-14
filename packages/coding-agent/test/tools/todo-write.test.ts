@@ -1,6 +1,11 @@
 import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
-import { createTodoWriteToolDefinition, type TodoItem, type TodoWriteStore } from "../../src/core/tools/todo-write.ts";
+import {
+	createTodoWriteTool,
+	createTodoWriteToolDefinition,
+	type TodoItem,
+	type TodoWriteStore,
+} from "../../src/core/tools/todo-write.ts";
 
 function createRecordingStore(): TodoWriteStore & { writes: TodoItem[][] } {
 	const writes: TodoItem[][] = [];
@@ -17,28 +22,30 @@ describe("todo_write contract (task 4.3)", () => {
 		const definition = createTodoWriteToolDefinition(createRecordingStore());
 		expect([...definition.contract.capabilities]).toEqual(["state"]);
 		expect(definition.contract.permission.defaultBehavior).toBe("allow");
-		expect(definition.contract.permission.ruleForCall([{ content: "x", status: "pending" }])).toBeNull();
+		expect(definition.contract.permission.ruleForCall({ todos: [{ content: "x", status: "pending" }] })).toBeNull();
 		expect(definition.contract.context.deferSchema).toBe(true);
 		expect(definition.contract.evidence.emits.size).toBe(0);
 	});
 
 	it("never matches any rule content, since ruleForCall never generates one", () => {
 		const definition = createTodoWriteToolDefinition(createRecordingStore());
-		expect(definition.contract.permission.matches("**", [{ content: "x", status: "pending" }])).toBe(false);
+		expect(definition.contract.permission.matches("**", { todos: [{ content: "x", status: "pending" }] })).toBe(
+			false,
+		);
 	});
 });
 
 describe("todo_write execution (task 4.3)", () => {
 	it("persists the full submitted list to the store and echoes it back in details", async () => {
 		const store = createRecordingStore();
-		const definition = createTodoWriteToolDefinition(store);
+		const tool = createTodoWriteTool(store);
 		const todos: TodoItem[] = [
 			{ content: "Write the spec", status: "completed" },
 			{ content: "Implement the tool", status: "in_progress" },
 			{ content: "Wire up the registry", status: "pending" },
 		];
 
-		const result = await definition.execute("call-1", { todos });
+		const result = await tool.execute("call-1", { todos });
 
 		expect(store.writes).toEqual([todos]);
 		expect(result.details).toEqual({ todos });
@@ -47,18 +54,18 @@ describe("todo_write execution (task 4.3)", () => {
 
 	it("replaces the previous list entirely -- an empty array clears it", async () => {
 		const store = createRecordingStore();
-		const definition = createTodoWriteToolDefinition(store);
+		const tool = createTodoWriteTool(store);
 
-		await definition.execute("call-1", { todos: [{ content: "one task", status: "pending" }] });
-		await definition.execute("call-2", { todos: [] });
+		await tool.execute("call-1", { todos: [{ content: "one task", status: "pending" }] });
+		await tool.execute("call-2", { todos: [] });
 
 		expect(store.writes).toEqual([[{ content: "one task", status: "pending" }], []]);
 	});
 
 	it("summarizes the counts of each status in the result text", async () => {
 		const store = createRecordingStore();
-		const definition = createTodoWriteToolDefinition(store);
-		const result = await definition.execute("call-1", {
+		const tool = createTodoWriteTool(store);
+		const result = await tool.execute("call-1", {
 			todos: [
 				{ content: "a", status: "completed" },
 				{ content: "b", status: "in_progress" },
