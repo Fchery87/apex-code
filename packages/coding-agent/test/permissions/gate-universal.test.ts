@@ -23,6 +23,9 @@ const REPRESENTATIVE_PARAMS: Record<ToolName, unknown> = {
 	bash: { command: "echo test" },
 	tool_schema: { name: "read" },
 	todo_write: { todos: [{ content: "write the spec", status: "pending" }] },
+	web_search: { query: "typescript generics" },
+	// Port 1 refuses instantly and locally -- no external network dependency in tests.
+	web_fetch: { url: "http://127.0.0.1:1/" },
 };
 
 let scratch: string;
@@ -166,6 +169,29 @@ describe("permission gate — plan mode (task 4.3: state stays callable, mutatio
 			const result = await driveOneToolCallTurn(toolName, REPRESENTATIVE_PARAMS[toolName], beforeToolCall);
 			expect(result.blocked, JSON.stringify(result)).toBe(true);
 			expect(result.toolExecuted).toBe(false);
+		},
+	);
+
+	it.each(["web_search", "web_fetch"] as const)(
+		"task 4.4: %s (net capability) is not denied by plan mode's hard floor -- an explicit allow rule still executes",
+		async (toolName) => {
+			const store = new FilePermissionRuleStore({
+				cwd: scratch,
+				agentDir: join(scratch, "agent"),
+				policyPath: join(scratch, "missing-policy.json"),
+			});
+			await store.apply({ type: "addRules", destination: "local", rules: [{ toolName, behavior: "allow" }] });
+
+			const definitions = createAllToolDefinitions(scratch);
+			const beforeToolCall = createPermissionGate({
+				getContract: (name) => definitions[name as ToolName]?.contract,
+				store,
+				getMode: () => "plan",
+			});
+
+			const result = await driveOneToolCallTurn(toolName, REPRESENTATIVE_PARAMS[toolName], beforeToolCall);
+			expect(result.blocked, JSON.stringify(result)).toBe(false);
+			expect(result.toolExecuted).toBe(true);
 		},
 	);
 });

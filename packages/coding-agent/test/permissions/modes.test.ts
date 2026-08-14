@@ -47,6 +47,10 @@ describe("resolveWithMode", () => {
 			expect(resolveWithMode("plan", noRule("allow"), caps("state"))).toEqual(noRule("allow"));
 		});
 
+		it("allows a net-capability tool (e.g. web_search/web_fetch), deferring to its own ask resolution -- net was never part of the hard floor", () => {
+			expect(resolveWithMode("plan", noRule("ask"), caps("net"))).toEqual(noRule("ask"));
+		});
+
 		it("is a hard safety floor: overrides even an explicit allow rule for a mutating capability", () => {
 			expect(resolveWithMode("plan", withRule(explicitAllow), caps("exec"))).toEqual({ behavior: "deny" });
 		});
@@ -67,6 +71,10 @@ describe("resolveWithMode", () => {
 
 		it("leaves an exec-capable tool asking — it never becomes edit-shaped by name", () => {
 			expect(resolveWithMode("acceptEdits", noRule("ask"), caps("exec"))).toEqual(noRule("ask"));
+		});
+
+		it("leaves a net-capable tool (web_search/web_fetch) asking — net is explicitly excluded from edit-shaped", () => {
+			expect(resolveWithMode("acceptEdits", noRule("ask"), caps("net"))).toEqual(noRule("ask"));
 		});
 
 		it("respects an explicit rule rather than overriding it", () => {
