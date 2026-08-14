@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createWebSearchToolDefinition, type WebSearchOperations, type WebSearchResult } from "../../src/core/tools/web-search.ts";
+import {
+	createWebSearchTool,
+	createWebSearchToolDefinition,
+	type WebSearchOperations,
+	type WebSearchResult,
+} from "../../src/core/tools/web-search.ts";
 
 function createRecordingOperations(results: WebSearchResult[]): WebSearchOperations & { queries: string[] } {
 	const queries: string[] = [];
@@ -49,9 +54,9 @@ describe("web_search execution (task 4.4)", () => {
 			{ title: "TypeScript Handbook", url: "https://www.typescriptlang.org/docs/", snippet: "The TypeScript docs." },
 		];
 		const ops = createRecordingOperations(results);
-		const definition = createWebSearchToolDefinition({ operations: ops });
+		const tool = createWebSearchTool({ operations: ops });
 
-		const result = await definition.execute("call-1", { query: "typescript generics" });
+		const result = await tool.execute("call-1", { query: "typescript generics" });
 
 		expect(ops.queries).toEqual(["typescript generics"]);
 		expect(result.details).toEqual({ results });
@@ -61,9 +66,9 @@ describe("web_search execution (task 4.4)", () => {
 
 	it("reports zero results clearly rather than an empty string", async () => {
 		const ops = createRecordingOperations([]);
-		const definition = createWebSearchToolDefinition({ operations: ops });
+		const tool = createWebSearchTool({ operations: ops });
 
-		const result = await definition.execute("call-1", { query: "no matches for this" });
+		const result = await tool.execute("call-1", { query: "no matches for this" });
 
 		const text = result.content.find((c) => c.type === "text")?.text ?? "";
 		expect(text).toMatch(/no results/i);
@@ -72,7 +77,7 @@ describe("web_search execution (task 4.4)", () => {
 
 describe("web_search default operations (task 4.4)", () => {
 	it("fails clearly when no search provider has been configured, rather than silently no-oping", async () => {
-		const definition = createWebSearchToolDefinition();
-		await expect(definition.execute("call-1", { query: "anything" })).rejects.toThrow(/not configured/i);
+		const tool = createWebSearchTool();
+		await expect(tool.execute("call-1", { query: "anything" })).rejects.toThrow(/not configured/i);
 	});
 });

@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "apex-code-agent-core";
 import { Type } from "typebox";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { AgentSession, type AgentSessionConfig } from "../../src/core/agent-session.ts";
 import { AuthStorage } from "../../src/core/auth-storage.ts";
 import type { ToolDefinition } from "../../src/core/extensions/types.ts";
@@ -53,17 +53,19 @@ async function loadSchema(
 		registry.registerProvider(model.provider, {
 			baseUrl: model.baseUrl,
 			api: model.api,
-			models: [{
-				id: model.id,
-				name: model.name,
-				api: model.api,
-				reasoning: model.reasoning,
-				input: model.input,
-				cost: model.cost,
-				contextWindow: model.contextWindow,
-				maxTokens: model.maxTokens,
-				baseUrl: model.baseUrl,
-			}],
+			models: [
+				{
+					id: model.id,
+					name: model.name,
+					api: model.api,
+					reasoning: model.reasoning,
+					input: model.input,
+					cost: model.cost,
+					contextWindow: model.contextWindow,
+					maxTokens: model.maxTokens,
+					baseUrl: model.baseUrl,
+				},
+			],
 		});
 
 		const session = new AgentSession({

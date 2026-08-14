@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DelegationRuntimeOptions } from "../../src/core/delegation/runtime.ts";
-import { createDelegateToolDefinition } from "../../src/core/tools/delegate.ts";
 import type { Capability } from "../../src/core/tools/contract.ts";
+import { createDelegateTool, createDelegateToolDefinition } from "../../src/core/tools/delegate.ts";
 
 /** A runtime fixture that never resolves any agent -- enough to exercise the contract shape without a real child. */
 function inertRuntime(overrides: Partial<DelegationRuntimeOptions> = {}): DelegationRuntimeOptions {
@@ -60,7 +60,7 @@ describe("delegate evidence: workflow record (task 4.6)", () => {
 	it("captures a workflow evidence record naming the agent type and task", () => {
 		const definition = createDelegateToolDefinition(inertRuntime());
 		const params = { agentType: "explore", task: "find the config loader" };
-		const result = { content: [], details: undefined };
+		const result = { content: [], details: { agentType: "explore", task: "find the config loader", output: "" } };
 		expect(definition.contract.evidence.capture(params, result)).toEqual([
 			{ kind: "workflow", agentType: "explore", task: "find the config loader" },
 		]);
@@ -71,19 +71,26 @@ describe("delegate execution: runs a real child through the injected runtime (ta
 	it("returns the child's output as the tool result on success", async () => {
 		const runtime = inertRuntime({
 			resolveAgent: (agentType) =>
-				agentType === "explore" ? { name: "explore", description: "recon", tools: [], systemPrompt: "" } : undefined,
+				agentType === "explore"
+					? { name: "explore", description: "recon", tools: [], systemPrompt: "" }
+					: undefined,
 			getParentCapabilities: () => new Set<Capability>(["delegate"]),
 			buildChildSession: vi.fn(async () => ({
 				run: async (task: string) => ({ output: `explored: ${task}` }),
 				dispose: () => {},
 			})),
 		});
-		const definition = createDelegateToolDefinition(runtime);
+		const tool = createDelegateTool(runtime);
 
-		const result = await definition.execute("call-1", { agentType: "explore", task: "find the config loader" });
+		const result = await tool.execute("call-1", { agentType: "explore", task: "find the config loader" });
 
 		expect(result.content).toEqual([{ type: "text", text: "explored: find the config loader" }]);
-		expect(result.details).toEqual({ agentType: "explore", task: "find the config loader", output: "explored: find the config loader", handle: undefined });
+		expect(result.details).toEqual({
+			agentType: "explore",
+			task: "find the config loader",
+			output: "explored: find the config loader",
+			handle: undefined,
+		});
 	});
 
 	it("keeps the established agent-type glob grammar for an earlier delegate rule", () => {
@@ -99,9 +106,9 @@ describe("delegate execution: runs a real child through the injected runtime (ta
 	});
 
 	it("throws (a model-readable isError result once caught by the agent loop) for an unresolvable agent type", async () => {
-		const definition = createDelegateToolDefinition(inertRuntime());
-		await expect(
-			definition.execute("call-1", { agentType: "explore", task: "find the config loader" }),
-		).rejects.toThrow(/unknown agent type/i);
+		const tool = createDelegateTool(inertRuntime());
+		await expect(tool.execute("call-1", { agentType: "explore", task: "find the config loader" })).rejects.toThrow(
+			/unknown agent type/i,
+		);
 	});
 });

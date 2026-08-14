@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ExtensionContext } from "../../src/core/extensions/types.ts";
-import { createPlanPresentToolDefinition } from "../../src/core/tools/plan-present.ts";
+import { createPlanPresentTool, createPlanPresentToolDefinition } from "../../src/core/tools/plan-present.ts";
 
-function fakeCtx(overrides: { hasUI: boolean; confirm?: (title: string, message: string) => Promise<boolean> }): ExtensionContext {
+function fakeCtx(overrides: {
+	hasUI: boolean;
+	confirm?: (title: string, message: string) => Promise<boolean>;
+}): ExtensionContext {
 	return {
 		hasUI: overrides.hasUI,
 		ui: {
@@ -87,8 +90,8 @@ describe("plan_present fails closed without interactive UI (task 4.5)", () => {
 	});
 
 	it("throws when called with no context at all", async () => {
-		const definition = createPlanPresentToolDefinition();
-		await expect(definition.execute("call-1", { plan: "1. Step" })).rejects.toThrow(
+		const tool = createPlanPresentTool();
+		await expect(tool.execute("call-1", { plan: "1. Step" })).rejects.toThrow(
 			/interactive UI|not available|headless/i,
 		);
 	});
