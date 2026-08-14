@@ -69,6 +69,23 @@ export {
 	truncateTail,
 } from "./truncate.ts";
 export {
+	createWebFetchTool,
+	createWebFetchToolDefinition,
+	type WebFetchDetails,
+	type WebFetchInput,
+	type WebFetchOperations,
+	type WebFetchToolOptions,
+} from "./web-fetch.ts";
+export {
+	createWebSearchTool,
+	createWebSearchToolDefinition,
+	type WebSearchDetails,
+	type WebSearchInput,
+	type WebSearchOperations,
+	type WebSearchResult,
+	type WebSearchToolOptions,
+} from "./web-search.ts";
+export {
 	createWriteTool,
 	createWriteToolDefinition,
 	type WriteOperations,
@@ -87,10 +104,23 @@ import { createReadTool, createReadToolDefinition, type ReadToolOptions } from "
 import { createWriteTool, createWriteToolDefinition, type WriteToolOptions } from "./write.ts";
 import { createToolSchemaTool, createToolSchemaToolDefinition, type ToolSchemaResolver } from "./tool-schema.ts";
 import { createTodoWriteTool, createTodoWriteToolDefinition, type TodoWriteStore } from "./todo-write.ts";
+import { createWebFetchTool, createWebFetchToolDefinition, type WebFetchToolOptions } from "./web-fetch.ts";
+import { createWebSearchTool, createWebSearchToolDefinition, type WebSearchToolOptions } from "./web-search.ts";
 
 export type Tool = AgentTool<any>;
 export type ToolDef = ApexToolDefinition<any, any>;
-export type ToolName = "read" | "bash" | "edit" | "write" | "grep" | "find" | "ls" | "tool_schema" | "todo_write";
+export type ToolName =
+	| "read"
+	| "bash"
+	| "edit"
+	| "write"
+	| "grep"
+	| "find"
+	| "ls"
+	| "tool_schema"
+	| "todo_write"
+	| "web_search"
+	| "web_fetch";
 export const allToolNames: Set<ToolName> = new Set([
 	"read",
 	"bash",
@@ -101,6 +131,8 @@ export const allToolNames: Set<ToolName> = new Set([
 	"ls",
 	"tool_schema",
 	"todo_write",
+	"web_search",
+	"web_fetch",
 ]);
 
 export interface ToolsOptions {
@@ -113,6 +145,8 @@ export interface ToolsOptions {
 	ls?: LsToolOptions;
 	tool_schema?: { resolver?: ToolSchemaResolver };
 	todo_write?: { store?: TodoWriteStore };
+	web_search?: WebSearchToolOptions;
+	web_fetch?: WebFetchToolOptions;
 }
 
 /** Default store when no session/workspace context supplies one (mirrors emptyToolSchemaResolver below). */
@@ -138,6 +172,10 @@ export function createToolDefinition(toolName: ToolName, cwd: string, options?: 
 			return createToolSchemaToolDefinition(options?.tool_schema?.resolver ?? emptyToolSchemaResolver);
 		case "todo_write":
 			return createTodoWriteToolDefinition(options?.todo_write?.store ?? noopTodoWriteStore);
+		case "web_search":
+			return createWebSearchToolDefinition(options?.web_search);
+		case "web_fetch":
+			return createWebFetchToolDefinition(options?.web_fetch);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -163,6 +201,10 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 			return createToolSchemaTool(options?.tool_schema?.resolver ?? emptyToolSchemaResolver);
 		case "todo_write":
 			return createTodoWriteTool(options?.todo_write?.store ?? noopTodoWriteStore);
+		case "web_search":
+			return createWebSearchTool(options?.web_search);
+		case "web_fetch":
+			return createWebFetchTool(options?.web_fetch);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -209,6 +251,8 @@ export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): R
 		...definitions,
 		tool_schema: createToolSchemaToolDefinition(resolver),
 		todo_write: createTodoWriteToolDefinition(options?.todo_write?.store ?? noopTodoWriteStore),
+		web_search: createWebSearchToolDefinition(options?.web_search),
+		web_fetch: createWebFetchToolDefinition(options?.web_fetch),
 	};
 }
 
@@ -246,5 +290,7 @@ export function createAllTools(cwd: string, options?: ToolsOptions): Record<Tool
 		ls: createLsTool(cwd, options?.ls),
 		tool_schema: createToolSchemaTool(resolver),
 		todo_write: createTodoWriteTool(options?.todo_write?.store ?? noopTodoWriteStore),
+		web_search: createWebSearchTool(options?.web_search),
+		web_fetch: createWebFetchTool(options?.web_fetch),
 	};
 }
