@@ -9,6 +9,8 @@ export {
 	createBashToolDefinition,
 	createLocalBashOperations,
 } from "./bash.ts";
+export { createAskUserTool, createAskUserToolDefinition, type AskUserDetails, type AskUserInput } from "./ask-user.ts";
+export { createDelegateTool, createDelegateToolDefinition, type DelegateInput } from "./delegate.ts";
 export {
 	createEditTool,
 	createEditToolDefinition,
@@ -42,6 +44,12 @@ export {
 	type LsToolInput,
 	type LsToolOptions,
 } from "./ls.ts";
+export {
+	createPlanPresentTool,
+	createPlanPresentToolDefinition,
+	type PlanPresentDetails,
+	type PlanPresentInput,
+} from "./plan-present.ts";
 export {
 	createReadTool,
 	createReadToolDefinition,
@@ -94,12 +102,15 @@ export {
 } from "./write.ts";
 
 import type { AgentTool } from "apex-code-agent-core";
+import { createAskUserTool, createAskUserToolDefinition } from "./ask-user.ts";
 import { type BashToolOptions, createBashTool, createBashToolDefinition } from "./bash.ts";
 import type { ApexToolDefinition } from "./contract.ts";
+import { createDelegateTool, createDelegateToolDefinition } from "./delegate.ts";
 import { createEditTool, createEditToolDefinition, type EditToolOptions } from "./edit.ts";
 import { createFindTool, createFindToolDefinition, type FindToolOptions } from "./find.ts";
 import { createGrepTool, createGrepToolDefinition, type GrepToolOptions } from "./grep.ts";
 import { createLsTool, createLsToolDefinition, type LsToolOptions } from "./ls.ts";
+import { createPlanPresentTool, createPlanPresentToolDefinition } from "./plan-present.ts";
 import { createReadTool, createReadToolDefinition, type ReadToolOptions } from "./read.ts";
 import { createWriteTool, createWriteToolDefinition, type WriteToolOptions } from "./write.ts";
 import { createToolSchemaTool, createToolSchemaToolDefinition, type ToolSchemaResolver } from "./tool-schema.ts";
@@ -120,7 +131,10 @@ export type ToolName =
 	| "tool_schema"
 	| "todo_write"
 	| "web_search"
-	| "web_fetch";
+	| "web_fetch"
+	| "ask_user"
+	| "plan_present"
+	| "delegate";
 export const allToolNames: Set<ToolName> = new Set([
 	"read",
 	"bash",
@@ -133,6 +147,9 @@ export const allToolNames: Set<ToolName> = new Set([
 	"todo_write",
 	"web_search",
 	"web_fetch",
+	"ask_user",
+	"plan_present",
+	"delegate",
 ]);
 
 export interface ToolsOptions {
@@ -176,6 +193,12 @@ export function createToolDefinition(toolName: ToolName, cwd: string, options?: 
 			return createWebSearchToolDefinition(options?.web_search);
 		case "web_fetch":
 			return createWebFetchToolDefinition(options?.web_fetch);
+		case "ask_user":
+			return createAskUserToolDefinition();
+		case "plan_present":
+			return createPlanPresentToolDefinition();
+		case "delegate":
+			return createDelegateToolDefinition();
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -205,6 +228,12 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 			return createWebSearchTool(options?.web_search);
 		case "web_fetch":
 			return createWebFetchTool(options?.web_fetch);
+		case "ask_user":
+			return createAskUserTool();
+		case "plan_present":
+			return createPlanPresentTool();
+		case "delegate":
+			return createDelegateTool();
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -253,6 +282,9 @@ export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): R
 		todo_write: createTodoWriteToolDefinition(options?.todo_write?.store ?? noopTodoWriteStore),
 		web_search: createWebSearchToolDefinition(options?.web_search),
 		web_fetch: createWebFetchToolDefinition(options?.web_fetch),
+		ask_user: createAskUserToolDefinition(),
+		plan_present: createPlanPresentToolDefinition(),
+		delegate: createDelegateToolDefinition(),
 	};
 }
 
@@ -292,5 +324,8 @@ export function createAllTools(cwd: string, options?: ToolsOptions): Record<Tool
 		todo_write: createTodoWriteTool(options?.todo_write?.store ?? noopTodoWriteStore),
 		web_search: createWebSearchTool(options?.web_search),
 		web_fetch: createWebFetchTool(options?.web_fetch),
+		ask_user: createAskUserTool(),
+		plan_present: createPlanPresentTool(),
+		delegate: createDelegateTool(),
 	};
 }

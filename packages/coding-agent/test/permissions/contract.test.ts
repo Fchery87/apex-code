@@ -30,6 +30,9 @@ const REPRESENTATIVE_PARAMS: Record<string, unknown> = {
 	web_search: { query: "typescript generics" },
 	// Port 1 refuses instantly and locally -- no external network dependency in tests.
 	web_fetch: { url: "http://127.0.0.1:1/" },
+	ask_user: { question: "Which approach?", options: ["a", "b"] },
+	plan_present: { plan: "1. Do a thing" },
+	delegate: { agentType: "explore", task: "find the config loader" },
 };
 
 describe("tool contracts", () => {

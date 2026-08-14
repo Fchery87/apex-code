@@ -146,7 +146,7 @@ export function createGrepToolDefinition(
 				verb: "Search",
 				getPath: (params) => params.path,
 			}),
-			context: { resultRecoverable: true, deferSchema: false },
+			context: { resultRecoverable: true, deferSchema: true },
 			evidence: { emits: new Set(), capture: () => [] },
 		},
 		async execute(

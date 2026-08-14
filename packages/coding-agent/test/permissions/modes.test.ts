@@ -51,6 +51,10 @@ describe("resolveWithMode", () => {
 			expect(resolveWithMode("plan", noRule("ask"), caps("net"))).toEqual(noRule("ask"));
 		});
 
+		it("allows a ui-capability tool (e.g. ask_user/plan_present) -- presenting a question or a plan isn't mutation", () => {
+			expect(resolveWithMode("plan", noRule("allow"), caps("ui"))).toEqual(noRule("allow"));
+		});
+
 		it("is a hard safety floor: overrides even an explicit allow rule for a mutating capability", () => {
 			expect(resolveWithMode("plan", withRule(explicitAllow), caps("exec"))).toEqual({ behavior: "deny" });
 		});
@@ -75,6 +79,10 @@ describe("resolveWithMode", () => {
 
 		it("leaves a net-capable tool (web_search/web_fetch) asking — net is explicitly excluded from edit-shaped", () => {
 			expect(resolveWithMode("acceptEdits", noRule("ask"), caps("net"))).toEqual(noRule("ask"));
+		});
+
+		it("leaves a ui-capable tool (ask_user/plan_present) untouched — isEditShaped requires fs.write, which ui-only tools never declare", () => {
+			expect(resolveWithMode("acceptEdits", noRule("ask"), caps("ui"))).toEqual(noRule("ask"));
 		});
 
 		it("respects an explicit rule rather than overriding it", () => {

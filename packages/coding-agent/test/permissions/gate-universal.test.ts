@@ -26,6 +26,9 @@ const REPRESENTATIVE_PARAMS: Record<ToolName, unknown> = {
 	web_search: { query: "typescript generics" },
 	// Port 1 refuses instantly and locally -- no external network dependency in tests.
 	web_fetch: { url: "http://127.0.0.1:1/" },
+	ask_user: { question: "Which approach?", options: ["a", "b"] },
+	plan_present: { plan: "1. Do a thing" },
+	delegate: { agentType: "explore", task: "find the config loader" },
 };
 
 let scratch: string;
@@ -151,7 +154,7 @@ describe("permission gate — plan mode (task 4.3: state stays callable, mutatio
 		expect(result.toolExecuted).toBe(true);
 	});
 
-	it.each(["write", "bash"] as const)(
+	it.each(["write", "bash", "delegate"] as const)(
 		"still denies %s under plan mode's hard floor, through the real registry contract",
 		async (toolName) => {
 			const store = new FilePermissionRuleStore({
@@ -182,6 +185,27 @@ describe("permission gate — plan mode (task 4.3: state stays callable, mutatio
 			});
 			await store.apply({ type: "addRules", destination: "local", rules: [{ toolName, behavior: "allow" }] });
 
+			const definitions = createAllToolDefinitions(scratch);
+			const beforeToolCall = createPermissionGate({
+				getContract: (name) => definitions[name as ToolName]?.contract,
+				store,
+				getMode: () => "plan",
+			});
+
+			const result = await driveOneToolCallTurn(toolName, REPRESENTATIVE_PARAMS[toolName], beforeToolCall);
+			expect(result.blocked, JSON.stringify(result)).toBe(false);
+			expect(result.toolExecuted).toBe(true);
+		},
+	);
+
+	it.each(["ask_user", "plan_present"] as const)(
+		"task 4.5: %s (ui capability) is not denied by plan mode's hard floor, even with no explicit rule (allow default)",
+		async (toolName) => {
+			const store = new FilePermissionRuleStore({
+				cwd: scratch,
+				agentDir: join(scratch, "agent"),
+				policyPath: join(scratch, "missing-policy.json"),
+			});
 			const definitions = createAllToolDefinitions(scratch);
 			const beforeToolCall = createPermissionGate({
 				getContract: (name) => definitions[name as ToolName]?.contract,
