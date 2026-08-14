@@ -184,6 +184,8 @@ const noopDelegationRuntime: DelegationRuntimeOptions = {
 	resolveAgent: () => undefined,
 	getParentCapabilities: () => new Set(),
 	getToolCapabilities: () => undefined,
+	getDelegationDepth: () => 0,
+	maxDelegationDepth: 2,
 	buildChildSession: async () => {
 		throw new Error("delegate has no runtime configured in this context -- no agent types are resolvable.");
 	},

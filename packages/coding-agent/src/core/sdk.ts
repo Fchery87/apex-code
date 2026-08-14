@@ -443,7 +443,12 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				return (createAllToolDefinitions(cwd)[toolName as ToolName] as ApexToolDefinition | undefined)?.contract
 					?.capabilities;
 			},
-			buildChildSession: async ({ definition, toolNames }) => {
+			// Read fresh each call, not captured once: depth is a live property of
+			// the (possibly delegated) session this createAgentSession call is
+			// building, via the same sessionManager this closure already captures.
+			getDelegationDepth: () => sessionManager.getDelegationDepth(),
+			maxDelegationDepth: settingsManager.getDelegationMaxDepth(),
+			buildChildSession: async ({ definition, toolNames, depth }) => {
 				if (!parentPermissionGate) {
 					throw new Error("delegate requires a permission gate configured on the parent session (ADR 0008).");
 				}
@@ -452,7 +457,10 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				if (!childModel) {
 					throw new Error(`Cannot delegate to "${definition.name}": no model is available for the child session.`);
 				}
-				const childSessionManager = SessionManager.inMemory(cwd, { parentSession: sessionManager.getSessionId() });
+				const childSessionManager = SessionManager.inMemory(cwd, {
+					parentSession: sessionManager.getSessionId(),
+					delegationDepth: depth,
+				});
 				const derivedStore = new DerivedPermissionRuleStore({ parent: parentPermissionGate.store });
 				const { session: childSession } = await createAgentSession({
 					cwd,
@@ -467,6 +475,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					// human for a call the human did not make (ADR 0008, "Who answers a
 					// child's ask").
 					permissionGate: { store: derivedStore, getMode: parentPermissionGate.getMode },
+					// Forwarded so a child that itself holds `delegate` can delegate again
+					// (bounded by the depth guard above, read fresh from its own session
+					// header on its next createAgentSession call) -- otherwise recursion
+					// would be silently capped at one level regardless of maxDelegationDepth.
+					delegation: options.delegation,
 				});
 				await childSession.bindExtensions({});
 				return {

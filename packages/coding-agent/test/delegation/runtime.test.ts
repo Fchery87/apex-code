@@ -28,6 +28,8 @@ function baseOptions(overrides: Partial<DelegationRuntimeOptions> = {}): Delegat
 		resolveAgent: (agentType) => (agentType === "scout" ? scoutDefinition() : undefined),
 		getParentCapabilities: () => caps("fs.read", "delegate"),
 		getToolCapabilities: (toolName) => (toolName === "read" ? caps("fs.read") : toolName === "bash" ? caps("exec") : undefined),
+		getDelegationDepth: () => 0,
+		maxDelegationDepth: 2,
 		buildChildSession: vi.fn(async () => fakeChild().handle),
 		...overrides,
 	};
@@ -107,6 +109,42 @@ describe("runDelegation", () => {
 
 		const result = await runDelegation(options, "worker", "run tests");
 		expect(result.output).toBe("ran the tests");
+	});
+
+	it("passes the parent depth + 1 to buildChildSession as the child's depth", async () => {
+		const { handle } = fakeChild();
+		const buildChildSession = vi.fn(async () => handle);
+		const options = baseOptions({ getDelegationDepth: () => 1, maxDelegationDepth: 5, buildChildSession });
+
+		await runDelegation(options, "scout", "task");
+
+		expect(buildChildSession).toHaveBeenCalledWith(expect.objectContaining({ depth: 2 }));
+	});
+
+	it("refuses to delegate at the depth bound, naming the bound, and never builds a child", async () => {
+		const buildChildSession = vi.fn();
+		const options = baseOptions({ getDelegationDepth: () => 2, maxDelegationDepth: 2, buildChildSession });
+
+		await expect(runDelegation(options, "scout", "task")).rejects.toThrow(/depth/i);
+		await expect(runDelegation(options, "scout", "task")).rejects.toThrow(/2/);
+		expect(buildChildSession).not.toHaveBeenCalled();
+	});
+
+	it("refuses past the depth bound too, not only exactly at it", async () => {
+		const buildChildSession = vi.fn();
+		const options = baseOptions({ getDelegationDepth: () => 5, maxDelegationDepth: 2, buildChildSession });
+
+		await expect(runDelegation(options, "scout", "task")).rejects.toThrow(/depth/i);
+		expect(buildChildSession).not.toHaveBeenCalled();
+	});
+
+	it("still admits delegation one level below the bound", async () => {
+		const { handle } = fakeChild("ok");
+		const buildChildSession = vi.fn(async () => handle);
+		const options = baseOptions({ getDelegationDepth: () => 1, maxDelegationDepth: 2, buildChildSession });
+
+		const result = await runDelegation(options, "scout", "task");
+		expect(result.output).toBe("ok");
 	});
 
 	it("disposes the child even when run() rejects", async () => {
