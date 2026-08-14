@@ -484,6 +484,22 @@ caller. Until an on-demand schema-load path exists, `deferSchema: true` makes a 
 unusable rather than cheap, so it is the phase's first task and blocks every tool after
 it.
 
+**Correction (2026-08-13, second — the budget is fixed by measurement, closing the
+estimate above.)** Task 4.7 measured the complete 14-tool registry once every Phase 4
+tool (`todo_write`, `web_search`, `web_fetch`, `ask_user`, `plan_present`, `delegate`)
+had landed: the naive no-deferral projection is **2,706 tokens**, not the ~2,400
+estimated before the tools existed to measure. The enforced budget is fixed at
+**2,300 tokens**, against an actual measured prefix of **2,150 tokens** with this
+phase's real deferral choices in effect — every tool eligible for deferral
+(`grep`/`find`/`ls`, in addition to the five tools that shipped already declaring it)
+actually defers; only `read`/`bash`/`edit`/`write` (called on nearly every task) and
+`plan_present` (called on nearly every plan-mode turn) do not, and `tool_schema`
+cannot defer itself. That is a 556-token, ~21% reduction from the naive projection —
+real and measured, not the majority of total prompt growth since Phase 3 (the four
+excluded default tools are most of that growth and were never eligible to shrink).
+Enforced in `test/context/static-prefix.test.ts`; full record in
+[the Phase 4 plan](plans/2026-08-13-tool-surface.md)'s measurement table.
+
 ---
 
 ## Phase 5 — Delegation & multi-agent
