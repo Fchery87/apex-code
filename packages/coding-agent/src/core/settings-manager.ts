@@ -139,7 +139,18 @@ export interface Settings {
 	tuiMode?: TuiMode; // default: "regular"
 	fullscreenScrollbar?: ScrollViewScrollbar; // default: "auto"; no effect in regular TUI mode
 	network?: NetworkSettings;
+	delegationMaxDepth?: number; // Max delegation recursion depth (roadmap Phase 5, task 5.3). default: 2, hard-capped at DELEGATION_MAX_DEPTH_HARD_CAP
 }
+
+/**
+ * Hard ceiling on `delegationMaxDepth`, independent of what a user configures. A
+ * placeholder pending real measurement (the open question `docs/plans/2026-08-14-
+ * delegation-and-multi-agent.md` carries into this task): each level multiplies
+ * both token cost and the distance between the human and the work, and this
+ * repository has not yet measured that cost per level. 5 is conservative headroom
+ * above the default of 2, not a derived number.
+ */
+export const DELEGATION_MAX_DEPTH_HARD_CAP = 5;
 
 function isMergeableObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -855,6 +866,14 @@ export class SettingsManager {
 
 	getWebSocketConnectTimeoutMs(): number | undefined {
 		return parseTimeoutSetting(this.settings.websocketConnectTimeoutMs, "websocketConnectTimeoutMs");
+	}
+
+	/** Max delegation recursion depth (roadmap Phase 5, task 5.3). A non-positive or missing configured value falls back to the default rather than being rejected outright -- this bound is a safety ceiling, not a value where a malformed setting should block startup. Always clamped to DELEGATION_MAX_DEPTH_HARD_CAP, regardless of configuration. */
+	getDelegationMaxDepth(): number {
+		const DEFAULT = 2;
+		const configured = this.settings.delegationMaxDepth;
+		const value = Number.isFinite(configured) && (configured as number) > 0 ? (configured as number) : DEFAULT;
+		return Math.min(Math.floor(value), DELEGATION_MAX_DEPTH_HARD_CAP);
 	}
 
 	getHideThinkingBlock(): boolean {

@@ -368,4 +368,4 @@ sessions; how leases interact with the append-only assumption.
 
 | Phase | `type` | Fields | Added |
 | --- | --- | --- | --- |
-| — | — | — | — |
+| 5 | `session` (header, extended -- not a new discriminated type) | `delegationDepth?: number` -- recursion depth for delegation; absent means 0, a non-delegated root. Assigned by the delegation runtime (`core/delegation/runtime.ts`), never by the tool, so the bound applies to any future delegation entry point | task 5.3, `2026-08-14-delegation-and-multi-agent.md` |

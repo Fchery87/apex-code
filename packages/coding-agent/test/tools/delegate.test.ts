@@ -9,6 +9,8 @@ function inertRuntime(overrides: Partial<DelegationRuntimeOptions> = {}): Delega
 		resolveAgent: () => undefined,
 		getParentCapabilities: () => new Set<Capability>(),
 		getToolCapabilities: () => undefined,
+		getDelegationDepth: () => 0,
+		maxDelegationDepth: 2,
 		buildChildSession: vi.fn(async () => {
 			throw new Error("buildChildSession should not be called by the inert fixture");
 		}),

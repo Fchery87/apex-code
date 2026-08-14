@@ -42,6 +42,8 @@ export interface BuildChildSessionRequest {
 	definition: AgentDefinition;
 	/** The child's tool allowlist, already ceiling-checked -- exactly `definition.tools`, never narrowed. */
 	toolNames: string[];
+	/** The child's own recursion depth (the parent's depth + 1), for the runtime constructing it to record on the child's session header (task 5.3). */
+	depth: number;
 }
 
 export interface DelegationRuntimeOptions {
@@ -50,6 +52,10 @@ export interface DelegationRuntimeOptions {
 	getParentCapabilities: () => ReadonlySet<Capability>;
 	/** Capability set a named tool requires, from the live registry. `undefined` for an unknown tool name. */
 	getToolCapabilities: (toolName: string) => ReadonlySet<Capability> | undefined;
+	/** The parent session's own recursion depth (`SessionManager.getDelegationDepth()`), read fresh at delegation time. */
+	getDelegationDepth: () => number;
+	/** Delegation is refused once `getDelegationDepth() >= maxDelegationDepth` -- assigned by the runtime, not by the tool, so the bound applies to any future delegation entry point. */
+	maxDelegationDepth: number;
 	buildChildSession: (request: BuildChildSessionRequest) => Promise<ChildSessionHandle>;
 }
 
@@ -72,6 +78,12 @@ export interface DelegationResult {
  * that one tool. `buildChildSession` is therefore never called for a refused
  * delegation -- there is no code path that produces a child holding a capability
  * outside the ceiling.
+ *
+ * The depth check (task 5.3) runs right after agent-type resolution and before the
+ * capability check, so recursion is bounded regardless of what is being delegated --
+ * a refusal at the bound still names the agent type, but never reaches the ceiling
+ * or `buildChildSession`. `buildChildSession` receives the child's depth (parent + 1)
+ * so the caller can record it on the child's own session header.
  */
 export async function runDelegation(
 	options: DelegationRuntimeOptions,
@@ -81,6 +93,13 @@ export async function runDelegation(
 	const definition = options.resolveAgent(agentType);
 	if (!definition) {
 		throw new Error(`Unknown agent type "${agentType}".`);
+	}
+
+	const depth = options.getDelegationDepth();
+	if (depth >= options.maxDelegationDepth) {
+		throw new Error(
+			`Delegation depth limit (${options.maxDelegationDepth}) reached at depth ${depth}; cannot delegate to agent "${agentType}" further.`,
+		);
 	}
 
 	const requestedCapabilities = new Set<Capability>();
@@ -99,7 +118,7 @@ export async function runDelegation(
 		);
 	}
 
-	const child = await options.buildChildSession({ agentType, definition, toolNames: definition.tools });
+	const child = await options.buildChildSession({ agentType, definition, toolNames: definition.tools, depth: depth + 1 });
 	try {
 		const { output } = await child.run(task);
 		return { agentType, task, output };

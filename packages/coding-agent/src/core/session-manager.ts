@@ -37,11 +37,14 @@ export interface SessionHeader {
 	timestamp: string;
 	cwd: string;
 	parentSession?: string;
+	/** Recursion depth for delegation (roadmap Phase 5, task 5.3). Absent means 0 -- every session written before this field existed reads as a non-delegated root, additive per contracts.md §3. */
+	delegationDepth?: number;
 }
 
 export interface NewSessionOptions {
 	id?: string;
 	parentSession?: string;
+	delegationDepth?: number;
 }
 
 export interface SessionEntryBase {
@@ -959,6 +962,7 @@ export class SessionManager {
 			timestamp,
 			cwd: this.cwd,
 			parentSession: options?.parentSession,
+			delegationDepth: options?.delegationDepth,
 		};
 		this.fileEntries = [header];
 		this.byId.clear();
@@ -1310,6 +1314,11 @@ export class SessionManager {
 	getHeader(): SessionHeader | null {
 		const h = this.fileEntries.find((e) => e.type === "session");
 		return h ? (h as SessionHeader) : null;
+	}
+
+	/** This session's delegation recursion depth (roadmap Phase 5, task 5.3). Absent field reads as 0 -- a non-delegated root, including every session written before this field existed. */
+	getDelegationDepth(): number {
+		return this.getHeader()?.delegationDepth ?? 0;
 	}
 
 	/**

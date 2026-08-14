@@ -357,6 +357,38 @@ describe("SettingsManager", () => {
 		});
 	});
 
+	describe("delegationMaxDepth (roadmap Phase 5, task 5.3)", () => {
+		it("should default to 2", () => {
+			const manager = SettingsManager.create(projectDir, agentDir);
+			expect(manager.getDelegationMaxDepth()).toBe(2);
+		});
+
+		it("should use a configured value below the hard cap", () => {
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ delegationMaxDepth: 1 }));
+			const manager = SettingsManager.create(projectDir, agentDir);
+			expect(manager.getDelegationMaxDepth()).toBe(1);
+		});
+
+		it("should use merged global and project settings, like other numeric settings", () => {
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ delegationMaxDepth: 4 }));
+			writeFileSync(join(projectDir, ".apex-code", "settings.json"), JSON.stringify({ delegationMaxDepth: 3 }));
+			const manager = SettingsManager.create(projectDir, agentDir);
+			expect(manager.getDelegationMaxDepth()).toBe(3);
+		});
+
+		it("should clamp a configured value above the hard cap rather than honoring it", () => {
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ delegationMaxDepth: 999 }));
+			const manager = SettingsManager.create(projectDir, agentDir);
+			expect(manager.getDelegationMaxDepth()).toBeLessThanOrEqual(5);
+		});
+
+		it("should reject a non-positive configured value, falling back to the default", () => {
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ delegationMaxDepth: 0 }));
+			const manager = SettingsManager.create(projectDir, agentDir);
+			expect(manager.getDelegationMaxDepth()).toBe(2);
+		});
+	});
+
 	describe("externalEditor", () => {
 		const originalVisual = process.env.VISUAL;
 		const originalEditor = process.env.EDITOR;

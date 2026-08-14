@@ -103,3 +103,69 @@ describe("delegation end-to-end through createAgentSession (task 5.2)", () => {
 		session.dispose();
 	});
 });
+
+describe("delegation recursion depth guard through createAgentSession (task 5.3)", () => {
+	it("admits delegation up to the default bound (2) and refuses a third level, naming the bound", async () => {
+		// A self-delegating agent, so depth actually gets exercised: root (depth 0)
+		// -> child (depth 1) -> grandchild (depth 2), where the grandchild's own
+		// attempt to delegate again is refused by the depth guard before any
+		// great-grandchild session is built.
+		const recursiveDefinitions: Record<string, AgentDefinition> = {
+			scout: { name: "scout", description: "recon, can delegate further", tools: ["read", "delegate"], systemPrompt: "You are a scout." },
+		};
+		const { faux, runtime } = await buildModelRuntime("delegation-depth-e2e");
+		const settingsManager = SettingsManager.create(scratch, join(scratch, "agent"));
+		const store = new FilePermissionRuleStore({
+			cwd: scratch,
+			agentDir: join(scratch, "agent"),
+			policyPath: join(scratch, "missing-policy.json"),
+		});
+		await store.apply({ type: "addRules", destination: "local", rules: [{ toolName: "delegate", behavior: "allow" }] });
+
+		const { session } = await createAgentSession({
+			cwd: scratch,
+			agentDir: join(scratch, "agent"),
+			model: faux.getModel(),
+			modelRuntime: runtime,
+			settingsManager,
+			tools: ["read", "delegate"],
+			permissionGate: { store, getMode: () => "default" },
+			delegation: { resolveAgent: (agentType) => recursiveDefinitions[agentType] },
+		});
+		await session.bindExtensions({});
+
+		const rootCall = fauxToolCall("delegate", { agentType: "scout", task: "T1" });
+		const childCall = fauxToolCall("delegate", { agentType: "scout", task: "T2" });
+		const grandchildCall = fauxToolCall("delegate", { agentType: "scout", task: "T3" });
+		faux.setResponses([
+			fauxAssistantMessage([rootCall], { stopReason: "toolUse" }), // root, depth 0: delegates
+			fauxAssistantMessage([childCall], { stopReason: "toolUse" }), // child, depth 1: delegates
+			fauxAssistantMessage([grandchildCall], { stopReason: "toolUse" }), // grandchild, depth 2: tries to delegate again -- refused
+			fauxAssistantMessage("grandchild done", { stopReason: "stop" }), // grandchild's final turn, after the depth refusal
+			fauxAssistantMessage("child done", { stopReason: "stop" }), // child's final turn
+			fauxAssistantMessage("root done", { stopReason: "stop" }), // root's final turn
+		]);
+
+		await session.prompt("go");
+
+		// The precise signal: exactly 6 model turns fired (root x2, child x2,
+		// grandchild x2). If the depth guard failed to block the grandchild's
+		// third-level delegate call, a real great-grandchild session would need at
+		// least one more turn -- the faux provider's response queue is shift()-based,
+		// not cycling, so an extra call would consume a response meant for a
+		// different level and cascade into either an off-by-one output or an
+		// exhausted-queue error. This assertion catches that directly rather than
+		// inferring it from shifted text.
+		expect(faux.state.callCount).toBe(6);
+
+		const rootResult = session.agent.state.messages.find(
+			(m) => m.role === "toolResult" && m.toolCallId === rootCall.id,
+		);
+		if (rootResult?.role !== "toolResult") throw new Error("expected root's tool result");
+		expect(rootResult.isError).toBe(false);
+		const rootText = rootResult.content.find((c) => c.type === "text")?.text ?? "";
+		expect(rootText).toContain("child done");
+
+		session.dispose();
+	});
+});
