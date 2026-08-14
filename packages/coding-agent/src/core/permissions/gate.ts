@@ -12,8 +12,7 @@
  */
 
 import type { BeforeToolCallContext, BeforeToolCallResult } from "apex-code-agent-core";
-import type { ToolContract } from "../tools/contract.ts";
-import { UNCLASSIFIED } from "../tools/contract.ts";
+import { resolveToolContract, type ToolContract } from "../tools/contract.ts";
 import { resolveWithMode } from "./modes.ts";
 import type { PermissionResponder } from "./responder.ts";
 import { resolvePermission } from "./rules.ts";
@@ -46,7 +45,7 @@ export async function evaluateToolCall(
 	params: unknown,
 	options: PermissionGateOptions,
 ): Promise<GateDecision> {
-	const contract = options.getContract(toolName) ?? UNCLASSIFIED;
+	const contract = resolveToolContract(options.getContract, toolName);
 	const spec = contract.permission;
 	const snapshot = await options.store.snapshot();
 	if (snapshot.errors.length > 0) {

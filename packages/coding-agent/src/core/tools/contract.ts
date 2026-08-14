@@ -133,6 +133,22 @@ export const UNCLASSIFIED: ToolContract<TSchema, unknown> = {
 		describe: (ruleContent) => `Exact call: ${ruleContent}`,
 		ruleForCall: (params) => JSON.stringify(params),
 	},
-	context: { resultRecoverable: false, deferSchema: true },
+	context: { resultRecoverable: false, deferSchema: false },
 	evidence: { emits: new Set(), capture: () => [] },
 };
+
+/** Resolve a complete tool contract for enforcement consumers. */
+export function resolveToolContract(
+	lookup: (toolName: string) => ToolContract | undefined,
+	toolName: string,
+): ToolContract {
+	return lookup(toolName) ?? UNCLASSIFIED;
+}
+
+/** Resolve the context projection using the same canonical foreign-tool fallback. */
+export function resolveToolContext(
+	lookup: (toolName: string) => Pick<ToolContract, "context"> | undefined,
+	toolName: string,
+): Pick<ToolContract, "context"> {
+	return lookup(toolName) ?? UNCLASSIFIED;
+}

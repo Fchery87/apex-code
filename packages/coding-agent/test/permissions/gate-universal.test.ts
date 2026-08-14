@@ -21,6 +21,7 @@ const REPRESENTATIVE_PARAMS: Record<ToolName, unknown> = {
 	find: { pattern: "*.ts" },
 	ls: {},
 	bash: { command: "echo test" },
+	tool_schema: { name: "read" },
 };
 
 let scratch: string;

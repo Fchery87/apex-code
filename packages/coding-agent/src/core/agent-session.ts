@@ -112,6 +112,7 @@ import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-promp
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
 import type { ApexToolDefinition } from "./tools/contract.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
+import { createToolSchemaToolDefinition } from "./tools/tool-schema.ts";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
 import { addUsageToTotals, createUsageTotals } from "./usage-totals.ts";
 
@@ -383,6 +384,7 @@ export class AgentSession {
 	private _toolDefinitions: Map<string, ToolDefinitionEntry> = new Map();
 	private _toolPromptSnippets: Map<string, string> = new Map();
 	private _toolPromptGuidelines: Map<string, string[]> = new Map();
+	private _loadedDeferredSchemas = new Set<string>();
 
 	// Base system prompt (without extension appends) - used to apply fresh appends each turn
 	private _baseSystemPrompt = "";
@@ -616,6 +618,7 @@ export class AgentSession {
 	private _installContextPipeline(): void {
 		installContextPipeline(this.agent, {
 			contractLookup: (name) => (this.getToolDefinition(name) as Partial<ApexToolDefinition> | undefined)?.contract,
+			loadedSchemaNames: this._loadedDeferredSchemas,
 			evictionBudget: () => this._evictionBudget(),
 		});
 	}
@@ -986,14 +989,17 @@ export class AgentSession {
 	 * Get all configured tools with name, description, parameter schema, prompt guidelines, and source metadata.
 	 */
 	getAllTools(): ToolInfo[] {
-		return Array.from(this._toolDefinitions.values()).map(({ definition, sourceInfo }) => ({
-			name: definition.name,
-			description: definition.description,
-			parameters: definition.parameters,
-			promptGuidelines: definition.promptGuidelines,
-			sourceInfo,
-			unclassified: !("contract" in definition),
-		}));
+		const schemaToolActive = this.getActiveToolNames().includes("tool_schema");
+		return Array.from(this._toolDefinitions.values())
+			.filter(({ definition }) => definition.name !== "tool_schema" || schemaToolActive)
+			.map(({ definition, sourceInfo }) => ({
+				name: definition.name,
+				description: definition.description,
+				parameters: definition.parameters,
+				promptGuidelines: definition.promptGuidelines,
+				sourceInfo,
+				unclassified: !("contract" in definition),
+			}));
 	}
 
 	getToolDefinition(name: string): ToolDefinition | undefined {
@@ -2631,6 +2637,13 @@ export class AgentSession {
 			}
 		}
 
+		const hasDeferredActiveTool = nextActiveToolNames.some((name) => {
+			const contract = (definitionRegistry.get(name)?.definition as Partial<ApexToolDefinition> | undefined)?.contract;
+			return contract?.context.deferSchema === true;
+		});
+		if (hasDeferredActiveTool && this._toolRegistry.has("tool_schema")) {
+			nextActiveToolNames.push("tool_schema");
+		}
 		this.setActiveToolsByName([...new Set(nextActiveToolNames)]);
 	}
 
@@ -2642,7 +2655,7 @@ export class AgentSession {
 		const autoResizeImages = this.settingsManager.getImageAutoResize();
 		const shellCommandPrefix = this.settingsManager.getShellCommandPrefix();
 		const shellPath = this.settingsManager.getShellPath();
-		const baseToolDefinitions = this._baseToolsOverride
+		const baseToolDefinitions: Record<string, ToolDefinition<any, any>> = this._baseToolsOverride
 			? Object.fromEntries(
 					Object.entries(this._baseToolsOverride).map(([name, tool]) => [
 						name,
@@ -2653,6 +2666,16 @@ export class AgentSession {
 					read: { autoResizeImages },
 					bash: { commandPrefix: shellCommandPrefix, shellPath },
 				});
+		baseToolDefinitions.tool_schema = createToolSchemaToolDefinition({
+			getTool: (name) => {
+				if (!this._toolRegistry.has(name)) return undefined;
+				const definition = this._toolDefinitions.get(name)?.definition;
+				return definition ? { name: definition.name, parameters: definition.parameters } : undefined;
+			},
+			markLoaded: (name) => {
+				this._loadedDeferredSchemas.add(name);
+			},
+		}) as ToolDefinition<any, any>;
 
 		this._baseToolDefinitions = new Map(
 			Object.entries(baseToolDefinitions).map(([name, tool]) => [name, tool as ToolDefinition]),

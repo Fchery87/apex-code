@@ -27,6 +27,7 @@
 import type { Agent } from "apex-code-agent-core";
 import { type DeferrableTool, announceToolsByName } from "./deferred-schemas.ts";
 import { type ContractLookup, evictToolResults } from "./eviction.ts";
+import { resolveToolContext } from "../tools/contract.ts";
 
 /**
  * Eviction-budget formula shared by every caller of `installContextPipeline`.
@@ -68,6 +69,7 @@ export function evictionBudget(contextWindow: number, reserveTokens: number): nu
 export function projectToolSchemas<T extends { name: string; description: string; parameters: unknown }>(
 	tools: readonly T[],
 	contractLookup: ContractLookup,
+	loadedSchemaNames: ReadonlySet<string> = new Set(),
 ): T[] {
 	const deferrable: DeferrableTool[] = tools.map((tool) => ({
 		name: tool.name,
@@ -75,7 +77,8 @@ export function projectToolSchemas<T extends { name: string; description: string
 		parameters: tool.parameters,
 		contract: {
 			context: {
-				deferSchema: contractLookup(tool.name)?.context.deferSchema === true,
+				deferSchema:
+					!loadedSchemaNames.has(tool.name) && resolveToolContext(contractLookup, tool.name).context.deferSchema,
 			},
 		},
 	}));
@@ -86,6 +89,8 @@ export function projectToolSchemas<T extends { name: string; description: string
 export interface ContextPipelineOptions {
 	/** Resolves a tool's contract; shared by both eviction and schema projection. */
 	contractLookup: ContractLookup;
+	/** Names whose real schemas have been loaded by the model in this session. */
+	loadedSchemaNames?: ReadonlySet<string>;
 	/**
 	 * Eviction budget as a thunk, not a plain number: `AgentSession`'s budget
 	 * depends on `this.model` and `this.settingsManager`, both of which can change
@@ -103,7 +108,7 @@ export interface ContextPipelineOptions {
  * `AgentSession._installAgentNextTurnRefresh` uses for `prepareNextTurnWithContext`.
  */
 export function installContextPipeline(agent: Agent, options: ContextPipelineOptions): void {
-	const { contractLookup, evictionBudget: getBudget } = options;
+	const { contractLookup, evictionBudget: getBudget, loadedSchemaNames = new Set<string>() } = options;
 
 	const previousTransformContext = agent.transformContext;
 	agent.transformContext = async (messages, signal) => {
@@ -118,7 +123,7 @@ export function installContextPipeline(agent: Agent, options: ContextPipelineOpt
 		}
 		return previousStreamFunction(
 			model,
-			{ ...context, tools: projectToolSchemas(context.tools, contractLookup) },
+			{ ...context, tools: projectToolSchemas(context.tools, contractLookup, loadedSchemaNames) },
 			streamOptions,
 		);
 	};
