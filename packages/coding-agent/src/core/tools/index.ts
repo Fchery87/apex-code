@@ -77,11 +77,12 @@ import { createGrepTool, createGrepToolDefinition, type GrepToolOptions } from "
 import { createLsTool, createLsToolDefinition, type LsToolOptions } from "./ls.ts";
 import { createReadTool, createReadToolDefinition, type ReadToolOptions } from "./read.ts";
 import { createWriteTool, createWriteToolDefinition, type WriteToolOptions } from "./write.ts";
+import { createToolSchemaTool, createToolSchemaToolDefinition, type ToolSchemaResolver } from "./tool-schema.ts";
 
 export type Tool = AgentTool<any>;
 export type ToolDef = ApexToolDefinition<any, any>;
-export type ToolName = "read" | "bash" | "edit" | "write" | "grep" | "find" | "ls";
-export const allToolNames: Set<ToolName> = new Set(["read", "bash", "edit", "write", "grep", "find", "ls"]);
+export type ToolName = "read" | "bash" | "edit" | "write" | "grep" | "find" | "ls" | "tool_schema";
+export const allToolNames: Set<ToolName> = new Set(["read", "bash", "edit", "write", "grep", "find", "ls", "tool_schema"]);
 
 export interface ToolsOptions {
 	read?: ReadToolOptions;
@@ -91,6 +92,7 @@ export interface ToolsOptions {
 	grep?: GrepToolOptions;
 	find?: FindToolOptions;
 	ls?: LsToolOptions;
+	tool_schema?: { resolver?: ToolSchemaResolver };
 }
 
 export function createToolDefinition(toolName: ToolName, cwd: string, options?: ToolsOptions): ToolDef {
@@ -109,6 +111,8 @@ export function createToolDefinition(toolName: ToolName, cwd: string, options?: 
 			return createFindToolDefinition(cwd, options?.find);
 		case "ls":
 			return createLsToolDefinition(cwd, options?.ls);
+		case "tool_schema":
+			return createToolSchemaToolDefinition(options?.tool_schema?.resolver ?? emptyToolSchemaResolver);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -130,6 +134,8 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 			return createFindTool(cwd, options?.find);
 		case "ls":
 			return createLsTool(cwd, options?.ls);
+		case "tool_schema":
+			return createToolSchemaTool(options?.tool_schema?.resolver ?? emptyToolSchemaResolver);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -153,8 +159,13 @@ export function createReadOnlyToolDefinitions(cwd: string, options?: ToolsOption
 	];
 }
 
+const emptyToolSchemaResolver: ToolSchemaResolver = {
+	getTool: () => undefined,
+	markLoaded: () => {},
+};
+
 export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): Record<ToolName, ToolDef> {
-	return {
+	const definitions = {
 		read: createReadToolDefinition(cwd, options?.read),
 		bash: createBashToolDefinition(cwd, options?.bash),
 		edit: createEditToolDefinition(cwd, options?.edit),
@@ -163,6 +174,11 @@ export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): R
 		find: createFindToolDefinition(cwd, options?.find),
 		ls: createLsToolDefinition(cwd, options?.ls),
 	};
+	const resolver = options?.tool_schema?.resolver ?? {
+		getTool: (name: string) => definitions[name as keyof typeof definitions],
+		markLoaded: () => {},
+	};
+	return { ...definitions, tool_schema: createToolSchemaToolDefinition(resolver) };
 }
 
 export function createCodingTools(cwd: string, options?: ToolsOptions): Tool[] {
@@ -184,6 +200,11 @@ export function createReadOnlyTools(cwd: string, options?: ToolsOptions): Tool[]
 }
 
 export function createAllTools(cwd: string, options?: ToolsOptions): Record<ToolName, Tool> {
+	const definitions = createAllToolDefinitions(cwd, options);
+	const resolver = options?.tool_schema?.resolver ?? {
+		getTool: (name: string) => definitions[name as ToolName],
+		markLoaded: () => {},
+	};
 	return {
 		read: createReadTool(cwd, options?.read),
 		bash: createBashTool(cwd, options?.bash),
@@ -192,5 +213,6 @@ export function createAllTools(cwd: string, options?: ToolsOptions): Record<Tool
 		grep: createGrepTool(cwd, options?.grep),
 		find: createFindTool(cwd, options?.find),
 		ls: createLsTool(cwd, options?.ls),
+		tool_schema: createToolSchemaTool(resolver),
 	};
 }

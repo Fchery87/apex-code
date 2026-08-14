@@ -9,7 +9,7 @@ its schema and then call it successfully.
 
 | Task | State | Commit | Verification |
 | --- | --- | --- | --- |
-| 4.1 Canonical load path, active registry, and absent-contract reconciliation | Not started | — | Failing-first end-to-end `AgentSession` test; then load tool returns the real schema, rejects inactive/unknown names, shared `UNCLASSIFIED` fallback keeps foreign schemas full, and the production prefix measurement fixes the budget and the grep/find/ls deferral choice |
+| 4.1 Canonical load path, active registry, and absent-contract reconciliation | In progress — load path, active registry, shared fallback, and 1,929-token baseline landed; budget/defer selection remains | — | Failing-first end-to-end `AgentSession` test; then load tool returns the real schema, rejects inactive/unknown names, shared `UNCLASSIFIED` fallback keeps foreign schemas full, and the production prefix measurement fixes the budget and the grep/find/ls deferral choice |
 | 4.2 Registry and contract test expansion | Not started | — | Registry factories, `ToolName`, enumeration, representative params, and universal gate cover every Phase 4 tool; each contract has all four axes |
 | 4.3 `todo_write` state tool and plan-mode correction | Not started | — | Real state persisted in the workspace/session-facing store; rule grammar tests; mode matrix proves plan allows state while mutating filesystem/exec/delegate remain denied |
 | 4.4 Network tools and sandbox boundary | Not started | — | `web_search` and `web_fetch` use the declared network boundary and rule grammars; permission-mode matrix; direct host policy plus Linux/macOS sandbox tests prove child network posture is unchanged |
@@ -77,8 +77,8 @@ foreign tools must remain fully announced unless they explicitly carry a contrac
 
 | Measurement | Result |
 | --- | --- |
-| Current production prefix, seven tools | 1,217 tokens (28 prompt + 1,189 schemas) |
-| Naive Phase 4 prefix, no deferral | ~2,400 tokens (must be recomputed from actual definitions) |
+| Current production prefix, eight tools including `tool_schema` | 1,929 tokens (100 prompt + 7,613 serialized tool definitions) |
+| Naive Phase 4 prefix, no deferral | To be recomputed after remaining Phase 4 tool definitions land |
 | Enforced Phase 4 budget | Pending 4.1 measurement |
 | First-party deferred set (`grep`/`find`/`ls`) | Pending 4.1 measurement |
 

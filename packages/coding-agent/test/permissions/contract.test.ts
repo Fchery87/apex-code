@@ -25,6 +25,7 @@ const REPRESENTATIVE_PARAMS: Record<string, unknown> = {
 	find: { pattern: "**/*.ts", path: "src" },
 	ls: { path: "src" },
 	bash: { command: "git status" },
+	tool_schema: { name: "read" },
 };
 
 describe("tool contracts", () => {
@@ -47,7 +48,7 @@ describe("tool contracts", () => {
 		}
 	});
 
-	it("covers exactly the seven inherited tools, so a new tool cannot be silently omitted", () => {
+	it("covers exactly the registered tools, so a new tool cannot be silently omitted", () => {
 		expect(Object.keys(registry()).sort()).toEqual(Object.keys(REPRESENTATIVE_PARAMS).sort());
 	});
 
@@ -113,7 +114,7 @@ describe("UNCLASSIFIED", () => {
 		expect([...UNCLASSIFIED.capabilities].sort()).toEqual([...ALL_CAPABILITIES].sort());
 		expect(UNCLASSIFIED.permission.defaultBehavior).toBe("ask");
 		expect(UNCLASSIFIED.context.resultRecoverable).toBe(false);
-		expect(UNCLASSIFIED.context.deferSchema).toBe(true);
+		expect(UNCLASSIFIED.context.deferSchema).toBe(false);
 		expect(UNCLASSIFIED.evidence.emits.size).toBe(0);
 		expect(UNCLASSIFIED.evidence.capture({}, { content: [] } as never)).toEqual([]);
 	});
