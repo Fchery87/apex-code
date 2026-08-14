@@ -83,7 +83,12 @@ describe("delegate execution: runs a real child through the injected runtime (ta
 		const result = await definition.execute("call-1", { agentType: "explore", task: "find the config loader" });
 
 		expect(result.content).toEqual([{ type: "text", text: "explored: find the config loader" }]);
-		expect(result.details).toEqual({ agentType: "explore", task: "find the config loader", output: "explored: find the config loader" });
+		expect(result.details).toEqual({ agentType: "explore", task: "find the config loader", output: "explored: find the config loader", handle: undefined });
+	});
+
+	it("keeps the established agent-type glob grammar for an earlier delegate rule", () => {
+		const definition = createDelegateToolDefinition(inertRuntime());
+		expect(definition.contract.permission.matches("explore:*", { agentType: "explore:quick", task: "x" })).toBe(true);
 	});
 
 	it("throws (a model-readable isError result once caught by the agent loop) for an unresolvable agent type", async () => {

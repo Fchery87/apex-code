@@ -12,6 +12,9 @@
  * would create (`sdk.ts` already imports `agent-session.ts`).
  */
 
+import { randomUUID } from "node:crypto";
+import { mkdirSync } from "node:fs";
+import { join, resolve } from "node:path";
 import type { Capability } from "../tools/contract.ts";
 import { computeCapabilityCeiling } from "./ceiling.ts";
 
@@ -44,6 +47,10 @@ export interface BuildChildSessionRequest {
 	toolNames: string[];
 	/** The child's own recursion depth (the parent's depth + 1), for the runtime constructing it to record on the child's session header (task 5.3). */
 	depth: number;
+	/** Stable id used for the child session and its artifact directory. */
+	sessionId: string;
+	/** Per-child artifact root, created before the child session is constructed. */
+	artifactDir?: string;
 }
 
 export interface DelegationRuntimeOptions {
@@ -56,6 +63,8 @@ export interface DelegationRuntimeOptions {
 	getDelegationDepth: () => number;
 	/** Delegation is refused once `getDelegationDepth() >= maxDelegationDepth` -- assigned by the runtime, not by the tool, so the bound applies to any future delegation entry point. */
 	maxDelegationDepth: number;
+	/** Parent session directory. When supplied, child artifacts are rooted beneath it. */
+	getParentSessionDir?: () => string;
 	buildChildSession: (request: BuildChildSessionRequest) => Promise<ChildSessionHandle>;
 }
 
@@ -63,6 +72,25 @@ export interface DelegationResult {
 	agentType: string;
 	task: string;
 	output: string;
+	/** Present for background work; pass this handle to retrieveDelegationResult. */
+	handleId?: string;
+}
+
+interface BackgroundDelegation {
+	promise: Promise<DelegationResult>;
+}
+
+// Results deliberately stay available for the lifetime of their parent runtime.
+// Phase 5 promises in-process retrieval only; restart durability belongs to Phase 6.
+const backgroundByRuntime = new WeakMap<object, Map<string, BackgroundDelegation>>();
+
+function background(options: DelegationRuntimeOptions): Map<string, BackgroundDelegation> {
+	let value = backgroundByRuntime.get(options);
+	if (!value) {
+		value = new Map();
+		backgroundByRuntime.set(options, value);
+	}
+	return value;
 }
 
 /**
@@ -89,6 +117,7 @@ export async function runDelegation(
 	options: DelegationRuntimeOptions,
 	agentType: string,
 	task: string,
+	request: { background?: boolean } = {},
 ): Promise<DelegationResult> {
 	const definition = options.resolveAgent(agentType);
 	if (!definition) {
@@ -118,11 +147,47 @@ export async function runDelegation(
 		);
 	}
 
-	const child = await options.buildChildSession({ agentType, definition, toolNames: definition.tools, depth: depth + 1 });
-	try {
-		const { output } = await child.run(task);
-		return { agentType, task, output };
-	} finally {
-		child.dispose();
+	const sessionId = randomUUID();
+	let artifactDir: string | undefined;
+	const parentSessionDir = options.getParentSessionDir?.();
+	if (parentSessionDir) {
+		const parentRoot = resolve(parentSessionDir);
+		artifactDir = join(parentRoot, "delegations", sessionId);
+		mkdirSync(artifactDir, { recursive: true });
 	}
+	const child = await options.buildChildSession({
+		agentType,
+		definition,
+		toolNames: definition.tools,
+		depth: depth + 1,
+		sessionId,
+		artifactDir,
+	});
+	const execute = async (): Promise<DelegationResult> => {
+		try {
+			const { output } = await child.run(task);
+			return { agentType, task, output };
+		} finally {
+			child.dispose();
+		}
+	};
+	if (!request.background) return execute();
+	const handleId = sessionId;
+	const promise = execute();
+	// Retrieval owns propagation of a child failure; mark the background promise
+	// observed now so a child that fails before retrieval does not become an
+	// unhandled rejection.
+	void promise.catch(() => {});
+	background(options).set(handleId, { promise });
+	return { agentType, task, output: `Delegation started. Retrieve result with handle \"${handleId}\".`, handleId };
+}
+
+/** Retrieve a background delegation. Running children are awaited; unknown handles fail explicitly. */
+export async function retrieveDelegationResult(
+	options: DelegationRuntimeOptions,
+	handleId: string,
+): Promise<DelegationResult> {
+	const entry = background(options).get(handleId);
+	if (!entry) throw new Error(`Unknown delegation handle "${handleId}".`);
+	return entry.promise;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AgentDefinition, ChildSessionHandle, DelegationRuntimeOptions } from "../../src/core/delegation/runtime.ts";
-import { runDelegation } from "../../src/core/delegation/runtime.ts";
+import { retrieveDelegationResult, runDelegation } from "../../src/core/delegation/runtime.ts";
 import type { Capability } from "../../src/core/tools/contract.ts";
 
 function caps(...values: Capability[]): ReadonlySet<Capability> {
@@ -145,6 +145,44 @@ describe("runDelegation", () => {
 
 		const result = await runDelegation(options, "scout", "task");
 		expect(result.output).toBe("ok");
+	});
+
+	it("returns a handle immediately for a background child and retrieves its result after completion", async () => {
+		let release: (() => void) | undefined;
+		const completed = new Promise<void>((resolve) => { release = resolve; });
+		const run = vi.fn(async () => { await completed; return { output: "finished later" }; });
+		const child: ChildSessionHandle = { run, dispose: vi.fn() };
+		const options = baseOptions({ buildChildSession: vi.fn(async () => child) });
+		const started = await runDelegation(options, "scout", "task", { background: true });
+		expect(started.handleId).toBeTruthy();
+		expect(started.output).toMatch(/started/i);
+		const retrieved = retrieveDelegationResult(options, started.handleId!);
+		expect(run).toHaveBeenCalledWith("task");
+		release?.();
+		await expect(retrieved).resolves.toEqual({ agentType: "scout", task: "task", output: "finished later" });
+		await expect(retrieveDelegationResult(options, started.handleId!)).resolves.toEqual({
+			agentType: "scout", task: "task", output: "finished later",
+		});
+	});
+
+	it("rejects retrieval of an unknown background handle", async () => {
+		await expect(retrieveDelegationResult(baseOptions(), "missing")).rejects.toThrow(/unknown delegation handle/i);
+	});
+
+	it("creates a unique child artifact directory below the parent session directory before building the child", async () => {
+		const { mkdtemp, rm, stat } = await import("node:fs/promises");
+		const { tmpdir } = await import("node:os");
+		const { join } = await import("node:path");
+		const parentDir = await mkdtemp(join(tmpdir(), "apex-delegation-artifacts-"));
+		try {
+			const { handle } = fakeChild();
+			const buildChildSession = vi.fn(async () => handle);
+			await runDelegation(baseOptions({ getParentSessionDir: () => parentDir, buildChildSession }), "scout", "task");
+			const request = buildChildSession.mock.calls[0]?.[0];
+			expect(request?.artifactDir).toMatch(new RegExp(`^${parentDir}/delegations/`));
+			expect(request?.sessionId).toBeTruthy();
+			expect((await stat(request?.artifactDir ?? "")).isDirectory()).toBe(true);
+		} finally { await rm(parentDir, { recursive: true, force: true }); }
 	});
 
 	it("disposes the child even when run() rejects", async () => {

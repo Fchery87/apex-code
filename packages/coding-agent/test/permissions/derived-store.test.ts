@@ -131,6 +131,18 @@ describe("DerivedPermissionRuleStore", () => {
 		expect(decision.block).toBe(true);
 	});
 
+	it("keeps a bash-holding parent's inherited rule restriction in force for the child", async () => {
+		const parent = newParentStore();
+		await parent.apply({
+			type: "addRules", destination: "session", rules: [{ toolName: "bash", behavior: "deny", ruleContent: "rm *" }],
+		});
+		const child = new DerivedPermissionRuleStore({ parent });
+		const decision = await evaluateToolCall("bash", { command: "rm generated.txt" }, {
+			getContract, store: child, getMode: () => "default",
+		});
+		expect(decision.block).toBe(true);
+	});
+
 	it("never gets a full-registry contract lookup wrong for an unclassified tool", () => {
 		// Sanity check the fixture itself isn't silently degrading to UNCLASSIFIED.
 		expect(getContract("delegate")).not.toEqual(UNCLASSIFIED);
