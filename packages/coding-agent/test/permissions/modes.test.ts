@@ -35,8 +35,16 @@ describe("resolveWithMode", () => {
 			expect(resolveWithMode("plan", noRule("ask"), caps("exec"))).toEqual({ behavior: "deny" });
 		});
 
+		it("denies a tool with delegate capability", () => {
+			expect(resolveWithMode("plan", noRule("allow"), caps("delegate"))).toEqual({ behavior: "deny" });
+		});
+
 		it("allows a pure fs.read tool, deferring to its own resolution", () => {
 			expect(resolveWithMode("plan", noRule("allow"), caps("fs.read"))).toEqual(noRule("allow"));
+		});
+
+		it("allows a state-capability tool (e.g. todo_write) -- plan mode narrows the floor to fs.write/exec/delegate only", () => {
+			expect(resolveWithMode("plan", noRule("allow"), caps("state"))).toEqual(noRule("allow"));
 		});
 
 		it("is a hard safety floor: overrides even an explicit allow rule for a mutating capability", () => {
@@ -100,6 +108,14 @@ describe("resolveWithMode", () => {
 			expect(resolveWithMode("dontAsk", noRule("allow"), caps("fs.read"))).toEqual(noRule("allow"));
 			expect(resolveWithMode("dontAsk", withRule(explicitDeny), caps("fs.write"))).toEqual(withRule(explicitDeny));
 		});
+	});
+
+	it("never denies an empty-capability tool (the schema loader's shape) under any mode's floor", () => {
+		// tool_schema declares an empty capability set so it stays callable to load the
+		// schema of a deferred tool no matter which mode -- including plan -- is active.
+		for (const mode of ["default", "plan", "acceptEdits", "bypassPermissions", "dontAsk"] as const) {
+			expect(resolveWithMode(mode, noRule("allow"), caps())).toEqual(noRule("allow"));
+		}
 	});
 
 	it("never references a tool by name — only by declared capability", () => {
