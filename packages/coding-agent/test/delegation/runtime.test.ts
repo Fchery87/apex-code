@@ -156,11 +156,11 @@ describe("runDelegation", () => {
 		const started = await runDelegation(options, "scout", "task", { background: true });
 		expect(started.handleId).toBeTruthy();
 		expect(started.output).toMatch(/started/i);
-		const retrieved = retrieveDelegationResult(options, started.handleId!);
+		const retrieved = retrieveDelegationResult(options, started.handleId!, "scout");
 		expect(run).toHaveBeenCalledWith("task");
 		release?.();
 		await expect(retrieved).resolves.toEqual({ agentType: "scout", task: "task", output: "finished later" });
-		await expect(retrieveDelegationResult(options, started.handleId!)).resolves.toEqual({
+		await expect(retrieveDelegationResult(options, started.handleId!, "scout")).resolves.toEqual({
 			agentType: "scout", task: "task", output: "finished later",
 		});
 	});

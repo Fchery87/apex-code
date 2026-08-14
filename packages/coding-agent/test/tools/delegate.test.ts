@@ -91,6 +91,13 @@ describe("delegate execution: runs a real child through the injected runtime (ta
 		expect(definition.contract.permission.matches("explore:*", { agentType: "explore:quick", task: "x" })).toBe(true);
 	});
 
+	it("requires retrieval to name the originating agent type", () => {
+		const definition = createDelegateToolDefinition(inertRuntime());
+		const params = { agentType: "explore:quick", handle: "h" };
+		expect(definition.contract.permission.matches("explore:*", params)).toBe(true);
+		expect(definition.contract.permission.matches("worker", params)).toBe(false);
+	});
+
 	it("throws (a model-readable isError result once caught by the agent loop) for an unresolvable agent type", async () => {
 		const definition = createDelegateToolDefinition(inertRuntime());
 		await expect(

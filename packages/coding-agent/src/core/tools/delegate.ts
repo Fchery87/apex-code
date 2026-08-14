@@ -13,6 +13,7 @@ const delegateSchema = Type.Union([
 		background: Type.Optional(Type.Boolean({ description: "Return a handle immediately instead of waiting for the child." })),
 	}),
 	Type.Object({
+		agentType: Type.String({ description: "The agent type that produced the background result." }),
 		handle: Type.String({ description: "A background delegation handle returned by an earlier call." }),
 	}),
 ]);
@@ -47,26 +48,23 @@ export function createDelegateToolDefinition(
 			capabilities: new Set(["delegate"]),
 			permission: {
 				defaultBehavior: "ask",
-				matches: (ruleContent, params) =>
-					"agentType" in params
-						? minimatch(params.agentType, ruleContent)
-						: ruleContent === `handle:${params.handle}`,
+				matches: (ruleContent, params) => minimatch(params.agentType, ruleContent),
 				describe: (ruleContent) => `Delegate to agent types matching "${ruleContent}"`,
-				ruleForCall: (params) => ("agentType" in params ? params.agentType : `handle:${params.handle}`),
+				ruleForCall: (params) => params.agentType,
 			},
 			context: { resultRecoverable: false, deferSchema: true },
 			evidence: {
 				emits: new Set(["workflow"]),
 				capture: (params): EvidenceRecord[] =>
-					"agentType" in params
+					"task" in params
 						? [{ kind: "workflow", agentType: params.agentType, task: params.task }]
-						: [],
+						: [{ kind: "workflow", agentType: params.agentType, handle: params.handle }],
 			},
 		},
 		async execute(_toolCallId, input: DelegateInput): Promise<AgentToolResult<DelegateDetails>> {
-			const result = "handle" in input
-				? await retrieveDelegationResult(runtime, input.handle)
-				: await runDelegation(runtime, input.agentType, input.task, { background: input.background });
+			const result = "task" in input
+				? await runDelegation(runtime, input.agentType, input.task, { background: input.background })
+				: await retrieveDelegationResult(runtime, input.handle, input.agentType);
 			return {
 				content: [{ type: "text", text: result.output }],
 				details: {
