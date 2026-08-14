@@ -27,8 +27,8 @@ function workspace(): string {
  * otherwise. Uses process.execPath (not a third-party runtime) so it runs on any
  * host that can run this test suite at all, matching every other sandbox test.
  */
-function connectProbeScript(port: number): string {
-	return `
+function connectProbeScript(port: number, nested = false): string {
+	const probe = `
 		const net = require("node:net");
 		const url = new URL(process.env.HTTP_PROXY);
 		const c = net.connect(Number(url.port), url.hostname, () => {
@@ -37,6 +37,12 @@ function connectProbeScript(port: number): string {
 		c.on("data", (d) => process.exit(d.toString().includes("200") ? 0 : 1));
 		c.on("error", () => process.exit(1));
 		c.on("close", () => process.exit(1));
+	`;
+	if (!nested) return probe;
+	return `
+		const { spawnSync } = require("node:child_process");
+		const result = spawnSync(process.execPath, ["-e", ${JSON.stringify(probe)}], { stdio: "inherit" });
+		process.exit(result.status ?? 1);
 	`;
 }
 
@@ -118,7 +124,7 @@ describe.skipIf(!canEnforceLinuxSandbox())("CLI sandbox network allowlist", () =
 		let stderr = "";
 		const code = await launchSandboxedCli({
 			command: process.execPath,
-			args: ["-e", connectProbeScript(testServerPort)],
+			args: ["-e", connectProbeScript(testServerPort, true)],
 			environment: {}, workspace: cwd, allowedHosts: ["example.com"],
 			dependencies: { stderr: { write: (message) => { stderr += message; return true; } } },
 		});
