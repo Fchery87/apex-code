@@ -113,4 +113,17 @@ describe.skipIf(!canEnforceLinuxSandbox())("CLI sandbox network allowlist", () =
 		expect(codeAllowed).toBe(0);
 		expect(stderrAllowed).not.toContain("Sandbox violation");
 	});
+	it("keeps the same network boundary for a child-process workload (delegation boundary)", async () => {
+		const cwd = workspace();
+		let stderr = "";
+		const code = await launchSandboxedCli({
+			command: process.execPath,
+			args: ["-e", connectProbeScript(testServerPort)],
+			environment: {}, workspace: cwd, allowedHosts: ["example.com"],
+			dependencies: { stderr: { write: (message) => { stderr += message; return true; } } },
+		});
+		expect(code).not.toBe(0);
+		expect(stderr).toContain("Sandbox violation (network)");
+	});
+
 });

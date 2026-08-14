@@ -77,6 +77,7 @@ export interface DelegationResult {
 }
 
 interface BackgroundDelegation {
+	agentType: string;
 	promise: Promise<DelegationResult>;
 }
 
@@ -178,7 +179,7 @@ export async function runDelegation(
 	// observed now so a child that fails before retrieval does not become an
 	// unhandled rejection.
 	void promise.catch(() => {});
-	background(options).set(handleId, { promise });
+	background(options).set(handleId, { agentType, promise });
 	return { agentType, task, output: `Delegation started. Retrieve result with handle \"${handleId}\".`, handleId };
 }
 
@@ -186,8 +187,12 @@ export async function runDelegation(
 export async function retrieveDelegationResult(
 	options: DelegationRuntimeOptions,
 	handleId: string,
+	expectedAgentType?: string,
 ): Promise<DelegationResult> {
 	const entry = background(options).get(handleId);
 	if (!entry) throw new Error(`Unknown delegation handle "${handleId}".`);
+	if (expectedAgentType !== undefined && entry.agentType !== expectedAgentType) {
+		throw new Error(`Delegation handle "${handleId}" belongs to agent "${entry.agentType}", not "${expectedAgentType}".`);
+	}
 	return entry.promise;
 }
