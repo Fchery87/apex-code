@@ -86,8 +86,8 @@ capable and measurably worse.
 | 2a | Permissions — rule model | **landed** — live enforcement completed · `8dff33f41` | [spec](specs/2026-08-11-permission-rule-model.md) | — |
 | 2b | Permissions — OS sandbox | **landed** — Linux + macOS backends verified in CI · `b9a7bb337` | [spec](specs/2026-08-12-os-sandbox.md) | — |
 | 3 | Context engineering | **landed** — eviction + deferred schemas verified against the replay corpus · `72a2fefe4` | [spec](specs/2026-08-13-context-engineering.md) | — |
-| 4 | Tool surface | **active** — plan approved, implementation not started | [spec](specs/2026-08-13-tool-surface.md) | [plan](plans/2026-08-13-tool-surface.md) |
-| 5 | Delegation & multi-agent | not started | — | — |
+| 4 | Tool surface | **landed** — all 7 tasks (4.1–4.7) done, budget fixed at 2,150/2,300 tokens · `faffaa79e` | [spec](specs/2026-08-13-tool-surface.md) | [plan](plans/2026-08-13-tool-surface.md) |
+| 5 | Delegation & multi-agent | **planned** — spec + ADR 0008 + plan done; task 5.1 blocking, implementation not started | [spec](specs/2026-08-14-delegation-and-multi-agent.md) | [plan](plans/2026-08-14-delegation-and-multi-agent.md) |
 | 6 | Durable state & daemon | not started | — | — |
 | 7 | Evidence & verification | not started | — | — |
 | 8 | Observability & cost | not started | — | — |
@@ -517,6 +517,21 @@ use case demands it.
 Recursive delegation terminates at a bounded depth. Subagent artifacts never write
 outside their own directory.
 
+**Correction (2026-08-14 — the `pi-subagents` scope is restated; no such dependency
+exists.)** The Scope paragraph above named `pi-subagents` as an existing dependency
+supplying `capability-ceiling`, `preflight`, and `control-channel` primitives, governed
+by "existing ADRs 0009 and 0024." Neither is real in this repository: no package named
+`pi-subagents` appears in upstream Pi's ten-package inventory at the fork point
+(`docs/upstream-log.md`) or anywhere in this repository's dependency graph; ADR 0009 is
+reserved for telemetry, and there is no ADR 0024. The only delegation code that exists
+is the bundled upstream example extension (`examples/extensions/subagent/`), which is
+not a dependency and, per `docs/specs/2026-08-14-delegation-and-multi-agent.md`,
+reconstructs authority from disk/argv rather than deriving it — a ceiling bypass by
+construction. The scope is restated: delegation authority derives from the parent's
+live in-memory permission state (store, mode, capability set), never reconstructed
+across a process boundary, decided in ADR
+`0008-delegation-authority.md` and detailed in the spec above.
+
 ---
 
 ## Phase 6 — Durable state & daemon
@@ -606,7 +621,7 @@ takes the next free number instead of a reserved one.
 | 0005 | What the sandbox boundary does and does not guarantee | 2b | reserved |
 | 0006 | Session format ownership and the migration guarantee owed to users | 6 | reserved |
 | 0007 | Evidence capture in core; policy layer stays a bundled extension | 7 | reserved |
-| 0008 | Delegation authority: `pi-subagents` dependency vs. owning it | 5 | reserved |
+| 0008 | Delegation authority: in-process derived child vs. subprocess with serialized authority | 5 | ✅ |
 | 0009 | Telemetry: opt-in only, and exactly what is collected | 9 | reserved |
 | 0010 | One canonical tool contract, declared by the tool and never re-derived | pre-2 | ✅ |
 | 0011 | Deferred schemas resolve through an explicit model-callable tool, not harness-side injection | 4 | ✅ |
