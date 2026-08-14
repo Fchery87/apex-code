@@ -42,7 +42,11 @@ vi.mock("openai", () => {
 	return { default: FakeOpenAI };
 });
 
-async function createCloudflareRuntime(): Promise<{ modelRuntime: ModelRuntime; modelRegistry: ModelRegistry }> {
+async function createCloudflareRuntime(): Promise<{
+	modelRuntime: ModelRuntime;
+	modelRegistry: ModelRegistry;
+	modelId: string;
+}> {
 	const authStorage = AuthStorage.inMemory();
 	await authStorage.modify("cloudflare-ai-gateway", async () => ({
 		type: "api_key",
@@ -53,13 +57,17 @@ async function createCloudflareRuntime(): Promise<{ modelRuntime: ModelRuntime; 
 		},
 	}));
 	const modelRuntime = await ModelRuntime.create({ credentials: authStorage, modelsPath: null });
-	return { modelRuntime, modelRegistry: new ModelRegistry(modelRuntime) };
+	const modelId = modelRuntime
+		.getModels("cloudflare-ai-gateway")
+		.find((model) => model.api === "openai-completions" && model.baseUrl.endsWith("/compat"))?.id;
+	if (!modelId) throw new Error("cloudflare-ai-gateway catalog has no OpenAI-compatible model");
+	return { modelRuntime, modelRegistry: new ModelRegistry(modelRuntime), modelId };
 }
 
 describe("ModelRegistry Cloudflare compat streaming", () => {
 	it("materializes the Cloudflare endpoint through ModelRuntime streaming", async () => {
-		const { modelRuntime } = await createCloudflareRuntime();
-		const model = modelRuntime.getModel("cloudflare-ai-gateway", "workers-ai/@cf/moonshotai/kimi-k2.5");
+		const { modelRuntime, modelId } = await createCloudflareRuntime();
+		const model = modelRuntime.getModel("cloudflare-ai-gateway", modelId);
 		expect(model).toBeDefined();
 
 		resetApiProviders();
@@ -74,8 +82,8 @@ describe("ModelRegistry Cloudflare compat streaming", () => {
 	});
 
 	it("materializes the Cloudflare endpoint after extension-style auth resolution", async () => {
-		const { modelRegistry } = await createCloudflareRuntime();
-		const model = modelRegistry.find("cloudflare-ai-gateway", "workers-ai/@cf/moonshotai/kimi-k2.5");
+		const { modelRegistry, modelId } = await createCloudflareRuntime();
+		const model = modelRegistry.find("cloudflare-ai-gateway", modelId);
 		expect(model).toBeDefined();
 
 		resetApiProviders();
