@@ -100,4 +100,41 @@ describe("AgentSession evidence wiring", () => {
 		]);
 		session.dispose();
 	});
+	it("keeps completed tool results successful when the evidence sink rejects a record", async () => {
+		const cwd = scratchDirectory();
+		const parameters = Type.Object({ value: Type.String() });
+		const fixture: ApexToolDefinition = {
+			name: "sink_failure_fixture",
+			label: "Sink failure fixture",
+			description: "A source evidence fixture",
+			parameters,
+			contract: {
+				capabilities: new Set(),
+				permission: { defaultBehavior: "allow", matches: () => false, describe: () => "", ruleForCall: () => null },
+				context: { resultRecoverable: true, deferSchema: false },
+				evidence: { emits: new Set(["manual"]), capture: () => [{ kind: "manual", status: "observed" }] },
+			},
+			execute: async (): Promise<AgentToolResult<unknown>> => ({ content: [{ type: "text", text: "fixture" }], details: {} }),
+		};
+		const diagnostics: unknown[] = [];
+		const sink: EvidenceSink = {
+			record: () => {
+				throw new Error("sink unavailable");
+			},
+			recordDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+		};
+		const { session } = await createAgentSession({ cwd, agentDir: join(cwd, "agent"), model: getModel("anthropic", "claude-sonnet-4-5")!, customTools: [fixture], evidenceSink: sink });
+		const after = await session.agent.afterToolCall!({
+			assistantMessage: assistantWithTool("sink_failure_fixture"),
+			toolCall: { type: "toolCall", id: "call-1", name: "sink_failure_fixture", arguments: { value: "source" } },
+			args: { value: "source" },
+			result: { content: [{ type: "text", text: "fixture" }], details: {} },
+			isError: false,
+			context: { systemPrompt: "", messages: [], tools: [] },
+		});
+		expect(after).toBeUndefined();
+		expect(diagnostics).toEqual([{ toolName: "sink_failure_fixture", reason: "sink unavailable" }]);
+		session.dispose();
+	});
+
 });

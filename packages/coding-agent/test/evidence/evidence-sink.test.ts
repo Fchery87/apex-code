@@ -66,8 +66,8 @@ describe("SessionEvidenceSink", () => {
 		const workspace = createScratchDirectory();
 		const sink = new SessionEvidenceSink(SessionManager.inMemory(workspace));
 
-		expect(() => sink.record({ toolName: "bash", records: [{ kind: "command", accessToken: "secret" }] })).toThrow(
-			"credential-shaped",
-		);
+		expect(() =>
+			sink.record({ toolName: "manual", records: [{ kind: "manual", value: { accessToken: "secret" } }] }),
+		).toThrow("credential-shaped");
 	});
 });

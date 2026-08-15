@@ -72,11 +72,59 @@ export interface ContextSpec {
 
 export type EvidenceKind = "diff" | "test" | "command" | "manual" | "workflow";
 
-/** A structured record of what actually happened, captured at the source (Phase 7). */
-export interface EvidenceRecord {
-	kind: EvidenceKind;
-	[key: string]: unknown;
+/** Source-observed command facts. `exitCode` is absent only when execution never began. */
+export interface CommandEvidenceRecord {
+	kind: "command";
+	command: string;
+	cwd?: string;
+	executable?: string;
+	argv?: string[];
+	exitCode?: number | null;
 }
+
+/** A file mutation is identified by hashes and paths, never raw file or patch contents. */
+export interface DiffEvidenceRecord {
+	kind: "diff";
+	path: string;
+	patchHash?: string;
+	contentHash?: string;
+	byteCount?: number;
+}
+
+/** Normalized argv-based test execution facts. */
+export interface TestEvidenceRecord {
+	kind: "test";
+	cwd: string;
+	executable: string;
+	argv: string[];
+	exitCode: number | null;
+}
+
+/** Explicit human attestation; policy decides how, or whether, it is sufficient. */
+export interface ManualEvidenceRecord {
+	kind: "manual";
+	value?: unknown;
+	observed?: unknown;
+	status?: string;
+}
+
+/** Source facts from approval and delegation workflows. */
+export interface WorkflowEvidenceRecord {
+	kind: "workflow";
+	plan?: string;
+	approved?: boolean;
+	agentType?: string;
+	task?: string;
+	handle?: string;
+}
+
+/** A structured source record. Policy is a separate consumer, not an additional variant. */
+export type EvidenceRecord =
+	| CommandEvidenceRecord
+	| DiffEvidenceRecord
+	| TestEvidenceRecord
+	| ManualEvidenceRecord
+	| WorkflowEvidenceRecord;
 
 /** Durable destination for source-level tool evidence. Policy is deliberately not part of this boundary. */
 export interface EvidenceSink {
