@@ -1,8 +1,9 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentToolResult, AssistantMessage } from "apex-code-agent-core";
+import type { AssistantMessage } from "@earendil-works/pi-ai/compat";
 import { getModel } from "@earendil-works/pi-ai/compat";
+import type { AgentToolResult } from "apex-code-agent-core";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import { createAgentSession } from "../../src/core/sdk.ts";
@@ -29,7 +30,14 @@ function assistantWithTool(name: string): AssistantMessage {
 		api: "openai-responses",
 		provider: "openai",
 		model: "test",
-		usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+		usage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
 		stopReason: "toolUse",
 		timestamp: Date.now(),
 	};
@@ -39,7 +47,7 @@ describe("AgentSession evidence wiring", () => {
 	it("captures raw completed tool facts once, before extension presentation hooks", async () => {
 		const cwd = scratchDirectory();
 		const parameters = Type.Object({ value: Type.String() });
-		const fixture: ApexToolDefinition<typeof parameters, { observed: string }> = {
+		const fixture: ApexToolDefinition = {
 			name: "fixture",
 			label: "Fixture",
 			description: "A source evidence fixture",
@@ -48,24 +56,48 @@ describe("AgentSession evidence wiring", () => {
 				capabilities: new Set(),
 				permission: { defaultBehavior: "allow", matches: () => false, describe: () => "", ruleForCall: () => null },
 				context: { resultRecoverable: true, deferSchema: false },
-				evidence: { emits: new Set(["manual"]), capture: (params, result) => [{ kind: "manual", value: params.value, observed: result.details?.observed }] },
+				evidence: {
+					emits: new Set(["manual"]),
+					capture: (params, result) => [
+						{
+							kind: "manual",
+							value:
+								typeof params === "object" && params !== null && "value" in params ? params.value : undefined,
+							observed:
+								typeof result.details === "object" && result.details !== null && "observed" in result.details
+									? result.details.observed
+									: undefined,
+						},
+					],
+				},
 			},
-			execute: async (): Promise<AgentToolResult<{ observed: string }>> => ({ content: [{ type: "text", text: "fixture" }], details: { observed: "raw" } }),
+			execute: async (): Promise<AgentToolResult<unknown>> => ({
+				content: [{ type: "text", text: "fixture" }],
+				details: { observed: "raw" },
+			}),
 		};
 		const recorded: Array<{ toolName: string; records: unknown[] }> = [];
 		const sink: EvidenceSink = { record: (entry) => recorded.push(entry) };
-		const { session } = await createAgentSession({ cwd, agentDir: join(cwd, "agent"), model: getModel("anthropic", "claude-sonnet-4-5")!, customTools: [fixture], evidenceSink: sink });
+		const { session } = await createAgentSession({
+			cwd,
+			agentDir: join(cwd, "agent"),
+			model: getModel("anthropic", "claude-sonnet-4-5")!,
+			customTools: [fixture],
+			evidenceSink: sink,
+		});
 		const after = session.agent.afterToolCall;
 		expect(after).toBeDefined();
 		await after!({
 			assistantMessage: assistantWithTool("fixture"),
-			toolCall: { id: "call-1", name: "fixture", arguments: { value: "source" } },
+			toolCall: { type: "toolCall", id: "call-1", name: "fixture", arguments: { value: "source" } },
 			args: { value: "source" },
 			result: { content: [{ type: "text", text: "presented" }], details: { observed: "raw" } },
 			isError: false,
 			context: { systemPrompt: "", messages: [], tools: [] },
 		});
-		expect(recorded).toEqual([{ toolName: "fixture", records: [{ kind: "manual", value: "source", observed: "raw" }] }]);
+		expect(recorded).toEqual([
+			{ toolName: "fixture", records: [{ kind: "manual", value: "source", observed: "raw" }] },
+		]);
 		session.dispose();
 	});
 });

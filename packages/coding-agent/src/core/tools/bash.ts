@@ -104,9 +104,18 @@ export function createBashPermissionSpec(): PermissionSpec<typeof bashSchema> {
 	};
 }
 
+export interface BashExecutionFacts {
+	cwd: string;
+	executable?: string;
+	argv?: string[];
+	exitCode: number | null;
+}
+
 export interface BashToolDetails {
 	truncation?: TruncationResult;
 	fullOutputPath?: string;
+	/** Facts observed at the source execution boundary; never rendered as output. */
+	execution?: BashExecutionFacts;
 }
 
 /**
@@ -130,7 +139,7 @@ export interface BashOperations {
 			timeout?: number;
 			env?: NodeJS.ProcessEnv;
 		},
-	) => Promise<{ exitCode: number | null }>;
+	) => Promise<{ exitCode: number | null; executable?: string; argv?: string[] }>;
 }
 
 /**
@@ -197,7 +206,11 @@ export function createLocalBashOperations(options?: { shellPath?: string }): Bas
 				if (timedOut) {
 					throw new Error(`timeout:${timeout}`);
 				}
-				return { exitCode };
+				return {
+					exitCode,
+					executable: shellConfig.shell,
+					argv: commandFromStdin ? [...shellConfig.args] : [...shellConfig.args, command],
+				};
 			} finally {
 				if (child.pid) untrackDetachedChildPid(child.pid);
 				if (timeoutHandle) clearTimeout(timeoutHandle);
@@ -394,7 +407,12 @@ export function createBashToolDefinition(
 			context: { resultRecoverable: false, deferSchema: false },
 			evidence: {
 				emits: new Set(["command"]),
-				capture: (params) => [{ kind: "command", command: params.command }],
+				capture: (params, result) => {
+					const execution = result.details?.execution;
+					return execution
+						? [{ kind: "command", command: params.command, ...execution }]
+						: [{ kind: "command", command: params.command }];
+				},
 			},
 		},
 		async execute(
@@ -492,6 +510,7 @@ export function createBashToolDefinition(
 
 			try {
 				let exitCode: number | null;
+				let execution: BashExecutionFacts;
 				try {
 					const result = await ops.exec(spawnContext.command, spawnContext.cwd, {
 						onData: handleData,
@@ -500,6 +519,12 @@ export function createBashToolDefinition(
 						env: spawnContext.env,
 					});
 					exitCode = result.exitCode;
+					execution = {
+						cwd: spawnContext.cwd,
+						executable: result.executable,
+						argv: result.argv,
+						exitCode,
+					};
 				} catch (err) {
 					const snapshot = await finishOutput();
 					const { text } = formatOutput(snapshot, "");
@@ -515,10 +540,11 @@ export function createBashToolDefinition(
 
 				const snapshot = await finishOutput();
 				const { text: outputText, details } = formatOutput(snapshot);
+				const resultDetails: BashToolDetails = { ...details, execution };
 				if (exitCode !== 0 && exitCode !== null) {
 					throw new Error(appendStatus(outputText, `Command exited with code ${exitCode}`));
 				}
-				return { content: [{ type: "text", text: outputText }], details };
+				return { content: [{ type: "text", text: outputText }], details: resultDetails };
 			} finally {
 				clearUpdateTimer();
 			}
