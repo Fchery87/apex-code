@@ -70,4 +70,16 @@ describe("SessionEvidenceSink", () => {
 			sink.record({ toolName: "manual", records: [{ kind: "manual", value: { accessToken: "secret" } }] }),
 		).toThrow("credential-shaped");
 	});
+	it("rejects raw content, oversized facts, and unsafe artifact references", () => {
+		const sink = new SessionEvidenceSink(SessionManager.inMemory(createScratchDirectory()));
+		expect(() =>
+			sink.record({ toolName: "write", records: [{ kind: "manual", value: { content: "raw" } }] }),
+		).toThrow("raw content");
+		expect(() =>
+			sink.record({ toolName: "manual", records: [{ kind: "manual", value: "x".repeat(20_000) }] }),
+		).toThrow("bounded");
+		expect(() =>
+			sink.record({ toolName: "manual", records: [{ kind: "manual", value: { artifactPath: "../../secret" } }] }),
+		).toThrow("artifact");
+	});
 });
