@@ -87,7 +87,7 @@ capable and measurably worse.
 | 2b | Permissions — OS sandbox | **landed** — Linux + macOS backends verified in CI · `b9a7bb337` | [spec](specs/2026-08-12-os-sandbox.md) | — |
 | 3 | Context engineering | **landed** — eviction + deferred schemas verified against the replay corpus · `72a2fefe4` | [spec](specs/2026-08-13-context-engineering.md) | — |
 | 4 | Tool surface | **landed** — all 7 tasks (4.1–4.7) done, budget fixed at 2,150/2,300 tokens · `faffaa79e` | [spec](specs/2026-08-13-tool-surface.md) | [plan](plans/2026-08-13-tool-surface.md) |
-| 5 | Delegation & multi-agent | **planned** — spec + ADR 0008 + plan done; task 5.1 blocking, implementation not started | [spec](specs/2026-08-14-delegation-and-multi-agent.md) | [plan](plans/2026-08-14-delegation-and-multi-agent.md) |
+| 5 | Delegation & multi-agent | **landed** — 7 of 7 tasks · `edb760ff4` | [spec](specs/2026-08-14-delegation-and-multi-agent.md) | — |
 | 6 | Durable state & daemon | not started | — | — |
 | 7 | Evidence & verification | not started | — | — |
 | 8 | Observability & cost | not started | — | — |
