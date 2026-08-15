@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { access as fsAccess } from "node:fs/promises";
 import { Container, Text, truncateToWidth } from "@earendil-works/pi-tui";
-import type { AgentTool } from "apex-code-agent-core";
+import { type AgentTool, ToolExecutionError } from "apex-code-agent-core";
 import { spawn } from "child_process";
 import { type Static, Type } from "typebox";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
@@ -528,12 +528,17 @@ export function createBashToolDefinition(
 				} catch (err) {
 					const snapshot = await finishOutput();
 					const { text } = formatOutput(snapshot, "");
+					const interruptedExecution: BashExecutionFacts = { cwd: spawnContext.cwd, exitCode: null };
 					if (err instanceof Error && err.message === "aborted") {
-						throw new Error(appendStatus(text, "Command aborted"));
+						throw new ToolExecutionError(appendStatus(text, "Command aborted"), {
+							execution: interruptedExecution,
+						});
 					}
 					if (err instanceof Error && err.message.startsWith("timeout:")) {
 						const timeoutSecs = err.message.split(":")[1];
-						throw new Error(appendStatus(text, `Command timed out after ${timeoutSecs} seconds`));
+						throw new ToolExecutionError(appendStatus(text, `Command timed out after ${timeoutSecs} seconds`), {
+							execution: interruptedExecution,
+						});
 					}
 					throw err;
 				}
@@ -542,7 +547,9 @@ export function createBashToolDefinition(
 				const { text: outputText, details } = formatOutput(snapshot);
 				const resultDetails: BashToolDetails = { ...details, execution };
 				if (exitCode !== 0 && exitCode !== null) {
-					throw new Error(appendStatus(outputText, `Command exited with code ${exitCode}`));
+					throw new ToolExecutionError(appendStatus(outputText, `Command exited with code ${exitCode}`), {
+						execution,
+					});
 				}
 				return { content: [{ type: "text", text: outputText }], details: resultDetails };
 			} finally {

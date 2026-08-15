@@ -10,7 +10,14 @@ import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { agentLoop, agentLoopContinue } from "../src/agent-loop.ts";
 import { setDefaultStreamFn } from "../src/index.ts";
-import type { AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, AgentTool } from "../src/types.ts";
+import {
+	type AgentContext,
+	type AgentEvent,
+	type AgentLoopConfig,
+	type AgentMessage,
+	type AgentTool,
+	ToolExecutionError,
+} from "../src/types.ts";
 
 // Mock stream for testing - mimics MockAssistantStream
 class MockAssistantStream extends EventStream<AssistantMessageEvent, AssistantMessage> {
@@ -1603,5 +1610,35 @@ describe("agentLoopContinue with AgentMessage", () => {
 		const messages = await stream.result();
 		expect(messages.length).toBe(1);
 		expect(messages[0].role).toBe("assistant");
+	});
+	it("preserves structured details from a source-observed tool execution error", async () => {
+		const toolSchema = Type.Object({});
+		const tool: AgentTool<typeof toolSchema> = {
+			name: "failing",
+			label: "failing",
+			description: "fixture",
+			parameters: toolSchema,
+			execute: async () => {
+				throw new ToolExecutionError("failed", { exitCode: 7 });
+			},
+		};
+		const context: AgentContext = { systemPrompt: "", messages: [], tools: [tool] };
+		const config: AgentLoopConfig = { model: createModel(), convertToLlm: identityConverter };
+		let callIndex = 0;
+		const stream = agentLoop([createUserMessage("run")], context, config, undefined, () => {
+			const result = new MockAssistantStream();
+			queueMicrotask(() => {
+				const content =
+					callIndex++ === 0
+						? [{ type: "toolCall" as const, id: "call-1", name: "failing", arguments: {} }]
+						: [{ type: "text" as const, text: "done" }];
+				result.push({ type: "done", reason: "stop", message: createAssistantMessage(content) });
+			});
+			return result;
+		});
+		const events: AgentEvent[] = [];
+		for await (const event of stream) events.push(event);
+		const end = events.find((event) => event.type === "tool_execution_end");
+		expect(end).toMatchObject({ type: "tool_execution_end", isError: true, result: { details: { exitCode: 7 } } });
 	});
 });

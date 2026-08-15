@@ -137,4 +137,30 @@ describe("AgentSession evidence wiring", () => {
 		session.dispose();
 	});
 
+	it("captures preserved source facts from a non-zero bash execution result", async () => {
+		const cwd = scratchDirectory();
+		const recorded: Array<{ toolName: string; records: unknown[] }> = [];
+		const sink: EvidenceSink = { record: (entry) => recorded.push(entry) };
+		const { session } = await createAgentSession({ cwd, agentDir: join(cwd, "agent"), model: getModel("anthropic", "claude-sonnet-4-5")!, evidenceSink: sink });
+		const bash = session.agent.state.tools.find((tool) => tool.name === "bash")!;
+		let sourceError: unknown;
+		try {
+			await bash.execute("nonzero-bash", { command: "exit 9" });
+		} catch (error) {
+			sourceError = error;
+		}
+		await session.agent.afterToolCall!({
+			assistantMessage: assistantWithTool("bash"),
+			toolCall: { type: "toolCall", id: "nonzero-bash", name: "bash", arguments: { command: "exit 9" } },
+			args: { command: "exit 9" },
+			result: { content: [{ type: "text", text: "failed" }], details: sourceError instanceof Error && "details" in sourceError ? sourceError.details : {} },
+			isError: true,
+			context: { systemPrompt: "", messages: [], tools: [] },
+		});
+		expect(recorded).toEqual([
+			{ toolName: "bash", records: [{ kind: "command", command: "exit 9", cwd, exitCode: 9, executable: "/bin/bash", argv: ["-c", "exit 9"] }] },
+		]);
+		session.dispose();
+	});
+
 });
