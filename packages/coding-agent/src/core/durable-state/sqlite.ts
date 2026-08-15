@@ -59,6 +59,7 @@ export interface DurableStateStore {
 	runCommand<T>(input: { id?: string; sessionId: string; command: string }, operation: () => Promise<T>): Promise<T>;
 	transitionCommand(id: string, state: Exclude<CommandJournalState, "created">, reason?: string): CommandJournalRecord;
 	getCommand(id: string): CommandJournalRecord | undefined;
+	commandCount(): number;
 	recoverUnfinishedCommands(reason?: string): CommandJournalRecord[];
 	recoverUnfinishedCommandsWithDiagnostics(reason?: string): RecoveryDiagnostic[];
 	acquireLease(input: {
@@ -298,6 +299,8 @@ export function openDurableStateStore(path: string): DurableStateStore {
 			return readCommand(database, id)!;
 		},
 		getCommand: (id) => readCommand(database, id),
+		commandCount: () =>
+			(database.prepare("SELECT COUNT(*) AS count FROM command_journal").get() as { count: number }).count,
 		recoverUnfinishedCommands: (reason = "daemon restarted before command completion") => {
 			const rows = database
 				.prepare("SELECT id FROM command_journal WHERE state IN ('created', 'running')")
