@@ -89,7 +89,7 @@ capable and measurably worse.
 | 4 | Tool surface | **landed** — all 7 tasks (4.1–4.7) done, budget fixed at 2,150/2,300 tokens · `faffaa79e` | [spec](specs/2026-08-13-tool-surface.md) | [plan](plans/2026-08-13-tool-surface.md) |
 | 5 | Delegation & multi-agent | **landed** — 7 of 7 tasks · `edb760ff4` | [spec](specs/2026-08-14-delegation-and-multi-agent.md) | — |
 | 6 | Durable state & daemon | **landed** — 6 of 6 tasks · `baf5e5302` (full-suite audit recorded) | [spec](specs/2026-08-15-durable-state-and-daemon.md) | — |
-| 7 | Evidence & verification | **active** — task 7.1 complete · ADR 0007 | [spec](specs/2026-08-16-evidence-and-verification.md) | [plan](plans/2026-08-16-evidence-and-verification.md) |
+| 7 | Evidence & verification | **landed** — 7 of 7 tasks · `c82584312` (clean Node 22 verification) | [spec](specs/2026-08-16-evidence-and-verification.md) | — |
 | 8 | Observability & cost | not started | — | — |
 | 9 | Release hardening | not started | — | — |
 

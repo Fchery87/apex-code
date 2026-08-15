@@ -80,6 +80,15 @@ structured capture diagnostic rather than fabricating success or failure evidenc
 | Policy separation | Capture works with no policy extension; policy consumes read-only records |
 | False-positive baseline | Repository audit records the absent `gatedFailures()` corpus; no unmeasured threshold is claimed |
 
+## Verification outcome
+
+At commit `c82584312`, a fresh no-space checkout under Node `v22.21.1` completed
+`npm ci --ignore-scripts`, `npm run build`, `npm run check`, and `npm test` successfully:
+277 test files passed and 6 skipped; 2311 tests passed and 53 skipped. The repository
+contains roadmap references to `gatedFailures()` but no tracked implementation or
+calibration corpus; Phase 7 therefore records that missing baseline instead of claiming
+a fabricated numeric false-positive rate.
+
 ## Rollout and deletion inventory
 
 No existing source is deleted. The implementation may supersede only the currently
