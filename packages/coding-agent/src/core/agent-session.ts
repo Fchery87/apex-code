@@ -35,7 +35,6 @@ import {
 	modelsAreEqual,
 	type RetryCallbacks,
 	resetApiProviders,
-	streamSimple,
 } from "@earendil-works/pi-ai/compat";
 import type {
 	Agent,
@@ -65,7 +64,7 @@ import {
 	prepareCompaction,
 	shouldCompact,
 } from "./compaction/index.ts";
-import { evictionBudget, installContextPipeline } from "./context/pipeline.ts";
+import { evictionBudget, installContextPipeline, isDefaultStreamFunction } from "./context/pipeline.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.ts";
 import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
@@ -104,7 +103,12 @@ import { createInteractiveResponder } from "./permissions/responder.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
 import type { BranchSummaryEntry, CompactionEntry, SessionEntry, SessionManager } from "./session-manager.ts";
-import { CURRENT_SESSION_VERSION, getLatestCompactionEntry, TODO_CUSTOM_ENTRY_TYPE, type SessionHeader } from "./session-manager.ts";
+import {
+	CURRENT_SESSION_VERSION,
+	getLatestCompactionEntry,
+	type SessionHeader,
+	TODO_CUSTOM_ENTRY_TYPE,
+} from "./session-manager.ts";
 import type { SettingsManager } from "./settings-manager.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
@@ -112,9 +116,9 @@ import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-promp
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
 import type { ApexToolDefinition } from "./tools/contract.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
-import { createToolSchemaToolDefinition } from "./tools/tool-schema.ts";
 import { createTodoWriteToolDefinition } from "./tools/todo-write.ts";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
+import { createToolSchemaToolDefinition } from "./tools/tool-schema.ts";
 import { addUsageToTotals, createUsageTotals } from "./usage-totals.ts";
 
 // ============================================================================
@@ -469,7 +473,7 @@ export class AgentSession {
 		headers?: Record<string, string>;
 		env?: Record<string, string>;
 	}> {
-		if (this.agent.streamFunction === streamSimple) {
+		if (isDefaultStreamFunction(this.agent.streamFunction)) {
 			return this._getRequiredRequestAuth(model);
 		}
 
@@ -2639,7 +2643,8 @@ export class AgentSession {
 		}
 
 		const hasDeferredActiveTool = nextActiveToolNames.some((name) => {
-			const contract = (definitionRegistry.get(name)?.definition as Partial<ApexToolDefinition> | undefined)?.contract;
+			const contract = (definitionRegistry.get(name)?.definition as Partial<ApexToolDefinition> | undefined)
+				?.contract;
 			return contract?.context.deferSchema === true;
 		});
 		if (hasDeferredActiveTool && this._toolRegistry.has("tool_schema")) {
