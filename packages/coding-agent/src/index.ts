@@ -49,6 +49,11 @@ export {
 	shouldCompact,
 } from "./core/compaction/index.ts";
 export { createEventBus, type EventBus, type EventBusController } from "./core/event-bus.ts";
+export {
+	createEvidencePolicyExtension,
+	type EvidencePolicy,
+	type EvidencePolicyInput,
+} from "./core/evidence-policy.ts";
 // Extension system
 export type {
 	AgentEndEvent,
