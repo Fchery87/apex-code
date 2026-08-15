@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
 /** Current schema for the daemon-owned durable-state sidecar. */
-export const CURRENT_DURABLE_STATE_SCHEMA_VERSION = 1;
+export const CURRENT_DURABLE_STATE_SCHEMA_VERSION = 2;
 
 export type CommandJournalState = "created" | "running" | "completed" | "failed" | "interrupted";
 
@@ -194,6 +194,14 @@ export function openDurableStateStore(path: string): DurableStateStore {
 			throw new Error(
 				`Durable state database schema version ${version} is newer than this version (${CURRENT_DURABLE_STATE_SCHEMA_VERSION})`,
 			);
+		}
+		if (version < 2) {
+			const commandColumns = database.prepare('PRAGMA table_info("command_journal")').all() as Array<{
+				name: string;
+			}>;
+			if (!commandColumns.some((column) => column.name === "recovery_reason")) {
+				database.exec("ALTER TABLE command_journal ADD COLUMN recovery_reason TEXT");
+			}
 		}
 		if (version < CURRENT_DURABLE_STATE_SCHEMA_VERSION) {
 			database
