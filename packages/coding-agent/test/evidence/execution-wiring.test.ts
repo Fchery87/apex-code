@@ -114,7 +114,10 @@ describe("AgentSession evidence wiring", () => {
 				context: { resultRecoverable: true, deferSchema: false },
 				evidence: { emits: new Set(["manual"]), capture: () => [{ kind: "manual", status: "observed" }] },
 			},
-			execute: async (): Promise<AgentToolResult<unknown>> => ({ content: [{ type: "text", text: "fixture" }], details: {} }),
+			execute: async (): Promise<AgentToolResult<unknown>> => ({
+				content: [{ type: "text", text: "fixture" }],
+				details: {},
+			}),
 		};
 		const diagnostics: unknown[] = [];
 		const sink: EvidenceSink = {
@@ -123,7 +126,13 @@ describe("AgentSession evidence wiring", () => {
 			},
 			recordDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
 		};
-		const { session } = await createAgentSession({ cwd, agentDir: join(cwd, "agent"), model: getModel("anthropic", "claude-sonnet-4-5")!, customTools: [fixture], evidenceSink: sink });
+		const { session } = await createAgentSession({
+			cwd,
+			agentDir: join(cwd, "agent"),
+			model: getModel("anthropic", "claude-sonnet-4-5")!,
+			customTools: [fixture],
+			evidenceSink: sink,
+		});
 		const after = await session.agent.afterToolCall!({
 			assistantMessage: assistantWithTool("sink_failure_fixture"),
 			toolCall: { type: "toolCall", id: "call-1", name: "sink_failure_fixture", arguments: { value: "source" } },
@@ -141,7 +150,12 @@ describe("AgentSession evidence wiring", () => {
 		const cwd = scratchDirectory();
 		const recorded: Array<{ toolName: string; records: unknown[] }> = [];
 		const sink: EvidenceSink = { record: (entry) => recorded.push(entry) };
-		const { session } = await createAgentSession({ cwd, agentDir: join(cwd, "agent"), model: getModel("anthropic", "claude-sonnet-4-5")!, evidenceSink: sink });
+		const { session } = await createAgentSession({
+			cwd,
+			agentDir: join(cwd, "agent"),
+			model: getModel("anthropic", "claude-sonnet-4-5")!,
+			evidenceSink: sink,
+		});
 		const bash = session.agent.state.tools.find((tool) => tool.name === "bash")!;
 		let sourceError: unknown;
 		try {
@@ -153,14 +167,28 @@ describe("AgentSession evidence wiring", () => {
 			assistantMessage: assistantWithTool("bash"),
 			toolCall: { type: "toolCall", id: "nonzero-bash", name: "bash", arguments: { command: "exit 9" } },
 			args: { command: "exit 9" },
-			result: { content: [{ type: "text", text: "failed" }], details: sourceError instanceof Error && "details" in sourceError ? sourceError.details : {} },
+			result: {
+				content: [{ type: "text", text: "failed" }],
+				details: sourceError instanceof Error && "details" in sourceError ? sourceError.details : {},
+			},
 			isError: true,
 			context: { systemPrompt: "", messages: [], tools: [] },
 		});
 		expect(recorded).toEqual([
-			{ toolName: "bash", records: [{ kind: "command", command: "exit 9", cwd, exitCode: 9, executable: "/bin/bash", argv: ["-c", "exit 9"] }] },
+			{
+				toolName: "bash",
+				records: [
+					{
+						kind: "command",
+						command: "exit 9",
+						cwd,
+						exitCode: 9,
+						executable: "/bin/bash",
+						argv: ["-c", "exit 9"],
+					},
+				],
+			},
 		]);
 		session.dispose();
 	});
-
 });

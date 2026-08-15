@@ -46,6 +46,4 @@ describe("test runner source evidence", () => {
 			{ kind: "test", executable: process.execPath, argv: ["-e", "process.exit(1)"], cwd, exitCode: 1 },
 		]);
 	});
-
-
 });
