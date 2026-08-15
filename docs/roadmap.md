@@ -562,8 +562,10 @@ gates, and governance policy as a **bundled extension**, switchable off and
 independently testable — that separability is how the layer's calibration was earned.
 
 **Exit criterion.** Evidence for bash, edit, write, and test is captured at the source
-with no post-hoc reconstruction. Gate false-positive rate stays under the threshold
-already established by the existing `gatedFailures()` work.
+with no post-hoc reconstruction. The bundled policy extension consumes the durable
+records independently. The Phase 7 audit found no tracked `gatedFailures()` corpus or
+established threshold, so no numeric calibration claim is made until such a corpus is
+introduced and measured.
 
 **Risks.** The known self-measurement hazard: tests that drive a turn from the repo
 root file synthetic rows into the evidence ledger. Carry the `inScratchRepo`
