@@ -21,6 +21,8 @@ describe("evidence policy extension", () => {
 			| undefined;
 		const observed: unknown[] = [];
 		const extension = createEvidencePolicyExtension(async (input) => {
+			expect(Object.isFrozen(input.records)).toBe(true);
+			expect(Object.isFrozen(input.records[0])).toBe(true);
 			observed.push(input);
 		});
 		const api = {
