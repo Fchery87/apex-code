@@ -4,7 +4,7 @@
 
 | Task | State | Commit | Verification |
 | --- | --- | --- | --- |
-| 6.1 Inspect session/auth boundaries and choose SQLite ownership | Not started | — | Map current stores and write the Phase 6 ADR before schema code. |
+| 6.1 Inspect session/auth boundaries and choose SQLite ownership | Done | `__COMMIT__` | Mapped `SessionManager`/JSONL, `AuthStorage`, `ModelRuntime`, and the existing `pi-server`/`pi-client` lease seams. ADR 0006 settles JSONL as session-of-record, a daemon-owned SQLite sidecar, credential exclusion, additive migrations, and `node:sqlite` behind an adapter. |
 | 6.2 Define additive SQLite schema and migrations | Not started | — | Migration tests; no secrets; JSONL remains readable. |
 | 6.3 Implement durable command journal and crash recovery | Not started | — | SIGKILL/restart integration test with explicit interrupted state. |
 | 6.4 Implement daemon-local leases and client attach | Not started | — | Two-client contention test with valid ordered JSONL. |

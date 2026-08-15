@@ -1,6 +1,6 @@
 # Spec: Durable state & daemon
 
-**Status:** Draft — Phase 6 entry specification
+**Status:** Active — ADR 0006 accepted for Phase 6 persistence boundaries
 
 ## Metadata
 
@@ -14,6 +14,10 @@
 ## Deletion inventory
 
 This phase makes no existing document obsolete. The Phase 5 plan was deleted when Phase 5 closed; its durable decisions remain in the Phase 5 spec and ADR 0008.
+
+## Decision record
+
+ADR [0006](../adr/0006-session-format-and-durable-state.md) settles JSONL ownership, the SQLite sidecar boundary, credential exclusion, and additive migration policy.
 
 ## Objective
 
