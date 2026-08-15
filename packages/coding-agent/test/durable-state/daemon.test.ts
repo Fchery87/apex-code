@@ -58,6 +58,16 @@ describe("DurableStateDaemon", () => {
 		restarted.dispose();
 	});
 
+	it("allows two shared clients to attach while rejecting their mutations", () => {
+		const daemon = new DurableStateDaemon({ databasePath: join(createDir(), "state.sqlite"), daemonId: "daemon" });
+		expect(daemon.attach({ sessionId: "session", clientId: "a", mode: "shared", ttlMs: 10_000 }).mode).toBe("shared");
+		expect(daemon.attach({ sessionId: "session", clientId: "b", mode: "shared", ttlMs: 10_000 }).mode).toBe("shared");
+		expect(() => daemon.beginMutation({ sessionId: "session", clientId: "a", command: "append" })).toThrow(
+			/exclusive lease/,
+		);
+		daemon.dispose();
+	});
+
 	it("rejects a second client mutation and leaves JSONL ordered", async () => {
 		const dir = createDir();
 		const session = SessionManager.create(dir, join(dir, "sessions"), { id: "session" });
