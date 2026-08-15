@@ -89,7 +89,7 @@ capable and measurably worse.
 | 4 | Tool surface | **landed** — all 7 tasks (4.1–4.7) done, budget fixed at 2,150/2,300 tokens · `faffaa79e` | [spec](specs/2026-08-13-tool-surface.md) | [plan](plans/2026-08-13-tool-surface.md) |
 | 5 | Delegation & multi-agent | **landed** — 7 of 7 tasks · `edb760ff4` | [spec](specs/2026-08-14-delegation-and-multi-agent.md) | — |
 | 6 | Durable state & daemon | **landed** — 6 of 6 tasks · `baf5e5302` (full-suite audit recorded) | [spec](specs/2026-08-15-durable-state-and-daemon.md) | — |
-| 7 | Evidence & verification | not started | — | — |
+| 7 | Evidence & verification | **active** — task 7.1 complete · ADR 0007 | [spec](specs/2026-08-16-evidence-and-verification.md) | [plan](plans/2026-08-16-evidence-and-verification.md) |
 | 8 | Observability & cost | not started | — | — |
 | 9 | Release hardening | not started | — | — |
 
@@ -620,7 +620,7 @@ takes the next free number instead of a reserved one.
 | 0004 | Permission rule model and source precedence | 2a | ✅ |
 | 0005 | What the sandbox boundary does and does not guarantee | 2b | reserved |
 | 0006 | Session format ownership and the migration guarantee owed to users | 6 | reserved |
-| 0007 | Evidence capture in core; policy layer stays a bundled extension | 7 | reserved |
+| 0007 | Evidence capture in core; policy layer stays a bundled extension | 7 | ✅ |
 | 0008 | Delegation authority: in-process derived child vs. subprocess with serialized authority | 5 | ✅ |
 | 0009 | Telemetry: opt-in only, and exactly what is collected | 9 | reserved |
 | 0010 | One canonical tool contract, declared by the tool and never re-derived | pre-2 | ✅ |
