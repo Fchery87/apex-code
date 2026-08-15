@@ -82,4 +82,14 @@ describe("SessionEvidenceSink", () => {
 			sink.record({ toolName: "manual", records: [{ kind: "manual", value: { artifactPath: "../../secret" } }] }),
 		).toThrow("artifact");
 	});
+	it("retains durable evidence across compaction entries while omitting it from model context", () => {
+		const session = SessionManager.inMemory(createScratchDirectory());
+		const sink = new SessionEvidenceSink(session);
+		sink.record({ toolName: "bash", records: [{ kind: "command", command: "printf safe", exitCode: 0 }] });
+		session.appendCompaction("summary", "missing-entry", 1);
+
+		expect(session.getEvidenceRecords()).toHaveLength(1);
+		expect(session.getEntries().some((entry) => entry.type === "evidence")).toBe(true);
+		expect(session.buildContextEntries().some((entry) => entry.type === "evidence")).toBe(false);
+	});
 });
