@@ -14,7 +14,7 @@ would force a retrofit.
 | --- | --- | --- | --- |
 | Tool contract | **Settled** — ADR 0010 | Phases 2, 3, 4, 5, 7 | Now (gates Phase 2's spec) |
 | Context pipeline order | **Settled** — spec `2026-08-13-context-engineering` | Phases 3, 7 | Settled 2026-08-13 |
-| Session entry schema | Open | Phases 1, 5, 6, 7, 9 | Start of Phase 6, but see note |
+| Session entry schema | Settled — ADR 0006 | Phases 1, 5, 6, 7, 9 | — |
 
 ---
 
