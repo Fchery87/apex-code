@@ -29,6 +29,7 @@ const REPRESENTATIVE_PARAMS: Record<ToolName, unknown> = {
 	ask_user: { question: "Which approach?", options: ["a", "b"] },
 	plan_present: { plan: "1. Do a thing" },
 	delegate: { agentType: "explore", task: "find the config loader" },
+	test: { executable: "npm", args: ["test", "--", "unit"] },
 };
 
 let scratch: string;
