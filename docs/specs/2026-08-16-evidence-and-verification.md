@@ -30,7 +30,7 @@ Phase 7 makes verification facts trustworthy by capturing them where the work ha
 
 ## Current state
 
-`EvidenceRecord` is currently a structurally open `{ kind, ... }` interface. First-party tools declare evidence kinds and capture functions, but capture is not wired to a shared sink. Bash currently captures only the requested command, edit/write capture only the requested path, and no durable evidence entry is appended to a session. There is no first-party test-runner evidence boundary yet. Policy references in the roadmap describe a future bundled extension; no core policy engine is being introduced by this phase.
+`EvidenceRecord` is currently a structurally open `{ kind, ... }` interface. First-party tools declare evidence kinds and capture functions, but capture is not wired to a shared sink. Bash currently captures only the requested command, edit/write capture only the requested path, and no durable evidence entry is appended to a session. There is no first-party test-runner evidence boundary yet. Policy references in the roadmap describe a bundled extension; this phase exposes an optional read-only policy adapter, not a core policy engine. A repository-wide tracked-file audit found no `gatedFailures()` implementation or calibration corpus, so a numeric false-positive threshold cannot be honestly measured or invented.
 
 ## The problem
 
@@ -45,7 +45,7 @@ A post-hoc observer sees rendered results, not authoritative execution facts. Ba
 - [ ] Evidence is durably represented in additive JSONL entries and remains available across reload and compaction.
 - [ ] Evidence references are bounded and session-owned; secrets and raw contents are excluded.
 - [ ] The existing governance/policy layer can consume evidence without being required for capture.
-- [ ] The existing `gatedFailures()` false-positive baseline is measured without attributing capture failures to policy failures.
+- [ ] A repository audit records whether a `gatedFailures()` corpus exists; no threshold is invented when it does not.
 
 ## Non-goals
 
@@ -78,7 +78,7 @@ structured capture diagnostic rather than fabricating success or failure evidenc
 | Durability | Append/reload/compaction session tests |
 | Secret boundary | Sink and artifact tests with token-like inputs |
 | Policy separation | Capture works with no policy extension; policy consumes read-only records |
-| False-positive baseline | Existing `gatedFailures()` corpus before/after measurement |
+| False-positive baseline | Repository audit records the absent `gatedFailures()` corpus; no unmeasured threshold is claimed |
 
 ## Rollout and deletion inventory
 
