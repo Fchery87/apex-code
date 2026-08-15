@@ -112,7 +112,9 @@ describe("Radius provider", () => {
 	});
 
 	it("does not fetch or expose Radius models without configured auth", async () => {
-		const fetchSpy = vi.spyOn(globalThis, "fetch");
+		// A no-auth case must not make an ambient network request; fail immediately
+		// instead of allowing a real Radius request to consume the test timeout.
+		const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("unexpected catalog fetch"));
 		const runtime = await ModelRuntime.create({
 			credentials: AuthStorage.inMemory(),
 			modelsStore: new InMemoryModelsStore(),
