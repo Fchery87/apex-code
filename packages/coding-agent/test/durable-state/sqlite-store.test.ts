@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { CURRENT_DURABLE_STATE_SCHEMA_VERSION, openDurableStateStore } from "../../src/core/durable-state/sqlite.ts";
+import { SessionManager } from "../../src/core/session-manager.ts";
 
 const tempDirs: string[] = [];
 
@@ -43,6 +44,36 @@ describe("durable state SQLite schema", () => {
 		const second = openDurableStateStore(path);
 		expect(second.schemaVersion()).toBe(CURRENT_DURABLE_STATE_SCHEMA_VERSION);
 		second.close();
+	});
+
+	it("keeps JSONL sessions readable when the sidecar is absent", () => {
+		const dir = mkdtempSync(join(tmpdir(), "apex-jsonl-"));
+		tempDirs.push(dir);
+		const sessions = join(dir, "sessions");
+		const manager = SessionManager.create(dir, sessions, { id: "jsonl-only" });
+		manager.appendMessage({ role: "user", content: "hello", timestamp: 1 });
+		manager.appendMessage({
+			role: "assistant",
+			content: [{ type: "text", text: "world" }],
+			api: "test",
+			provider: "test",
+			model: "small",
+			usage: {
+				input: 1,
+				output: 1,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 2,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "stop",
+			timestamp: 2,
+		});
+		const sessionFile = manager.getSessionFile();
+		if (!sessionFile) throw new Error("Expected a persisted session file");
+		const reopened = SessionManager.open(sessionFile, sessions);
+		expect(reopened.getEntries()).toHaveLength(2);
+		expect(reopened.buildSessionContext().messages).toHaveLength(2);
 	});
 
 	it("rejects a database newer than this binary", () => {
