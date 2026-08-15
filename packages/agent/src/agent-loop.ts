@@ -21,6 +21,7 @@ import type {
 	AgentToolResult,
 	StreamFn,
 } from "./types.ts";
+import { ToolExecutionError } from "./types.ts";
 
 export type AgentEventSink = (event: AgentEvent) => Promise<void> | void;
 
@@ -701,10 +702,9 @@ async function executePreparedToolCall(
 	} catch (error) {
 		acceptingUpdates = false;
 		await Promise.all(updateEvents);
-		return {
-			result: createErrorToolResult(error instanceof Error ? error.message : String(error)),
-			isError: true,
-		};
+		const result = createErrorToolResult(error instanceof Error ? error.message : String(error));
+		if (error instanceof ToolExecutionError) result.details = error.details;
+		return { result, isError: true };
 	} finally {
 		acceptingUpdates = false;
 	}

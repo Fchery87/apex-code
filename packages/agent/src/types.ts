@@ -357,6 +357,21 @@ export interface AgentState {
 	readonly errorMessage?: string;
 }
 
+/**
+ * Tool execution failure with source-observed details. The loop keeps these details
+ * on its error result so an afterToolCall observer can capture evidence without
+ * parsing display text.
+ */
+export class ToolExecutionError<T = unknown> extends Error {
+	readonly details: T;
+
+	constructor(message: string, details: T) {
+		super(message);
+		this.name = "ToolExecutionError";
+		this.details = details;
+	}
+}
+
 /** Final or partial result produced by a tool. */
 export interface AgentToolResult<T> {
 	/** Text or image content returned to the model. */
