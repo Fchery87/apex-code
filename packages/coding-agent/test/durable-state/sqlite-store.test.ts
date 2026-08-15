@@ -92,15 +92,18 @@ describe("durable state SQLite schema", () => {
 		expect(typeof repository.dirty).toBe("boolean");
 	});
 
-	it("enforces renewable exclusive and shared session leases", () => {
+	it("allows multiple shared leases and rejects conflicting exclusive leases", () => {
 		const store = openDurableStateStore(createDatabasePath());
-		store.acquireLease({ sessionId: "s", ownerId: "a", mode: "exclusive", ttlMs: 10_000 });
-		expect(() => store.acquireLease({ sessionId: "s", ownerId: "b", mode: "shared", ttlMs: 10_000 })).toThrow(
+		store.acquireLease({ sessionId: "s", ownerId: "a", mode: "shared", ttlMs: 10_000 });
+		const second = store.acquireLease({ sessionId: "s", ownerId: "b", mode: "shared", ttlMs: 10_000 });
+		expect(second).toMatchObject({ sessionId: "s", ownerId: "b", mode: "shared" });
+		expect(() => store.acquireLease({ sessionId: "s", ownerId: "c", mode: "exclusive", ttlMs: 10_000 })).toThrow(
 			/lease is held/,
 		);
 		store.releaseLease("s", "a");
-		const lease = store.acquireLease({ sessionId: "s", ownerId: "b", mode: "shared", ttlMs: 10_000 });
-		expect(lease).toMatchObject({ sessionId: "s", ownerId: "b", mode: "shared" });
+		store.releaseLease("s", "b");
+		const exclusive = store.acquireLease({ sessionId: "s", ownerId: "c", mode: "exclusive", ttlMs: 10_000 });
+		expect(exclusive).toMatchObject({ sessionId: "s", ownerId: "c", mode: "exclusive" });
 		store.close();
 	});
 

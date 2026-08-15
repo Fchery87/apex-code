@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
 /** Current schema for the daemon-owned durable-state sidecar. */
-export const CURRENT_DURABLE_STATE_SCHEMA_VERSION = 2;
+export const CURRENT_DURABLE_STATE_SCHEMA_VERSION = 3;
 
 export type CommandJournalState = "created" | "running" | "completed" | "failed" | "interrupted";
 
@@ -98,10 +98,11 @@ function createSchema(database: DatabaseSync): void {
 			updated_at TEXT NOT NULL
 		);
 		CREATE TABLE IF NOT EXISTS session_leases (
-			session_id TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL,
 			owner_id TEXT NOT NULL,
 			mode TEXT NOT NULL,
-			expires_at TEXT NOT NULL
+			expires_at TEXT NOT NULL,
+			PRIMARY KEY (session_id, owner_id)
 		);
 		CREATE TABLE IF NOT EXISTS usage_totals (
 			session_id TEXT PRIMARY KEY,
@@ -155,15 +156,22 @@ function readCommand(database: DatabaseSync, id: string): CommandJournalRecord |
 	};
 }
 
+function readLeases(database: DatabaseSync, sessionId: string): SessionLeaseRecord[] {
+	const rows = database
+		.prepare(
+			"SELECT session_id, owner_id, mode, expires_at FROM session_leases WHERE session_id = ? ORDER BY owner_id",
+		)
+		.all(sessionId) as Array<{ session_id: string; owner_id: string; mode: SessionLeaseMode; expires_at: string }>;
+	return rows.map((row) => ({
+		sessionId: row.session_id,
+		ownerId: row.owner_id,
+		mode: row.mode,
+		expiresAt: row.expires_at,
+	}));
+}
+
 function readLease(database: DatabaseSync, sessionId: string): SessionLeaseRecord | undefined {
-	const row = database
-		.prepare("SELECT session_id, owner_id, mode, expires_at FROM session_leases WHERE session_id = ?")
-		.get(sessionId) as
-		| { session_id: string; owner_id: string; mode: SessionLeaseMode; expires_at: string }
-		| undefined;
-	return row
-		? { sessionId: row.session_id, ownerId: row.owner_id, mode: row.mode, expiresAt: row.expires_at }
-		: undefined;
+	return readLeases(database, sessionId)[0];
 }
 
 function transitionCommand(
@@ -199,9 +207,23 @@ export function openDurableStateStore(path: string): DurableStateStore {
 			const commandColumns = database.prepare('PRAGMA table_info("command_journal")').all() as Array<{
 				name: string;
 			}>;
-			if (!commandColumns.some((column) => column.name === "recovery_reason")) {
+			if (!commandColumns.some((column) => column.name === "recovery_reason"))
 				database.exec("ALTER TABLE command_journal ADD COLUMN recovery_reason TEXT");
-			}
+		}
+		if (version < 3 && version > 0) {
+			database.exec(`
+				ALTER TABLE session_leases RENAME TO session_leases_v2;
+				CREATE TABLE session_leases (
+					session_id TEXT NOT NULL,
+					owner_id TEXT NOT NULL,
+					mode TEXT NOT NULL,
+					expires_at TEXT NOT NULL,
+					PRIMARY KEY (session_id, owner_id)
+				);
+				INSERT INTO session_leases (session_id, owner_id, mode, expires_at)
+				SELECT session_id, owner_id, mode, expires_at FROM session_leases_v2;
+				DROP TABLE session_leases_v2;
+			`);
 		}
 		if (version < CURRENT_DURABLE_STATE_SCHEMA_VERSION) {
 			database
@@ -281,21 +303,26 @@ export function openDurableStateStore(path: string): DurableStateStore {
 			});
 		},
 		acquireLease: ({ sessionId, ownerId, mode, ttlMs }) => {
-			const existing = readLease(database, sessionId);
-			if (
-				existing &&
-				Date.parse(existing.expiresAt) > Date.now() &&
-				(existing.ownerId !== ownerId || existing.mode === "exclusive" || mode === "exclusive")
-			) {
-				throw new Error(`Session lease is held for ${sessionId}`);
+			if (!Number.isFinite(ttlMs) || ttlMs <= 0) throw new Error("Lease TTL must be positive");
+			database.exec("BEGIN IMMEDIATE");
+			try {
+				database.prepare("DELETE FROM session_leases WHERE expires_at <= ?").run(new Date().toISOString());
+				const active = readLeases(database, sessionId).filter((lease) => lease.ownerId !== ownerId);
+				if (active.some((lease) => lease.mode === "exclusive") || (mode === "exclusive" && active.length > 0)) {
+					throw new Error(`Session lease is held for ${sessionId}`);
+				}
+				const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+				database
+					.prepare(
+						"INSERT INTO session_leases (session_id, owner_id, mode, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT(session_id, owner_id) DO UPDATE SET mode=excluded.mode, expires_at=excluded.expires_at",
+					)
+					.run(sessionId, ownerId, mode, expiresAt);
+				database.exec("COMMIT");
+				return readLeases(database, sessionId).find((lease) => lease.ownerId === ownerId)!;
+			} catch (error) {
+				database.exec("ROLLBACK");
+				throw error;
 			}
-			const expiresAt = new Date(Date.now() + ttlMs).toISOString();
-			database
-				.prepare(
-					"INSERT INTO session_leases (session_id, owner_id, mode, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT(session_id) DO UPDATE SET owner_id=excluded.owner_id, mode=excluded.mode, expires_at=excluded.expires_at",
-				)
-				.run(sessionId, ownerId, mode, expiresAt);
-			return readLease(database, sessionId)!;
 		},
 		releaseLease: (sessionId, ownerId) => {
 			database.prepare("DELETE FROM session_leases WHERE session_id = ? AND owner_id = ?").run(sessionId, ownerId);
