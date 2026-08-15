@@ -59,7 +59,12 @@ describe("DurableStateDaemon", () => {
 	});
 
 	it("allows two shared clients to attach while rejecting their mutations", () => {
-		const daemon = new DurableStateDaemon({ databasePath: join(createDir(), "state.sqlite"), daemonId: "daemon" });
+		const daemon = new DurableStateDaemon({
+			databasePath: join(createDir(), "state.sqlite"),
+			daemonId: "daemon",
+			cwd: process.cwd(),
+		});
+		expect(daemon.provenance.revision).toMatch(/^[0-9a-f]{40}$/);
 		expect(daemon.attach({ sessionId: "session", clientId: "a", mode: "shared", ttlMs: 10_000 }).mode).toBe("shared");
 		expect(daemon.attach({ sessionId: "session", clientId: "b", mode: "shared", ttlMs: 10_000 }).mode).toBe("shared");
 		expect(() => daemon.beginMutation({ sessionId: "session", clientId: "a", command: "append" })).toThrow(
