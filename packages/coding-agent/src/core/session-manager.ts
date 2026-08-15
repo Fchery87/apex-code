@@ -19,7 +19,6 @@ import { createInterface } from "readline";
 import { StringDecoder } from "string_decoder";
 import { getAgentDir as getDefaultAgentDir, getSessionsDir } from "../config.ts";
 import { normalizePath, resolvePath } from "../utils/paths.ts";
-import type { TodoItem } from "./tools/todo-write.ts";
 import {
 	type BashExecutionMessage,
 	type CustomMessage,
@@ -27,6 +26,8 @@ import {
 	createCompactionSummaryMessage,
 	createCustomMessage,
 } from "./messages.ts";
+import type { EvidenceCaptureDiagnostic, EvidenceRecord } from "./tools/contract.ts";
+import type { TodoItem } from "./tools/todo-write.ts";
 
 export const CURRENT_SESSION_VERSION = 3;
 
@@ -124,6 +125,27 @@ export interface SessionInfoEntry extends SessionEntryBase {
 	name?: string;
 }
 
+/** Additive, bounded source-level evidence. See ADR 0007. */
+export interface DurableEvidenceRecord {
+	id: string;
+	sessionId: string;
+	toolName: string;
+	timestamp: string;
+	facts: EvidenceRecord;
+}
+
+export interface EvidenceEntry extends SessionEntryBase {
+	type: "evidence";
+	toolName: string;
+	records: DurableEvidenceRecord[];
+}
+
+/** Additive diagnostic for an evidence-capture failure; it is not a verification verdict. */
+export interface EvidenceDiagnosticEntry extends SessionEntryBase {
+	type: "evidence_diagnostic";
+	diagnostic: EvidenceCaptureDiagnostic;
+}
+
 /**
  * Custom message entry for extensions to inject messages into LLM context.
  * Use customType to identify your extension's entries.
@@ -154,7 +176,9 @@ export type SessionEntry =
 	| CustomEntry
 	| CustomMessageEntry
 	| LabelEntry
-	| SessionInfoEntry;
+	| SessionInfoEntry
+	| EvidenceEntry
+	| EvidenceDiagnosticEntry;
 
 /** Raw file entry (includes header) */
 export type FileEntry = SessionHeader | SessionEntry;
@@ -207,6 +231,7 @@ export type ReadonlySessionManager = Pick<
 	| "getEntries"
 	| "getTree"
 	| "getSessionName"
+	| "getEvidenceRecords"
 >;
 
 function createSessionId(): string {
@@ -1155,6 +1180,40 @@ export class SessionManager {
 		return entry.id;
 	}
 
+	/** Append source-level evidence as an additive entry. See ADR 0007. */
+	appendEvidence(toolName: string, records: EvidenceRecord[]): string {
+		const timestamp = new Date().toISOString();
+		const entry: EvidenceEntry = {
+			type: "evidence",
+			toolName,
+			records: records.map((facts) => ({
+				id: randomUUID(),
+				sessionId: this.sessionId,
+				toolName,
+				timestamp,
+				facts,
+			})),
+			id: generateId(this.byId),
+			parentId: this.leafId,
+			timestamp,
+		};
+		this._appendEntry(entry);
+		return entry.id;
+	}
+
+	/** Record a non-fatal evidence-capture diagnostic without claiming tool success or failure. */
+	appendEvidenceDiagnostic(diagnostic: EvidenceCaptureDiagnostic): string {
+		const entry: EvidenceDiagnosticEntry = {
+			type: "evidence_diagnostic",
+			diagnostic,
+			id: generateId(this.byId),
+			parentId: this.leafId,
+			timestamp: new Date().toISOString(),
+		};
+		this._appendEntry(entry);
+		return entry.id;
+	}
+
 	/** Append a session info entry (e.g., display name). Returns entry id. */
 	appendSessionInfo(name: string): string {
 		const sanitizedName = name.replace(/[\r\n]+/g, " ").trim();
@@ -1225,6 +1284,11 @@ export class SessionManager {
 
 	getEntry(id: string): SessionEntry | undefined {
 		return this.byId.get(id);
+	}
+
+	/** Read durable evidence without exposing a mutation path to policy consumers. */
+	getEvidenceRecords(): readonly DurableEvidenceRecord[] {
+		return this.fileEntries.flatMap((entry) => (entry.type === "evidence" ? entry.records : []));
 	}
 
 	/**

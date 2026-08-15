@@ -19,7 +19,7 @@ import { DefaultResourceLoader } from "./resource-loader.ts";
 import { getDefaultSessionDir, SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
 import { time } from "./timings.ts";
-import type { ApexToolDefinition, Capability } from "./tools/contract.ts";
+import type { ApexToolDefinition, Capability, EvidenceSink } from "./tools/contract.ts";
 import {
 	createAllToolDefinitions,
 	createBashTool,
@@ -90,6 +90,8 @@ export interface CreateAgentSessionOptions {
 	sessionStartEvent?: SessionStartEvent;
 	/** Authorization configuration for every registered tool call. */
 	permissionGate?: AgentSessionConfig["permissionGate"];
+	/** Optional destination for source-level evidence; defaults to the durable session sink. */
+	evidenceSink?: EvidenceSink;
 	/**
 	 * Delegation entry point (roadmap Phase 5, ADR 0008). When set, `delegate`
 	 * executes real child sessions through `resolveAgent`, with the child's
@@ -192,8 +194,9 @@ function extractFinalAssistantText(session: AgentSession): string {
 		const message = messages[i];
 		if (message.role !== "assistant") continue;
 		const text = message.content
-			.filter((content): content is Extract<AgentMessage, { role: "assistant" }>["content"][number] & { type: "text" } =>
-				content.type === "text",
+			.filter(
+				(content): content is Extract<AgentMessage, { role: "assistant" }>["content"][number] & { type: "text" } =>
+					content.type === "text",
 			)
 			.map((content) => content.text)
 			.join("\n");
@@ -421,19 +424,21 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const delegation = options.delegation ?? (options.permissionGate ? {} : undefined);
 	if (delegation) {
 		const parentPermissionGate = options.permissionGate;
-		const resolveAgent = delegation.resolveAgent ?? createAgentDefinitionResolver({
-			cwd,
-			agentDir,
-			isProjectTrusted: () => settingsManager.isProjectTrusted(),
-		});
+		const resolveAgent =
+			delegation.resolveAgent ??
+			createAgentDefinitionResolver({
+				cwd,
+				agentDir,
+				isProjectTrusted: () => settingsManager.isProjectTrusted(),
+			});
 		const delegationRuntime: DelegationRuntimeOptions = {
 			resolveAgent,
 			getParentCapabilities: () => {
 				const capabilities = new Set<Capability>();
 				for (const name of parentSessionRef.current?.getActiveToolNames() ?? []) {
-					const contract = (parentSessionRef.current?.getToolDefinition(name) as
-						| Partial<ApexToolDefinition>
-						| undefined)?.contract;
+					const contract = (
+						parentSessionRef.current?.getToolDefinition(name) as Partial<ApexToolDefinition> | undefined
+					)?.contract;
 					if (contract) for (const capability of contract.capabilities) capabilities.add(capability);
 				}
 				return capabilities;
@@ -446,9 +451,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				// parent's own session restricted it out of its active/allowed set via
 				// `tools`/`excludeTools` -- that restriction affects the parent's own
 				// *authority* (getParentCapabilities, above), not what a named tool is.
-				const fromParent = (parentSessionRef.current?.getToolDefinition(toolName) as
-					| Partial<ApexToolDefinition>
-					| undefined)?.contract?.capabilities;
+				const fromParent = (
+					parentSessionRef.current?.getToolDefinition(toolName) as Partial<ApexToolDefinition> | undefined
+				)?.contract?.capabilities;
 				if (fromParent) return fromParent;
 				return (createAllToolDefinitions(cwd)[toolName as ToolName] as ApexToolDefinition | undefined)?.contract
 					?.capabilities;
@@ -464,20 +469,21 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					throw new Error("delegate requires a permission gate configured on the parent session (ADR 0008).");
 				}
 				const childModel =
-					(definition.model && modelRuntime.getAvailableSnapshot().find((m) => m.id === definition.model)) || model;
+					(definition.model && modelRuntime.getAvailableSnapshot().find((m) => m.id === definition.model)) ||
+					model;
 				if (!childModel) {
 					throw new Error(`Cannot delegate to "${definition.name}": no model is available for the child session.`);
 				}
 				const childSessionManager = artifactDir
 					? SessionManager.create(cwd, artifactDir, {
-						id: sessionId,
-						parentSession: sessionManager.getSessionId(),
-						delegationDepth: depth,
-					})
+							id: sessionId,
+							parentSession: sessionManager.getSessionId(),
+							delegationDepth: depth,
+						})
 					: SessionManager.inMemory(cwd, {
-						parentSession: sessionManager.getSessionId(),
-						delegationDepth: depth,
-					});
+							parentSession: sessionManager.getSessionId(),
+							delegationDepth: depth,
+						});
 				const derivedStore = new DerivedPermissionRuleStore({ parent: parentPermissionGate.store });
 				const { session: childSession } = await createAgentSession({
 					cwd,
@@ -501,7 +507,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				await childSession.bindExtensions({});
 				return {
 					async run(task: string) {
-						const prompt = definition.systemPrompt ? `${definition.systemPrompt}\n\nTask: ${task}` : `Task: ${task}`;
+						const prompt = definition.systemPrompt
+							? `${definition.systemPrompt}\n\nTask: ${task}`
+							: `Task: ${task}`;
 						await childSession.prompt(prompt);
 						return { output: extractFinalAssistantText(childSession) };
 					},
@@ -529,6 +537,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		extensionRunnerRef,
 		sessionStartEvent: options.sessionStartEvent,
 		permissionGate: options.permissionGate,
+		evidenceSink: options.evidenceSink,
 	});
 	parentSessionRef.current = session;
 	const extensionsResult = resourceLoader.getExtensions();
