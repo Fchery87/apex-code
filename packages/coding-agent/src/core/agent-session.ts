@@ -66,6 +66,7 @@ import {
 } from "./compaction/index.ts";
 import { evictionBudget, installContextPipeline, isDefaultStreamFunction } from "./context/pipeline.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
+import { SessionEvidenceSink } from "./evidence.ts";
 import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.ts";
 import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
 import {
@@ -114,7 +115,7 @@ import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.ts";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
-import type { ApexToolDefinition } from "./tools/contract.ts";
+import type { ApexToolDefinition, EvidenceSink } from "./tools/contract.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
 import { createTodoWriteToolDefinition } from "./tools/todo-write.ts";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
@@ -245,6 +246,8 @@ export interface AgentSessionConfig {
 	 * construction time — a caller cannot pass a lookup into its own future state.
 	 */
 	permissionGate?: Omit<PermissionGateOptions, "getContract">;
+	/** Optional durable evidence destination. Capture remains active without any policy extension. */
+	evidenceSink?: EvidenceSink;
 }
 
 export interface ExtensionBindings {
@@ -374,6 +377,7 @@ export class AgentSession {
 	private _baseToolsOverride?: Record<string, AgentTool>;
 	private _sessionStartEvent: SessionStartEvent;
 	private _permissionGate?: Omit<PermissionGateOptions, "getContract">;
+	private _evidenceSink?: EvidenceSink;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionMode: ExtensionMode = "print";
 	private _extensionCommandContextActions?: ExtensionCommandContextActions;
@@ -412,6 +416,7 @@ export class AgentSession {
 		this._baseToolsOverride = config.baseToolsOverride;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
 		this._permissionGate = config.permissionGate;
+		this._evidenceSink = config.evidenceSink ?? new SessionEvidenceSink(this.sessionManager);
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, extensions, auto-compaction, retry logic)
@@ -545,6 +550,22 @@ export class AgentSession {
 		};
 
 		this.agent.afterToolCall = async ({ toolCall, args, result, isError }) => {
+			const definition = this.getToolDefinition(toolCall.name) as Partial<ApexToolDefinition> | undefined;
+			if (this._evidenceSink && definition?.contract) {
+				try {
+					const records = definition.contract.evidence.capture(args, result);
+					if (!records.every((record) => definition.contract?.evidence.emits.has(record.kind))) {
+						throw new Error("Evidence capture emitted a kind not declared by its tool contract");
+					}
+					if (records.length > 0) this._evidenceSink.record({ toolName: toolCall.name, records });
+				} catch (error) {
+					this._evidenceSink.recordDiagnostic?.({
+						toolName: toolCall.name,
+						reason: error instanceof Error ? error.message : String(error),
+					});
+				}
+			}
+
 			const runner = this._extensionRunner;
 			const hookResult = runner.hasHandlers("tool_result")
 				? await runner.emitToolResult({

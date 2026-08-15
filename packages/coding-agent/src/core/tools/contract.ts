@@ -7,8 +7,8 @@
  * defaulting into "unclassified".
  */
 
-import type { Static, TSchema } from "typebox";
 import type { AgentToolResult } from "apex-code-agent-core";
+import type { Static, TSchema } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
 
 /** What class of thing a tool does. A set, not a single value — `bash` is `{exec}`. */
@@ -76,6 +76,18 @@ export type EvidenceKind = "diff" | "test" | "command" | "manual" | "workflow";
 export interface EvidenceRecord {
 	kind: EvidenceKind;
 	[key: string]: unknown;
+}
+
+/** Durable destination for source-level tool evidence. Policy is deliberately not part of this boundary. */
+export interface EvidenceSink {
+	record(entry: { toolName: string; records: EvidenceRecord[] }): void;
+	recordDiagnostic?(diagnostic: EvidenceCaptureDiagnostic): void;
+}
+
+/** A capture failure is observable but never changes an already-completed tool result. */
+export interface EvidenceCaptureDiagnostic {
+	toolName: string;
+	reason: string;
 }
 
 export interface EvidenceSpec<TParams extends TSchema = TSchema, TDetails = unknown> {

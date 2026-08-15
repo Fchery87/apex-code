@@ -1,0 +1,71 @@
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { AgentToolResult, AssistantMessage } from "apex-code-agent-core";
+import { getModel } from "@earendil-works/pi-ai/compat";
+import { Type } from "typebox";
+import { afterEach, describe, expect, it } from "vitest";
+import { createAgentSession } from "../../src/core/sdk.ts";
+import type { ApexToolDefinition, EvidenceSink } from "../../src/core/tools/contract.ts";
+
+const directories: string[] = [];
+
+function scratchDirectory(): string {
+	const directory = mkdtempSync(join(tmpdir(), "apex-evidence-wiring-"));
+	directories.push(directory);
+	return directory;
+}
+
+afterEach(() => {
+	for (const directory of directories.splice(0)) {
+		if (existsSync(directory)) rmSync(directory, { recursive: true, force: true });
+	}
+});
+
+function assistantWithTool(name: string): AssistantMessage {
+	return {
+		role: "assistant",
+		content: [{ type: "toolCall", id: "call-1", name, arguments: { value: "source" } }],
+		api: "openai-responses",
+		provider: "openai",
+		model: "test",
+		usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+		stopReason: "toolUse",
+		timestamp: Date.now(),
+	};
+}
+
+describe("AgentSession evidence wiring", () => {
+	it("captures raw completed tool facts once, before extension presentation hooks", async () => {
+		const cwd = scratchDirectory();
+		const parameters = Type.Object({ value: Type.String() });
+		const fixture: ApexToolDefinition<typeof parameters, { observed: string }> = {
+			name: "fixture",
+			label: "Fixture",
+			description: "A source evidence fixture",
+			parameters,
+			contract: {
+				capabilities: new Set(),
+				permission: { defaultBehavior: "allow", matches: () => false, describe: () => "", ruleForCall: () => null },
+				context: { resultRecoverable: true, deferSchema: false },
+				evidence: { emits: new Set(["manual"]), capture: (params, result) => [{ kind: "manual", value: params.value, observed: result.details?.observed }] },
+			},
+			execute: async (): Promise<AgentToolResult<{ observed: string }>> => ({ content: [{ type: "text", text: "fixture" }], details: { observed: "raw" } }),
+		};
+		const recorded: Array<{ toolName: string; records: unknown[] }> = [];
+		const sink: EvidenceSink = { record: (entry) => recorded.push(entry) };
+		const { session } = await createAgentSession({ cwd, agentDir: join(cwd, "agent"), model: getModel("anthropic", "claude-sonnet-4-5")!, customTools: [fixture], evidenceSink: sink });
+		const after = session.agent.afterToolCall;
+		expect(after).toBeDefined();
+		await after!({
+			assistantMessage: assistantWithTool("fixture"),
+			toolCall: { id: "call-1", name: "fixture", arguments: { value: "source" } },
+			args: { value: "source" },
+			result: { content: [{ type: "text", text: "presented" }], details: { observed: "raw" } },
+			isError: false,
+			context: { systemPrompt: "", messages: [], tools: [] },
+		});
+		expect(recorded).toEqual([{ toolName: "fixture", records: [{ kind: "manual", value: "source", observed: "raw" }] }]);
+		session.dispose();
+	});
+});
