@@ -24,10 +24,11 @@
  * them, this does not change the observable pipeline order.
  */
 
-import type { Agent } from "apex-code-agent-core";
-import { type DeferrableTool, announceToolsByName } from "./deferred-schemas.ts";
-import { type ContractLookup, evictToolResults } from "./eviction.ts";
+import { streamSimple } from "@earendil-works/pi-ai/compat";
+import type { Agent, StreamFn } from "apex-code-agent-core";
 import { resolveToolContext } from "../tools/contract.ts";
+import { announceToolsByName, type DeferrableTool } from "./deferred-schemas.ts";
+import { type ContractLookup, evictToolResults } from "./eviction.ts";
 
 /**
  * Eviction-budget formula shared by every caller of `installContextPipeline`.
@@ -86,6 +87,13 @@ export function projectToolSchemas<T extends { name: string; description: string
 	return tools.map((tool, index) => ({ ...tool, parameters: announced[index].parameters }));
 }
 
+const defaultStreamFunctions = new WeakSet<StreamFn>();
+
+/** Returns true for the built-in streamSimple function, including its context-pipeline wrapper. */
+export function isDefaultStreamFunction(streamFunction: StreamFn): boolean {
+	return streamFunction === streamSimple || defaultStreamFunctions.has(streamFunction);
+}
+
 export interface ContextPipelineOptions {
 	/** Resolves a tool's contract; shared by both eviction and schema projection. */
 	contractLookup: ContractLookup;
@@ -117,7 +125,11 @@ export function installContextPipeline(agent: Agent, options: ContextPipelineOpt
 	};
 
 	const previousStreamFunction = agent.streamFunction;
-	agent.streamFunction = (model, context, streamOptions) => {
+	const wrappedStreamFunction = (
+		model: Parameters<typeof previousStreamFunction>[0],
+		context: Parameters<typeof previousStreamFunction>[1],
+		streamOptions: Parameters<typeof previousStreamFunction>[2],
+	) => {
 		if (!context.tools || context.tools.length === 0) {
 			return previousStreamFunction(model, context, streamOptions);
 		}
@@ -127,4 +139,6 @@ export function installContextPipeline(agent: Agent, options: ContextPipelineOpt
 			streamOptions,
 		);
 	};
+	if (isDefaultStreamFunction(previousStreamFunction)) defaultStreamFunctions.add(wrappedStreamFunction);
+	agent.streamFunction = wrappedStreamFunction;
 }

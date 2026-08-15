@@ -195,6 +195,7 @@ describe("AgentSession compaction characterization", () => {
 	it("throws when compacting without configured auth", async () => {
 		const harness = await createHarness({ withConfiguredAuth: false });
 		harnesses.push(harness);
+		seedCompactableSession(harness);
 
 		await expect(harness.session.compact()).rejects.toThrow(`No API key found for ${harness.getModel().provider}.`);
 	});
