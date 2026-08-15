@@ -33,6 +33,13 @@ describe("durable state SQLite schema", () => {
 			"usage_totals",
 		]);
 		expect(store.columns("schema_migrations")).toEqual(["version", "applied_at"]);
+		for (const table of store.tableNames()) {
+			const columns = store.columns(table);
+			expect(columns).not.toContain("api_key");
+			expect(columns).not.toContain("token");
+			expect(columns).not.toContain("access_token");
+			expect(columns).not.toContain("refresh_token");
+		}
 		store.close();
 	});
 

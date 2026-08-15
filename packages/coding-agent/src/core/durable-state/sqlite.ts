@@ -60,7 +60,7 @@ function createSchema(database: DatabaseSync): void {
 			cost REAL NOT NULL DEFAULT 0
 		);
 		CREATE TABLE IF NOT EXISTS model_performance (
-		id INTEGER PRIMARY KEY,
+			id INTEGER PRIMARY KEY,
 			provider TEXT NOT NULL,
 			model_id TEXT NOT NULL,
 			ttft_ms REAL,
