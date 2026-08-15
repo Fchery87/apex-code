@@ -1,3 +1,4 @@
+import { type GitProvenance, readGitProvenance } from "./provenance.ts";
 import {
 	type CommandJournalRecord,
 	type DurableStateStore,
@@ -10,6 +11,7 @@ import {
 export interface DurableStateDaemonOptions {
 	databasePath: string;
 	daemonId: string;
+	cwd?: string;
 }
 export interface AttachClientInput {
 	sessionId: string;
@@ -30,11 +32,13 @@ export interface MutationInput {
  */
 export class DurableStateDaemon {
 	readonly recoveryDiagnostics: readonly RecoveryDiagnostic[];
+	readonly provenance: GitProvenance;
 	readonly #store: DurableStateStore;
 	readonly #attachments = new Map<string, Map<string, SessionLeaseRecord>>();
 
 	constructor(options: DurableStateDaemonOptions) {
 		this.#store = openDurableStateStore(options.databasePath);
+		this.provenance = readGitProvenance(options.cwd ?? process.cwd());
 		this.recoveryDiagnostics = this.#store.recoverUnfinishedCommandsWithDiagnostics(
 			`daemon ${options.daemonId} started before command completion`,
 		);
