@@ -42,6 +42,15 @@ const TABLES = [
 	"usage_totals",
 ] as const;
 
+export interface RecoveryDiagnostic {
+	commandId: string;
+	sessionId: string;
+	previousState: "created" | "running";
+	state: "interrupted";
+	reason: string;
+	recoveredAt: string;
+}
+
 export interface DurableStateStore {
 	schemaVersion(): number;
 	tableNames(): string[];
@@ -50,6 +59,7 @@ export interface DurableStateStore {
 	transitionCommand(id: string, state: Exclude<CommandJournalState, "created">, reason?: string): CommandJournalRecord;
 	getCommand(id: string): CommandJournalRecord | undefined;
 	recoverUnfinishedCommands(reason?: string): CommandJournalRecord[];
+	recoverUnfinishedCommandsWithDiagnostics(reason?: string): RecoveryDiagnostic[];
 	acquireLease(input: {
 		sessionId: string;
 		ownerId: string;
@@ -243,6 +253,23 @@ export function openDurableStateStore(path: string): DurableStateStore {
 			return rows.map(({ id }) => {
 				const current = readCommand(database, id)!;
 				return current.state === "interrupted" ? current : transitionCommand(database, id, "interrupted", reason);
+			});
+		},
+		recoverUnfinishedCommandsWithDiagnostics: (reason = "daemon restarted before command completion") => {
+			const recoveredAt = new Date().toISOString();
+			const rows = database
+				.prepare("SELECT id, session_id, state FROM command_journal WHERE state IN ('created', 'running')")
+				.all() as Array<{ id: string; session_id: string; state: "created" | "running" }>;
+			return rows.map((row) => {
+				transitionCommand(database, row.id, "interrupted", reason);
+				return {
+					commandId: row.id,
+					sessionId: row.session_id,
+					previousState: row.state,
+					state: "interrupted" as const,
+					reason,
+					recoveredAt,
+				};
 			});
 		},
 		acquireLease: ({ sessionId, ownerId, mode, ttlMs }) => {
