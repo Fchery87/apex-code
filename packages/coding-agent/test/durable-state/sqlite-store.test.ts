@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
+import { readGitProvenance } from "../../src/core/durable-state/provenance.ts";
 import { CURRENT_DURABLE_STATE_SCHEMA_VERSION, openDurableStateStore } from "../../src/core/durable-state/sqlite.ts";
 import { SessionManager } from "../../src/core/session-manager.ts";
 
@@ -58,9 +59,14 @@ describe("durable state SQLite schema", () => {
 		const created = store.beginCommand({ id: "cmd-1", sessionId: "session-1", command: "test" });
 		expect(created.state).toBe("created");
 		expect(store.transitionCommand("cmd-1", "running").state).toBe("running");
-		const recovered = store.recoverUnfinishedCommands("process restarted");
+		const recovered = store.recoverUnfinishedCommandsWithDiagnostics("process restarted");
 		expect(recovered).toHaveLength(1);
-		expect(recovered[0]).toMatchObject({ id: "cmd-1", state: "interrupted", recoveryReason: "process restarted" });
+		expect(recovered[0]).toMatchObject({
+			commandId: "cmd-1",
+			previousState: "running",
+			state: "interrupted",
+			reason: "process restarted",
+		});
 		expect(store.recoverUnfinishedCommands()).toEqual([]);
 		expect(() => store.transitionCommand("cmd-1", "completed")).toThrow(/Invalid command transition/);
 		store.close();
@@ -73,6 +79,17 @@ describe("durable state SQLite schema", () => {
 		expect(() => store.transitionCommand("missing", "running")).toThrow(/Unknown command/);
 		expect(() => store.beginCommand({ id: "cmd-1", sessionId: "session-1", command: "test" })).toThrow();
 		store.close();
+	});
+
+	it("records git provenance when available and degrades outside a repository", () => {
+		const dir = mkdtempSync(join(tmpdir(), "apex-provenance-"));
+		tempDirs.push(dir);
+		const outside = readGitProvenance(dir);
+		expect(outside).toEqual({});
+		const repository = readGitProvenance(process.cwd());
+		expect(repository.repositoryRoot).toBeTruthy();
+		expect(repository.revision).toMatch(/^[0-9a-f]{40}$/);
+		expect(typeof repository.dirty).toBe("boolean");
 	});
 
 	it("enforces renewable exclusive and shared session leases", () => {
