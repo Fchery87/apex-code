@@ -10,7 +10,7 @@
 | 7.4 Capture edit/write evidence at source | Done | `d7296ee61` | Scratch mutation tests verify write byte count/content hash and edit patch hash, while asserting raw mutated content is absent from evidence. |
 | 7.5 Add normalized test execution evidence | Done | `07b11310e` + `db19cb857` + `2feb0ef7c` | Explicit argv-only `test` tool records normalized executable, arguments, cwd, and non-zero exit status. Agent-core `ToolExecutionError` preserves source details for failed bash execution without parsing rendered output. |
 | 7.6 Wire optional policy consumption | Done | `369c9e7bd` | Public optional extension consumes immutable durable evidence snapshots after capture and returns no tool-result patch; capture requires no policy extension. |
-| 7.7 Measure and close Phase 7 | In progress | — | No `gatedFailures()` implementation/corpus exists in this repository despite historical roadmap wording; record this audit, run full validation in a clean Node 22 checkout, then close without inventing a calibration threshold. |
+| 7.7 Measure and close Phase 7 | Done | `c82584312` | A tracked-file audit found no `gatedFailures()` implementation or calibration corpus, so no false-positive threshold was invented. Clean no-space Node v22.21.1 validation passed: `npm ci --ignore-scripts && npm run build && npm run check && npm test` — 277 passed / 6 skipped test files; 2311 passed / 53 skipped tests. |
 
 ## Order changes
 
