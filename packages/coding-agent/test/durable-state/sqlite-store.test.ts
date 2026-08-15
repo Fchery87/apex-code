@@ -53,6 +53,40 @@ describe("durable state SQLite schema", () => {
 		second.close();
 	});
 
+	it("journals commands before execution and recovers unfinished work", () => {
+		const store = openDurableStateStore(createDatabasePath());
+		const created = store.beginCommand({ id: "cmd-1", sessionId: "session-1", command: "test" });
+		expect(created.state).toBe("created");
+		expect(store.transitionCommand("cmd-1", "running").state).toBe("running");
+		const recovered = store.recoverUnfinishedCommands("process restarted");
+		expect(recovered).toHaveLength(1);
+		expect(recovered[0]).toMatchObject({ id: "cmd-1", state: "interrupted", recoveryReason: "process restarted" });
+		expect(store.recoverUnfinishedCommands()).toEqual([]);
+		expect(() => store.transitionCommand("cmd-1", "completed")).toThrow(/Invalid command transition/);
+		store.close();
+	});
+
+	it("rejects invalid journal transitions and duplicate command IDs", () => {
+		const store = openDurableStateStore(createDatabasePath());
+		store.beginCommand({ id: "cmd-1", sessionId: "session-1", command: "test" });
+		expect(() => store.transitionCommand("cmd-1", "completed")).toThrow(/Invalid command transition/);
+		expect(() => store.transitionCommand("missing", "running")).toThrow(/Unknown command/);
+		expect(() => store.beginCommand({ id: "cmd-1", sessionId: "session-1", command: "test" })).toThrow();
+		store.close();
+	});
+
+	it("enforces renewable exclusive and shared session leases", () => {
+		const store = openDurableStateStore(createDatabasePath());
+		store.acquireLease({ sessionId: "s", ownerId: "a", mode: "exclusive", ttlMs: 10_000 });
+		expect(() => store.acquireLease({ sessionId: "s", ownerId: "b", mode: "shared", ttlMs: 10_000 })).toThrow(
+			/lease is held/,
+		);
+		store.releaseLease("s", "a");
+		const lease = store.acquireLease({ sessionId: "s", ownerId: "b", mode: "shared", ttlMs: 10_000 });
+		expect(lease).toMatchObject({ sessionId: "s", ownerId: "b", mode: "shared" });
+		store.close();
+	});
+
 	it("keeps JSONL sessions readable when the sidecar is absent", () => {
 		const dir = mkdtempSync(join(tmpdir(), "apex-jsonl-"));
 		tempDirs.push(dir);

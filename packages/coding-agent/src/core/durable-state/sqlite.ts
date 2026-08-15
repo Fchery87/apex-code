@@ -1,7 +1,36 @@
+import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
 /** Current schema for the daemon-owned durable-state sidecar. */
 export const CURRENT_DURABLE_STATE_SCHEMA_VERSION = 1;
+
+export type CommandJournalState = "created" | "running" | "completed" | "failed" | "interrupted";
+
+export type SessionLeaseMode = "shared" | "exclusive";
+export interface SessionLeaseRecord {
+	sessionId: string;
+	ownerId: string;
+	mode: SessionLeaseMode;
+	expiresAt: string;
+}
+
+export interface CommandJournalRecord {
+	id: string;
+	sessionId: string;
+	command: string;
+	state: CommandJournalState;
+	createdAt: string;
+	updatedAt: string;
+	recoveryReason?: string;
+}
+
+const COMMAND_TRANSITIONS: Record<CommandJournalState, readonly CommandJournalState[]> = {
+	created: ["running", "failed", "interrupted"],
+	running: ["completed", "failed", "interrupted"],
+	completed: [],
+	failed: [],
+	interrupted: [],
+};
 
 const TABLES = [
 	"cache_entries",
@@ -17,6 +46,18 @@ export interface DurableStateStore {
 	schemaVersion(): number;
 	tableNames(): string[];
 	columns(tableName: string): string[];
+	beginCommand(input: { id?: string; sessionId: string; command: string }): CommandJournalRecord;
+	transitionCommand(id: string, state: Exclude<CommandJournalState, "created">, reason?: string): CommandJournalRecord;
+	getCommand(id: string): CommandJournalRecord | undefined;
+	recoverUnfinishedCommands(reason?: string): CommandJournalRecord[];
+	acquireLease(input: {
+		sessionId: string;
+		ownerId: string;
+		mode: SessionLeaseMode;
+		ttlMs: number;
+	}): SessionLeaseRecord;
+	releaseLease(sessionId: string, ownerId: string): void;
+	getLease(sessionId: string): SessionLeaseRecord | undefined;
 	close(): void;
 }
 
@@ -42,6 +83,7 @@ function createSchema(database: DatabaseSync): void {
 			session_id TEXT NOT NULL,
 			command TEXT NOT NULL,
 			state TEXT NOT NULL,
+			recovery_reason TEXT,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		);
@@ -73,6 +115,62 @@ function createSchema(database: DatabaseSync): void {
 			expires_at TEXT
 		);
 	`);
+}
+
+function readCommand(database: DatabaseSync, id: string): CommandJournalRecord | undefined {
+	const row = database
+		.prepare(
+			"SELECT id, session_id, command, state, recovery_reason, created_at, updated_at FROM command_journal WHERE id = ?",
+		)
+		.get(id) as
+		| {
+				id: string;
+				session_id: string;
+				command: string;
+				state: CommandJournalState;
+				recovery_reason: string | null;
+				created_at: string;
+				updated_at: string;
+		  }
+		| undefined;
+	if (!row) return undefined;
+	return {
+		id: row.id,
+		sessionId: row.session_id,
+		command: row.command,
+		state: row.state,
+		createdAt: row.created_at,
+		updatedAt: row.updated_at,
+		...(row.recovery_reason ? { recoveryReason: row.recovery_reason } : {}),
+	};
+}
+
+function readLease(database: DatabaseSync, sessionId: string): SessionLeaseRecord | undefined {
+	const row = database
+		.prepare("SELECT session_id, owner_id, mode, expires_at FROM session_leases WHERE session_id = ?")
+		.get(sessionId) as
+		| { session_id: string; owner_id: string; mode: SessionLeaseMode; expires_at: string }
+		| undefined;
+	return row
+		? { sessionId: row.session_id, ownerId: row.owner_id, mode: row.mode, expiresAt: row.expires_at }
+		: undefined;
+}
+
+function transitionCommand(
+	database: DatabaseSync,
+	id: string,
+	state: Exclude<CommandJournalState, "created">,
+	reason?: string,
+): CommandJournalRecord {
+	const current = readCommand(database, id);
+	if (!current) throw new Error(`Unknown command journal entry: ${id}`);
+	if (!COMMAND_TRANSITIONS[current.state].includes(state))
+		throw new Error(`Invalid command transition: ${current.state} -> ${state}`);
+	const now = new Date().toISOString();
+	database
+		.prepare("UPDATE command_journal SET state = ?, recovery_reason = ?, updated_at = ? WHERE id = ?")
+		.run(state, reason ?? null, now, id);
+	return readCommand(database, id)!;
 }
 
 export function openDurableStateStore(path: string): DurableStateStore {
@@ -117,6 +215,57 @@ export function openDurableStateStore(path: string): DurableStateStore {
 			const rows = database.prepare(`PRAGMA table_info("${tableName}")`).all() as Array<{ name: string }>;
 			return rows.map((row) => row.name);
 		},
+		beginCommand: ({ id = randomUUID(), sessionId, command }) => {
+			const now = new Date().toISOString();
+			database
+				.prepare(
+					"INSERT INTO command_journal (id, session_id, command, state, created_at, updated_at) VALUES (?, ?, ?, 'created', ?, ?)",
+				)
+				.run(id, sessionId, command, now, now);
+			return readCommand(database, id)!;
+		},
+		transitionCommand: (id, state, reason) => {
+			const current = readCommand(database, id);
+			if (!current) throw new Error(`Unknown command journal entry: ${id}`);
+			if (!COMMAND_TRANSITIONS[current.state].includes(state))
+				throw new Error(`Invalid command transition: ${current.state} -> ${state}`);
+			const now = new Date().toISOString();
+			database
+				.prepare("UPDATE command_journal SET state = ?, recovery_reason = ?, updated_at = ? WHERE id = ?")
+				.run(state, reason ?? null, now, id);
+			return readCommand(database, id)!;
+		},
+		getCommand: (id) => readCommand(database, id),
+		recoverUnfinishedCommands: (reason = "daemon restarted before command completion") => {
+			const rows = database
+				.prepare("SELECT id FROM command_journal WHERE state IN ('created', 'running')")
+				.all() as Array<{ id: string }>;
+			return rows.map(({ id }) => {
+				const current = readCommand(database, id)!;
+				return current.state === "interrupted" ? current : transitionCommand(database, id, "interrupted", reason);
+			});
+		},
+		acquireLease: ({ sessionId, ownerId, mode, ttlMs }) => {
+			const existing = readLease(database, sessionId);
+			if (
+				existing &&
+				Date.parse(existing.expiresAt) > Date.now() &&
+				(existing.ownerId !== ownerId || existing.mode === "exclusive" || mode === "exclusive")
+			) {
+				throw new Error(`Session lease is held for ${sessionId}`);
+			}
+			const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+			database
+				.prepare(
+					"INSERT INTO session_leases (session_id, owner_id, mode, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT(session_id) DO UPDATE SET owner_id=excluded.owner_id, mode=excluded.mode, expires_at=excluded.expires_at",
+				)
+				.run(sessionId, ownerId, mode, expiresAt);
+			return readLease(database, sessionId)!;
+		},
+		releaseLease: (sessionId, ownerId) => {
+			database.prepare("DELETE FROM session_leases WHERE session_id = ? AND owner_id = ?").run(sessionId, ownerId);
+		},
+		getLease: (sessionId) => readLease(database, sessionId),
 		close: () => database.close(),
 	};
 }
