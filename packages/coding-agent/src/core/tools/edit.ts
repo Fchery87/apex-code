@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Box, Container, Spacer, Text } from "@earendil-works/pi-tui";
 import type { AgentTool } from "apex-code-agent-core";
 import { constants } from "fs";
@@ -6,7 +7,6 @@ import { type Static, Type } from "typebox";
 import { renderDiff } from "../../modes/interactive/components/diff.ts";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import type { ApexToolDefinition } from "./contract.ts";
-import { createPathPermissionSpec } from "./path-permission.ts";
 import {
 	applyEditsToNormalizedContent,
 	computeEditsDiff,
@@ -21,6 +21,7 @@ import {
 	stripBom,
 } from "./edit-diff.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
+import { createPathPermissionSpec } from "./path-permission.ts";
 import { resolveToCwd } from "./path-utils.ts";
 import { renderToolPath, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -68,6 +69,10 @@ type LegacyEditToolInput = EditToolInput & {
 	oldText?: unknown;
 	newText?: unknown;
 };
+
+function sha256(value: string): string {
+	return createHash("sha256").update(value).digest("hex");
+}
 
 export interface EditToolDetails {
 	/** Display-oriented diff of the changes made */
@@ -319,7 +324,12 @@ export function createEditToolDefinition(
 			context: { resultRecoverable: true, deferSchema: false },
 			evidence: {
 				emits: new Set(["diff"]),
-				capture: (params) => [{ kind: "diff", path: params.path }],
+				capture: (params, result) => {
+					const patch = result.details?.patch;
+					return patch
+						? [{ kind: "diff", path: params.path, patchHash: sha256(patch) }]
+						: [{ kind: "diff", path: params.path }];
+				},
 			},
 		},
 		renderShell: "self",

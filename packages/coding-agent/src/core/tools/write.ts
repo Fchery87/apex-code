@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Container, Text } from "@earendil-works/pi-tui";
 import type { AgentTool } from "apex-code-agent-core";
 import { mkdir as fsMkdir, writeFile as fsWriteFile } from "fs/promises";
@@ -24,6 +25,15 @@ export const writeToolSystemPromptContribution = {
 } as const;
 
 export type WriteToolInput = Static<typeof writeSchema>;
+
+export interface WriteToolDetails {
+	byteCount: number;
+	contentHash: string;
+}
+
+function sha256(value: string): string {
+	return createHash("sha256").update(value).digest("hex");
+}
 
 /**
  * Pluggable operations for the write tool.
@@ -188,7 +198,7 @@ function formatWriteResult(
 export function createWriteToolDefinition(
 	cwd: string,
 	options?: WriteToolOptions,
-): ApexToolDefinition<typeof writeSchema, undefined> {
+): ApexToolDefinition<typeof writeSchema, WriteToolDetails> {
 	const ops = options?.operations ?? defaultWriteOperations;
 	return {
 		name: "write",
@@ -209,7 +219,19 @@ export function createWriteToolDefinition(
 			context: { resultRecoverable: true, deferSchema: false },
 			evidence: {
 				emits: new Set(["diff"]),
-				capture: (params) => [{ kind: "diff", path: params.path }],
+				capture: (params, result) => {
+					const details = result.details;
+					return details
+						? [
+								{
+									kind: "diff",
+									path: params.path,
+									byteCount: details.byteCount,
+									contentHash: details.contentHash,
+								},
+							]
+						: [{ kind: "diff", path: params.path }];
+				},
 			},
 		},
 		async execute(
@@ -241,7 +263,7 @@ export function createWriteToolDefinition(
 
 				return {
 					content: [{ type: "text", text: `Successfully wrote ${content.length} bytes to ${path}` }],
-					details: undefined,
+					details: { byteCount: Buffer.byteLength(content), contentHash: sha256(content) },
 				};
 			});
 		},
