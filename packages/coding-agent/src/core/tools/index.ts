@@ -64,6 +64,16 @@ export {
 	type ReadToolOptions,
 } from "./read.ts";
 export {
+	createTestPermissionSpec,
+	createTestTool,
+	createTestToolDefinition,
+	type TestOperationResult,
+	type TestOperations,
+	type TestRunDetails,
+	type TestToolInput,
+	type TestToolOptions,
+} from "./test.ts";
+export {
 	createTodoWriteTool,
 	createTodoWriteToolDefinition,
 	type TodoItem,
@@ -119,6 +129,7 @@ import { createGrepTool, createGrepToolDefinition, type GrepToolOptions } from "
 import { createLsTool, createLsToolDefinition, type LsToolOptions } from "./ls.ts";
 import { createPlanPresentTool, createPlanPresentToolDefinition } from "./plan-present.ts";
 import { createReadTool, createReadToolDefinition, type ReadToolOptions } from "./read.ts";
+import { createTestTool, createTestToolDefinition, type TestToolOptions } from "./test.ts";
 import { createTodoWriteTool, createTodoWriteToolDefinition, type TodoWriteStore } from "./todo-write.ts";
 import { createToolSchemaTool, createToolSchemaToolDefinition, type ToolSchemaResolver } from "./tool-schema.ts";
 import { createWebFetchTool, createWebFetchToolDefinition, type WebFetchToolOptions } from "./web-fetch.ts";
@@ -141,7 +152,8 @@ export type ToolName =
 	| "web_fetch"
 	| "ask_user"
 	| "plan_present"
-	| "delegate";
+	| "delegate"
+	| "test";
 export const allToolNames: Set<ToolName> = new Set([
 	"read",
 	"bash",
@@ -157,6 +169,7 @@ export const allToolNames: Set<ToolName> = new Set([
 	"ask_user",
 	"plan_present",
 	"delegate",
+	"test",
 ]);
 
 export interface ToolsOptions {
@@ -172,6 +185,7 @@ export interface ToolsOptions {
 	web_search?: WebSearchToolOptions;
 	web_fetch?: WebFetchToolOptions;
 	delegate?: { runtime?: DelegationRuntimeOptions };
+	test?: TestToolOptions;
 }
 
 /** Default store when no session/workspace context supplies one (mirrors emptyToolSchemaResolver below). */
@@ -227,6 +241,8 @@ export function createToolDefinition(toolName: ToolName, cwd: string, options?: 
 			return createPlanPresentToolDefinition();
 		case "delegate":
 			return createDelegateToolDefinition(options?.delegate?.runtime ?? noopDelegationRuntime);
+		case "test":
+			return createTestToolDefinition(cwd, options?.test);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -262,6 +278,8 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 			return createPlanPresentTool();
 		case "delegate":
 			return createDelegateTool(options?.delegate?.runtime ?? noopDelegationRuntime);
+		case "test":
+			return createTestTool(cwd, options?.test);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -313,6 +331,7 @@ export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): R
 		ask_user: createAskUserToolDefinition(),
 		plan_present: createPlanPresentToolDefinition(),
 		delegate: createDelegateToolDefinition(options?.delegate?.runtime ?? noopDelegationRuntime),
+		test: createTestToolDefinition(cwd, options?.test),
 	};
 }
 
@@ -355,5 +374,6 @@ export function createAllTools(cwd: string, options?: ToolsOptions): Record<Tool
 		ask_user: createAskUserTool(),
 		plan_present: createPlanPresentTool(),
 		delegate: createDelegateTool(options?.delegate?.runtime ?? noopDelegationRuntime),
+		test: createTestTool(cwd, options?.test),
 	};
 }

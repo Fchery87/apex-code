@@ -246,7 +246,10 @@ describe("Coding Agent Tools", () => {
 
 			expect(getTextOutput(result)).toContain("Successfully wrote");
 			expect(getTextOutput(result)).toContain(testFile);
-			expect(result.details).toBeUndefined();
+			expect(result.details).toMatchObject({
+				byteCount: Buffer.byteLength(content),
+				contentHash: expect.any(String),
+			});
 		});
 
 		it("should create parent directories", async () => {
@@ -476,7 +479,9 @@ describe("Coding Agent Tools", () => {
 			const result = await bashTool.execute("test-call-8", { command: "echo 'test output'" });
 
 			expect(getTextOutput(result)).toContain("test output");
-			expect(result.details).toBeUndefined();
+			expect(result.details).toMatchObject({
+				execution: { cwd: expect.any(String), exitCode: 0, argv: expect.any(Array) },
+			});
 		});
 
 		it("should handle command errors", async () => {
