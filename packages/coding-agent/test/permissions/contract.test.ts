@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-	ALL_CAPABILITIES,
-	type ApexToolDefinition,
-	UNCLASSIFIED,
-} from "../../src/core/tools/contract.ts";
 import { computeCapabilityCeiling } from "../../src/core/delegation/ceiling.ts";
+import { ALL_CAPABILITIES, type ApexToolDefinition, UNCLASSIFIED } from "../../src/core/tools/contract.ts";
 import { createAllToolDefinitions } from "../../src/core/tools/index.ts";
 
 const CWD = "/workspace";
@@ -34,6 +30,7 @@ const REPRESENTATIVE_PARAMS: Record<string, unknown> = {
 	ask_user: { question: "Which approach?", options: ["a", "b"] },
 	plan_present: { plan: "1. Do a thing" },
 	delegate: { agentType: "explore", task: "find the config loader" },
+	test: { executable: "npm", args: ["test"] },
 };
 
 describe("tool contracts", () => {
