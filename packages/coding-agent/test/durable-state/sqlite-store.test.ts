@@ -72,6 +72,25 @@ describe("durable state SQLite schema", () => {
 		store.close();
 	});
 
+	it("journals a command before executing and records its terminal outcome", async () => {
+		const store = openDurableStateStore(createDatabasePath());
+		let observedState: string | undefined;
+		const result = await store.runCommand({ id: "cmd-run", sessionId: "session-1", command: "append" }, async () => {
+			observedState = store.getCommand("cmd-run")?.state;
+			return "persisted";
+		});
+		expect(result).toBe("persisted");
+		expect(observedState).toBe("running");
+		expect(store.getCommand("cmd-run")?.state).toBe("completed");
+		await expect(
+			store.runCommand({ id: "cmd-fail", sessionId: "session-1", command: "append" }, async () => {
+				throw new Error("write failed");
+			}),
+		).rejects.toThrow("write failed");
+		expect(store.getCommand("cmd-fail")?.state).toBe("failed");
+		store.close();
+	});
+
 	it("rejects invalid journal transitions and duplicate command IDs", () => {
 		const store = openDurableStateStore(createDatabasePath());
 		store.beginCommand({ id: "cmd-1", sessionId: "session-1", command: "test" });

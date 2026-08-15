@@ -56,6 +56,7 @@ export interface DurableStateStore {
 	tableNames(): string[];
 	columns(tableName: string): string[];
 	beginCommand(input: { id?: string; sessionId: string; command: string }): CommandJournalRecord;
+	runCommand<T>(input: { id?: string; sessionId: string; command: string }, operation: () => Promise<T>): Promise<T>;
 	transitionCommand(id: string, state: Exclude<CommandJournalState, "created">, reason?: string): CommandJournalRecord;
 	getCommand(id: string): CommandJournalRecord | undefined;
 	recoverUnfinishedCommands(reason?: string): CommandJournalRecord[];
@@ -263,6 +264,27 @@ export function openDurableStateStore(path: string): DurableStateStore {
 				)
 				.run(id, sessionId, command, now, now);
 			return readCommand(database, id)!;
+		},
+		runCommand: async (input, operation) => {
+			const entry = (() => {
+				const id = input.id ?? randomUUID();
+				const now = new Date().toISOString();
+				database
+					.prepare(
+						"INSERT INTO command_journal (id, session_id, command, state, created_at, updated_at) VALUES (?, ?, ?, 'created', ?, ?)",
+					)
+					.run(id, input.sessionId, input.command, now, now);
+				return readCommand(database, id)!;
+			})();
+			transitionCommand(database, entry.id, "running");
+			try {
+				const result = await operation();
+				transitionCommand(database, entry.id, "completed");
+				return result;
+			} catch (error) {
+				transitionCommand(database, entry.id, "failed");
+				throw error;
+			}
 		},
 		transitionCommand: (id, state, reason) => {
 			const current = readCommand(database, id);
