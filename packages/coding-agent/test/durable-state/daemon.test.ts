@@ -1,6 +1,8 @@
+import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { DurableStateDaemon } from "../../src/core/durable-state/daemon.ts";
 import { SessionManager } from "../../src/core/session-manager.ts";
@@ -25,6 +27,34 @@ describe("DurableStateDaemon", () => {
 		const restarted = new DurableStateDaemon({ databasePath: path, daemonId: "second" });
 		expect(restarted.recoveryDiagnostics).toMatchObject([{ commandId: "cmd", state: "interrupted" }]);
 		expect(restarted.getCommand("cmd")?.state).toBe("interrupted");
+		restarted.dispose();
+	});
+
+	it("recovers a command after its daemon process is killed", async () => {
+		const databasePath = join(createDir(), "state.sqlite");
+		const daemonModule = pathToFileURL(join(process.cwd(), "src/core/durable-state/daemon.ts")).href;
+		const child = spawn(
+			process.execPath,
+			[
+				"--import",
+				"tsx",
+				"--input-type=module",
+				"-e",
+				`import { DurableStateDaemon } from ${JSON.stringify(daemonModule)}; const daemon = new DurableStateDaemon({ databasePath: ${JSON.stringify(databasePath)}, daemonId: "child" }); daemon.attach({ sessionId: "s", clientId: "client", mode: "exclusive", ttlMs: 60000 }); daemon.beginMutation({ id: "killed", sessionId: "s", clientId: "client", command: "append" }); console.log("ready"); setInterval(() => {}, 1000);`,
+			],
+			{ stdio: ["ignore", "pipe", "pipe"] },
+		);
+		await new Promise<void>((resolve, reject) => {
+			child.once("error", reject);
+			child.stdout.once("data", (chunk) =>
+				chunk.toString().includes("ready") ? resolve() : reject(new Error("Daemon did not become ready")),
+			);
+		});
+		child.kill("SIGKILL");
+		await new Promise<void>((resolve) => child.once("close", () => resolve()));
+		const restarted = new DurableStateDaemon({ databasePath, daemonId: "restarted" });
+		expect(restarted.recoveryDiagnostics).toMatchObject([{ commandId: "killed", state: "interrupted" }]);
+		expect(restarted.getCommand("killed")?.state).toBe("interrupted");
 		restarted.dispose();
 	});
 
