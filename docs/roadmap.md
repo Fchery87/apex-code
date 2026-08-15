@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0, 1, 2a, 2b, and 3 landed · **Created:** 2026-08-08 · **Last updated:** 2026-08-13
+**Status:** Active — Phases 0 through 7 landed · **Created:** 2026-08-08 · **Last updated:** 2026-08-15
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -90,7 +90,7 @@ capable and measurably worse.
 | 5 | Delegation & multi-agent | **landed** — 7 of 7 tasks · `edb760ff4` | [spec](specs/2026-08-14-delegation-and-multi-agent.md) | — |
 | 6 | Durable state & daemon | **landed** — 6 of 6 tasks · `baf5e5302` (full-suite audit recorded) | [spec](specs/2026-08-15-durable-state-and-daemon.md) | — |
 | 7 | Evidence & verification | **landed** — 7 of 7 tasks · `c82584312` (clean Node 22 verification) | [spec](specs/2026-08-16-evidence-and-verification.md) | — |
-| 8 | Observability & cost | not started | — | — |
+| 8 | Observability & cost | spec + plan written — exit criterion amended, 0 of 7 tasks | [spec](specs/2026-08-15-observability-and-cost.md) | [plan](plans/2026-08-15-observability-and-cost.md) |
 | 9 | Release hardening | not started | — | — |
 
 ---
@@ -298,8 +298,8 @@ bridged over a Unix domain socket, and a bounded violation store wired into the
 production CLI) meets the Phase 2 exit criterion stated above — a write outside the
 workspace and a request to a non-allowlisted host both fail closed and surface as
 recorded violations, proven through the real CLI entry point with a live scripted
-agent turn, not just the backend in isolation. Task 2b.6 (see
-[plan](plans/2026-08-12-os-sandbox.md)) obtained this phase's first genuinely clean
+agent turn, not just the backend in isolation. Task 2b.6 (in the since-deleted
+`docs/plans/2026-08-12-os-sandbox.md`) obtained this phase's first genuinely clean
 full `npm test` run — not killed, truncated, or scoped down by the environment —
 confirming no regression beyond the same 4 pre-existing, sandboxing-unrelated files
 already characterized in 2b.4c.
@@ -582,8 +582,54 @@ A status line worth reading. Carry OMP's accessibility settings across —
 `symbolPreset: ascii`, `colorBlindMode`, configurable token-usage display. Cheap, and
 almost nobody does it.
 
-**Exit criterion.** Session cost reconciles with provider billing within 5% over a
-one-week real-usage window.
+**Correction (2026-08-15, first — most of this phase is wiring, not new capability.)**
+The Scope above reads as though none of it exists. Measured against the tree at
+`035606611`, per-model and per-session cost **already ship**: `/session` renders token
+totals with a cached/uncached split, total cost, a per-`provider/model` breakdown
+(`getUsageCostBreakdown`), and cache re-billed waste (`computeCacheWaste`). What does
+not exist is per-**role** attribution, **latency** in any surface (`SessionStats` has
+no such field), and anything **cross-session**. The larger gap is upstream of all of
+it: the per-request sample store built in Phase 1 is constructed **only in tests**, so
+`instrumentAttempt` short-circuits on `if (!store) return stream;` in every real
+session, and the `usage_totals`/`model_performance` tables Phase 6 declared have no
+reader or writer anywhere in the repository. Phase 8's first task is therefore the
+same shape as Phase 4's was: wire the production path, because until it lands every
+gate below measures an empty table. Full inventory in
+[the Phase 8 spec](specs/2026-08-15-observability-and-cost.md) § Current state.
+
+**Correction (2026-08-15, second — the exit criterion is amended before
+implementation.)** The original criterion read: *"Session cost reconciles with
+provider billing within 5% over a one-week real-usage window."* It cannot be checked
+by a reviewer, cannot run in CI, and requires a paid account plus a week of wall
+clock — the defect ground rule 3 exists to prevent, and the one Phase 3 hit with its
+median. It is amended **before** the work rather than at closure, and the amendment
+makes the internal gate *stricter*: the 5% tolerance survives only where it belongs,
+against an external bill we do not control, while internal arithmetic must reconcile
+exactly.
+
+**Exit criterion (amended).** All of the following, each checkable by someone other
+than the author:
+
+- Every model request attempt in a real session produces exactly one attributed
+  durable sample (provider, model, role, outcome, ttft, generation, tokens, cost),
+  observed through the production wiring rather than a test-constructed store; a
+  rotated-away credential attempt records its own row.
+- The durable ledger's per-session cost aggregate equals `getUsageCostBreakdown()`
+  over that session's entries **exactly** — equality, not a tolerance. Two cost
+  projections exist by design; this is what stops them drifting (ADR 0010's
+  principle, applied outside the tool registry).
+- With no OTLP endpoint configured, a full turn produces zero outbound requests
+  attributable to observability.
+- The footer conveys context pressure through a channel other than colour at default
+  settings, and `symbolPreset: ascii` renders no codepoint above U+007F.
+- A version-3 durable-state database migrates to version 4 without data loss.
+
+**Carried, not discharged.** Recorded cost within 5% of a real provider invoice
+remains owed, with `apex-code cost --since` as the named artifact for running it. It
+is a post-landing obligation recorded as a further amendment when performed — the
+same posture Phase 0 used for its amended criteria and Phase 7 used for its declined
+calibration claim. Phase 8 may be marked landed on the gates above; the obligation is
+never quietly ticked.
 
 ---
 
@@ -620,13 +666,14 @@ takes the next free number instead of a reserved one.
 | 0002 | Clean-room rule regarding `c-code`; behavior may be described, code never copied | 0 | ✅ |
 | 0003 | Upstream merge cadence, patch-surface ceiling, and abandonment tripwire | 0 | ✅ (ceiling pending) |
 | 0004 | Permission rule model and source precedence | 2a | ✅ |
-| 0005 | What the sandbox boundary does and does not guarantee | 2b | reserved |
-| 0006 | Session format ownership and the migration guarantee owed to users | 6 | reserved |
+| 0005 | What the sandbox boundary does and does not guarantee | 2b | ✅ |
+| 0006 | Session format ownership and the migration guarantee owed to users | 6 | ✅ |
 | 0007 | Evidence capture in core; policy layer stays a bundled extension | 7 | ✅ |
 | 0008 | Delegation authority: in-process derived child vs. subprocess with serialized authority | 5 | ✅ |
 | 0009 | Telemetry: opt-in only, and exactly what is collected | 9 | reserved |
 | 0010 | One canonical tool contract, declared by the tool and never re-derived | pre-2 | ✅ |
 | 0011 | Deferred schemas resolve through an explicit model-callable tool, not harness-side injection | 4 | ✅ |
+| 0012 | User-directed OTLP export is not project telemetry; the two never share a switch | 8 | ✅ |
 
 ## Cross-phase contracts
 
