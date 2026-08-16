@@ -88,6 +88,7 @@ import {
 	resolveModelScopeFromModels,
 } from "../../core/model-resolver.ts";
 import { CredentialSynchronizationError } from "../../core/model-runtime.ts";
+import { aggregateUsagePerformance } from "../../core/observability/aggregate.ts";
 import { DefaultPackageManager } from "../../core/package-manager.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
@@ -2915,7 +2916,7 @@ export class InteractiveMode {
 				return;
 			}
 			if (text === "/session") {
-				this.handleSessionCommand();
+				await this.handleSessionCommand();
 				this.editor.setText("");
 				return;
 			}
@@ -5989,7 +5990,7 @@ export class InteractiveMode {
 		this.ui.requestRender();
 	}
 
-	private handleSessionCommand(): void {
+	private async handleSessionCommand(): Promise<void> {
 		const stats = this.session.getSessionStats();
 		const sessionName = this.sessionManager.getSessionName();
 		const entries = this.sessionManager.getEntries();
@@ -6044,6 +6045,32 @@ export class InteractiveMode {
 					cacheWaste.missedCost >= 0.0001
 						? `\n${theme.fg("dim", "Cache Re-billed:")} $${cacheWaste.missedCost.toFixed(3)} ${theme.fg("dim", `(${detail})`)}`
 						: `\n${theme.fg("dim", "Cache Re-billed:")} ${detail}`;
+			}
+		}
+
+		// Role and latency: the two dimensions the durable ledger (roadmap Phase 8)
+		// carries that session entries never did. Scoped to this session's rows only
+		// -- a ledger that also served other sessions must never leak their cost in.
+		const usagePerformanceSamples = (await this.session.modelRuntime.listUsagePerformanceSamples()).filter(
+			(sample) => sample.sessionId === stats.sessionId,
+		);
+		if (usagePerformanceSamples.length > 0) {
+			const avgTtftMs =
+				usagePerformanceSamples.reduce((sum, sample) => sum + sample.ttftMs, 0) / usagePerformanceSamples.length;
+			const avgGenerationMs =
+				usagePerformanceSamples.reduce((sum, sample) => sum + sample.generationMs, 0) /
+				usagePerformanceSamples.length;
+			info += `\n\n${theme.bold("Latency")}\n`;
+			info += `${theme.fg("dim", "Avg TTFT:")} ${Math.round(avgTtftMs)}ms\n`;
+			info += `${theme.fg("dim", "Avg Generation:")} ${Math.round(avgGenerationMs)}ms`;
+
+			const roleRows = aggregateUsagePerformance(usagePerformanceSamples, "role");
+			if (roleRows.length > 0) {
+				info += `\n\n${theme.bold("Roles")}`;
+				for (const row of roleRows) {
+					const requestLabel = row.sampleCount === 1 ? "1 request" : `${row.sampleCount} requests`;
+					info += `\n  ${theme.fg("dim", `${row.key}:`)} $${row.cost.toFixed(3)} ${theme.fg("dim", `(${requestLabel})`)}`;
+				}
 			}
 		}
 
