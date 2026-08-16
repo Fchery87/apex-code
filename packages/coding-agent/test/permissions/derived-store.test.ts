@@ -23,7 +23,7 @@ function registry(): Record<string, ApexToolDefinition> {
 }
 
 function getContract(toolName: string) {
-	return (registry()[toolName]?.contract) as ApexToolDefinition["contract"] | undefined;
+	return registry()[toolName]?.contract as ApexToolDefinition["contract"] | undefined;
 }
 
 function newParentStore(): FilePermissionRuleStore {
@@ -134,12 +134,20 @@ describe("DerivedPermissionRuleStore", () => {
 	it("keeps a bash-holding parent's inherited rule restriction in force for the child", async () => {
 		const parent = newParentStore();
 		await parent.apply({
-			type: "addRules", destination: "session", rules: [{ toolName: "bash", behavior: "deny", ruleContent: "rm *" }],
+			type: "addRules",
+			destination: "session",
+			rules: [{ toolName: "bash", behavior: "deny", ruleContent: "rm *" }],
 		});
 		const child = new DerivedPermissionRuleStore({ parent });
-		const decision = await evaluateToolCall("bash", { command: "rm generated.txt" }, {
-			getContract, store: child, getMode: () => "default",
-		});
+		const decision = await evaluateToolCall(
+			"bash",
+			{ command: "rm generated.txt" },
+			{
+				getContract,
+				store: child,
+				getMode: () => "default",
+			},
+		);
 		expect(decision.block).toBe(true);
 	});
 

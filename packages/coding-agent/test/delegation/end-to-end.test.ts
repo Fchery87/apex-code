@@ -22,12 +22,21 @@ afterEach(async () => {
 
 const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
 	scout: { name: "scout", description: "Fast recon", tools: ["read"], systemPrompt: "You are a scout." },
-	worker: { name: "worker", description: "General purpose", tools: ["read", "bash"], systemPrompt: "You are a worker." },
+	worker: {
+		name: "worker",
+		description: "General purpose",
+		tools: ["read", "bash"],
+		systemPrompt: "You are a worker.",
+	},
 };
 
 async function buildModelRuntime(providerId: string) {
 	const faux = fauxProvider({ provider: providerId });
-	const runtime = await ModelRuntime.create({ credentials: AuthStorage.inMemory(), modelsPath: null, allowModelNetwork: false });
+	const runtime = await ModelRuntime.create({
+		credentials: AuthStorage.inMemory(),
+		modelsPath: null,
+		allowModelNetwork: false,
+	});
 	runtime.registerNativeProvider(faux.provider);
 	await runtime.refresh({ allowNetwork: false, providers: [providerId] });
 	return { faux, runtime };
@@ -84,19 +93,38 @@ describe("delegation end-to-end through createAgentSession (task 5.2)", () => {
 		const { faux, runtime } = await buildModelRuntime("delegation-artifacts-e2e");
 		const agentDir = join(scratch, "agent");
 		const settingsManager = SettingsManager.create(scratch, agentDir);
-		const store = new FilePermissionRuleStore({ cwd: scratch, agentDir, policyPath: join(scratch, "missing-policy.json") });
+		const store = new FilePermissionRuleStore({
+			cwd: scratch,
+			agentDir,
+			policyPath: join(scratch, "missing-policy.json"),
+		});
 		await store.apply({
-			type: "addRules", destination: "local", rules: [
+			type: "addRules",
+			destination: "local",
+			rules: [
 				{ toolName: "delegate", behavior: "allow" },
 				{ toolName: "write", behavior: "allow", ruleContent: "child-output.txt" },
 			],
 		});
 		const { session } = await createAgentSession({
-			cwd: scratch, agentDir, model: faux.getModel(), modelRuntime: runtime, settingsManager,
-			tools: ["read", "write", "delegate"], permissionGate: { store, getMode: () => "default" },
-			delegation: { resolveAgent: (agentType) => agentType === "writer" ? {
-				name: "writer", description: "writes workspace output", tools: ["write"], systemPrompt: "Write the requested file.",
-			} : undefined },
+			cwd: scratch,
+			agentDir,
+			model: faux.getModel(),
+			modelRuntime: runtime,
+			settingsManager,
+			tools: ["read", "write", "delegate"],
+			permissionGate: { store, getMode: () => "default" },
+			delegation: {
+				resolveAgent: (agentType) =>
+					agentType === "writer"
+						? {
+								name: "writer",
+								description: "writes workspace output",
+								tools: ["write"],
+								systemPrompt: "Write the requested file.",
+							}
+						: undefined,
+			},
 		});
 		await session.bindExtensions({});
 		const delegateCall = fauxToolCall("delegate", { agentType: "writer", task: "write child-output.txt" });
@@ -109,14 +137,23 @@ describe("delegation end-to-end through createAgentSession (task 5.2)", () => {
 		]);
 		await session.prompt("delegate to writer");
 		expect(await readFile(join(scratch, "child-output.txt"), "utf8")).toBe("workspace edit");
-		const result = session.agent.state.messages.find((m) => m.role === "toolResult" && m.toolCallId === delegateCall.id);
+		const result = session.agent.state.messages.find(
+			(m) => m.role === "toolResult" && m.toolCallId === delegateCall.id,
+		);
 		if (result?.role !== "toolResult") throw new Error("expected a delegation result");
 		expect(result.isError).toBe(false);
 		const childJsonl = await (async () => {
 			const { readdir } = await import("node:fs/promises");
 			const roots = await readdir(join(session.sessionManager.getSessionDir(), "delegations"));
 			expect(roots).toHaveLength(1);
-			return join(session.sessionManager.getSessionDir(), "delegations", roots[0]!, (await readdir(join(session.sessionManager.getSessionDir(), "delegations", roots[0]!))).find((f) => f.endsWith(".jsonl"))!);
+			return join(
+				session.sessionManager.getSessionDir(),
+				"delegations",
+				roots[0]!,
+				(await readdir(join(session.sessionManager.getSessionDir(), "delegations", roots[0]!))).find((f) =>
+					f.endsWith(".jsonl"),
+				)!,
+			);
 		})();
 		await access(childJsonl);
 		expect(childJsonl).toContain(`${session.sessionManager.getSessionDir()}/delegations/`);
@@ -154,7 +191,12 @@ describe("delegation recursion depth guard through createAgentSession (task 5.3)
 		// attempt to delegate again is refused by the depth guard before any
 		// great-grandchild session is built.
 		const recursiveDefinitions: Record<string, AgentDefinition> = {
-			scout: { name: "scout", description: "recon, can delegate further", tools: ["read", "delegate"], systemPrompt: "You are a scout." },
+			scout: {
+				name: "scout",
+				description: "recon, can delegate further",
+				tools: ["read", "delegate"],
+				systemPrompt: "You are a scout.",
+			},
 		};
 		const { faux, runtime } = await buildModelRuntime("delegation-depth-e2e");
 		const settingsManager = SettingsManager.create(scratch, join(scratch, "agent"));
@@ -163,7 +205,11 @@ describe("delegation recursion depth guard through createAgentSession (task 5.3)
 			agentDir: join(scratch, "agent"),
 			policyPath: join(scratch, "missing-policy.json"),
 		});
-		await store.apply({ type: "addRules", destination: "local", rules: [{ toolName: "delegate", behavior: "allow" }] });
+		await store.apply({
+			type: "addRules",
+			destination: "local",
+			rules: [{ toolName: "delegate", behavior: "allow" }],
+		});
 
 		const { session } = await createAgentSession({
 			cwd: scratch,

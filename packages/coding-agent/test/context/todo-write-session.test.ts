@@ -5,8 +5,7 @@ import { Agent } from "apex-code-agent-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AgentSession } from "../../src/core/agent-session.ts";
 import { AuthStorage } from "../../src/core/auth-storage.ts";
-import { getLatestTodos } from "../../src/core/session-manager.ts";
-import { SessionManager } from "../../src/core/session-manager.ts";
+import { getLatestTodos, SessionManager } from "../../src/core/session-manager.ts";
 import { SettingsManager } from "../../src/core/settings-manager.ts";
 import { createInMemoryModelRegistry, getModelRuntime } from "../model-runtime-test-utils.ts";
 import { createFauxStreamFn, fauxModel } from "../test-harness.ts";
@@ -27,10 +26,12 @@ describe("todo_write persists through the real session-facing store (task 4.3)",
 	it("records the submitted list on the real SessionManager, readable via getLatestTodos", async () => {
 		const { streamFn } = createFauxStreamFn([
 			{
-				toolCalls: [{
-					name: "todo_write",
-					args: { todos: [{ content: "write the spec", status: "in_progress" }] },
-				}],
+				toolCalls: [
+					{
+						name: "todo_write",
+						args: { todos: [{ content: "write the spec", status: "in_progress" }] },
+					},
+				],
 			},
 			"done",
 		]);
@@ -45,17 +46,19 @@ describe("todo_write persists through the real session-facing store (task 4.3)",
 		registry.registerProvider(model.provider, {
 			baseUrl: model.baseUrl,
 			api: model.api,
-			models: [{
-				id: model.id,
-				name: model.name,
-				api: model.api,
-				reasoning: model.reasoning,
-				input: model.input,
-				cost: model.cost,
-				contextWindow: model.contextWindow,
-				maxTokens: model.maxTokens,
-				baseUrl: model.baseUrl,
-			}],
+			models: [
+				{
+					id: model.id,
+					name: model.name,
+					api: model.api,
+					reasoning: model.reasoning,
+					input: model.input,
+					cost: model.cost,
+					contextWindow: model.contextWindow,
+					maxTokens: model.maxTokens,
+					baseUrl: model.baseUrl,
+				},
+			],
 		});
 
 		const sessionManager = SessionManager.inMemory();
@@ -72,7 +75,9 @@ describe("todo_write persists through the real session-facing store (task 4.3)",
 		await session.prompt("start the task");
 		await session.agent.waitForIdle();
 
-		expect(getLatestTodos(sessionManager.getEntries())).toEqual([{ content: "write the spec", status: "in_progress" }]);
+		expect(getLatestTodos(sessionManager.getEntries())).toEqual([
+			{ content: "write the spec", status: "in_progress" },
+		]);
 
 		session.dispose();
 	});
@@ -80,10 +85,17 @@ describe("todo_write persists through the real session-facing store (task 4.3)",
 	it("a second call replaces the recorded list rather than merging with the first", async () => {
 		const { streamFn } = createFauxStreamFn([
 			{
-				toolCalls: [{
-					name: "todo_write",
-					args: { todos: [{ content: "write the spec", status: "completed" }, { content: "implement it", status: "in_progress" }] },
-				}],
+				toolCalls: [
+					{
+						name: "todo_write",
+						args: {
+							todos: [
+								{ content: "write the spec", status: "completed" },
+								{ content: "implement it", status: "in_progress" },
+							],
+						},
+					},
+				],
 			},
 			"done",
 		]);
@@ -98,17 +110,19 @@ describe("todo_write persists through the real session-facing store (task 4.3)",
 		registry.registerProvider(model.provider, {
 			baseUrl: model.baseUrl,
 			api: model.api,
-			models: [{
-				id: model.id,
-				name: model.name,
-				api: model.api,
-				reasoning: model.reasoning,
-				input: model.input,
-				cost: model.cost,
-				contextWindow: model.contextWindow,
-				maxTokens: model.maxTokens,
-				baseUrl: model.baseUrl,
-			}],
+			models: [
+				{
+					id: model.id,
+					name: model.name,
+					api: model.api,
+					reasoning: model.reasoning,
+					input: model.input,
+					cost: model.cost,
+					contextWindow: model.contextWindow,
+					maxTokens: model.maxTokens,
+					baseUrl: model.baseUrl,
+				},
+			],
 		});
 
 		const sessionManager = SessionManager.inMemory();

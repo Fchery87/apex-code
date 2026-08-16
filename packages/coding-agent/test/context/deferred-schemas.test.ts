@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { projectToolSchemas } from "../../src/core/context/pipeline.ts";
 import {
 	type AnnouncedTool,
-	type DeferrableTool,
 	announceToolsByName,
+	type DeferrableTool,
 	loadDeferredSchema,
 } from "../../src/core/context/deferred-schemas.ts";
+import { projectToolSchemas } from "../../src/core/context/pipeline.ts";
 
 /**
  * Hand-written, hermetic fixtures shaped like `ApexToolDefinition` — name,
@@ -104,7 +104,6 @@ describe("loadDeferredSchema", () => {
 		expect(() => loadDeferredSchema([deferredTool], "does_not_exist")).toThrow(/does_not_exist/);
 	});
 });
-
 
 describe("projectToolSchemas", () => {
 	it("keeps an unclassified foreign tool's real schema announced through the canonical fallback", () => {

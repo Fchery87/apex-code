@@ -21,8 +21,10 @@ function productionPrefixTokens(options?: { loadedSchemaNames?: ReadonlySet<stri
 		),
 		promptGuidelines: definitions.flatMap((definition) => definition.promptGuidelines ?? []),
 	});
-	return Math.ceil(`${systemPrompt}
-${JSON.stringify(tools)}`.length / 4);
+	return Math.ceil(
+		`${systemPrompt}
+${JSON.stringify(tools)}`.length / 4,
+	);
 }
 
 /**

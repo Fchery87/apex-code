@@ -28,11 +28,15 @@ function parseDefinition(content: string): AgentDefinition | undefined {
 	try {
 		const { frontmatter, body } = parseFrontmatter<AgentFrontmatter>(content);
 		if (
-			typeof frontmatter.name !== "string" || !frontmatter.name ||
-			typeof frontmatter.description !== "string" || !frontmatter.description ||
-			!Array.isArray(frontmatter.tools) || !frontmatter.tools.every((tool): tool is string => typeof tool === "string" && tool.length > 0) ||
+			typeof frontmatter.name !== "string" ||
+			!frontmatter.name ||
+			typeof frontmatter.description !== "string" ||
+			!frontmatter.description ||
+			!Array.isArray(frontmatter.tools) ||
+			!frontmatter.tools.every((tool): tool is string => typeof tool === "string" && tool.length > 0) ||
 			(frontmatter.model !== undefined && (typeof frontmatter.model !== "string" || !frontmatter.model))
-		) return undefined;
+		)
+			return undefined;
 		return {
 			name: frontmatter.name,
 			description: frontmatter.description,
@@ -62,5 +66,6 @@ function discover(dir: string, agentType: string): AgentDefinition | undefined {
 export function createAgentDefinitionResolver(options: CreateAgentDefinitionResolverOptions): AgentDefinitionResolver {
 	const userDir = join(options.agentDir, "agents");
 	const projectDir = join(options.cwd, ".apex-code", "agents");
-	return (agentType) => discover(userDir, agentType) ?? (options.isProjectTrusted() ? discover(projectDir, agentType) : undefined);
+	return (agentType) =>
+		discover(userDir, agentType) ?? (options.isProjectTrusted() ? discover(projectDir, agentType) : undefined);
 }

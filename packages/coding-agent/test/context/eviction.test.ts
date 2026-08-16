@@ -107,10 +107,7 @@ describe("evictToolResults", () => {
 	});
 
 	it("stops evicting once the budget is satisfied without touching later eligible results", () => {
-		const messages = [
-			toolResult("read", "call-a", BIG_TEXT),
-			toolResult("read", "call-b", BIG_TEXT),
-		];
+		const messages = [toolResult("read", "call-a", BIG_TEXT), toolResult("read", "call-b", BIG_TEXT)];
 
 		// BIG_TEXT is 400 chars -> ~100 estimated tokens per raw result, ~19 for the
 		// default marker. Two raw results total ~200; evicting just the first one

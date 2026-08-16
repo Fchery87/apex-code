@@ -48,17 +48,19 @@ describe("deferred schema load path against a real first-party tool (task 4.7)",
 		registry.registerProvider(model.provider, {
 			baseUrl: model.baseUrl,
 			api: model.api,
-			models: [{
-				id: model.id,
-				name: model.name,
-				api: model.api,
-				reasoning: model.reasoning,
-				input: model.input,
-				cost: model.cost,
-				contextWindow: model.contextWindow,
-				maxTokens: model.maxTokens,
-				baseUrl: model.baseUrl,
-			}],
+			models: [
+				{
+					id: model.id,
+					name: model.name,
+					api: model.api,
+					reasoning: model.reasoning,
+					input: model.input,
+					cost: model.cost,
+					contextWindow: model.contextWindow,
+					maxTokens: model.maxTokens,
+					baseUrl: model.baseUrl,
+				},
+			],
 		});
 
 		const session = new AgentSession({

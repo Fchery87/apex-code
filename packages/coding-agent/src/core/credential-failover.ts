@@ -4,12 +4,13 @@
  * pool selection state lives in CredentialPool, request orchestration in ModelRuntime.
  */
 
-import { isRetryableAssistantError } from "@earendil-works/pi-ai";
 import type { AssistantMessage, AssistantMessageEvent } from "@earendil-works/pi-ai";
+import { isRetryableAssistantError } from "@earendil-works/pi-ai";
 import type { CredentialFailureKind } from "./credential-pool.ts";
 
 const RATE_LIMIT_PATTERN = /\b429\b|rate.?limit|too many requests/i;
-const BLOCKED_CREDENTIAL_PATTERN = /\b401\b|\b403\b|unauthorized|forbidden|invalid.?api.?key|permission denied|expired/i;
+const BLOCKED_CREDENTIAL_PATTERN =
+	/\b401\b|\b403\b|unauthorized|forbidden|invalid.?api.?key|permission denied|expired/i;
 
 /**
  * Classifies a failed AssistantMessage into a rotation-eligible CredentialFailureKind,

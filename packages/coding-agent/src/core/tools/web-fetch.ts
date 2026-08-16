@@ -1,6 +1,6 @@
-import { minimatch } from "minimatch";
-import { Type, type Static } from "typebox";
 import type { AgentToolResult } from "apex-code-agent-core";
+import { minimatch } from "minimatch";
+import { type Static, Type } from "typebox";
 import type { ApexToolDefinition } from "./contract.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 import { DEFAULT_MAX_BYTES, formatSize, truncateHead } from "./truncate.ts";

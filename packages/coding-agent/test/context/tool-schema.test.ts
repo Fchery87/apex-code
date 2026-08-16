@@ -62,17 +62,19 @@ describe("deferred schema load path (task 4.1)", () => {
 		registry.registerProvider(model.provider, {
 			baseUrl: model.baseUrl,
 			api: model.api,
-			models: [{
-				id: model.id,
-				name: model.name,
-				api: model.api,
-				reasoning: model.reasoning,
-				input: model.input,
-				cost: model.cost,
-				contextWindow: model.contextWindow,
-				maxTokens: model.maxTokens,
-				baseUrl: model.baseUrl,
-			}],
+			models: [
+				{
+					id: model.id,
+					name: model.name,
+					api: model.api,
+					reasoning: model.reasoning,
+					input: model.input,
+					cost: model.cost,
+					contextWindow: model.contextWindow,
+					maxTokens: model.maxTokens,
+					baseUrl: model.baseUrl,
+				},
+			],
 		});
 
 		let executedValue: string | undefined;
@@ -83,9 +85,11 @@ describe("deferred schema load path (task 4.1)", () => {
 			cwd: tempDir,
 			modelRuntime: getModelRuntime(registry),
 			resourceLoader: createTestResourceLoader(),
-			customTools: [createDeferredTool((value) => {
-				executedValue = value;
-			})],
+			customTools: [
+				createDeferredTool((value) => {
+					executedValue = value;
+				}),
+			],
 			initialActiveToolNames: ["secret_tool", "tool_schema"],
 		});
 
@@ -115,9 +119,9 @@ describe("deferred schema load path (task 4.1)", () => {
 	it("rejects unknown and inactive schema names without marking them loaded", async () => {
 		const { loadToolSchema } = await import("../../src/core/tools/tool-schema.ts");
 		const loaded: string[] = [];
-		expect(() => loadToolSchema({ getTool: () => undefined, markLoaded: (name) => loaded.push(name) }, "not_active")).toThrow(
-			/inactive or unknown.*not_active/i,
-		);
+		expect(() =>
+			loadToolSchema({ getTool: () => undefined, markLoaded: (name) => loaded.push(name) }, "not_active"),
+		).toThrow(/inactive or unknown.*not_active/i);
 		expect(loaded).toEqual([]);
 	});
 
@@ -137,17 +141,19 @@ describe("deferred schema load path (task 4.1)", () => {
 		registry.registerProvider(model.provider, {
 			baseUrl: model.baseUrl,
 			api: model.api,
-			models: [{
-				id: model.id,
-				name: model.name,
-				api: model.api,
-				reasoning: model.reasoning,
-				input: model.input,
-				cost: model.cost,
-				contextWindow: model.contextWindow,
-				maxTokens: model.maxTokens,
-				baseUrl: model.baseUrl,
-			}],
+			models: [
+				{
+					id: model.id,
+					name: model.name,
+					api: model.api,
+					reasoning: model.reasoning,
+					input: model.input,
+					cost: model.cost,
+					contextWindow: model.contextWindow,
+					maxTokens: model.maxTokens,
+					baseUrl: model.baseUrl,
+				},
+			],
 		});
 
 		const session = new AgentSession({
