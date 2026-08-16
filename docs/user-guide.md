@@ -64,6 +64,19 @@ ever continuing linearly. `--continue`/`--resume` pick up a previous session;
 session, or role. `/session` shows the current session's token/cost breakdown
 during a run.
 
+## Sharing sessions
+
+`/share` is an explicit publication action. Apex Code first asks for confirmation, then
+exports the complete session HTML and uses your authenticated GitHub CLI to create a
+**secret Gist**. Secret means unlisted, not private or access-controlled: anyone with the
+URL can read it. The export may contain the complete transcript, prompts, tool calls and
+results, paths, and file content, so use `/export` to review it locally first when needed.
+
+By default Apex Code returns only GitHub's Gist URL. Set `APEX_CODE_SHARE_VIEWER_URL` to
+a viewer you trust if you also want a convenience preview link. Bundled model catalogs
+likewise require no hosted service; `APEX_CODE_MODEL_CATALOG_URL` explicitly enables a
+compatible remote overlay.
+
 ## Where to go next
 
 | Topic | Where |
@@ -79,7 +92,7 @@ during a run.
 
 Apex-owned runtime controls use `APEX_CODE_*` names. The main controls are
 `APEX_CODE_OFFLINE`, `APEX_CODE_SKIP_VERSION_CHECK`, `APEX_CODE_PACKAGE_DIR`,
-`APEX_CODE_EXPERIMENTAL`, and `APEX_CODE_SHARE_VIEWER_URL`. Temporary legacy `PI_*`
+`APEX_CODE_EXPERIMENTAL`, `APEX_CODE_MODEL_CATALOG_URL`, and `APEX_CODE_SHARE_VIEWER_URL`. Temporary legacy `PI_*`
 aliases remain supported through the pre-1.0 line. The canonical Apex name wins when
 both are set, and legacy-only use emits a deprecation diagnostic. Removal will occur
 no earlier than Apex Code 1.0.0 and no earlier than 2027-02-16, with release notes.

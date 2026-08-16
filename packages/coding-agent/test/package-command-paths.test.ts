@@ -395,7 +395,21 @@ describe("package commands", () => {
 		}
 	});
 
-	it("refreshes only model catalogs with update --models", async () => {
+	it("uses bundled catalogs when update --models has no remote configured", async () => {
+		delete process.env.APEX_CODE_MODEL_CATALOG_URL;
+		const create = vi.spyOn(ModelRuntime, "create");
+		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+		await expect(runPackageCommandDirectly(["update", "--models"])).resolves.toBeUndefined();
+
+		expect(create).not.toHaveBeenCalled();
+		expect(logSpy.mock.calls.map(([message]) => String(message)).join("\n")).toContain(
+			"Using bundled model catalogs; no remote catalog is configured",
+		);
+	});
+
+	it("refreshes only explicitly configured model catalogs with update --models", async () => {
+		process.env.APEX_CODE_MODEL_CATALOG_URL = "https://catalog.example.test";
 		const refresh = vi.fn(async () => ({ aborted: false, errors: new Map<string, Error>() }));
 		const create = vi.spyOn(ModelRuntime, "create").mockResolvedValue({ refresh } as unknown as ModelRuntime);
 		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});

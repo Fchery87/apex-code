@@ -234,12 +234,13 @@ export class ModelRuntime implements Models {
 				? new FileModelsStore(options.modelsStorePath ?? join(dirname(modelsPath), "models-store.json"))
 				: new InMemoryCodingAgentModelsStore());
 		const builtinModelDataGeneratedAt = builtinProviderCatalog.getBuiltinModelDataGeneratedAt();
+		const catalogBaseUrl = (options.catalogBaseUrl ?? getApexEnvironment("APEX_CODE_MODEL_CATALOG_URL"))?.trim();
 		const providers = builtinProviderCatalog
 			.builtinProviders()
 			.map((provider) =>
-				provider.id === "radius"
+				provider.id === "radius" || !catalogBaseUrl
 					? provider
-					: withRemoteCatalog(provider, options.catalogBaseUrl, builtinModelDataGeneratedAt),
+					: withRemoteCatalog(provider, catalogBaseUrl, builtinModelDataGeneratedAt),
 			);
 		const runtime = new ModelRuntime(
 			credentials,

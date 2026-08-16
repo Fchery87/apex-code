@@ -46,8 +46,11 @@ gh gist create --public=false <session.html>
 Only after GitHub returns a Gist URL does Apex Code extract the Gist ID and call
 `getShareViewerUrl()`. `packages/coding-agent/src/config.ts:503-508` defaults that viewer
 to `https://pi.dev/session/#<gist-id>`, with `APEX_CODE_SHARE_VIEWER_URL` as an override.
-Thus `/share` already gives the session to GitHub at the user's explicit command; opening
-the preview additionally discloses the Gist identifier to `pi.dev`.
+Thus `/share` already gives the session to GitHub at the user's explicit command. In the
+observed fragment-based viewer, the initial request to `pi.dev` ordinarily omits the Gist
+ID; Pi serves the viewer code and receives browser/request metadata, while that code has
+the recipient browser fetch the identified Gist from GitHub. Apex cannot govern future
+viewer behavior.
 
 GitHub's official `gh gist create` manual documents `--public` as “List the gist publicly
 (disabled by default),” while GitHub's REST documentation describes the resulting API

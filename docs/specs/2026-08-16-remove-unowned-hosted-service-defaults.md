@@ -74,11 +74,10 @@ register the untouched built-in provider. Keep `APEX_CODE_OFFLINE` as the broade
 network kill switch. Keep the overlay implementation host-agnostic and update its
 comments/tests accordingly.
 
-Register `APEX_CODE_MODEL_CATALOG_URL` with temporary `PI_MODEL_CATALOG_URL` compatibility
-under Phase 10's published precedence, warning, and removal window. Bind persisted overlay
+Introduce only `APEX_CODE_MODEL_CATALOG_URL`; because it is new Apex vocabulary, do not
+invent a legacy `PI_*` alias. Bind persisted overlay
 bodies and validators to their normalized source base URL; a different configured source
-never receives another origin's ETag or cached body. Legacy entries without provenance are
-accepted only when the explicitly configured source is the former `https://pi.dev` service.
+never receives another origin's ETag or cached body. Legacy entries without provenance are ignored and refetched after explicit configuration.
 
 ### Share result
 

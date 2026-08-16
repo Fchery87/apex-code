@@ -441,7 +441,8 @@ ${chalk.bold("Environment Variables:")}
   APEX_CODE_TIMING                        - Enable timing diagnostics when set to 1
   APEX_CODE_CLEAR_ON_SHRINK               - Clear context on shrink when set to 1
   APEX_CODE_HARDWARE_CURSOR               - Show the hardware cursor when set to 1
-  APEX_CODE_SHARE_VIEWER_URL              - Base URL for /share command (default: https://pi.dev/session/)
+  APEX_CODE_MODEL_CATALOG_URL              - Optional base URL for remote model catalog refreshes
+  APEX_CODE_SHARE_VIEWER_URL              - Optional base URL for /share preview links
 
 ${chalk.bold("Built-in Tool Names:")}
   read   - Read file contents

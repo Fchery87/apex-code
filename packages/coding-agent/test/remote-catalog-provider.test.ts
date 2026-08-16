@@ -238,4 +238,30 @@ describe("remote catalog provider", () => {
 		expect(provider.getModels().map((entry) => entry.id)).toEqual(["static"]);
 		expect(await store.read(provider.id)).toMatchObject({ models: [], checkedAt: expect.any(Number) });
 	});
+	it("does not reuse cached bodies or validators from another catalog origin", async () => {
+		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(JSON.stringify({ configured: model("configured") }), {
+				headers: { "content-type": "application/json", etag: '"configured"' },
+			}),
+		);
+		const store = new InMemoryModelsStore();
+		const otherOrigin = {
+			models: [model("other-origin")],
+			checkedAt: 0,
+			lastModified: Date.now(),
+			etag: '"other"',
+			sourceBaseUrl: "https://other.example.test/",
+		};
+		await store.write("test-provider", otherOrigin);
+		const provider = testProvider();
+
+		await refreshProvider(provider, store, { force: true });
+
+		expect(fetchSpy.mock.calls[0]?.[1]?.headers).not.toHaveProperty("if-none-match");
+		expect(provider.getModels().map((entry) => entry.id)).toEqual(["static", "configured"]);
+		expect(await store.read("test-provider")).toMatchObject({
+			sourceBaseUrl: "https://pi.dev/",
+			etag: '"configured"',
+		});
+	});
 });

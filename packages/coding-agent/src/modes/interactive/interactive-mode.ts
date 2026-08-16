@@ -94,6 +94,7 @@ import { DefaultPackageManager } from "../../core/package-manager.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
 import { type SessionEntry, SessionManager, sessionEntryToContextMessages } from "../../core/session-manager.ts";
+import { publishSessionShare } from "../../core/session-share.ts";
 import type { TuiMode } from "../../core/settings-manager.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
@@ -5832,7 +5833,7 @@ export class InteractiveMode {
 	}
 
 	private async handleShareCommand(): Promise<void> {
-		// Check if gh is available and logged in
+		// Check before confirmation so a user without a working GitHub CLI gets an actionable error.
 		try {
 			const authResult = spawnSync("gh", ["auth", "status"], { encoding: "utf-8" });
 			if (authResult.status !== 0) {
@@ -5844,83 +5845,66 @@ export class InteractiveMode {
 			return;
 		}
 
-		// Export to a temp file
-		const tmpFile = path.join(os.tmpdir(), "session.html");
+		let loader: BorderedLoader | undefined;
+		let proc: ReturnType<typeof spawn> | undefined;
 		try {
-			await this.session.exportToHtml(tmpFile);
-		} catch (error: unknown) {
-			this.showError(`Failed to export session: ${error instanceof Error ? error.message : "Unknown error"}`);
-			return;
-		}
-
-		// Show cancellable loader, replacing the editor
-		const loader = new BorderedLoader(this.ui, theme, "Creating gist...");
-		this.editorContainer.clear();
-		this.editorContainer.addChild(loader);
-		this.ui.setFocus(loader);
-		this.ui.requestRender();
-
-		const restoreEditor = () => {
-			loader.dispose();
-			this.editorContainer.clear();
-			this.editorContainer.addChild(this.editor);
-			this.ui.setFocus(this.editor);
-			try {
-				fs.unlinkSync(tmpFile);
-			} catch {
-				// Ignore cleanup errors
-			}
-		};
-
-		// Create a secret gist asynchronously
-		let proc: ReturnType<typeof spawn> | null = null;
-
-		loader.onAbort = () => {
-			proc?.kill();
-			restoreEditor();
-			this.showStatus("Share cancelled");
-		};
-
-		try {
-			const result = await new Promise<{ stdout: string; stderr: string; code: number | null }>((resolve) => {
-				proc = spawn("gh", ["gist", "create", "--public=false", tmpFile]);
-				let stdout = "";
-				let stderr = "";
-				proc.stdout?.on("data", (data) => {
-					stdout += data.toString();
-				});
-				proc.stderr?.on("data", (data) => {
-					stderr += data.toString();
-				});
-				proc.on("close", (code) => resolve({ stdout, stderr, code }));
+			const result = await publishSessionShare({
+				confirm: () =>
+					this.showExtensionConfirm(
+						"Publish session to GitHub?",
+						"This uploads a complete HTML export to a secret GitHub Gist. Secret Gists are unlisted, not private or access-controlled; anyone with the URL can read the transcript, prompts, tool activity, and included file content. Review a local /export first if needed.",
+					),
+				exportToHtml: async (exportPath) => {
+					await this.session.exportToHtml(exportPath);
+				},
+				publishGist: (exportPath) =>
+					new Promise<string>((resolve, reject) => {
+						loader = new BorderedLoader(this.ui, theme, "Creating secret GitHub Gist...");
+						this.editorContainer.clear();
+						this.editorContainer.addChild(loader);
+						this.ui.setFocus(loader);
+						this.ui.requestRender();
+						loader.onAbort = () => proc?.kill();
+						proc = spawn("gh", ["gist", "create", "--public=false", exportPath]);
+						let stdout = "";
+						let stderr = "";
+						proc.stdout?.on("data", (data) => {
+							stdout += data.toString();
+						});
+						proc.stderr?.on("data", (data) => {
+							stderr += data.toString();
+						});
+						proc.on("error", reject);
+						proc.on("close", (code) => {
+							if (loader?.signal.aborted) reject(new Error("Share cancelled"));
+							else if (code !== 0) reject(new Error(stderr.trim() || "Unknown GitHub CLI error"));
+							else resolve(stdout);
+						});
+					}),
 			});
 
-			if (loader.signal.aborted) return;
-
-			restoreEditor();
-
-			if (result.code !== 0) {
-				const errorMsg = result.stderr?.trim() || "Unknown error";
-				this.showError(`Failed to create gist: ${errorMsg}`);
+			if (result.kind === "cancelled") {
+				this.showStatus("Share cancelled");
 				return;
 			}
-
-			// Extract gist ID from the URL returned by gh
-			// gh returns something like: https://gist.github.com/username/GIST_ID
-			const gistUrl = result.stdout?.trim();
-			const gistId = gistUrl?.split("/").pop();
-			if (!gistId) {
-				this.showError("Failed to parse gist ID from gh output");
-				return;
-			}
-
-			// Create the preview URL
-			const previewUrl = getShareViewerUrl(gistId);
-			this.showStatus(`Share URL: ${previewUrl}\nGist: ${gistUrl}`);
+			const previewUrl = getShareViewerUrl(result.gistId);
+			this.showStatus(
+				previewUrl
+					? `Secret GitHub Gist: ${result.gistUrl}\nConfigured preview: ${previewUrl}`
+					: `Secret GitHub Gist: ${result.gistUrl}`,
+			);
 		} catch (error: unknown) {
-			if (!loader.signal.aborted) {
-				restoreEditor();
-				this.showError(`Failed to create gist: ${error instanceof Error ? error.message : "Unknown error"}`);
+			if (error instanceof Error && error.message === "Share cancelled") this.showStatus("Share cancelled");
+			else
+				this.showError(
+					`Failed to create secret GitHub Gist: ${error instanceof Error ? error.message : "Unknown error"}`,
+				);
+		} finally {
+			if (loader) {
+				loader.dispose();
+				this.editorContainer.clear();
+				this.editorContainer.addChild(this.editor);
+				this.ui.setFocus(this.editor);
 			}
 		}
 	}

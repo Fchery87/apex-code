@@ -500,12 +500,16 @@ export function expandTildePath(path: string): string {
 	return normalizePath(path);
 }
 
-const DEFAULT_SHARE_VIEWER_URL = "https://pi.dev/session/";
-
 /** Get the share viewer URL for a gist ID */
-export function getShareViewerUrl(gistId: string): string {
-	const baseUrl = getApexEnvironment("APEX_CODE_SHARE_VIEWER_URL") || DEFAULT_SHARE_VIEWER_URL;
-	return `${baseUrl}#${gistId}`;
+export function getShareViewerUrl(gistId: string): string | undefined {
+	const configured = getApexEnvironment("APEX_CODE_SHARE_VIEWER_URL")?.trim();
+	if (!configured) return undefined;
+	const viewer = new URL(configured);
+	if (viewer.protocol !== "https:" && viewer.protocol !== "http:") {
+		throw new Error("APEX_CODE_SHARE_VIEWER_URL must use http or https");
+	}
+	viewer.hash = encodeURIComponent(gistId);
+	return viewer.href;
 }
 
 // =============================================================================

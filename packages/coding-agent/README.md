@@ -49,14 +49,16 @@ a single version request to the npm registry for `apex-code@next`; set
 network operations. Model requests go to the provider you configure. Optional OTLP
 traces are exported only when you explicitly configure your own collector.
 
-The default model catalog and `/share` viewer currently use retained upstream-hosted
-services; their defaults are intentionally outside this phase's identity cleanup.
+Bundled model catalogs work without a hosted catalog. A remote overlay is contacted only
+when `APEX_CODE_MODEL_CATALOG_URL` names one. `/share` asks before uploading the complete
+HTML session to a secret (unlisted, not private) GitHub Gist; it returns the Gist URL and
+adds a preview link only when `APEX_CODE_SHARE_VIEWER_URL` names a viewer.
 
 ## Environment compatibility
 
 Canonical runtime controls use the `APEX_CODE_*` prefix, including
 `APEX_CODE_OFFLINE`, `APEX_CODE_SKIP_VERSION_CHECK`, `APEX_CODE_PACKAGE_DIR`,
-`APEX_CODE_EXPERIMENTAL`, and `APEX_CODE_SHARE_VIEWER_URL`. Temporary `PI_*` aliases
+`APEX_CODE_EXPERIMENTAL`, `APEX_CODE_MODEL_CATALOG_URL`, and `APEX_CODE_SHARE_VIEWER_URL`. Temporary `PI_*` aliases
 remain for compatibility through the pre-1.0 line and will be removed no earlier than
 Apex Code 1.0.0 and 2027-02-16. Canonical values win when both forms are set.
 

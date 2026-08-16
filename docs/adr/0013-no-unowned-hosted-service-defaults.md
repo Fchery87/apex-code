@@ -12,9 +12,7 @@ third-party preview unless the user explicitly configures one.
 
 Two user-directed integrations remain supported:
 
-- `APEX_CODE_MODEL_CATALOG_URL` names a compatible remote catalog service. The temporary
-  `PI_MODEL_CATALOG_URL` alias follows Phase 10's compatibility window. The SDK's
-  existing `catalogBaseUrl` option is the programmatic equivalent. With neither value,
+- `APEX_CODE_MODEL_CATALOG_URL` names a compatible remote catalog service. The SDK's existing `catalogBaseUrl` option is the programmatic equivalent. With neither value,
   the remote overlay is absent rather than pointed at a project-selected host.
 - `APEX_CODE_SHARE_VIEWER_URL` names a viewer that receives a secret Gist identifier in
   its URL. The bounded `PI_SHARE_VIEWER_URL` compatibility alias remains through the
@@ -35,9 +33,9 @@ platform metadata for freshness supplied by infrastructure Apex neither controls
 promises.
 
 The share viewer has a sharper confidentiality consequence. GitHub calls an unlisted
-Gist “secret,” not private. Its ID is sufficient to retrieve it. Opening the current
-preview discloses that identifier to `pi.dev`, whose behavior, retention, and
-availability Apex cannot govern. The GitHub URL is already a complete, honest result
+Gist “secret,” not private. Its ID is sufficient to retrieve it. The current fragment URL ordinarily keeps the Gist ID out of the initial HTTP request,
+but `pi.dev` still serves executable viewer code and receives browser/request metadata;
+Apex cannot govern its future behavior, retention, or availability. The GitHub URL is already a complete, honest result
 from the explicit upload and requires no second service.
 
 This is not a telemetry decision. ADR 0009 governs project-directed usage collection;

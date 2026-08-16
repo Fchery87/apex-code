@@ -18,7 +18,8 @@ subprocess metadata. Provider API-key variables remain documented in
 | `APEX_CODE_TIMING` | Enable timing diagnostics when set to `1` |
 | `APEX_CODE_CLEAR_ON_SHRINK` | Clear context on shrink when set to `1` |
 | `APEX_CODE_HARDWARE_CURSOR` | Show the hardware cursor when set to `1` |
-| `APEX_CODE_SHARE_VIEWER_URL` | Override the `/share` viewer base URL |
+| `APEX_CODE_MODEL_CATALOG_URL` | Optional base URL for remote model catalog overlays; unset uses bundled catalogs only |
+| `APEX_CODE_SHARE_VIEWER_URL` | Optional base URL for preview links after `/share`; unset returns the GitHub Gist URL only |
 | `VISUAL`, `EDITOR` | External editor fallback |
 | `HTTP_PROXY`, `HTTPS_PROXY` | Proxy outbound HTTP requests |
 
