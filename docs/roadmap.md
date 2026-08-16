@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0 through 9 landed · **Created:** 2026-08-08 · **Last updated:** 2026-08-16
+**Status:** Active — Phases 0 through 9 landed · Phase 10 active · **Created:** 2026-08-08 · **Last updated:** 2026-08-16
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -92,6 +92,7 @@ capable and measurably worse.
 | 7 | Evidence & verification | **landed** — 7 of 7 tasks · `c82584312` (clean Node 22 verification) | [spec](specs/2026-08-16-evidence-and-verification.md) | — |
 | 8 | Observability & cost | **landed** — 7 of 7 tasks, exit criterion amended before implementation · `9c7c9e9aa` | [spec](specs/2026-08-15-observability-and-cost.md) | — |
 | 9 | Release hardening | **landed** — 6 of 6 tasks · `a0be145d7` | [spec](specs/2026-08-16-release-hardening.md) | — |
+| 10 | Complete the Apex Code product surface | **active** — 0 of 7 tasks | [spec](specs/2026-08-16-complete-apex-product-surface.md) | [plan](plans/2026-08-16-complete-apex-product-surface.md) |
 
 ---
 
@@ -755,6 +756,37 @@ operational commitment — someone watching the GitHub private-vulnerability-rep
 inbox — not something a test can prove. The disclosure *path* is published and
 verified accurate against current code; whether it is staffed is outside what this
 phase's verification can close.
+
+
+---
+
+## Phase 10 — Complete the Apex Code product surface
+
+**Objective.** An installed `apex-code` artifact identifies, documents, launches, and
+updates one product — Apex Code — while preserving explicitly classified upstream and
+ecosystem compatibility.
+
+**Scope.** Repair external-editor argv handling; make `APEX_CODE_*` canonical behind a
+bounded compatibility layer; correct live help, diagnostics, system prompt, npm README,
+and shipped docs; make npm install/update and publishing coherent; repair documentation
+lifecycle drift; and require the portable build/test surface on Ubuntu, macOS, and
+Windows from a checkout path containing a space. Windows sandbox enforcement remains
+unsupported under ADR 0005.
+
+The phase does not change the two remaining `pi.dev` defaults. It renames the share
+viewer variable interface only; Phase 11 decides hosted-service defaults after this
+phase exits.
+
+**Exit criterion.** Required Ubuntu, macOS, and Windows CI passes install, build, check,
+and the full root test suite from an asserted checkout path containing a space. The
+packed npm artifact launches and updates as `apex-code`, documents real network/privacy
+and `.apex-code` behavior, and contains no current Pi product/executable instruction
+outside a reviewed upstream, compatibility, attribution, or historical classification.
+Every retained Apex-owned `PI_*` alias has tested Apex-first precedence, one diagnostic
+per process, subprocess compatibility where owed, and a published removal rule.
+
+**Current state.** Active. See the [spec](specs/2026-08-16-complete-apex-product-surface.md)
+and [plan](plans/2026-08-16-complete-apex-product-surface.md).
 
 ---
 
