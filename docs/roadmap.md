@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0 through 7 landed · **Created:** 2026-08-08 · **Last updated:** 2026-08-15
+**Status:** Active — Phases 0 through 8 landed · **Created:** 2026-08-08 · **Last updated:** 2026-08-16
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -90,7 +90,7 @@ capable and measurably worse.
 | 5 | Delegation & multi-agent | **landed** — 7 of 7 tasks · `edb760ff4` | [spec](specs/2026-08-14-delegation-and-multi-agent.md) | — |
 | 6 | Durable state & daemon | **landed** — 6 of 6 tasks · `baf5e5302` (full-suite audit recorded) | [spec](specs/2026-08-15-durable-state-and-daemon.md) | — |
 | 7 | Evidence & verification | **landed** — 7 of 7 tasks · `c82584312` (clean Node 22 verification) | [spec](specs/2026-08-16-evidence-and-verification.md) | — |
-| 8 | Observability & cost | spec + plan written — exit criterion amended, 0 of 7 tasks | [spec](specs/2026-08-15-observability-and-cost.md) | [plan](plans/2026-08-15-observability-and-cost.md) |
+| 8 | Observability & cost | **landed** — 7 of 7 tasks, exit criterion amended before implementation · pending SHA | [spec](specs/2026-08-15-observability-and-cost.md) | — |
 | 9 | Release hardening | not started | — | — |
 
 ---
@@ -630,6 +630,50 @@ is a post-landing obligation recorded as a further amendment when performed — 
 same posture Phase 0 used for its amended criteria and Phase 7 used for its declined
 calibration claim. Phase 8 may be marked landed on the gates above; the obligation is
 never quietly ticked.
+
+**Closure (2026-08-16) — all five amended exit-criterion gates met, verified test-first
+across 7 tasks (8.1–8.7).** `SqliteUsagePerformanceStore` is now constructed at
+`agent-session-services.ts` on every real session — the first production caller of
+`openDurableStateStore` this repository has ever had, since `DurableStateDaemon`
+(Phase 6) has no caller of its own outside its own test. One durable, session-attributed
+row is recorded per model request attempt (2 under forced credential rotation),
+verified through the actual production path, not a test-constructed store. The
+durable-state schema moved 3 → 4: `model_performance` gained ten columns and
+`usage_totals` — never written by any production code — was dropped. The
+reconciliation gate holds exactly: a session mixing assistant messages, a tool-result
+usage entry, and a compaction entry sums to the identical total via the ledger's new
+`aggregateUsagePerformance()` and via the pre-existing `getUsageCostBreakdown()`,
+resting on a real, source-verified fact rather than an assumption — compaction and
+ordinary turns share the same `modelRuntime.streamSimple`-backed `streamFn`
+(`sdk.ts` wires it directly; `context/pipeline.ts`'s wrapper always delegates to the
+previous function). `apex-code cost [--by model|session|role] [--since <duration|
+date>]` reads that same aggregation, wired at the real CLI dispatch. `/session` adds
+Latency and Roles sections, additive and omitted (not shown empty) when the ledger
+has no rows for that session. OTLP export is a documented, on-the-record scope
+narrowing to span-per-request-attempt rather than a full turn/tool-call tree — the
+same unit the ledger already records, reusing `instrumentAttempt` rather than opening
+a new integration into `agent-session.ts`'s tool-call lifecycle; off unless
+`observability.otlpEndpoint` is set (zero `fetch` calls verified unconfigured),
+attributes an explicit ADR 0012 allowlist, egress via global `fetch` so a configured
+proxy is honoured. The footer's WCAG 1.4.1 color-only failure is fixed by default (a
+`!`/`!!` text marker at the 70%/90% thresholds, unconditional); `symbolPreset: ascii`
+was verified by checking every codepoint in a full render, not spot-checking known
+glyphs; `colorBlindMode` was first built as `chalk.bold`, and the test itself caught
+that chalk's style methods silently no-op outside a real TTY — corrected to a real
+palette swap (`error` → `accent`) using the same raw-ANSI path already proven to
+survive stripping.
+
+Full verification: `npx tsgo --noEmit` and `npm run build` clean. `npx biome check`
+(repo-wide) shows 39 pre-existing errors with zero overlap against this phase's
+changed files, cross-referenced by diff rather than assumed. Full `npm test` from
+`packages/coding-agent`: 2356 passed / 53 skipped of 2414 tests; the 5 failures are
+`external-editor`'s already-characterized pre-existing 3 (Phase 2b), plus two that
+looked new but reproduced as CPU-contention timeouts under full-suite parallel load —
+both passed clean in isolation and neither references any file this phase touched.
+Per `AGENTS.md`'s plan lifecycle convention, `docs/plans/2026-08-15-observability-
+and-cost.md` is deleted now that Phase 8 is landed (recoverable via `git show
+<commit>:docs/plans/2026-08-15-observability-and-cost.md`); its durable content
+lives in this section, the spec, and ADR 0012.
 
 ---
 
