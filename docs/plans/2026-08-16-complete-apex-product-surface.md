@@ -1,6 +1,6 @@
 # Phase 10 complete Apex Code product surface
 
-**Status:** Active — 5 done, 1 implemented awaiting CI, 1 pending closure
+**Status:** Active — 5 verified, 1 implemented awaiting CI, 1 pending closure
 
 This plan implements `docs/specs/2026-08-16-complete-apex-product-surface.md`. Task 10.1
 establishes the known failing baseline. Task 10.2 centralizes environment identity
