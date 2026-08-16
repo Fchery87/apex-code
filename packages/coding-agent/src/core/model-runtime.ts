@@ -53,6 +53,7 @@ import type { CredentialFailureKind, CredentialIdentity, CredentialPool } from "
 import { ModelConfig } from "./model-config.ts";
 import { type RoleResolutionResult, resolveModelRoles } from "./model-resolver.ts";
 import { FileModelsStore, InMemoryCodingAgentModelsStore } from "./models-store.ts";
+import { exportUsageSampleSpan, type OtlpExportConfig } from "./observability/otlp.ts";
 import {
 	type AuthStatus,
 	type CompatibilityRequestConfig,
@@ -110,6 +111,8 @@ export interface CreateModelRuntimeOptions {
 	usagePerformanceStore?: UsagePerformanceStore;
 	/** Monotonic clock for usage/latency timing. Defaults to performance.now(); inject a fake in tests. */
 	performanceClock?: () => number;
+	/** User-directed OTLP export target (roadmap Phase 8, ADR 0012). Unset: no export, no egress. */
+	otlpExportConfig?: OtlpExportConfig;
 }
 
 export interface ModelRuntimeAuthOverrides extends AuthOperationOptions {
@@ -187,6 +190,7 @@ export class ModelRuntime implements Models {
 		| undefined;
 	private readonly usagePerformanceStore: UsagePerformanceStore | undefined;
 	private readonly performanceClock: () => number;
+	private readonly otlpExportConfig: OtlpExportConfig | undefined;
 
 	private constructor(
 		credentials: RuntimeCredentials,
@@ -201,6 +205,7 @@ export class ModelRuntime implements Models {
 		) => { apiKey?: string; env?: Record<string, string> } | undefined,
 		usagePerformanceStore?: UsagePerformanceStore,
 		performanceClock?: () => number,
+		otlpExportConfig?: OtlpExportConfig,
 	) {
 		this.credentials = credentials;
 		this.config = config;
@@ -210,6 +215,7 @@ export class ModelRuntime implements Models {
 		this.resolveCredentialPoolAuth = resolveCredentialPoolAuth;
 		this.usagePerformanceStore = usagePerformanceStore;
 		this.performanceClock = performanceClock ?? (() => performance.now());
+		this.otlpExportConfig = otlpExportConfig;
 		this.defaultBuiltins = new Map(providers.map((provider) => [provider.id, provider]));
 		for (const [providerId, provider] of this.defaultBuiltins) this.builtins.set(providerId, provider);
 		this.models = createModels({ credentials, modelsStore });
@@ -245,6 +251,7 @@ export class ModelRuntime implements Models {
 			options.resolveCredentialPoolAuth,
 			options.usagePerformanceStore,
 			options.performanceClock,
+			options.otlpExportConfig,
 		);
 		runtime.configureRadiusProviders();
 		runtime.rebuildProviders();
@@ -746,7 +753,8 @@ export class ModelRuntime implements Models {
 		credentialIdentity: CredentialIdentity | undefined,
 	): ResultStream {
 		const store = this.usagePerformanceStore;
-		if (!store) return stream;
+		const otlpConfig = this.otlpExportConfig;
+		if (!store && !otlpConfig) return stream;
 		const now = this.performanceClock;
 		const startedAt = now();
 		const self = this;
@@ -758,15 +766,13 @@ export class ModelRuntime implements Models {
 					if (event.type === "done" || event.type === "error") {
 						const completedAt = now();
 						const message = event.type === "done" ? event.message : event.error;
-						void store
-							.record(
-								self.buildUsageSample(model, role, credentialIdentity, message, {
-									startedAt,
-									firstEventAt: firstEventAt ?? completedAt,
-									completedAt,
-								}),
-							)
-							.catch(() => {});
+						const sample = self.buildUsageSample(model, role, credentialIdentity, message, {
+							startedAt,
+							firstEventAt: firstEventAt ?? completedAt,
+							completedAt,
+						});
+						if (store) void store.record(sample).catch(() => {});
+						if (otlpConfig) void exportUsageSampleSpan(sample, otlpConfig);
 					}
 					yield event;
 				}

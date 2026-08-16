@@ -140,6 +140,18 @@ export interface Settings {
 	fullscreenScrollbar?: ScrollViewScrollbar; // default: "auto"; no effect in regular TUI mode
 	network?: NetworkSettings;
 	delegationMaxDepth?: number; // Max delegation recursion depth (roadmap Phase 5, task 5.3). default: 2, hard-capped at DELEGATION_MAX_DEPTH_HARD_CAP
+	observability?: ObservabilitySettings;
+}
+
+/**
+ * User-directed OTLP trace export (roadmap Phase 8, ADR 0012) -- data goes to the
+ * user's own collector, never to this project. Unset `otlpEndpoint` means export
+ * never activates; there is no separate on/off switch to forget to flip.
+ */
+export interface ObservabilitySettings {
+	otlpEndpoint?: string; // e.g. "http://localhost:4318"; POSTed to as "<endpoint>/v1/traces"
+	otlpHeaders?: Record<string, string>; // extra headers for the OTLP export request, e.g. collector auth
+	retentionDays?: number; // default: 90; usage-performance ledger rows older than this are pruned on store open
 }
 
 /**
@@ -841,6 +853,10 @@ export class SettingsManager {
 			maxRetries: this.settings.retry?.maxRetries ?? 3,
 			baseDelayMs: this.settings.retry?.baseDelayMs ?? 2000,
 		};
+	}
+
+	getObservabilitySettings(): ObservabilitySettings {
+		return this.settings.observability ?? {};
 	}
 
 	getHttpIdleTimeoutMs(): number {

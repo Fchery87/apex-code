@@ -166,6 +166,12 @@ export async function createAgentSessionServices(
 		}
 	}
 
+	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
+	const otlpEndpoint = settingsManager.getObservabilitySettings().otlpEndpoint;
+	const otlpExportConfig = otlpEndpoint
+		? { endpoint: otlpEndpoint, headers: settingsManager.getObservabilitySettings().otlpHeaders }
+		: undefined;
+
 	const modelRuntime =
 		options.modelRuntime ??
 		(await ModelRuntime.create({
@@ -173,8 +179,8 @@ export async function createAgentSessionServices(
 			modelsPath: join(agentDir, "models.json"),
 			signal: options.modelRuntimeSignal,
 			usagePerformanceStore,
+			otlpExportConfig,
 		}));
-	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
 	const resourceLoader = new DefaultResourceLoader({
 		...(options.resourceLoaderOptions ?? {}),
 		cwd,
