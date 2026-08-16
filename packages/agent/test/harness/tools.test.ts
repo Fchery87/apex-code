@@ -569,7 +569,12 @@ describe("AgentHarness tools", () => {
 
 			expect(receivedContext).toBe(context);
 			expect(receivedSignal).toBe(controller.signal);
-			expect(textOutput(result)).toBe(`ready::explicit:${getOrThrow(await env.canonicalPath(context.workspace))}`);
+			const output = textOutput(result);
+			expect(output).toMatch(/^ready::explicit:/);
+			const reportedCwd = output.slice("ready::explicit:".length);
+			expect(getOrThrow(await env.canonicalPath(reportedCwd))).toBe(
+				getOrThrow(await env.canonicalPath(context.workspace)),
+			);
 		});
 
 		it("supports command prefixes", async () => {

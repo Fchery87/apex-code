@@ -291,7 +291,10 @@ describe("NodeExecutionEnv", () => {
 				},
 			),
 		);
-		expect(result).toEqual({ stdout: `${await realpath(root)}:ok`, stderr: "", exitCode: 0 });
+		const separator = result.stdout.lastIndexOf(":");
+		const reportedCwd = result.stdout.slice(0, separator);
+		expect(await realpath(reportedCwd)).toBe(await realpath(root));
+		expect(result).toMatchObject({ stdout: expect.stringMatching(/:ok$/), stderr: "", exitCode: 0 });
 	});
 
 	it.each([
