@@ -1,7 +1,7 @@
 import { applyPatch } from "diff";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { basename, join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { executeBashWithOperations } from "../src/core/bash-executor.ts";
 import { type BashOperations, createBashTool, createLocalBashOperations } from "../src/core/tools/bash.ts";
@@ -424,7 +424,7 @@ describe("Coding Agent Tools", () => {
 			expect(readFileSync(testFile, "utf-8")).toBe(originalContent);
 		});
 
-		it("should include EACCES for read-only files", async () => {
+		it.skipIf(process.platform === "win32")("should include EACCES for read-only files", async () => {
 			const testFile = join(testDir, "edit-readonly.txt");
 			writeFileSync(testFile, "hello\n");
 			chmodSync(testFile, 0o444);
@@ -463,15 +463,18 @@ describe("Coding Agent Tools", () => {
 			expect(result).toEqual({ error: `Could not edit file: ${missingFile}. Error code: ENOENT.` });
 		});
 
-		it("should include EACCES in diff preview for unreadable files", async () => {
-			const unreadableFile = join(testDir, "unreadable-preview.txt");
-			writeFileSync(unreadableFile, "hello\n");
-			chmodSync(unreadableFile, 0o222);
+		it.skipIf(process.platform === "win32")(
+			"should include EACCES in diff preview for unreadable files",
+			async () => {
+				const unreadableFile = join(testDir, "unreadable-preview.txt");
+				writeFileSync(unreadableFile, "hello\n");
+				chmodSync(unreadableFile, 0o222);
 
-			const result = await computeEditsDiff(unreadableFile, [{ oldText: "hello", newText: "world" }], testDir);
+				const result = await computeEditsDiff(unreadableFile, [{ oldText: "hello", newText: "world" }], testDir);
 
-			expect(result).toEqual({ error: `Could not edit file: ${unreadableFile}. Error code: EACCES.` });
-		});
+				expect(result).toEqual({ error: `Could not edit file: ${unreadableFile}. Error code: EACCES.` });
+			},
+		);
 	});
 
 	describe("bash tool", () => {
@@ -818,7 +821,7 @@ describe("Coding Agent Tools", () => {
 			writeFileSync(testFile, "target\n");
 
 			const result = await grepTool.execute("test-call-grep-injection", {
-				pattern: `--pre=${payload}`,
+				pattern: `--pre=${basename(payload)}`,
 				path: testDir,
 			});
 

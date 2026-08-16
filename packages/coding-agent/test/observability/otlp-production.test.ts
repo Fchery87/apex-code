@@ -36,6 +36,7 @@ describe("OTLP export through production wiring (task 8.5)", () => {
 			sessionId: "session-otlp-unconfigured",
 			resourceLoaderOptions: { noSkills: true, noPromptTemplates: true, noThemes: true },
 		});
+		cleanups.push(() => services.close());
 		services.modelRuntime.registerNativeProvider(faux.provider);
 		await services.modelRuntime.refresh({ allowNetwork: false, providers: [providerId] });
 		await services.modelRuntime.streamSimple(faux.getModel(), { messages: [] }).result();
@@ -63,6 +64,7 @@ describe("OTLP export through production wiring (task 8.5)", () => {
 			settingsManager,
 			resourceLoaderOptions: { noSkills: true, noPromptTemplates: true, noThemes: true },
 		});
+		cleanups.push(() => services.close());
 		services.modelRuntime.registerNativeProvider(faux.provider);
 		await services.modelRuntime.refresh({ allowNetwork: false, providers: [providerId] });
 		await services.modelRuntime.streamSimple(faux.getModel(), { messages: [] }).result();

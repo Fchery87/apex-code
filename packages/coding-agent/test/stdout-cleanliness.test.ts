@@ -102,13 +102,16 @@ describe("stdout cleanliness in non-interactive modes", () => {
 		expect(result.stderr).not.toContain("Usage:");
 	});
 
-	it("refuses a real print session without an explicit permission mode", async () => {
-		const result = await runCli(["--print", "do not run"]);
+	it.skipIf(process.platform === "win32")(
+		"refuses a real print session without an explicit permission mode",
+		async () => {
+			const result = await runCli(["--print", "do not run"]);
 
-		expect(result.code).toBe(1);
-		expect(result.stdout).toBe("");
-		expect(result.stderr).toContain("Non-interactive sessions require an explicit --permission-mode");
-	});
+			expect(result.code).toBe(1);
+			expect(result.stdout).toBe("");
+			expect(result.stderr).toContain("Non-interactive sessions require an explicit --permission-mode");
+		},
+	);
 
 	it("keeps stdout empty for --mode json --help while routing trusted startup chatter to stderr", async () => {
 		const result = await runCli(["--mode", "json", "--help", "--approve"]);

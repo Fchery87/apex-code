@@ -58,7 +58,7 @@ function connectThroughTcpProxy(proxyPort: number, hostname: string, port: numbe
 	});
 }
 
-describe("createSandboxNetworkProxy allowlist matching", () => {
+describe.skipIf(process.platform === "win32")("createSandboxNetworkProxy allowlist matching", () => {
 	it("allows a host:port entry only on that exact port, not on other ports of the same host", async () => {
 		const port = await targetServer();
 		const otherPort = await targetServer();

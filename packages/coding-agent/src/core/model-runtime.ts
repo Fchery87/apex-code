@@ -747,6 +747,10 @@ export class ModelRuntime implements Models {
 		return this.usagePerformanceStore ? await this.usagePerformanceStore.list() : [];
 	}
 
+	close(): void {
+		this.usagePerformanceStore?.close?.();
+	}
+
 	private instrumentAttempt(
 		stream: ResultStream,
 		model: Model<Api>,

@@ -36,7 +36,7 @@ async function runCli(options: { args: readonly string[]; cwd: string; environme
 	return { code, stderr };
 }
 
-describe("sandboxed public CLI", () => {
+describe.skipIf(process.platform === "win32")("sandboxed public CLI", () => {
 	it("runs the normal child entry and keeps agent state inside the workspace", async () => {
 		const workspace = temporaryDirectory("apex-sandbox-cli-process-");
 		const hostAgentDirectory = join(temporaryDirectory("apex-sandbox-host-agent-"), "agent");

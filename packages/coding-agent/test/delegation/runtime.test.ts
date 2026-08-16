@@ -195,7 +195,11 @@ describe("runDelegation", () => {
 			const buildChildSession = vi.fn<DelegationRuntimeOptions["buildChildSession"]>(async () => handle);
 			await runDelegation(baseOptions({ getParentSessionDir: () => parentDir, buildChildSession }), "scout", "task");
 			const request = buildChildSession.mock.calls[0]?.[0];
-			expect(request?.artifactDir).toMatch(new RegExp(`^${parentDir}/delegations/`));
+			expect(
+				request?.artifactDir?.startsWith(
+					`${join(parentDir, "delegations")}${process.platform === "win32" ? "\\" : "/"}`,
+				),
+			).toBe(true);
 			expect(request?.sessionId).toBeTruthy();
 			expect((await stat(request?.artifactDir ?? "")).isDirectory()).toBe(true);
 		} finally {

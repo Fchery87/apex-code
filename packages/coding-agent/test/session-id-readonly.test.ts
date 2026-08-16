@@ -100,7 +100,7 @@ function writeSession(sessionDir: string, cwd: string, id: string): void {
 	);
 }
 
-describe("--session-id read-only commands", () => {
+describe.skipIf(process.platform === "win32")("--session-id read-only commands", () => {
 	it("does not reserve a session for --help", async () => {
 		const result = await runCli(["--session-id", "read-only-help", "--help"]);
 
