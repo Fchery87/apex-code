@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0 through 11 landed · **Created:** 2026-08-08 · **Last updated:** 2026-08-16
+**Status:** Active — Phases 0 through 11 landed · Phase 12 active · **Created:** 2026-08-08 · **Last updated:** 2026-08-16
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -94,6 +94,7 @@ capable and measurably worse.
 | 9 | Release hardening | **landed** — 6 of 6 tasks · `a0be145d7` | [spec](specs/2026-08-16-release-hardening.md) | — |
 | 10 | Complete the Apex Code product surface | **landed** — 7 of 7 tasks · `6b602044d` (required three-OS CI run 31940072123) | [spec](specs/2026-08-16-complete-apex-product-surface.md) | — |
 | 11 | Remove unowned hosted-service defaults | **landed** — 5 of 5 tasks · `bfa746d0c` (required three-OS CI run 31945192886) | [spec](specs/2026-08-16-remove-unowned-hosted-service-defaults.md) | — |
+| 12 | Production graduation and release integrity | **active** — specification accepted; implementation not started | [spec](specs/2026-08-16-production-graduation-and-release-integrity.md) | [plan](plans/2026-08-16-production-graduation-and-release-integrity.md) |
 
 ---
 
@@ -817,6 +818,35 @@ outcome; ADR 0013 settles the hosted-service policy.
 
 ---
 
+
+## Phase 12 — Production graduation and release integrity
+
+**Objective.** Make a release byte-identifiable, safely installable, honestly branded, and
+supportable by the current sole maintainer before Apex Code claims beta or stable support.
+
+**Scope.** Close the published-artifact drift that served Pi-branded `apex-code@next`; add
+packed-artifact and rendered-startup identity gates; repair sandbox credential/state handoff
+and trust-first security policy resolution; verify downloaded executable tools; replace the
+inherited all-workspace release assumptions with an Apex-only path; add supply-chain evidence;
+and publish the sole-maintainer support and security operating policy.
+
+**Exit criterion.** A release commit produces byte-identified Apex-owned tarballs whose packed
+README, compiled runtime, startup surfaces, system prompt, metadata, exact dependency, tag, and
+registry `gitHead` agree. Pre-publication Linux/macOS artifact installs complete a provider-
+independent sandbox/session smoke; required Ubuntu/macOS/Windows CI passes; credentials and
+trusted policy cross the sandbox boundary only through tested least-privilege paths; downloaded
+executables reject unverified artifacts; Apex-only release tooling leaves frozen packages
+untouched; security/support ownership and the latest-supported-release policy are published.
+This phase does not claim Windows sandbox enforcement or 24/7 support.
+
+**Current state.** Active. The specification and ADR 0014 are written; implementation has not
+started. The published `apex-code@next` artifact remains stale relative to current `main` until
+a new verified prerelease is cut.
+
+See the [spec](specs/2026-08-16-production-graduation-and-release-integrity.md) and the
+[research](research/2026-08-16-production-operations-and-release-integrity.md). A plan will be
+created only after the security-boundary design decisions are settled.
+
 ## ADRs to write
 
 These are the irreversible or contested calls. Each gets settled once, in
@@ -841,6 +871,7 @@ takes the next free number instead of a reserved one.
 | 0011 | Deferred schemas resolve through an explicit model-callable tool, not harness-side injection | 4 | ✅ |
 | 0012 | User-directed OTLP export is not project telemetry; the two never share a switch | 8 | ✅ |
 | 0013 | Hosted functional-service defaults require project ownership or explicit user choice | 11 | ✅ |
+| 0014 | Sole-maintainer production operations, support targets, and succession | 12 | ✅ |
 
 ## Cross-phase contracts
 
