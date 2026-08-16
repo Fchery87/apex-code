@@ -183,7 +183,7 @@ describe("AgentSession evidence wiring", () => {
 						command: "exit 9",
 						cwd,
 						exitCode: 9,
-						executable: "/bin/bash",
+						executable: process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "/bin/bash",
 						argv: ["-c", "exit 9"],
 					},
 				],

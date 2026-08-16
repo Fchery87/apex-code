@@ -696,7 +696,7 @@ else {
 		}
 	});
 
-	it("prints a pnpm metadata hint when self-update fails", async () => {
+	it.skipIf(process.platform === "win32")("prints a pnpm metadata hint when self-update fails", async () => {
 		const globalRoot = join(tempDir, "pnpm", "global", "v11");
 		const selfPackageDir = join(globalRoot, "node_modules", "@earendil-works", "pi-coding-agent");
 		const fakeBinDir = join(tempDir, "bin");

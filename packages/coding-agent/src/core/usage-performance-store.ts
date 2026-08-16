@@ -29,6 +29,7 @@ export interface UsagePerformanceSample {
 export interface UsagePerformanceStore {
 	record(sample: UsagePerformanceSample): Promise<void>;
 	list(): Promise<readonly UsagePerformanceSample[]>;
+	close?(): void;
 }
 
 export class InMemoryUsagePerformanceStore implements UsagePerformanceStore {
@@ -55,6 +56,7 @@ const DEFAULT_RETENTION_DAYS = 90;
 export class SqliteUsagePerformanceStore implements UsagePerformanceStore {
 	private readonly store: DurableStateStore;
 	private readonly sessionId: string | undefined;
+	private closed = false;
 
 	constructor(databasePath: string, sessionId?: string, retentionDays: number = DEFAULT_RETENTION_DAYS) {
 		this.store = openDurableStateStore(databasePath);
@@ -109,6 +111,8 @@ export class SqliteUsagePerformanceStore implements UsagePerformanceStore {
 	}
 
 	close(): void {
+		if (this.closed) return;
+		this.closed = true;
 		this.store.close();
 	}
 }

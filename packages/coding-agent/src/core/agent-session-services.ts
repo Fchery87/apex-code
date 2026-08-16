@@ -89,6 +89,7 @@ export interface AgentSessionServices {
 	settingsManager: SettingsManager;
 	resourceLoader: ResourceLoader;
 	diagnostics: AgentSessionRuntimeDiagnostic[];
+	close(): void;
 }
 
 function applyExtensionFlagValues(
@@ -224,6 +225,9 @@ export async function createAgentSessionServices(
 		settingsManager,
 		resourceLoader,
 		diagnostics,
+		close: () => {
+			if (!options.modelRuntime) modelRuntime.close();
+		},
 	};
 }
 

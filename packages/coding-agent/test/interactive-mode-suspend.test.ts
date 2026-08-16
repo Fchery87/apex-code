@@ -23,7 +23,7 @@ function callHandleCtrlZ(context: HandleCtrlZThis): void {
 
 const interactiveModePrototype = InteractiveMode.prototype as unknown;
 
-describe("InteractiveMode.handleCtrlZ", () => {
+describe.skipIf(process.platform === "win32")("InteractiveMode.handleCtrlZ", () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
 	});

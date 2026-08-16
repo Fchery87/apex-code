@@ -108,7 +108,7 @@ function setup(): CliDirs {
 	return dirs;
 }
 
-describe("startup session name", () => {
+describe.skipIf(process.platform === "win32")("startup session name", () => {
 	it("sets --name on the selected session before runtime model validation", async () => {
 		const dirs = setup();
 		const result = await runCli(

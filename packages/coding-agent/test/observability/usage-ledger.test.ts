@@ -44,6 +44,7 @@ describe("production usage-performance wiring (task 8.1)", () => {
 			sessionId: "session-wiring-1",
 			resourceLoaderOptions: { noSkills: true, noPromptTemplates: true, noThemes: true },
 		});
+		cleanups.push(() => services.close());
 		services.modelRuntime.registerNativeProvider(faux.provider);
 		await services.modelRuntime.refresh({ allowNetwork: false, providers: [providerId] });
 
@@ -248,6 +249,7 @@ describe("production usage-performance wiring (task 8.1)", () => {
 		);
 
 		// The turn itself is unaffected by the ledger being unavailable.
+		cleanups.push(() => services.close());
 		services.modelRuntime.registerNativeProvider(faux.provider);
 		await services.modelRuntime.refresh({ allowNetwork: false, providers: [providerId] });
 		const message = await services.modelRuntime.streamSimple(faux.getModel(), { messages: [] }).result();

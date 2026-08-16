@@ -19,7 +19,7 @@ describe("Apex environment compatibility", () => {
 		const allowed = new Set(APEX_ENVIRONMENT_VARIABLES.map(([, legacy]) => legacy));
 		const findings: string[] = [];
 		for (const path of globSync("src/**/*.ts", { cwd: packageRoot, absolute: true })) {
-			if (path.endsWith("core/environment.ts")) continue;
+			if (path.replaceAll("\\", "/").endsWith("core/environment.ts")) continue;
 			const source = readFileSync(path, "utf8");
 			for (const match of source.matchAll(/\bPI_[A-Z0-9_]+\b/g)) {
 				if (allowed.has(match[0])) findings.push(`${relative(packageRoot, path)}:${match[0]}`);

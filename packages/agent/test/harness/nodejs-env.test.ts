@@ -282,9 +282,14 @@ describe("NodeExecutionEnv", () => {
 		const root = createTempDir();
 		const env = new NodeExecutionEnv({ cwd: root });
 		const result = getOrThrow(
-			await env.exec('printf \'%s:%s\' "$PWD" "$NODE_ENV_TEST"', {
-				env: { NODE_ENV_TEST: "ok" },
-			}),
+			await env.exec(
+				process.platform === "win32"
+					? 'printf \'%s:%s\' "$(pwd -W)" "$NODE_ENV_TEST"'
+					: 'printf \'%s:%s\' "$PWD" "$NODE_ENV_TEST"',
+				{
+					env: { NODE_ENV_TEST: "ok" },
+				},
+			),
 		);
 		expect(result).toEqual({ stdout: `${await realpath(root)}:ok`, stderr: "", exitCode: 0 });
 	});

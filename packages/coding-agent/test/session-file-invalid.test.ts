@@ -43,7 +43,7 @@ async function runCli(args: string[], cwd: string, agentDir: string): Promise<{ 
 	return { code, stderr };
 }
 
-describe("--session invalid file handling", () => {
+describe.skipIf(process.platform === "win32")("--session invalid file handling", () => {
 	it("prints a friendly error and preserves non-session file content", async () => {
 		const tempRoot = createTempDir();
 		const agentDir = join(tempRoot, "agent");

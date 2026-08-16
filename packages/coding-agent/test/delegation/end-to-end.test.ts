@@ -156,7 +156,7 @@ describe("delegation end-to-end through createAgentSession (task 5.2)", () => {
 			);
 		})();
 		await access(childJsonl);
-		expect(childJsonl).toContain(`${session.sessionManager.getSessionDir()}/delegations/`);
+		expect(childJsonl).toContain(join(session.sessionManager.getSessionDir(), "delegations"));
 		session.dispose();
 	});
 

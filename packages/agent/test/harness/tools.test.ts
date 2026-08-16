@@ -561,7 +561,7 @@ describe("AgentHarness tools", () => {
 					execution.cwd = turnContext.workspace;
 					execution.env = { PI_BASH_PREPARE_EXPLICIT: "explicit" };
 					execution.inheritEnv = false;
-					execution.command += `\nprintf '%s:%s:%s:%s' "$prefix" "\${PI_BASH_PREPARE_INHERITED-}" "$PI_BASH_PREPARE_EXPLICIT" "$PWD"`;
+					execution.command += `\nprintf '%s:%s:%s:%s' "$prefix" "\${PI_BASH_PREPARE_INHERITED-}" "$PI_BASH_PREPARE_EXPLICIT" "${process.platform === "win32" ? "$(pwd -W)" : "$PWD"}"`;
 				},
 			});
 

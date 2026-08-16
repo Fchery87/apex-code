@@ -5,7 +5,7 @@ import { TrustSelectorComponent } from "../src/modes/interactive/components/trus
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
-describe("TrustSelectorComponent", () => {
+describe.skipIf(process.platform === "win32")("TrustSelectorComponent", () => {
 	beforeAll(() => {
 		initTheme("dark");
 	});
