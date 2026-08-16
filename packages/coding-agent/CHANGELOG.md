@@ -1,3 +1,15 @@
+# Apex Code changelog
+
+## 0.0.1-alpha.1
+
+- Published the Apex Code CLI and agent core through npm Trusted Publishing.
+- Added provider failover, permissions and sandboxing, context engineering, expanded tools, delegation, durable state, evidence, observability, and release hardening.
+- Completed the current product identity, environment compatibility, and cross-platform portability surface.
+
+## Upstream Pi history
+
+The entries below are retained as historical attribution for the forked code.
+
 # Changelog
 
 ## [0.84.1] - 2026-08-07

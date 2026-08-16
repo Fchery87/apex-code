@@ -86,7 +86,7 @@ capable and measurably worse.
 | 2a | Permissions — rule model | **landed** — live enforcement completed · `8dff33f41` | [spec](specs/2026-08-11-permission-rule-model.md) | — |
 | 2b | Permissions — OS sandbox | **landed** — Linux + macOS backends verified in CI · `b9a7bb337` | [spec](specs/2026-08-12-os-sandbox.md) | — |
 | 3 | Context engineering | **landed** — eviction + deferred schemas verified against the replay corpus · `72a2fefe4` | [spec](specs/2026-08-13-context-engineering.md) | — |
-| 4 | Tool surface | **landed** — all 7 tasks (4.1–4.7) done, budget fixed at 2,150/2,300 tokens · `faffaa79e` | [spec](specs/2026-08-13-tool-surface.md) | [plan](plans/2026-08-13-tool-surface.md) |
+| 4 | Tool surface | **landed** — all 7 tasks (4.1–4.7) done, budget fixed at 2,150/2,300 tokens · `faffaa79e` | [spec](specs/2026-08-13-tool-surface.md) | — |
 | 5 | Delegation & multi-agent | **landed** — 7 of 7 tasks · `edb760ff4` | [spec](specs/2026-08-14-delegation-and-multi-agent.md) | — |
 | 6 | Durable state & daemon | **landed** — 6 of 6 tasks · `baf5e5302` (full-suite audit recorded) | [spec](specs/2026-08-15-durable-state-and-daemon.md) | — |
 | 7 | Evidence & verification | **landed** — 7 of 7 tasks · `c82584312` (clean Node 22 verification) | [spec](specs/2026-08-16-evidence-and-verification.md) | — |
@@ -499,7 +499,7 @@ cannot defer itself. That is a 556-token, ~21% reduction from the naive projecti
 real and measured, not the majority of total prompt growth since Phase 3 (the four
 excluded default tools are most of that growth and were never eligible to shrink).
 Enforced in `test/context/static-prefix.test.ts`; full record in
-[the Phase 4 plan](plans/2026-08-13-tool-surface.md)'s measurement table.
+[the Phase 4 spec](specs/2026-08-13-tool-surface.md)'s verified measurement record.
 
 ---
 

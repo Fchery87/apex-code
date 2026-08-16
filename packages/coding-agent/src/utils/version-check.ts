@@ -1,5 +1,6 @@
 import { compare, valid } from "semver";
 import { PACKAGE_NAME } from "../config.ts";
+import { getApexEnvironment } from "../core/environment.ts";
 import { getApexCodeUserAgent } from "./apex-code-user-agent.ts";
 import { fetchWithRetry } from "./management-http.ts";
 
@@ -59,7 +60,7 @@ export async function getLatestApexCodeRelease(
 	currentVersion: string,
 	options: { timeoutMs?: number; retry?: boolean } = {},
 ): Promise<LatestApexCodeRelease | undefined> {
-	if (process.env.PI_OFFLINE) return undefined;
+	if (getApexEnvironment("APEX_CODE_OFFLINE")) return undefined;
 
 	const response = await fetchWithRetry(
 		LATEST_VERSION_URL,
@@ -101,7 +102,7 @@ export async function getLatestApexCodeVersion(
 }
 
 export async function checkForNewApexCodeVersion(currentVersion: string): Promise<LatestApexCodeRelease | undefined> {
-	if (process.env.PI_SKIP_VERSION_CHECK) return undefined;
+	if (getApexEnvironment("APEX_CODE_SKIP_VERSION_CHECK")) return undefined;
 
 	try {
 		const latestRelease = await getLatestApexCodeRelease(currentVersion);

@@ -33,7 +33,7 @@ Run from the project you want mounted:
 
 ```bash
 cd /path/to/project
-pi -e ~/.apex-code/agent/extensions/gondolin
+apex-code -e ~/.apex-code/agent/extensions/gondolin
 ```
 
 The extension mounts the host cwd at `/workspace` in the VM and overrides `read`, `write`, `edit`, `bash`, `grep`, `find`, and `ls`.
@@ -68,13 +68,13 @@ docker build -t pi-sandbox -f Dockerfile.pi .
 docker run --rm -it \
   -e ANTHROPIC_API_KEY \
   -v "$PWD:/workspace" \
-  -v pi-agent-home:/root/.pi/agent \
+  -v pi-agent-home:/root/.apex-code/agent \
   pi-sandbox
 ```
 
 The `-v "$PWD:/workspace"` mounts your current directory into the container at /workspace such that reads and writes in `/workspace` inside Docker directly affect your host files, like in the Gondolin example.
 
-Use a named volume for `/root/.pi/agent` if you want container-local settings and sessions. Mounting your host `~/.apex-code/agent` exposes host auth and session files to the container.
+Use a named volume for `/root/.apex-code/agent` if you want container-local settings and sessions. Mounting your host `~/.apex-code/agent` exposes host auth and session files to the container.
 
 ## OpenShell
 
@@ -92,7 +92,7 @@ openshell gateway select <name>
 Launch `pi` inside an OpenShell sandbox:
 
 ```bash
-openshell sandbox create --name pi-sandbox --from pi -- pi
+openshell sandbox create --name pi-sandbox --from apex-code -- pi
 ```
 
 In this pattern, the whole `pi` process runs inside the sandbox.

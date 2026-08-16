@@ -1,3 +1,5 @@
 export function areExperimentalFeaturesEnabled(): boolean {
-	return process.env.PI_EXPERIMENTAL === "1";
+	return getApexEnvironment("APEX_CODE_EXPERIMENTAL") === "1";
 }
+
+import { getApexEnvironment } from "./environment.ts";

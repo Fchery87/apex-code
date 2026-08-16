@@ -50,6 +50,7 @@ import {
 	replayAttempt,
 } from "./credential-failover.ts";
 import type { CredentialFailureKind, CredentialIdentity, CredentialPool } from "./credential-pool.ts";
+import { getApexEnvironment } from "./environment.ts";
 import { ModelConfig } from "./model-config.ts";
 import { type RoleResolutionResult, resolveModelRoles } from "./model-resolver.ts";
 import { FileModelsStore, InMemoryCodingAgentModelsStore } from "./models-store.ts";
@@ -246,7 +247,7 @@ export class ModelRuntime implements Models {
 			modelsPath,
 			modelsStore,
 			providers,
-			process.env.PI_OFFLINE === undefined,
+			getApexEnvironment("APEX_CODE_OFFLINE") === undefined,
 			options.credentialPool,
 			options.resolveCredentialPoolAuth,
 			options.usagePerformanceStore,

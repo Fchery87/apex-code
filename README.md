@@ -2,8 +2,8 @@
 
 A provider-agnostic agentic coding harness. Forked from [Pi](https://github.com/earendil-works/pi).
 
-> **Status: pre-alpha — Phases 0 through 8 landed, Phase 9 (release hardening) in
-> progress.** All of the differentiated features below are built, not just
+> **Status: pre-alpha — Phases 0 through 9 landed, Phase 10 (product surface completion)
+> active.** All of the differentiated features below are built, not just
 > planned. See [`docs/roadmap.md`](docs/roadmap.md) for exit criteria and current
 > status, phase by phase.
 

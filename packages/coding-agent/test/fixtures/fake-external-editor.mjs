@@ -11,6 +11,7 @@ const directory = dirname(filePath);
 writeFileSync(
 	capturePath,
 	JSON.stringify({
+		argv: process.argv.slice(1),
 		filePath,
 		content: readFileSync(filePath, "utf-8"),
 		entries: readdirSync(directory),

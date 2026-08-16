@@ -7,7 +7,7 @@ RPC mode enables headless operation of the coding agent via a JSON protocol over
 ## Starting RPC Mode
 
 ```bash
-pi --mode rpc [options]
+apex-code --mode rpc [options]
 ```
 
 Common options:
@@ -786,7 +786,7 @@ Response:
 }
 ```
 
-The current session name is available via `get_state` in the `sessionName` field. To set the initial name when starting RPC mode, pass `--name <name>` or `-n <name>` to the `pi --mode rpc` process.
+The current session name is available via `get_state` in the `sessionName` field. To set the initial name when starting RPC mode, pass `--name <name>` or `-n <name>` to the `apex-code --mode rpc` process.
 
 ### Commands
 
@@ -806,9 +806,9 @@ Response:
   "success": true,
   "data": {
     "commands": [
-      {"name": "session-name", "description": "Set or clear session name", "source": "extension", "path": "/home/user/.pi/agent/extensions/session.ts"},
-      {"name": "fix-tests", "description": "Fix failing tests", "source": "prompt", "location": "project", "path": "/home/user/myproject/.pi/agent/prompts/fix-tests.md"},
-      {"name": "skill:brave-search", "description": "Web search via Brave API", "source": "skill", "location": "user", "path": "/home/user/.pi/agent/skills/brave-search/SKILL.md"}
+      {"name": "session-name", "description": "Set or clear session name", "source": "extension", "path": "/home/user/.apex-code/agent/extensions/session.ts"},
+      {"name": "fix-tests", "description": "Fix failing tests", "source": "prompt", "location": "project", "path": "/home/user/myproject/.apex-code/agent/prompts/fix-tests.md"},
+      {"name": "skill:brave-search", "description": "Web search via Brave API", "source": "skill", "location": "user", "path": "/home/user/.apex-code/agent/skills/brave-search/SKILL.md"}
     ]
   }
 }
@@ -823,7 +823,7 @@ Each command has:
   - `"skill"`: Loaded from a skill directory (name is prefixed with `skill:`)
 - `location`: Where it was loaded from (optional, not present for extensions):
   - `"user"`: User-level (`~/.apex-code/agent/`)
-  - `"project"`: Project-level (`./.pi/agent/`)
+  - `"project"`: Project-level (`./.apex-code/agent/`)
   - `"path"`: Explicit path via CLI or settings
 - `path`: Absolute file path to the command source (optional)
 

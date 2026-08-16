@@ -15,6 +15,7 @@ import {
 	trackDetachedChildPid,
 	untrackDetachedChildPid,
 } from "../../utils/shell.ts";
+import { setApexEnvironment } from "../environment.ts";
 import type { ExtensionContext, ToolRenderResultOptions } from "../extensions/types.ts";
 import { classifyBashCommand } from "./bash-command-segments.ts";
 import type { ApexToolDefinition, PermissionSpec } from "./contract.ts";
@@ -236,21 +237,21 @@ function resolveSpawnContext(
 	ctx: ExtensionContext | undefined,
 ): BashSpawnContext {
 	const env = { ...getShellEnv() };
-	delete env.PI_SESSION_ID;
-	delete env.PI_SESSION_FILE;
-	delete env.PI_PROVIDER;
-	delete env.PI_MODEL;
-	delete env.PI_REASONING_LEVEL;
+	setApexEnvironment("APEX_CODE_SESSION_ID", undefined, env);
+	setApexEnvironment("APEX_CODE_SESSION_FILE", undefined, env);
+	setApexEnvironment("APEX_CODE_PROVIDER", undefined, env);
+	setApexEnvironment("APEX_CODE_MODEL", undefined, env);
+	setApexEnvironment("APEX_CODE_REASONING_LEVEL", undefined, env);
 	if (exposeSessionEnvironment && ctx) {
 		const model = ctx.model;
-		env.PI_SESSION_ID = ctx.sessionManager.getSessionId();
+		setApexEnvironment("APEX_CODE_SESSION_ID", ctx.sessionManager.getSessionId(), env);
 		const sessionFile = ctx.sessionManager.getSessionFile();
-		if (sessionFile) env.PI_SESSION_FILE = sessionFile;
+		if (sessionFile) setApexEnvironment("APEX_CODE_SESSION_FILE", sessionFile, env);
 		if (model) {
-			env.PI_PROVIDER = model.provider;
-			env.PI_MODEL = model.id;
+			setApexEnvironment("APEX_CODE_PROVIDER", model.provider, env);
+			setApexEnvironment("APEX_CODE_MODEL", model.id, env);
 		}
-		if (ctx.thinkingLevel) env.PI_REASONING_LEVEL = ctx.thinkingLevel;
+		if (ctx.thinkingLevel) setApexEnvironment("APEX_CODE_REASONING_LEVEL", ctx.thinkingLevel, env);
 	}
 	const baseContext: BashSpawnContext = { command, cwd, env };
 	return spawnHook ? spawnHook(baseContext) : baseContext;
@@ -424,7 +425,7 @@ export function createBashToolDefinition(
 		) {
 			const resolvedCommand = commandPrefix ? `${commandPrefix}\n${command}` : command;
 			const spawnContext = resolveSpawnContext(resolvedCommand, cwd, spawnHook, exposeSessionEnvironment, ctx);
-			const output = new OutputAccumulator({ tempFilePrefix: "pi-bash" });
+			const output = new OutputAccumulator({ tempFilePrefix: "apex-code-bash" });
 			let acceptingOutput = true;
 			let updateTimer: NodeJS.Timeout | undefined;
 			let updateDirty = false;

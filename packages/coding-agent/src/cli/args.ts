@@ -274,7 +274,7 @@ ${chalk.bold("Commands:")}
   ${APP_NAME} install <source> [-l]     Install extension source and add to settings
   ${APP_NAME} remove <source> [-l]      Remove extension source from settings
   ${APP_NAME} uninstall <source> [-l]   Alias for remove
-  ${APP_NAME} update [source|self|pi]   Update pi, extensions, or model catalogs
+  ${APP_NAME} update [source|self|pi]   Update Apex Code, extensions, or model catalogs
   ${APP_NAME} list                      List installed extensions from settings
   ${APP_NAME} config [-l]               Open TUI to enable/disable package resources (Tab switches scope)
   ${APP_NAME} auth <command>            Print credentials or check provider readiness
@@ -323,7 +323,7 @@ ${chalk.bold("Options:")}
   --tui-mode <mode>              TUI mode: regular (default) or fullscreen
   --approve, -a                  Trust project-local files for this run
   --no-approve, -na              Ignore project-local files for this run
-  --offline                      Disable startup network operations (same as PI_OFFLINE=1)
+  --offline                      Disable startup network operations (same as APEX_CODE_OFFLINE=1)
   --help, -h                     Show this help
   --version, -v                  Show version number
 
@@ -433,9 +433,15 @@ ${chalk.bold("Environment Variables:")}
   AWS_REGION                       - AWS region for Amazon Bedrock (e.g., us-east-1)
   ${ENV_AGENT_DIR.padEnd(32)} - Config directory (default: ~/${CONFIG_DIR_NAME}/agent)
   ${ENV_SESSION_DIR.padEnd(32)} - Session storage directory (overridden by --session-dir)
-  PI_PACKAGE_DIR                   - Override package directory (for Nix/Guix store paths)
-  PI_OFFLINE                       - Disable startup network operations when set to 1/true/yes
-  PI_SHARE_VIEWER_URL              - Base URL for /share command (default: https://pi.dev/session/)
+  APEX_CODE_PACKAGE_DIR                   - Override package directory (for Nix/Guix store paths)
+  APEX_CODE_OFFLINE                       - Disable startup network operations when set to 1/true/yes
+  APEX_CODE_SKIP_VERSION_CHECK            - Skip the npm prerelease version check
+  APEX_CODE_EXPERIMENTAL                  - Enable experimental features when set to 1
+  APEX_CODE_STARTUP_BENCHMARK             - Enable startup benchmarking
+  APEX_CODE_TIMING                        - Enable timing diagnostics when set to 1
+  APEX_CODE_CLEAR_ON_SHRINK               - Clear context on shrink when set to 1
+  APEX_CODE_HARDWARE_CURSOR               - Show the hardware cursor when set to 1
+  APEX_CODE_SHARE_VIEWER_URL              - Base URL for /share command (default: https://pi.dev/session/)
 
 ${chalk.bold("Built-in Tool Names:")}
   read   - Read file contents

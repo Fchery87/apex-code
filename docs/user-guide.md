@@ -74,3 +74,12 @@ during a run.
 | Settled design decisions | [`docs/adr/`](adr/) |
 | Contributing | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
 | Third-party licenses | [`NOTICE`](../NOTICE) |
+
+## Environment compatibility
+
+Apex-owned runtime controls use `APEX_CODE_*` names. The main controls are
+`APEX_CODE_OFFLINE`, `APEX_CODE_SKIP_VERSION_CHECK`, `APEX_CODE_PACKAGE_DIR`,
+`APEX_CODE_EXPERIMENTAL`, and `APEX_CODE_SHARE_VIEWER_URL`. Temporary legacy `PI_*`
+aliases remain supported through the pre-1.0 line. The canonical Apex name wins when
+both are set, and legacy-only use emits a deprecation diagnostic. Removal will occur
+no earlier than Apex Code 1.0.0 and no earlier than 2027-02-16, with release notes.

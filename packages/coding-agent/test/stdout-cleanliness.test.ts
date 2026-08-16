@@ -63,6 +63,7 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 			cwd: projectDir,
 			env: {
 				...process.env,
+				FORCE_COLOR: undefined,
 				[ENV_AGENT_DIR]: agentDir,
 				TSX_TSCONFIG_PATH: resolve(__dirname, "../../../tsconfig.json"),
 			},

@@ -383,3 +383,11 @@ usability routes through it. Settled as `docs/adr/0011-deferred-schema-load-path
 Two items are carried as open questions for the plan rather than settled here, because
 both need a measurement that does not exist yet: whether `grep`/`find`/`ls` defer, and
 the enforced value of the static-prefix budget. Both are answered by task 4.1.
+
+## Verified static-prefix measurement
+
+Phase 4 completed with a 14-tool registry measuring 2,706 tokens without deferral,
+2,150 tokens with the selected first-party deferrals, and an enforced ceiling of
+2,300 tokens (`ENFORCED_PRODUCTION_PREFIX_BUDGET`). The deferred first-party set is
+`grep`, `find`, `ls`, `todo_write`, `web_search`, `web_fetch`, `ask_user`, and
+`delegate`; `tool_schema` remains always loaded.

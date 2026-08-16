@@ -21,7 +21,7 @@
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -58,7 +58,12 @@ function formatLicense(pkg) {
 function isWorkspacePackage(dir, packagesRoot) {
 	try {
 		const real = realpathSync(dir);
-		return real.startsWith(`${packagesRoot}/`) || real === packagesRoot;
+		const realPackagesRoot = realpathSync(packagesRoot);
+		const pathFromPackagesRoot = relative(realPackagesRoot, real);
+		return (
+			pathFromPackagesRoot === "" ||
+			(pathFromPackagesRoot !== ".." && !pathFromPackagesRoot.startsWith(`..${sep}`) && !isAbsolute(pathFromPackagesRoot))
+		);
 	} catch {
 		return false;
 	}

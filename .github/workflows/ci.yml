@@ -26,13 +26,13 @@ jobs:
     name: Frozen packages match upstream
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           # Full history + tags: the check diffs the working tree against the
           # pinned upstream tag, which a shallow clone cannot resolve.
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22
 
@@ -42,23 +42,30 @@ jobs:
   build-check-test:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    # macOS and Windows are advisory until Task 0.10 establishes their baseline.
-    # Upstream CIs Linux only, so their state on the other two is unknown to us;
-    # making them required today would mean our first CI run is red for reasons
-    # that predate the fork. Task 0.10 flips them to required once we know.
-    continue-on-error: ${{ matrix.os != 'ubuntu-latest' }}
+    defaults:
+      run:
+        working-directory: "apex code checkout"
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: "apex code checkout"
 
-      - uses: actions/setup-node@v4
+      - name: Assert spaced checkout
+        shell: bash
+        working-directory: "apex code checkout"
+        run: |
+          case "$PWD" in *" "*) ;; *) echo "checkout path must contain a space" >&2; exit 1;; esac
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: "apex code checkout/package-lock.json"
 
       # Upstream's native deps (canvas/image handling) plus the tools the
       # coding agent shells out to. Mirrors upstream's own CI.

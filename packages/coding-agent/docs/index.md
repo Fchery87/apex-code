@@ -1,21 +1,21 @@
-# Pi Documentation
+# Apex Code Documentation
 
 Pi is a minimal terminal coding harness. It is designed to stay small at the core while being extended through TypeScript extensions, skills, prompt templates, themes, and pi packages.
 
 ## Quick start
 
-Install Pi with npm:
+Install Apex Code with npm:
 
 ```bash
 npm install -g --ignore-scripts apex-code
 ```
 
-`--ignore-scripts` disables dependency lifecycle scripts during install. Pi does not require install scripts for normal npm installs.
+`--ignore-scripts` disables dependency lifecycle scripts during install. Apex Code does not require install scripts for normal npm installs.
 
 On Linux or macOS, you can also use the installer:
 
 ```bash
-curl -fsSL https://pi.dev/install.sh | sh
+npm install --global apex-code@next
 ```
 
 To uninstall pi itself, use npm for curl and npm installs:
@@ -68,7 +68,7 @@ For the full first-run flow, see [Quickstart](quickstart.md).
 
 ## Reference
 
-- [Environment variables](environment-variables.md) - Pi process configuration and session metadata available to bash tools.
+- [Environment variables](environment-variables.md) - Apex Code process configuration and session metadata available to bash tools.
 - [Session format](session-format.md) - JSONL session file format, entry types, and SessionManager API.
 
 ## Platform setup
