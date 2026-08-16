@@ -10,7 +10,7 @@
 | Last updated | 2026-08-16 |
 | Roadmap phase | `12 — Production graduation and release integrity` |
 | Tracking issue/PR | none |
-| Governing decisions | ADR 0005, ADR 0006, ADR 0013, ADR 0014 |
+| Governing decisions | ADR 0005, ADR 0006, ADR 0013, ADR 0014, ADR 0015, ADR 0016 |
 | Compatibility posture | **Preserves compatibility by default.** Existing session files, `.apex-code` settings, CLI compatibility aliases, extension vocabulary, and consumed Pi package identifiers remain supported unless a separately recorded migration or security decision requires a change. Release tooling and security boundaries may reject unsafe states rather than silently preserve them. |
 
 ## Executive summary

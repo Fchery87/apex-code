@@ -872,6 +872,8 @@ takes the next free number instead of a reserved one.
 | 0012 | User-directed OTLP export is not project telemetry; the two never share a switch | 8 | ✅ |
 | 0013 | Hosted functional-service defaults require project ownership or explicit user choice | 11 | ✅ |
 | 0014 | Sole-maintainer production operations, support targets, and succession | 12 | ✅ |
+| 0015 | Host-owned credentials with an explicit sandbox read-only handoff | 12 | ✅ |
+| 0016 | Trust-first supervisor policy inputs | 12 | ✅ |
 
 ## Cross-phase contracts
 

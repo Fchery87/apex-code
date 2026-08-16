@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-import { dirname } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 /** The public CLI either supervises a sandbox child or starts an ordinary runtime. */
 import { fileURLToPath } from "node:url";
-import { APP_NAME, getPackageDir } from "./config.ts";
+import { APP_NAME, getAgentDir, getPackageDir } from "./config.ts";
 import { setApexEnvironment } from "./core/environment.ts";
 import { configureHttpDispatcher } from "./core/http-dispatcher.ts";
-import { requiresSandboxedChild } from "./core/sandbox/cli-launch.ts";
+import { requiresSandboxedChild, resolveSupervisorAllowedHosts } from "./core/sandbox/cli-launch.ts";
 import { launchSandboxedCli } from "./core/sandbox/cli-supervisor.ts";
-import { SettingsManager } from "./core/settings-manager.ts";
 
 async function run(): Promise<void> {
 	const args = process.argv.slice(2);
@@ -23,8 +23,8 @@ async function run(): Promise<void> {
 		return;
 	}
 	if (requiresSandboxedChild(args)) {
-		const settingsManager = SettingsManager.create(process.cwd());
-		const allowedHosts = settingsManager.getNetworkSettings()?.allowedHosts;
+		const allowedHosts = resolveSupervisorAllowedHosts(process.cwd(), getAgentDir());
+		const authPath = join(getAgentDir(), "auth.json");
 
 		process.exitCode = await launchSandboxedCli({
 			command: process.execPath,
@@ -37,6 +37,7 @@ async function run(): Promise<void> {
 			environment: process.env,
 			workspace: process.cwd(),
 			allowedHosts,
+			authPath: existsSync(authPath) ? authPath : undefined,
 			readOnlyPaths: [getPackageDir(), dirname(getPackageDir())],
 		});
 		return;

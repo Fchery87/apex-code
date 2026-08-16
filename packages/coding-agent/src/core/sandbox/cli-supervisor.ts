@@ -34,6 +34,7 @@ export async function launchSandboxedCli(options: {
 	workspace: string;
 	allowedHosts?: readonly string[];
 	readOnlyPaths?: readonly string[];
+	authPath?: string;
 	dependencies?: Partial<CliSandboxDependencies>;
 }): Promise<number> {
 	const dependencies = { ...defaultDependencies, ...options.dependencies };
@@ -52,6 +53,7 @@ export async function launchSandboxedCli(options: {
 		environment: options.environment,
 		allowedHosts: options.allowedHosts,
 		readOnlyPaths: options.readOnlyPaths,
+		authPath: options.authPath,
 	});
 	try {
 		return await supervisor.launch(launch);

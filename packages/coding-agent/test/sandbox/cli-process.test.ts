@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -40,6 +40,9 @@ describe.skipIf(process.platform === "win32")("sandboxed public CLI", () => {
 	it("runs the normal child entry and keeps agent state inside the workspace", async () => {
 		const workspace = temporaryDirectory("apex-sandbox-cli-process-");
 		const hostAgentDirectory = join(temporaryDirectory("apex-sandbox-host-agent-"), "agent");
+		mkdirSync(hostAgentDirectory, { recursive: true });
+		const hostAuthPath = join(hostAgentDirectory, "auth.json");
+		writeFileSync(hostAuthPath, JSON.stringify({ test: { type: "api_key", key: "host-secret" } }), { mode: 0o600 });
 
 		const result = await runCli({
 			args: ["--print", "hello", "--permission-mode", "plan", "--model", "missing-sandbox-model"],
@@ -49,11 +52,12 @@ describe.skipIf(process.platform === "win32")("sandboxed public CLI", () => {
 
 		expect(result.code).toBe(1);
 		expect(result.stderr).toContain('Model "missing-sandbox-model" not found');
-		expect(existsSync(hostAgentDirectory)).toBe(false);
+		expect(existsSync(hostAgentDirectory)).toBe(true);
+		expect(readFileSync(hostAuthPath, "utf8")).toContain("host-secret");
 		expect(readdirSync(join(workspace, ".apex-code", "sandbox-agent"))).toEqual(
-			expect.arrayContaining(["auth.json", "models-store.json"]),
+			expect.arrayContaining(["models-store.json"]),
 		);
-	});
+	}, 30_000);
 
 	it("fails closed before executing a normal agent session when the platform sandbox tool is unavailable", async () => {
 		const workspace = temporaryDirectory("apex-sandbox-cli-unavailable-");
@@ -68,5 +72,5 @@ describe.skipIf(process.platform === "win32")("sandboxed public CLI", () => {
 		expect(result.stderr).toContain(
 			process.platform === "darwin" ? "sandbox-exec (Seatbelt) is required" : "Bubblewrap (bwrap) is required",
 		);
-	});
+	}, 30_000);
 });
