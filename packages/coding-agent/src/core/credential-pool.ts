@@ -71,7 +71,11 @@ export class CredentialPool {
 			const index = (this.nextIndex + offset) % this.entries.length;
 			const entry = this.entries[index];
 			const blockedUntil = this.blockedUntilByIdentity.get(entry.identity);
-			if (entry.providerId !== providerId || attempted.has(entry.identity) || (blockedUntil !== undefined && blockedUntil > now)) {
+			if (
+				entry.providerId !== providerId ||
+				attempted.has(entry.identity) ||
+				(blockedUntil !== undefined && blockedUntil > now)
+			) {
 				continue;
 			}
 			this.nextIndex = (index + 1) % this.entries.length;

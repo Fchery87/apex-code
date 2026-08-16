@@ -1,5 +1,5 @@
-import { Type, type Static } from "typebox";
 import type { AgentToolResult } from "apex-code-agent-core";
+import { type Static, Type } from "typebox";
 import type { ApexToolDefinition } from "./contract.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
@@ -43,7 +43,13 @@ export function createAskUserToolDefinition(): ApexToolDefinition<typeof askUser
 			context: { resultRecoverable: false, deferSchema: true },
 			evidence: { emits: new Set(), capture: () => [] },
 		},
-		async execute(_toolCallId, { question, options }: AskUserInput, _signal, _onUpdate, ctx): Promise<AgentToolResult<AskUserDetails>> {
+		async execute(
+			_toolCallId,
+			{ question, options }: AskUserInput,
+			_signal,
+			_onUpdate,
+			ctx,
+		): Promise<AgentToolResult<AskUserDetails>> {
 			if (!ctx?.hasUI) {
 				throw new Error(
 					"ask_user requires interactive UI, which is not available in this session (headless mode).",

@@ -48,9 +48,12 @@ describe("offline session replay", () => {
 		// small messages plus the eviction marker, well under REPLAY_EVICTION_BUDGET.
 		expect(result.metrics.contextTokensByTurn[0]).toBe(748);
 		const [turnContext] = result.contextsByTurn;
-		expect(turnContext?.some((message) => message.role === "toolResult" && JSON.stringify(message.content).includes(DEFAULT_EVICTION_MARKER))).toBe(
-			true,
-		);
+		expect(
+			turnContext?.some(
+				(message) =>
+					message.role === "toolResult" && JSON.stringify(message.content).includes(DEFAULT_EVICTION_MARKER),
+			),
+		).toBe(true);
 	});
 
 	it("preserves a terminal assistant error followed by a later successful turn", async () => {
@@ -100,7 +103,8 @@ describe("offline session replay", () => {
 		const turn20Context = result.contextsByTurn[19];
 		expect(turn20Context).toBeDefined();
 		const hasEvictionMarker = turn20Context?.some(
-			(message) => message.role === "toolResult" && JSON.stringify(message.content).includes(DEFAULT_EVICTION_MARKER),
+			(message) =>
+				message.role === "toolResult" && JSON.stringify(message.content).includes(DEFAULT_EVICTION_MARKER),
 		);
 		expect(hasEvictionMarker).toBe(true);
 	});
@@ -157,7 +161,10 @@ describe("offline session replay", () => {
 			const session = join(scratch, "nonzero-cost.jsonl");
 			await writeFile(
 				session,
-				source.replace('"cacheRead":0,"cacheWrite":0,"total":0', '"cacheRead":0.012,"cacheWrite":0.004,"total":0.153'),
+				source.replace(
+					'"cacheRead":0,"cacheWrite":0,"total":0',
+					'"cacheRead":0.012,"cacheWrite":0.004,"total":0.153',
+				),
 			);
 
 			const result = await replay(session);
@@ -213,9 +220,10 @@ describe("offline session replay", () => {
 				continue;
 			}
 			const relativeDifference = Math.abs(actualCost - expectedCost) / expectedCost;
-			expect(relativeDifference, `${name}: recorded ${expectedCost}, replay-reported ${actualCost}`).toBeLessThanOrEqual(
-				0.05,
-			);
+			expect(
+				relativeDifference,
+				`${name}: recorded ${expectedCost}, replay-reported ${actualCost}`,
+			).toBeLessThanOrEqual(0.05);
 		}
 		expect(fetchSpy).not.toHaveBeenCalled();
 	});

@@ -29,9 +29,7 @@ export type ContractLookup = (toolName: string) => Pick<ToolContract, "context">
 /** Marker substituted for an evicted result when its contract declares none. */
 export const DEFAULT_EVICTION_MARKER = "[Tool result evicted to save context. Re-run the tool to see it again.]";
 
-function isToolResultMessage(
-	message: AgentMessage,
-): message is Extract<AgentMessage, { role: "toolResult" }> {
+function isToolResultMessage(message: AgentMessage): message is Extract<AgentMessage, { role: "toolResult" }> {
 	return message.role === "toolResult";
 }
 

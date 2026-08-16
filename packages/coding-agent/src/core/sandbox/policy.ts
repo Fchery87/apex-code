@@ -24,7 +24,10 @@ export class SandboxUnavailableError extends Error {
  * no relative, missing, or non-directory workspace because a backend must never
  * silently broaden an ambiguous path into host authority.
  */
-export function createSandboxPolicy(options: { workspace: string; allowedHosts?: readonly string[] }): SandboxPolicyResult {
+export function createSandboxPolicy(options: {
+	workspace: string;
+	allowedHosts?: readonly string[];
+}): SandboxPolicyResult {
 	if (!isAbsolute(options.workspace)) {
 		return { kind: "invalid", reason: "Sandbox workspace must be an absolute path." };
 	}

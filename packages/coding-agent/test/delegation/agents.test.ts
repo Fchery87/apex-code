@@ -1,12 +1,16 @@
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createAgentDefinitionResolver } from "../../src/core/delegation/agents.ts";
 
 let scratch: string;
-beforeEach(async () => { scratch = await mkdtemp(join(tmpdir(), "apex-agent-definitions-")); });
-afterEach(async () => { await rm(scratch, { recursive: true, force: true }); });
+beforeEach(async () => {
+	scratch = await mkdtemp(join(tmpdir(), "apex-agent-definitions-"));
+});
+afterEach(async () => {
+	await rm(scratch, { recursive: true, force: true });
+});
 
 async function definition(dir: string, filename: string, content: string): Promise<void> {
 	await mkdir(dir, { recursive: true });
@@ -28,7 +32,11 @@ describe("agent definition discovery", () => {
 		await definition(join(agentDir, "agents"), "scout.md", VALID);
 		const resolve = createAgentDefinitionResolver({ cwd: scratch, agentDir, isProjectTrusted: () => false });
 		expect(resolve("scout")).toEqual({
-			name: "scout", description: "Find relevant code", tools: ["read"], model: "test-model", systemPrompt: "You are a focused scout.",
+			name: "scout",
+			description: "Find relevant code",
+			tools: ["read"],
+			model: "test-model",
+			systemPrompt: "You are a focused scout.",
 		});
 	});
 

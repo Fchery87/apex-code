@@ -1,11 +1,7 @@
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
+import { PERMISSION_SOURCES, type PermissionRule, resolvePermission } from "../../src/core/permissions/rules.ts";
 import type { PermissionSpec } from "../../src/core/tools/contract.ts";
-import {
-	PERMISSION_SOURCES,
-	type PermissionRule,
-	resolvePermission,
-} from "../../src/core/permissions/rules.ts";
 
 const exampleSchema = Type.Object({ path: Type.String() });
 
@@ -17,7 +13,11 @@ const exactSpec: PermissionSpec<typeof exampleSchema> = {
 	ruleForCall: (params) => params.path,
 };
 
-function rule(source: PermissionRule["source"], behavior: PermissionRule["behavior"], overrides: Partial<PermissionRule> = {}): PermissionRule {
+function rule(
+	source: PermissionRule["source"],
+	behavior: PermissionRule["behavior"],
+	overrides: Partial<PermissionRule> = {},
+): PermissionRule {
 	return { source, behavior, toolName: "read", ruleContent: "a.txt", ...overrides };
 }
 

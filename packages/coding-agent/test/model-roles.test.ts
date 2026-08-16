@@ -5,8 +5,8 @@ import { fauxProvider } from "@earendil-works/pi-ai";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { ModelConfig } from "../src/core/model-config.ts";
-import { ModelRuntime } from "../src/core/model-runtime.ts";
 import { resolveModelRoles } from "../src/core/model-resolver.ts";
+import { ModelRuntime } from "../src/core/model-runtime.ts";
 
 const sharedTempDir = join(tmpdir(), `pi-model-roles-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 

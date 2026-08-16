@@ -1,9 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-	createCredentialIdentity,
-	CredentialPool,
-	type CredentialPoolEntry,
-} from "../src/core/credential-pool.ts";
+import { CredentialPool, type CredentialPoolEntry, createCredentialIdentity } from "../src/core/credential-pool.ts";
 
 function entry(id: string, providerId = "test-provider"): CredentialPoolEntry {
 	return { identity: createCredentialIdentity(id), providerId };
@@ -90,5 +86,4 @@ describe("CredentialPool", () => {
 			'Duplicate credential identity "primary"',
 		);
 	});
-
 });

@@ -1,6 +1,6 @@
-import { minimatch } from "minimatch";
-import { Type, type Static } from "typebox";
 import type { AgentToolResult } from "apex-code-agent-core";
+import { minimatch } from "minimatch";
+import { type Static, Type } from "typebox";
 import type { DelegationRuntimeOptions } from "../delegation/runtime.ts";
 import { retrieveDelegationResult, runDelegation } from "../delegation/runtime.ts";
 import type { ApexToolDefinition, EvidenceRecord } from "./contract.ts";
@@ -10,7 +10,9 @@ const delegateSchema = Type.Union([
 	Type.Object({
 		agentType: Type.String({ description: "The type of subagent to delegate to." }),
 		task: Type.String({ description: "The task to delegate." }),
-		background: Type.Optional(Type.Boolean({ description: "Return a handle immediately instead of waiting for the child." })),
+		background: Type.Optional(
+			Type.Boolean({ description: "Return a handle immediately instead of waiting for the child." }),
+		),
 	}),
 	Type.Object({
 		agentType: Type.String({ description: "The agent type that produced the background result." }),
@@ -62,9 +64,10 @@ export function createDelegateToolDefinition(
 			},
 		},
 		async execute(_toolCallId, input: DelegateInput): Promise<AgentToolResult<DelegateDetails>> {
-			const result = "task" in input
-				? await runDelegation(runtime, input.agentType, input.task, { background: input.background })
-				: await retrieveDelegationResult(runtime, input.handle, input.agentType);
+			const result =
+				"task" in input
+					? await runDelegation(runtime, input.agentType, input.task, { background: input.background })
+					: await retrieveDelegationResult(runtime, input.handle, input.agentType);
 			return {
 				content: [{ type: "text", text: result.output }],
 				details: {

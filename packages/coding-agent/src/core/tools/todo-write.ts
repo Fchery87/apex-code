@@ -1,5 +1,5 @@
-import { Type, type Static } from "typebox";
 import type { AgentToolResult } from "apex-code-agent-core";
+import { type Static, Type } from "typebox";
 import type { ApexToolDefinition } from "./contract.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
@@ -36,7 +36,9 @@ function summarize(todos: TodoItem[]): string {
 }
 
 /** Create the harness-state tool that lets an agent record and update its own task list. */
-export function createTodoWriteToolDefinition(store: TodoWriteStore): ApexToolDefinition<typeof todoWriteSchema, TodoWriteDetails> {
+export function createTodoWriteToolDefinition(
+	store: TodoWriteStore,
+): ApexToolDefinition<typeof todoWriteSchema, TodoWriteDetails> {
 	return {
 		name: "todo_write",
 		label: "todo_write",

@@ -125,11 +125,19 @@ describe.skipIf(!canEnforceLinuxSandbox())("CLI sandbox network allowlist", () =
 		const code = await launchSandboxedCli({
 			command: process.execPath,
 			args: ["-e", connectProbeScript(testServerPort, true)],
-			environment: {}, workspace: cwd, allowedHosts: ["example.com"],
-			dependencies: { stderr: { write: (message) => { stderr += message; return true; } } },
+			environment: {},
+			workspace: cwd,
+			allowedHosts: ["example.com"],
+			dependencies: {
+				stderr: {
+					write: (message) => {
+						stderr += message;
+						return true;
+					},
+				},
+			},
 		});
 		expect(code).not.toBe(0);
 		expect(stderr).toContain("Sandbox violation (network)");
 	});
-
 });

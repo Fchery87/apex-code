@@ -1,10 +1,10 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fauxAssistantMessage, fauxProvider, type FauxResponseFactory } from "@earendil-works/pi-ai";
+import { type FauxResponseFactory, fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
-import { createCredentialIdentity, CredentialPool } from "../src/core/credential-pool.ts";
+import { CredentialPool, createCredentialIdentity } from "../src/core/credential-pool.ts";
 import { ModelRuntime } from "../src/core/model-runtime.ts";
 
 const primary = createCredentialIdentity("primary");
@@ -112,7 +112,9 @@ describe("ModelRuntime credential failover", () => {
 		const controller = new AbortController();
 		controller.abort();
 
-		const message = await runtime.streamSimple(faux.getModel(), { messages: [] }, { signal: controller.signal }).result();
+		const message = await runtime
+			.streamSimple(faux.getModel(), { messages: [] }, { signal: controller.signal })
+			.result();
 
 		expect(message.stopReason).toBe("error");
 		expect(faux.state.callCount).toBe(0);

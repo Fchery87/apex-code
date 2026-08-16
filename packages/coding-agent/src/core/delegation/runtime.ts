@@ -180,7 +180,7 @@ export async function runDelegation(
 	// unhandled rejection.
 	void promise.catch(() => {});
 	background(options).set(handleId, { agentType, promise });
-	return { agentType, task, output: `Delegation started. Retrieve result with handle \"${handleId}\".`, handleId };
+	return { agentType, task, output: `Delegation started. Retrieve result with handle "${handleId}".`, handleId };
 }
 
 /** Retrieve a background delegation. Running children are awaited; unknown handles fail explicitly. */
@@ -192,7 +192,9 @@ export async function retrieveDelegationResult(
 	const entry = background(options).get(handleId);
 	if (!entry) throw new Error(`Unknown delegation handle "${handleId}".`);
 	if (expectedAgentType !== undefined && entry.agentType !== expectedAgentType) {
-		throw new Error(`Delegation handle "${handleId}" belongs to agent "${entry.agentType}", not "${expectedAgentType}".`);
+		throw new Error(
+			`Delegation handle "${handleId}" belongs to agent "${entry.agentType}", not "${expectedAgentType}".`,
+		);
 	}
 	return entry.promise;
 }
