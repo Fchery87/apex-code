@@ -100,7 +100,7 @@ function writeSession(sessionDir: string, cwd: string, id: string): void {
 	);
 }
 
-describe.skipIf(process.platform === "win32")("--session-id read-only commands", () => {
+describe("--session-id read-only commands", () => {
 	it("does not reserve a session for --help", async () => {
 		const result = await runCli(["--session-id", "read-only-help", "--help"]);
 
@@ -122,7 +122,7 @@ describe.skipIf(process.platform === "win32")("--session-id read-only commands",
 		expect(hasSessionWithId(join(result.agentDir, "sessions"), "read-only-models")).toBe(false);
 	});
 
-	it("warns when a missing --session-id creates a new session", async () => {
+	it.skipIf(process.platform === "win32")("warns when a missing --session-id creates a new session", async () => {
 		const result = await runCli((dirs) => [
 			"--session-dir",
 			dirs.sessionDir,
@@ -166,7 +166,7 @@ describe.skipIf(process.platform === "win32")("--session-id read-only commands",
 		expect(result.stderr).not.toContain("No project session found with id 'existing-session-id'");
 	});
 
-	it("rejects an existing fork target session id", async () => {
+	it.skipIf(process.platform === "win32")("rejects an existing fork target session id", async () => {
 		const result = await runCli(
 			(dirs) => [
 				"--session-dir",
