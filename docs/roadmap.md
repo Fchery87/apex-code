@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0 through 8 landed · **Created:** 2026-08-08 · **Last updated:** 2026-08-16
+**Status:** Active — Phases 0 through 9 landed · **Created:** 2026-08-08 · **Last updated:** 2026-08-16
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -91,7 +91,7 @@ capable and measurably worse.
 | 6 | Durable state & daemon | **landed** — 6 of 6 tasks · `baf5e5302` (full-suite audit recorded) | [spec](specs/2026-08-15-durable-state-and-daemon.md) | — |
 | 7 | Evidence & verification | **landed** — 7 of 7 tasks · `c82584312` (clean Node 22 verification) | [spec](specs/2026-08-16-evidence-and-verification.md) | — |
 | 8 | Observability & cost | **landed** — 7 of 7 tasks, exit criterion amended before implementation · `9c7c9e9aa` | [spec](specs/2026-08-15-observability-and-cost.md) | — |
-| 9 | Release hardening | spec + plan written, 0 of 6 tasks | [spec](specs/2026-08-16-release-hardening.md) | [plan](plans/2026-08-16-release-hardening.md) |
+| 9 | Release hardening | **landed** — 6 of 6 tasks · pending SHA | [spec](specs/2026-08-16-release-hardening.md) | — |
 
 ---
 
@@ -693,6 +693,69 @@ published artifact. An upgrade across a session-format version bump preserves an
 correctly renders pre-upgrade sessions. A security disclosure path is published and
 monitored.
 
+**Closure (2026-08-16) — 6 of 6 tasks, verified test-first.** Mostly repair and
+verification, the same shape Phase 8 turned out to have. Two real, verified bugs
+closed, both independent of any settings default: `checkForNewPiVersion` compared
+Apex Code's own version against **Pi's** latest release, unconditionally, on every
+interactive startup — since the two projects' versions are unrelated sequences,
+this almost always produced a false "Update Available" banner naming Pi's version
+and linking to Pi's changelog. Repointed at the npm registry's `next` tag for this
+package — no new endpoint required, npm already has the right data.
+`reportInstallTelemetry()`, a separate `pi.dev` ping, is removed outright. The
+"opt-in analytics" setting was not merely dead code: `first-time-setup.ts` actively
+asked every new user to consent to it, promising a `/privacy` command that has never
+existed anywhere in the tree, under Pi's name. Removed; onboarding is theme-selection
+only now. **ADR 0009**, reserved since Phase 0's ADR table, is written and settles
+the real finding: there is no working or intended project-directed telemetry to make
+opt-in, because neither mechanism above was ever project-directed telemetry working
+as designed — one was misdirected at upstream, the other was inert. Provider
+attribution headers (a real, separate mechanism — billing-origin tags sent to the
+user's own configured LLM provider) are kept, rebranded from `pi`/`Pi`, and governed
+by a new, honestly-named `sendProviderAttribution` setting so a user who'd already
+opted out under the old setting's name doesn't silently lose that choice.
+
+Session-format migration (v1→v2→v3, inherited, unchanged by any Apex Code phase)
+gained real test coverage through the production `SessionManager.open()` load path
+— content-equivalence (message text, tool calls, usage), not just `id`/`parentId`
+linkage — filling the gaps a pre-existing but narrower test left (missed by this
+spec's own first-pass `grep` for internal function names, corrected before
+implementing). `NOTICE`'s standing promise of a consolidated license report is kept:
+a dependency-free script reads installed packages' own `license` fields, wired into
+the release pipeline. The release pipeline now verifies a clean install on macOS as
+well as Ubuntu, structurally proven never to re-run the actual publish steps. Every
+concrete claim in the new `docs/user-guide.md` and the corrected README (which had
+drifted to claiming "pre-alpha, Phase 0" with Phase 8 landed) was checked against
+real CLI help text and slash-command definitions, not recalled.
+
+Closure verification caught a real regression from its own earlier work: two
+self-update tests mocked the old custom API's response field (`packageName`)
+against code that now reads npm's actual registry field (`name`); the mocks
+silently stopped matching and the tests began passing for the wrong reason
+(exercising the ordinary-upgrade fallback, not the rename-detection path they
+were meant to prove). Fixed by correcting the mocks, not the working code —
+rename-detection still functions end to end, verified once the test spoke the
+right vocabulary again (`test/package-command-paths.test.ts`: 27/27 passing after
+the fix). `npx tsgo --noEmit`, `npm run build`, and `npm run check` (biome,
+pinned-deps, ts-imports, shrinkwrap, install-lock) all clean, including 29 files of
+pre-existing mechanical formatting debt found and fixed along the way, reviewed
+change-by-change to confirm no logic moved. Full suite from `packages/coding-agent`:
+1 failed file / 3 failed tests / 279 passed / 6 skipped (286 files; 2358 passed / 53
+skipped of 2414 tests) — the only failures are `external-editor`'s already-documented
+pre-existing ones (Phase 2b's characterization); `package-command-paths.test.ts`
+passes clean, confirming the regression fix held under full-suite conditions, not
+just in isolation. `SECURITY.md`'s stale "not hardened until Phase 9" banner
+— which conflated release hardening with the permission gate and sandbox that
+actually landed in Phase 2 — is corrected. Per `AGENTS.md`'s plan lifecycle
+convention, `docs/plans/2026-08-16-release-hardening.md` is deleted now that Phase 9
+is landed (recoverable via `git show <commit>:docs/plans/2026-08-16-release-hardening.md`);
+its durable content lives in this section, the spec, and ADR 0009.
+
+**Carried, not discharged.** "Monitored" in the exit criterion above is an
+operational commitment — someone watching the GitHub private-vulnerability-reporting
+inbox — not something a test can prove. The disclosure *path* is published and
+verified accurate against current code; whether it is staffed is outside what this
+phase's verification can close.
+
 ---
 
 ## ADRs to write
@@ -714,7 +777,7 @@ takes the next free number instead of a reserved one.
 | 0006 | Session format ownership and the migration guarantee owed to users | 6 | ✅ |
 | 0007 | Evidence capture in core; policy layer stays a bundled extension | 7 | ✅ |
 | 0008 | Delegation authority: in-process derived child vs. subprocess with serialized authority | 5 | ✅ |
-| 0009 | Telemetry: opt-in only, and exactly what is collected | 9 | reserved |
+| 0009 | Telemetry: opt-in only, and exactly what is collected | 9 | ✅ |
 | 0010 | One canonical tool contract, declared by the tool and never re-derived | pre-2 | ✅ |
 | 0011 | Deferred schemas resolve through an explicit model-callable tool, not harness-side injection | 4 | ✅ |
 | 0012 | User-directed OTLP export is not project telemetry; the two never share a switch | 8 | ✅ |
