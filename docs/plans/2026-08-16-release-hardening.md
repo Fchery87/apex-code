@@ -12,7 +12,7 @@ behind "cheaper" tasks.
 | Task | State | Commit | Verification |
 | --- | --- | --- | --- |
 | 9.1 Remove broken install ping and dead analytics settings | Done | `5f1f007c5` | **Larger than scoped, two real findings beyond the original spec:** (1) the update-available check (`checkForNewPiVersion`) compared Apex Code's version against **Pi's**, unconditionally, on every startup — repointed at the npm registry's `next` tag for this package, all `Pi`-branded identifiers renamed, `pi-user-agent.ts` renamed to `apex-code-user-agent.ts`. (2) The "dead" analytics setting wasn't just inert — `first-time-setup.ts` actively asked every new user to consent to it, referencing a nonexistent `/privacy` command under Pi's name; removed, onboarding is theme-only now. `enableInstallTelemetry` replaced by an honestly-scoped `sendProviderAttribution` setting (default `true`) so a user who'd already opted out of attribution headers doesn't silently lose that choice. `provider-attribution.ts` and its 16-test suite (`sdk-openrouter-attribution.test.ts`, missed in the initial file-name grep) rebranded from `pi`/`Pi`/`pi.dev` to Apex Code identity. Two `pi.dev` references deliberately left alone and recorded in the spec's "Flagged, deliberately not touched": the remote model-catalog fetch and `/share`'s viewer URL — both real functional dependencies, not telemetry, requiring their own architectural decision. **Verified:** `npx tsgo --noEmit` clean; zero remaining references to any removed identifier (`grep` across `src/`+`test/`); 36 tests across 6 updated/new test files passing; broader regression sweep (116 tests, model-config/interactive-mode/args) unaffected. |
-| 9.2 Session-format migration test coverage | Not started | — | Fixture-driven tests for `migrateV1ToV2`, `migrateV2ToV3`, and the full v1→v3 chain, each asserting the migrated session's entries (messages, tool calls, usage) match hand-verified expected output, not just that migration doesn't throw |
+| 9.2 Session-format migration test coverage | Done | uncommitted | **Scope corrected before implementing:** `test/session-manager/migration.test.ts` already existed (missed by the spec's first-pass `grep` for internal function names — it calls the exported `migrateSessionEntries` wrapper) and already covered v1→v2 tree structure and idempotency. This task filled the three real gaps it left: the v2→v3 `hookMessage`→`custom` rename (previously only mentioned in a comment, never exercised), the real `SessionManager.open()` load path where migration actually runs in production, and content-equivalence (message text, tool calls, tool results, usage) surviving migration, not just correct `id`/`parentId` linkage. **Verified, `test/session-manager/format-migration.test.ts` (4 tests):** a hand-written v1 JSONL fixture (no version, no id/parentId) migrates through the real file-load path with a user message, an assistant message with a tool call, and a tool-result message all preserving their content exactly, and the file is rewritten at version 3; a v2 fixture with a `hookMessage`-role entry migrates through the same real path with the rename applied and content preserved; a v3 fixture is confirmed **not** rewritten (no spurious migration). No production code changes were needed — the existing migration functions were already correct; this closes the coverage gap, not a bug. Full `session-manager/` suite: 108/108 passing, no regressions. |
 | 9.3 Consolidated third-party license report | Not started | — | A script generates a non-empty report covering all workspace dependencies' licenses, runnable via `npm run` and wired into `release.yml`; fulfills `NOTICE`'s existing promise |
 | 9.4 Cross-platform release verification | Not started | — | `release.yml` gains a macOS job verifying a clean `npm install --global` + version check, alongside the existing Ubuntu job, reusing its registry-propagation retry pattern |
 | 9.5 User documentation and README correction | Not started | — | `README.md`'s status line corrected from "pre-alpha, Phase 0" to reality; a short `docs/user-guide.md` (install, first run, where to go next) exists and is linked from the README |
@@ -75,16 +75,25 @@ at all, matching how a User-Agent string isn't normally user-toggleable.
 
 ## Task 9.2 — session-format migration test coverage
 
+**Corrected scope, found before implementing:** `test/session-manager/migration.test.ts`
+already exists and covers v1→v2 tree-structure assignment and idempotency via the
+exported `migrateSessionEntries` wrapper — missed by the spec's first-pass `grep` for
+internal function names. This task fills the three gaps that test leaves, not a
+from-scratch migration test suite.
+
 ### Red
 
-1. A v1 fixture session file (hand-written or captured from a real pre-migration
-   shape) driven through `SessionManager.open()`; assert it loads without throwing
-   and its resulting entries match a hand-verified expected set — written to fail
-   until the test itself exists (the migration code already passes; the test is what's
-   new).
-2. Same for a v2 fixture through `migrateV2ToV3`.
-3. A test chaining v1 straight through to v3 in one load, asserting the two-step
-   migration produces the same result as the two migrations run independently.
+1. A fixture entry with `role: "hookMessage"` driven through `migrateSessionEntries`
+   (or the real load path below), asserting it becomes `role: "custom"` — the v2→v3
+   rename the existing test only mentions in a comment.
+2. A v1-shaped fixture **JSONL file on disk** driven through the real
+   `SessionManager.open()` (not calling `migrateSessionEntries` directly), asserting
+   the file is rewritten to the current version and `getEntries()`/
+   `buildSessionContext().messages` render the same message content, tool calls, and
+   usage as hand-verified expected output — not just correct `id`/`parentId` linkage.
+3. A v2-shaped fixture file through the same real load path, covering the
+   `hookMessage`→`custom` rename specifically through production code, not the
+   isolated unit call.
 
 ### Green
 
