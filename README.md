@@ -2,7 +2,7 @@
 
 A provider-agnostic agentic coding harness. Forked from [Pi](https://github.com/earendil-works/pi).
 
-> **Status: pre-alpha — Phases 0 through 10 landed.** All of the differentiated features below are built, not just
+> **Status: pre-alpha — Phases 0 through 11 landed.** All of the differentiated features below are built, not just
 > planned. See [`docs/roadmap.md`](docs/roadmap.md) for exit criteria and current
 > status, phase by phase.
 

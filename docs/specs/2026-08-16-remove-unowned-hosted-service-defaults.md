@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Author | Apex Code |
-| Status | `Active` |
+| Status | `Landed` |
 | Created | 2026-08-16 |
 | Last updated | 2026-08-16 |
 | Roadmap phase | `11 — Remove unowned hosted-service defaults` |
@@ -120,6 +120,33 @@ historical research/spec/ADR evidence, never current production or packed instru
 
 No compatibility alias, consumed-package identifier, historical attribution, or old
 changelog entry is deleted.
+
+## Phase outcome
+
+Phase 11 landed on 2026-08-16. The implementation is recorded in
+`34b9c0984873746999db07635d4f703df3a2ffba` and the required exit proof ran at
+`bfa746d0c8ac2f336807807b6ee7b2b795bddfe5`:
+[GitHub Actions run 31945192886](https://github.com/Fchery87/apex-code/actions/runs/31945192886).
+
+| Required job | Result | Gates |
+| --- | --- | --- |
+| Ubuntu | Passed | spaced checkout, install, build, check, full root test suite |
+| macOS | Passed | spaced checkout, install, build, check, full root test suite |
+| Windows | Passed | spaced checkout, install, build, check, full root test suite |
+| Frozen packages match upstream | Passed | consumed-package boundary check |
+
+The landed default uses only bundled model catalogs and performs no remote catalog
+selection without `APEX_CODE_MODEL_CATALOG_URL`. Explicit catalogs retain host-agnostic
+refresh behavior while persisted bodies and validators are bound to their source.
+`/share` now requires informed confirmation, publishes through an unpredictable private
+temporary directory, returns the canonical secret GitHub Gist URL, and adds a preview
+only for an explicitly configured viewer. Current production and packed instructions
+contain no `pi.dev` runtime default.
+
+Focused local verification passed 46 hosted-service/package tests, the product-surface
+suite, `npm run build`, and `npm run check`. The environment-sensitive local broad run
+was superseded for the phase exit claim by the clean required three-OS full-suite run
+above. The completed execution plan was deleted per the documentation lifecycle.
 
 ## Exit criterion
 
