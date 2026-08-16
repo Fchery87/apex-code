@@ -1,6 +1,6 @@
 # Phase 11 remove unowned hosted-service defaults
 
-**Status:** Active — 1 settled, 4 implementation/verification tasks pending
+**Status:** Active — 1 verified, 3 implemented awaiting broad verification, 1 closure task pending
 
 This plan implements `docs/specs/2026-08-16-remove-unowned-hosted-service-defaults.md`
 under ADR 0013. Task identifiers are stable. Work proceeds in vertical test-first
@@ -8,10 +8,10 @@ slices at the public seams named by the spec.
 
 | Task | State | Commit | Verification |
 | --- | --- | --- | --- |
-| 11.1 Research, specification, and hosted-service decision | Done | pending commit | Permanent research, ADR 0013, active spec, roadmap entry, and this plan. |
-| 11.2 Explicit remote model-catalog integration | Not started | — | Red: fresh runtime/update command and configured endpoint. Green: static default plus explicit host-agnostic overlay. |
-| 11.3 Explicit share-viewer integration and honest Gist result | Not started | — | Red: optional resolver and `/share` output. Green: canonical Gist always, configured preview only. |
-| 11.4 Product documentation and artifact audit | Not started | — | Help/README/user guide/env/changelog corrected; current packed surface rejects unowned defaults. |
+| 11.1 Research, specification, and hosted-service decision | Done | `32d6d8f7d` | Permanent research, ADR 0013, active spec, roadmap entry, and this plan. |
+| 11.2 Explicit remote model-catalog integration | Implemented — focused tests green | pending commit | Red: fresh runtime/update command and configured endpoint. Green: static default plus explicit host-agnostic overlay. |
+| 11.3 Explicit share-viewer integration and honest Gist result | Implemented — focused tests green | pending commit | Red: optional resolver and `/share` output. Green: canonical Gist always, configured preview only. |
+| 11.4 Product documentation and artifact audit | Implemented — focused tests green | pending commit | Help/README/user guide/env/changelog corrected; current packed surface rejects unowned defaults. |
 | 11.5 Three-OS verification and closure | Not started | — | Local narrow/build/check/full gates, required matrix proof, durable outcome, plan deletion. |
 
 ## Order changes
@@ -27,14 +27,14 @@ Capture exact egress and fallbacks from primary sources, compare options, settle
 ## Task 11.2 — model catalog
 
 At the `ModelRuntime.create()` and update-command seams, first prove that an unset
-endpoint performs no catalog fetch and still exposes static models. Then prove an
+endpoint and new canonical environment variable perform no catalog fetch and still exposes static models. Then prove an
 explicit SDK/environment endpoint keeps the existing overlay protocol. Implement only
 the endpoint selection and user-facing no-remote result needed to satisfy those tests.
 
 ## Task 11.3 — share viewer
 
-At the optional URL resolver and interactive command seam, first prove unset, canonical,
-legacy, conflicting, blank, malformed, and configured cases. Then make the viewer
+At the optional URL resolver and interactive command seam, first prove unset, canonical share-viewer,
+legacy share-viewer, conflicting share-viewer, blank, malformed, and configured cases. Then make the viewer
 optional and make `/share` always report the canonical secret Gist, adding preview text
 only for an explicit valid viewer.
 

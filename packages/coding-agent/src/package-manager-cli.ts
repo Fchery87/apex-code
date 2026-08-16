@@ -16,6 +16,7 @@ import {
 	type SelfUpdatePackageTarget,
 	VERSION,
 } from "./config.ts";
+import { getApexEnvironment } from "./core/environment.ts";
 import type { InlineExtension } from "./core/extensions/types.ts";
 import { ModelRuntime } from "./core/model-runtime.ts";
 import { DefaultPackageManager } from "./core/package-manager.ts";
@@ -395,6 +396,10 @@ function updateTargetIncludesExtensions(target: UpdateTarget): boolean {
 }
 
 async function refreshModelCatalogs(agentDir: string): Promise<void> {
+	if (!getApexEnvironment("APEX_CODE_MODEL_CATALOG_URL")?.trim()) {
+		console.log(chalk.green("Using bundled model catalogs; no remote catalog is configured"));
+		return;
+	}
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), 15_000);
 	try {

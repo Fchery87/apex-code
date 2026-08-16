@@ -29,3 +29,20 @@ test("publishing targets exactly the Apex-owned packages in dependency order", a
 	const { getPublicWorkspacePackages } = await import("./release-packages.mjs");
 	assert.deepEqual(getPublicWorkspacePackages().map(({ name }) => name), ["apex-code-agent-core", "apex-code"]);
 });
+
+
+test("current hosted integrations have no pi.dev runtime default", async () => {
+	const files = [
+		"packages/coding-agent/src/config.ts",
+		"packages/coding-agent/src/core/remote-catalog-provider.ts",
+		"packages/coding-agent/src/core/model-runtime.ts",
+		"packages/coding-agent/src/cli/args.ts",
+		"packages/coding-agent/README.md",
+		"packages/coding-agent/docs/environment-variables.md",
+		"docs/user-guide.md",
+	];
+	const current = (await Promise.all(files.map(read))).join("\n");
+	assert.doesNotMatch(current, /https:\/\/pi\.dev/);
+	assert.match(current, /APEX_CODE_MODEL_CATALOG_URL/);
+	assert.match(current, /APEX_CODE_SHARE_VIEWER_URL/);
+});

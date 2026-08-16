@@ -5,6 +5,9 @@
 - Published the Apex Code CLI and agent core through npm Trusted Publishing.
 - Added provider failover, permissions and sandboxing, context engineering, expanded tools, delegation, durable state, evidence, observability, and release hardening.
 - Completed the current product identity, environment compatibility, and cross-platform portability surface.
+- Removed implicit `pi.dev` model-catalog and share-viewer dependencies. Bundled catalogs
+  are now the default; remote catalogs and preview viewers require explicit Apex
+  environment configuration, and `/share` confirms the secret GitHub Gist upload.
 
 ## Upstream Pi history
 
