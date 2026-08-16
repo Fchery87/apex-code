@@ -1,14 +1,14 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fauxAssistantMessage, fauxProvider, type FauxResponseFactory } from "@earendil-works/pi-ai";
+import { type FauxResponseFactory, fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
-import { createCredentialIdentity, CredentialPool } from "../src/core/credential-pool.ts";
+import { CredentialPool, createCredentialIdentity } from "../src/core/credential-pool.ts";
 import { ModelRuntime } from "../src/core/model-runtime.ts";
 import {
-	FileUsagePerformanceStore,
 	InMemoryUsagePerformanceStore,
+	SqliteUsagePerformanceStore,
 	type UsagePerformanceSample,
 } from "../src/core/usage-performance-store.ts";
 
@@ -24,7 +24,9 @@ afterAll(() => {
 
 function sample(overrides: Partial<UsagePerformanceSample> = {}): UsagePerformanceSample {
 	return {
-		timestamp: 1000,
+		// A realistic recent timestamp: SqliteUsagePerformanceStore prunes rows
+		// older than its retention window on every open, using this field.
+		timestamp: Date.now(),
 		provider: "acme",
 		model: "acme-large",
 		role: "default",
@@ -54,26 +56,27 @@ describe("InMemoryUsagePerformanceStore", () => {
 	});
 });
 
-describe("FileUsagePerformanceStore", () => {
-	it("round-trips samples through a mode-0600 file, across store instances", async () => {
-		const path = join(sharedTempDir, "roundtrip.json");
-		const first = new FileUsagePerformanceStore(path);
+describe("SqliteUsagePerformanceStore", () => {
+	it("round-trips samples through the durable-state database, across store instances, stamped with its own sessionId", async () => {
+		const path = join(sharedTempDir, "roundtrip.sqlite");
+		const first = new SqliteUsagePerformanceStore(path, "session-a");
 		await first.record(sample({ provider: "acme" }));
 		await first.record(sample({ provider: "other", outcome: "error", failureKind: "rate_limited" }));
+		first.close();
 
-		const second = new FileUsagePerformanceStore(path);
+		const second = new SqliteUsagePerformanceStore(path, "session-a");
 		const listed = await second.list();
+		second.close();
 		expect(listed.map((entry) => entry.provider)).toEqual(["acme", "other"]);
 		expect(listed[1].failureKind).toBe("rate_limited");
-
-		const mode = statSync(path).mode & 0o777;
-		expect(mode).toBe(0o600);
+		expect(listed.every((entry) => entry.sessionId === "session-a")).toBe(true);
 	});
 
-	it("recovers from a missing or corrupt file instead of throwing", async () => {
-		const path = join(sharedTempDir, "does-not-exist.json");
-		const store = new FileUsagePerformanceStore(path);
+	it("starts empty against a fresh database path", async () => {
+		const path = join(sharedTempDir, "does-not-exist.sqlite");
+		const store = new SqliteUsagePerformanceStore(path);
 		expect(await store.list()).toEqual([]);
+		store.close();
 	});
 });
 
@@ -161,12 +164,12 @@ describe("ModelRuntime usage/performance recording", () => {
 		expect(serialized).not.toContain("secondary-key");
 	});
 
-	it("tags a role-resolved attempt with its role name and never writes a resolved secret to the file store", async () => {
+	it("tags a role-resolved attempt with its role name and never writes a resolved secret to the durable store", async () => {
 		const providerId = "usage-perf-role";
 		const faux = fauxProvider({ provider: providerId, models: [{ id: "model-a" }] });
 		faux.setResponses([fauxAssistantMessage([], { stopReason: "stop" })]);
-		const path = join(sharedTempDir, "role-attempt.json");
-		const store = new FileUsagePerformanceStore(path);
+		const path = join(sharedTempDir, "role-attempt.sqlite");
+		const store = new SqliteUsagePerformanceStore(path);
 		const modelsPath = join(sharedTempDir, "role-attempt-models.json");
 		writeFileSync(
 			modelsPath,
@@ -189,8 +192,9 @@ describe("ModelRuntime usage/performance recording", () => {
 		const samples = await store.list();
 		expect(samples).toHaveLength(1);
 		expect(samples[0].role).toBe("default");
+		store.close();
 
-		const content = readFileSync(path, "utf-8");
+		const content = readFileSync(path, "latin1");
 		expect(content).not.toContain("api_key");
 		expect(content).not.toContain("apiKey");
 	});

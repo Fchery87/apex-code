@@ -1,6 +1,6 @@
 # Phase 8 observability & cost
 
-**Status:** Not started — 0 of 7 tasks
+**Status:** In progress — 8.1 partially landed (production wiring, schema v4, store-level rotation verified; retention-days test, degradation-diagnostic test, and concurrent-open test still open), 0 of 7 tasks fully done
 
 This plan implements `docs/specs/2026-08-15-observability-and-cost.md` and ADR
 `0012-observability-export-boundary.md`. Task 8.1 is the blocking prerequisite: the
@@ -10,9 +10,18 @@ never held a row. Until 8.1 lands, every gate in this phase measures an empty ta
 and would pass vacuously — the same failure mode Phase 3's replay gate hit when
 `replay()` never installed the context pipeline.
 
+**8.1 is larger than "wire an existing table."** Verified: `openDurableStateStore`
+is called only by `DurableStateDaemon`, and nothing outside `DurableStateDaemon`'s
+own test constructs that class. No CLI command opens a durable-state database today
+— the whole SQLite subsystem is untested against production use, not just its two
+dead tables. `SqliteUsagePerformanceStore` becomes the first production caller of
+`openDurableStateStore`, opening the database directly and independent of the
+daemon (which stays out of scope). This means 8.1 must prove concurrent-open safety
+itself; no prior phase did.
+
 | Task | State | Commit | Verification |
 | --- | --- | --- | --- |
-| 8.1 Production wiring, ledger schema, and retention | Not started | — | Failing-first test through the **production** path (`createAgentSessionServices`, not a test-constructed store) asserting one durable row per request attempt with provider/model/role/outcome/ttft/generation/tokens/cost; a forced credential rotation records its own row so attempts exceed turns; version-3 fixture database migrates to 4 with `command_journal`/`session_leases`/`cache_entries` intact; `usage_totals` dropped; an unwritable database degrades to a diagnostic with the turn still completing |
+| 8.1 Production wiring, ledger schema, and retention | **Partially done, uncommitted** | — | **Verified (red-then-green, `test/observability/usage-ledger.test.ts` + updated `test/usage-performance-store.test.ts` + `test/durable-state/sqlite-store.test.ts`):** a failing-first test through the real production path (`createAgentSessionServices`, no store passed explicitly) proves a durable, session-attributed row is recorded per request attempt (provider/model/session/role/outcome/ttft/generation/tokens/cost), constructed and consumed as `SqliteUsagePerformanceStore`; a store-level test proves one row per credential-pool attempt including a rotated-away failure; a hand-built version-3 fixture migrates to version 4 with `command_journal`/`session_leases`/`cache_entries` untouched, `model_performance` carrying all ten new columns, and `usage_totals` dropped; `FileUsagePerformanceStore` deleted (zero remaining references). Typecheck, biome, and the full affected-file test set (22+15+8 tests across four files) all pass. **Not yet done:** a dedicated retention-pruning test (pruning itself runs on every store open — proven indirectly by the round-trip test's realistic timestamps not being pruned — but no test exercises an actually-old row being removed); the degradation-to-diagnostic test (store-open failures now push an `AgentSessionRuntimeDiagnostic` instead of throwing, implemented but unverified by a test); the concurrent-open test. **Full-suite verification:** `npm test` from `packages/coding-agent` — 4 failed files / 6 failed tests / 269 passed / 6 skipped (279 files; 2323 passed / 53 skipped of 2382 tests). Re-running the 4 failing files in isolation (no full-suite CPU contention) reproduced only `external-editor`'s 3 failures — the pre-existing one already characterized in this roadmap's Phase 2b closure — while `session-id-readonly`, `startup-session-name`, and `session-manager/file-operations` all passed cleanly alone; none of the three references any file this task touched, confirming CPU-contention timeouts under full parallel load, not regressions. A `--no-file-parallelism` full-suite rerun (the stronger confirmation prior phases used) was not additionally performed. Nothing committed yet. |
 | 8.2 Cross-projection reconciliation gate | Not started | — | The ledger's per-session cost aggregate equals `getUsageCostBreakdown()` over the same session's entries **exactly**, over a recorded session containing assistant messages, tool results, and at least one compaction or branch summary; this is the phase's correctness anchor and the answer to ADR 0010's principle applied outside the tool registry |
 | 8.3 Aggregation module and `apex-code cost` | Not started | — | One query module grouping cost and latency by model, session, and role over a caller-specified range; `apex-code cost --since` exercised end to end against a seeded ledger; per-role rows are non-empty when roles were used, which is the dimension nothing surfaces today |
 | 8.4 `/session` role and latency | Not started | — | `/session` additionally renders per-role attribution and ttft/generation; existing per-model breakdown and cache-waste output unchanged (assert the existing lines still render, so this is additive and not a rewrite) |
@@ -50,6 +59,12 @@ If it is moved, correct the order here rather than annotating it.
    all rows intact, `usage_totals` gone.
 4. Add the degradation test: make the database unwritable and assert the turn still
    completes and surfaces a diagnostic. Observability must never fail a turn.
+5. Add the concurrent-open test: two `SqliteUsagePerformanceStore` instances against
+   the same path (simulating two CLI invocations against one agent directory) each
+   record a sample from a concurrent turn; assert both rows land and neither instance
+   throws. This is the first production exercise of `openDurableStateStore` under
+   concurrency, so it is proven here rather than assumed from `DurableStateDaemon`'s
+   isolated tests.
 
 ### Green
 

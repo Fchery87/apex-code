@@ -31,7 +31,6 @@ describe("durable state SQLite schema", () => {
 			"model_performance",
 			"schema_migrations",
 			"session_leases",
-			"usage_totals",
 		]);
 		expect(store.columns("schema_migrations")).toEqual(["version", "applied_at"]);
 		for (const table of store.tableNames()) {

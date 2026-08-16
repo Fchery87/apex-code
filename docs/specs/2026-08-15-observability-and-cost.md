@@ -79,6 +79,7 @@ Verified against the tree at `035606611`, not recalled.
 | `usage_totals` and `model_performance` are dead schema | Declared at `src/core/durable-state/sqlite.ts:109` and `:117`. No `INSERT`, `UPDATE`, or `SELECT` against either name exists anywhere in `packages/`. The `TABLES` const (`sqlite.ts:35`) is used at exactly one site, `sqlite.ts:255`, as a read-only allowlist for a `columns()` introspection helper. The store exposes no generic write path. |
 | `model_performance` cannot hold the sample as typed | It has `provider`, `model_id`, `ttft_ms`, `generation_ms`, `sampled_at`. `UsagePerformanceSample` (`src/core/usage-performance-store.ts:14-28`) additionally carries `role`, `credentialIdentity`, `outcome`, `failureKind`, four token counts, and `cost`. |
 | Neither the sample nor `ModelRuntime` knows the session | `UsagePerformanceSample` has no session field, and `ModelRuntime` is session-agnostic — it is constructed per session at `agent-session-services.ts:144` but may also be created standalone (`sdk.ts:215`, `auth-check.ts:67`) and accepted pre-built via `options.modelRuntime`. Session attribution cannot come from `instrumentAttempt`. |
+| **The whole SQLite durable-state subsystem has zero production callers, not just its two dead tables** | `openDurableStateStore` (`sqlite.ts:196`) is called only by `DurableStateDaemon` (`daemon.ts:33`), and `DurableStateDaemon` is constructed only in its own test file (`test/durable-state/daemon.test.ts`) — zero matches for `new DurableStateDaemon(` or any daemon-starting call in `src/`. No CLI command opens a durable-state database today. This phase's sample store is therefore the **first production caller** of this subsystem, not a second table added to a running one. |
 | The file-backed store is quadratic | `FileUsagePerformanceStore.record()` (`src/core/usage-performance-store.ts:85-91`) parses the entire JSON document and rewrites it pretty-printed under lock, once per request attempt. Its own header comment (`:77`) says "Transitional: Phase 6 supersedes this with SQLite." Phase 6 landed and did not. |
 | Durable-state schema is at version 3 | `CURRENT_DURABLE_STATE_SCHEMA_VERSION = 3` (`sqlite.ts:5`). Migrations are an `if (version < N)` ladder with `ALTER TABLE` (`sqlite.ts:201-240`). |
 | Per-model, per-session cost **already ships** | `/session` (`src/modes/interactive/interactive-mode.ts:5992`) renders token totals with a cached/uncached split and hit rate, total cost, a per-`provider/model` cost breakdown via `getUsageCostBreakdown` (`src/core/usage-totals.ts:37`), and cache re-billed waste via `computeCacheWaste` (`src/core/cache-stats.ts:138`). |
@@ -181,6 +182,14 @@ median criterion.
       surface that no user has asked for. The roadmap frames this work as "cheap".
 - [ ] **Redesigning the footer's information architecture.** Fix the defects; do not
       reopen the layout.
+- [ ] **Wiring `DurableStateDaemon` into a CLI entry point, or fixing Phase 6's
+      exit criterion gap.** Verified: `DurableStateDaemon` is constructed only in its
+      own test file; no command starts it. That is arguably an open Phase 6
+      obligation (its `kill -9`-survives-restart criterion has nothing to restart in
+      production), not this phase's to close. `SqliteUsagePerformanceStore` opens the
+      durable-state database directly — it does not start, require, or depend on a
+      daemon process — so this phase does not need that gap closed to proceed, and
+      does not close it either. Flagged, not fixed; see *Risks*.
 - [ ] **Measured routing.** `model_performance` was named for driving role→model
       resolution from measurement. Actually routing on it changes which model runs a
       turn — a behaviour change, not observability. This phase makes the measurement
@@ -197,6 +206,7 @@ median criterion.
 | Ledger schema | Bump to version 4; extend `model_performance` with `session_id`, `role`, `credential_identity`, `outcome`, `failure_kind`, four token columns, `cost`; drop `usage_totals` | `src/core/durable-state/sqlite.ts` |
 | Sample store | New `SqliteUsagePerformanceStore` implementing the existing `UsagePerformanceStore` interface; retire the file-backed one | `src/core/usage-performance-store.ts` |
 | Session attribution | The store is constructed **per session** and stamps `session_id` on write. `UsagePerformanceSample` and `instrumentAttempt` are left unchanged | `src/core/usage-performance-store.ts`, `src/core/agent-session-services.ts` |
+| Database ownership | `SqliteUsagePerformanceStore` opens the durable-state database directly via `openDurableStateStore`, independent of `DurableStateDaemon` (which stays out of scope — see *Risks*). Every CLI invocation, not only a running daemon, needs its samples recorded, so the store cannot depend on a daemon process existing | `src/core/usage-performance-store.ts` |
 | Aggregation | One query module producing cost + latency grouped by model, session, and role over a time range | `src/core/observability/aggregate.ts` (new) |
 | Headless surface | `apex-code cost` subcommand reading the aggregation | `src/cli/cost-command.ts` (new), `src/cli/args.ts` |
 | Interactive surface | Extend `/session` with role attribution and latency | `src/modes/interactive/interactive-mode.ts:5992` |
@@ -233,6 +243,20 @@ turn (see Goals).
 | Roadmap Phase 8 exit criterion | doc | **Amended** — see *Verification*. |
 
 ## Risks
+
+**This phase is the first production code ever to open the durable-state
+database.** `openDurableStateStore` has run only inside tests and inside
+`DurableStateDaemon`, which nothing constructs outside its own test. Every prior
+assumption about that subsystem — that it behaves correctly under real filesystem
+conditions, concurrent opens from multiple CLI invocations, or an interrupted write —
+is untested against production use. `node:sqlite`'s own locking is expected to
+handle concurrent-open safely (WAL-mode readers/writers), but "expected to" is not
+"proven to" until this phase's own tests exercise it, since no prior phase did.
+Mitigation: task 8.1 includes a concurrent-open test (two sessions writing to the
+same database) before anything downstream depends on it. Signal that it broke: a
+locked-database error surfacing to a user during an ordinary turn, which the
+degrade-to-diagnostic Goal exists to catch even if the underlying lock contention
+itself isn't fully eliminated.
 
 **Self-measurement.** Phase 7's known hazard, now with a second ledger. Any test
 that drives a turn from the repo root writes synthetic rows into the real durable
