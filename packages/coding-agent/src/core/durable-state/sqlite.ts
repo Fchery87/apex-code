@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
 /** Current schema for the daemon-owned durable-state sidecar. */
-export const CURRENT_DURABLE_STATE_SCHEMA_VERSION = 3;
+export const CURRENT_DURABLE_STATE_SCHEMA_VERSION = 4;
 
 export type CommandJournalState = "created" | "running" | "completed" | "failed" | "interrupted";
 
@@ -39,8 +39,45 @@ const TABLES = [
 	"model_performance",
 	"schema_migrations",
 	"session_leases",
-	"usage_totals",
 ] as const;
+
+/** Columns added to `model_performance` in schema version 4 (roadmap Phase 8). */
+const MODEL_PERFORMANCE_V4_COLUMNS: ReadonlyArray<readonly [string, string]> = [
+	["session_id", "TEXT"],
+	["role", "TEXT"],
+	["credential_identity", "TEXT"],
+	["outcome", "TEXT"],
+	["failure_kind", "TEXT"],
+	["input_tokens", "INTEGER"],
+	["output_tokens", "INTEGER"],
+	["cache_read_tokens", "INTEGER"],
+	["cache_write_tokens", "INTEGER"],
+	["cost", "REAL"],
+];
+
+/**
+ * Plain, domain-independent row shape for `model_performance`. Deliberately not the
+ * richer `UsagePerformanceSample` (which carries a branded `CredentialIdentity` and a
+ * nested `usage` object) — this module owns SQLite schema and writes only, never
+ * `ModelRuntime`'s domain types, to avoid a circular import between the two.
+ */
+export interface UsagePerformanceRow {
+	provider: string;
+	modelId: string;
+	ttftMs: number | null;
+	generationMs: number | null;
+	sampledAt: string;
+	sessionId: string | null;
+	role: string | null;
+	credentialIdentity: string | null;
+	outcome: string | null;
+	failureKind: string | null;
+	inputTokens: number | null;
+	outputTokens: number | null;
+	cacheReadTokens: number | null;
+	cacheWriteTokens: number | null;
+	cost: number | null;
+}
 
 export interface RecoveryDiagnostic {
 	commandId: string;
@@ -70,6 +107,9 @@ export interface DurableStateStore {
 	}): SessionLeaseRecord;
 	releaseLease(sessionId: string, ownerId: string): void;
 	getLease(sessionId: string): SessionLeaseRecord | undefined;
+	recordUsagePerformance(row: UsagePerformanceRow): void;
+	listUsagePerformance(): UsagePerformanceRow[];
+	pruneUsagePerformance(olderThanIso: string): number;
 	close(): void;
 }
 
@@ -106,21 +146,23 @@ function createSchema(database: DatabaseSync): void {
 			expires_at TEXT NOT NULL,
 			PRIMARY KEY (session_id, owner_id)
 		);
-		CREATE TABLE IF NOT EXISTS usage_totals (
-			session_id TEXT PRIMARY KEY,
-			input_tokens INTEGER NOT NULL DEFAULT 0,
-			output_tokens INTEGER NOT NULL DEFAULT 0,
-			cache_read_tokens INTEGER NOT NULL DEFAULT 0,
-			cache_write_tokens INTEGER NOT NULL DEFAULT 0,
-			cost REAL NOT NULL DEFAULT 0
-		);
 		CREATE TABLE IF NOT EXISTS model_performance (
 			id INTEGER PRIMARY KEY,
 			provider TEXT NOT NULL,
 			model_id TEXT NOT NULL,
 			ttft_ms REAL,
 			generation_ms REAL,
-			sampled_at TEXT NOT NULL
+			sampled_at TEXT NOT NULL,
+			session_id TEXT,
+			role TEXT,
+			credential_identity TEXT,
+			outcome TEXT,
+			failure_kind TEXT,
+			input_tokens INTEGER,
+			output_tokens INTEGER,
+			cache_read_tokens INTEGER,
+			cache_write_tokens INTEGER,
+			cost REAL
 		);
 		CREATE TABLE IF NOT EXISTS cache_entries (
 			key TEXT PRIMARY KEY,
@@ -226,6 +268,16 @@ export function openDurableStateStore(path: string): DurableStateStore {
 				SELECT session_id, owner_id, mode, expires_at FROM session_leases_v2;
 				DROP TABLE session_leases_v2;
 			`);
+		}
+		if (version < 4 && version > 0) {
+			const modelPerformanceColumns = database.prepare('PRAGMA table_info("model_performance")').all() as Array<{
+				name: string;
+			}>;
+			const existingNames = new Set(modelPerformanceColumns.map((column) => column.name));
+			for (const [name, type] of MODEL_PERFORMANCE_V4_COLUMNS) {
+				if (!existingNames.has(name)) database.exec(`ALTER TABLE model_performance ADD COLUMN ${name} ${type}`);
+			}
+			database.exec("DROP TABLE IF EXISTS usage_totals");
 		}
 		if (version < CURRENT_DURABLE_STATE_SCHEMA_VERSION) {
 			database
@@ -353,6 +405,80 @@ export function openDurableStateStore(path: string): DurableStateStore {
 			database.prepare("DELETE FROM session_leases WHERE session_id = ? AND owner_id = ?").run(sessionId, ownerId);
 		},
 		getLease: (sessionId) => readLease(database, sessionId),
+		recordUsagePerformance: (row) => {
+			database
+				.prepare(
+					`INSERT INTO model_performance (
+						provider, model_id, ttft_ms, generation_ms, sampled_at,
+						session_id, role, credential_identity, outcome, failure_kind,
+						input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost
+					) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				)
+				.run(
+					row.provider,
+					row.modelId,
+					row.ttftMs,
+					row.generationMs,
+					row.sampledAt,
+					row.sessionId,
+					row.role,
+					row.credentialIdentity,
+					row.outcome,
+					row.failureKind,
+					row.inputTokens,
+					row.outputTokens,
+					row.cacheReadTokens,
+					row.cacheWriteTokens,
+					row.cost,
+				);
+		},
+		listUsagePerformance: () =>
+			(
+				database
+					.prepare(
+						`SELECT provider, model_id, ttft_ms, generation_ms, sampled_at, session_id, role,
+							credential_identity, outcome, failure_kind, input_tokens, output_tokens,
+							cache_read_tokens, cache_write_tokens, cost
+						FROM model_performance ORDER BY id ASC`,
+					)
+					.all() as Array<{
+					provider: string;
+					model_id: string;
+					ttft_ms: number | null;
+					generation_ms: number | null;
+					sampled_at: string;
+					session_id: string | null;
+					role: string | null;
+					credential_identity: string | null;
+					outcome: string | null;
+					failure_kind: string | null;
+					input_tokens: number | null;
+					output_tokens: number | null;
+					cache_read_tokens: number | null;
+					cache_write_tokens: number | null;
+					cost: number | null;
+				}>
+			).map((row) => ({
+				provider: row.provider,
+				modelId: row.model_id,
+				ttftMs: row.ttft_ms,
+				generationMs: row.generation_ms,
+				sampledAt: row.sampled_at,
+				sessionId: row.session_id,
+				role: row.role,
+				credentialIdentity: row.credential_identity,
+				outcome: row.outcome,
+				failureKind: row.failure_kind,
+				inputTokens: row.input_tokens,
+				outputTokens: row.output_tokens,
+				cacheReadTokens: row.cache_read_tokens,
+				cacheWriteTokens: row.cache_write_tokens,
+				cost: row.cost,
+			})),
+		pruneUsagePerformance: (olderThanIso) => {
+			const result = database.prepare("DELETE FROM model_performance WHERE sampled_at < ?").run(olderThanIso);
+			return Number(result.changes);
+		},
 		close: () => database.close(),
 	};
 }

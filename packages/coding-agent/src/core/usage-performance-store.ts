@@ -5,16 +5,15 @@
  * Never holds a credential secret — only the opaque CredentialIdentity label.
  */
 
-import { join } from "node:path";
-import { getAgentDir } from "../config.ts";
-import { normalizePath } from "../utils/paths.ts";
-import { type AuthStorageBackend, FileAuthStorageBackend } from "./auth-storage.ts";
-import type { CredentialFailureKind, CredentialIdentity } from "./credential-pool.ts";
+import { type CredentialFailureKind, type CredentialIdentity, createCredentialIdentity } from "./credential-pool.ts";
+import { type DurableStateStore, openDurableStateStore } from "./durable-state/sqlite.ts";
 
 export interface UsagePerformanceSample {
 	timestamp: number;
 	provider: string;
 	model: string;
+	/** Stamped by the store at record time from its own construction, never by the caller. */
+	sessionId?: string;
 	role?: string;
 	/** Opaque, non-secret credential label; absent when no credential pool was involved. */
 	credentialIdentity?: CredentialIdentity;
@@ -32,36 +31,6 @@ export interface UsagePerformanceStore {
 	list(): Promise<readonly UsagePerformanceSample[]>;
 }
 
-const STORE_VERSION = 1;
-
-interface StoredUsagePerformance {
-	version: number;
-	samples: UsagePerformanceSample[];
-}
-
-function emptyStore(): StoredUsagePerformance {
-	return { version: STORE_VERSION, samples: [] };
-}
-
-function parseStore(content: string | undefined): StoredUsagePerformance {
-	if (!content) return emptyStore();
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(content);
-	} catch {
-		return emptyStore();
-	}
-	if (
-		typeof parsed !== "object" ||
-		parsed === null ||
-		(parsed as Partial<StoredUsagePerformance>).version !== STORE_VERSION ||
-		!Array.isArray((parsed as Partial<StoredUsagePerformance>).samples)
-	) {
-		return emptyStore();
-	}
-	return parsed as StoredUsagePerformance;
-}
-
 export class InMemoryUsagePerformanceStore implements UsagePerformanceStore {
 	private readonly samples: UsagePerformanceSample[] = [];
 
@@ -74,23 +43,72 @@ export class InMemoryUsagePerformanceStore implements UsagePerformanceStore {
 	}
 }
 
-/** Versioned, mode-0600 file-backed store. Transitional: Phase 6 supersedes this with SQLite. */
-export class FileUsagePerformanceStore implements UsagePerformanceStore {
-	private readonly storage: AuthStorageBackend;
+const DEFAULT_RETENTION_DAYS = 90;
 
-	constructor(path: string = join(getAgentDir(), "usage-performance.json")) {
-		this.storage = new FileAuthStorageBackend(normalizePath(path));
+/**
+ * Durable, cross-session store backed by the shared durable-state SQLite database
+ * (roadmap Phase 8). Constructed per session so every recorded sample is stamped
+ * with the session that produced it; `sessionId` is never taken from the sample
+ * itself, only from how the store was constructed (see the spec's "Session
+ * attribution" note — `ModelRuntime` is session-agnostic and cannot supply this).
+ */
+export class SqliteUsagePerformanceStore implements UsagePerformanceStore {
+	private readonly store: DurableStateStore;
+	private readonly sessionId: string | undefined;
+
+	constructor(databasePath: string, sessionId?: string, retentionDays: number = DEFAULT_RETENTION_DAYS) {
+		this.store = openDurableStateStore(databasePath);
+		this.sessionId = sessionId;
+		const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+		this.store.pruneUsagePerformance(cutoff);
 	}
 
 	async record(sample: UsagePerformanceSample): Promise<void> {
-		await this.storage.withLockAsync(async (content) => {
-			const current = parseStore(content);
-			current.samples.push(sample);
-			return { result: undefined, next: JSON.stringify(current, null, 2) };
+		this.store.recordUsagePerformance({
+			provider: sample.provider,
+			modelId: sample.model,
+			ttftMs: sample.ttftMs,
+			generationMs: sample.generationMs,
+			sampledAt: new Date(sample.timestamp).toISOString(),
+			sessionId: this.sessionId ?? null,
+			role: sample.role ?? null,
+			credentialIdentity: sample.credentialIdentity ?? null,
+			outcome: sample.outcome,
+			failureKind: sample.failureKind ?? null,
+			inputTokens: sample.usage?.input ?? null,
+			outputTokens: sample.usage?.output ?? null,
+			cacheReadTokens: sample.usage?.cacheRead ?? null,
+			cacheWriteTokens: sample.usage?.cacheWrite ?? null,
+			cost: sample.cost ?? null,
 		});
 	}
 
 	async list(): Promise<readonly UsagePerformanceSample[]> {
-		return this.storage.withLockAsync(async (content) => ({ result: parseStore(content).samples }));
+		return this.store.listUsagePerformance().map((row) => ({
+			timestamp: Date.parse(row.sampledAt),
+			provider: row.provider,
+			model: row.modelId,
+			sessionId: row.sessionId ?? undefined,
+			role: row.role ?? undefined,
+			credentialIdentity: row.credentialIdentity ? createCredentialIdentity(row.credentialIdentity) : undefined,
+			outcome: row.outcome as UsagePerformanceSample["outcome"],
+			failureKind: (row.failureKind ?? undefined) as CredentialFailureKind | undefined,
+			ttftMs: row.ttftMs ?? 0,
+			generationMs: row.generationMs ?? 0,
+			usage:
+				row.inputTokens === null
+					? undefined
+					: {
+							input: row.inputTokens,
+							output: row.outputTokens ?? 0,
+							cacheRead: row.cacheReadTokens ?? 0,
+							cacheWrite: row.cacheWriteTokens ?? 0,
+						},
+			cost: row.cost ?? undefined,
+		}));
+	}
+
+	close(): void {
+		this.store.close();
 	}
 }

@@ -15,6 +15,10 @@ import {
 import { type CreateAgentSessionOptions, type CreateAgentSessionResult, createAgentSession } from "./sdk.ts";
 import type { SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
+import { SqliteUsagePerformanceStore } from "./usage-performance-store.ts";
+
+/** Filename of the shared durable-state database within an agent directory (roadmap Phase 8). */
+const DURABLE_STATE_DATABASE_FILENAME = "state.sqlite";
 
 /**
  * Non-fatal issues collected while creating services or sessions.
@@ -38,6 +42,12 @@ export interface AgentSessionRuntimeDiagnostic {
 export interface CreateAgentSessionServicesOptions {
 	cwd: string;
 	agentDir?: string;
+	/**
+	 * Session id to stamp on every usage-performance sample this runtime records.
+	 * Only observed when `modelRuntime` is not already provided — a caller-supplied
+	 * runtime owns its own store, if any.
+	 */
+	sessionId?: string;
 	settingsManager?: SettingsManager;
 	modelRuntime?: ModelRuntime;
 	modelRuntimeSignal?: AbortSignal;
@@ -139,12 +149,30 @@ export async function createAgentSessionServices(
 ): Promise<AgentSessionServices> {
 	const cwd = resolvePath(options.cwd);
 	const agentDir = options.agentDir ? resolvePath(options.agentDir) : getAgentDir();
+	const diagnostics: AgentSessionRuntimeDiagnostic[] = [];
+
+	// A ledger failure must never block session creation or a turn — open it
+	// best-effort and degrade to a diagnostic, never a thrown error.
+	let usagePerformanceStore: SqliteUsagePerformanceStore | undefined;
+	if (!options.modelRuntime) {
+		try {
+			usagePerformanceStore = new SqliteUsagePerformanceStore(
+				join(agentDir, DURABLE_STATE_DATABASE_FILENAME),
+				options.sessionId,
+			);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			diagnostics.push({ type: "warning", message: `Usage/cost recording unavailable: ${message}` });
+		}
+	}
+
 	const modelRuntime =
 		options.modelRuntime ??
 		(await ModelRuntime.create({
 			authPath: join(agentDir, "auth.json"),
 			modelsPath: join(agentDir, "models.json"),
 			signal: options.modelRuntimeSignal,
+			usagePerformanceStore,
 		}));
 	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
 	const resourceLoader = new DefaultResourceLoader({
@@ -155,7 +183,6 @@ export async function createAgentSessionServices(
 	});
 	await resourceLoader.reload(options.resourceLoaderReloadOptions);
 
-	const diagnostics: AgentSessionRuntimeDiagnostic[] = [];
 	const extensionsResult = resourceLoader.getExtensions();
 	for (const { name, config, extensionPath } of extensionsResult.runtime.pendingProviderRegistrations) {
 		try {
