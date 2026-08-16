@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0 through 10 landed · Phase 11 active · **Created:** 2026-08-08 · **Last updated:** 2026-08-16
+**Status:** Active — Phases 0 through 11 landed · **Created:** 2026-08-08 · **Last updated:** 2026-08-16
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -93,7 +93,7 @@ capable and measurably worse.
 | 8 | Observability & cost | **landed** — 7 of 7 tasks, exit criterion amended before implementation · `9c7c9e9aa` | [spec](specs/2026-08-15-observability-and-cost.md) | — |
 | 9 | Release hardening | **landed** — 6 of 6 tasks · `a0be145d7` | [spec](specs/2026-08-16-release-hardening.md) | — |
 | 10 | Complete the Apex Code product surface | **landed** — 7 of 7 tasks · `6b602044d` (required three-OS CI run 31940072123) | [spec](specs/2026-08-16-complete-apex-product-surface.md) | — |
-| 11 | Remove unowned hosted-service defaults | **active** — 1 of 5 tasks | [spec](specs/2026-08-16-remove-unowned-hosted-service-defaults.md) | [plan](plans/2026-08-16-remove-unowned-hosted-service-defaults.md) |
+| 11 | Remove unowned hosted-service defaults | **landed** — 5 of 5 tasks · `bfa746d0c` (required three-OS CI run 31945192886) | [spec](specs/2026-08-16-remove-unowned-hosted-service-defaults.md) | — |
 
 ---
 
@@ -809,10 +809,11 @@ integrations retain their existing behavior without cross-origin cache reuse, `/
 cannot publish before confirmation, and required Ubuntu/macOS/Windows install, build,
 check, and full tests pass from the spaced checkout.
 
-**Current state.** Active. See the
-[spec](specs/2026-08-16-remove-unowned-hosted-service-defaults.md) and
-[plan](plans/2026-08-16-remove-unowned-hosted-service-defaults.md). ADR 0013 settles the
-hosted-service policy.
+**Current state.** Landed. Required Ubuntu, macOS, and Windows jobs passed the
+spaced-checkout assertion, install, build, check, and full root test suite in
+[CI run 31945192886](https://github.com/Fchery87/apex-code/actions/runs/31945192886).
+See the [spec](specs/2026-08-16-remove-unowned-hosted-service-defaults.md) for the durable
+outcome; ADR 0013 settles the hosted-service policy.
 
 ---
 
