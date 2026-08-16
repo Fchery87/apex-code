@@ -29,6 +29,19 @@ export function formatTokens(count: number): string {
 	return `${Math.round(count / 1000000)}M`;
 }
 
+/** Accessibility/display settings the footer reads (roadmap Phase 8, task 8.6). */
+export interface FooterAccessibilitySettings {
+	getSymbolPreset(): "unicode" | "ascii";
+	getColorBlindMode(): boolean;
+	getTokenUsageDisplay(): "off" | "compact" | "full";
+}
+
+const DEFAULT_ACCESSIBILITY_SETTINGS: FooterAccessibilitySettings = {
+	getSymbolPreset: () => "unicode",
+	getColorBlindMode: () => false,
+	getTokenUsageDisplay: () => "compact",
+};
+
 export function formatCwdForFooter(cwd: string, home: string | undefined): string {
 	if (!home) return cwd;
 
@@ -51,10 +64,16 @@ export class FooterComponent implements Component {
 	private autoCompactEnabled = true;
 	private session: AgentSession;
 	private footerData: ReadonlyFooterDataProvider;
+	private accessibilitySettings: FooterAccessibilitySettings;
 
-	constructor(session: AgentSession, footerData: ReadonlyFooterDataProvider) {
+	constructor(
+		session: AgentSession,
+		footerData: ReadonlyFooterDataProvider,
+		accessibilitySettings: FooterAccessibilitySettings = DEFAULT_ACCESSIBILITY_SETTINGS,
+	) {
 		this.session = session;
 		this.footerData = footerData;
+		this.accessibilitySettings = accessibilitySettings;
 	}
 
 	setSession(session: AgentSession): void {
@@ -83,6 +102,12 @@ export class FooterComponent implements Component {
 
 	render(width: number): string[] {
 		const state = this.session.state;
+		const symbolPreset = this.accessibilitySettings.getSymbolPreset();
+		const colorBlindMode = this.accessibilitySettings.getColorBlindMode();
+		const tokenUsageDisplay = this.accessibilitySettings.getTokenUsageDisplay();
+		const upSymbol = symbolPreset === "ascii" ? "^" : "↑";
+		const downSymbol = symbolPreset === "ascii" ? "v" : "↓";
+		const bulletSymbol = symbolPreset === "ascii" ? "-" : "•";
 
 		// Calculate cumulative usage from ALL session entries (not just post-compaction messages)
 		const usageTotals = createUsageTotals();
@@ -122,37 +147,51 @@ export class FooterComponent implements Component {
 		// Add session name if set
 		const sessionName = this.session.sessionManager.getSessionName();
 		if (sessionName) {
-			pwd = `${pwd} • ${sessionName}`;
+			pwd = `${pwd} ${bulletSymbol} ${sessionName}`;
 		}
 
-		// Build stats line
+		// Build stats line. tokenUsageDisplay: "off" hides this whole section
+		// (context% and model name are separate and always shown); "full" shows
+		// exact counts instead of formatTokens' abbreviation.
+		const formatTokenCount = tokenUsageDisplay === "full" ? (n: number) => n.toLocaleString() : formatTokens;
 		const statsParts = [];
-		if (usageTotals.input) statsParts.push(`↑${formatTokens(usageTotals.input)}`);
-		if (usageTotals.output) statsParts.push(`↓${formatTokens(usageTotals.output)}`);
-		if (usageTotals.cacheRead) statsParts.push(`R${formatTokens(usageTotals.cacheRead)}`);
-		if (usageTotals.cacheWrite) statsParts.push(`W${formatTokens(usageTotals.cacheWrite)}`);
-		if ((usageTotals.cacheRead > 0 || usageTotals.cacheWrite > 0) && latestCacheHitRate !== undefined) {
-			statsParts.push(`CH${latestCacheHitRate.toFixed(1)}%`);
+		if (tokenUsageDisplay !== "off") {
+			if (usageTotals.input) statsParts.push(`${upSymbol}${formatTokenCount(usageTotals.input)}`);
+			if (usageTotals.output) statsParts.push(`${downSymbol}${formatTokenCount(usageTotals.output)}`);
+			if (usageTotals.cacheRead) statsParts.push(`R${formatTokenCount(usageTotals.cacheRead)}`);
+			if (usageTotals.cacheWrite) statsParts.push(`W${formatTokenCount(usageTotals.cacheWrite)}`);
+			if ((usageTotals.cacheRead > 0 || usageTotals.cacheWrite > 0) && latestCacheHitRate !== undefined) {
+				statsParts.push(`CH${latestCacheHitRate.toFixed(1)}%`);
+			}
 		}
 
 		// Kimi Coding is subscription-backed despite using API-key authentication.
 		const usingSubscription = state.model
 			? state.model.provider === "kimi-coding" || this.session.modelRuntime.isUsingSubscription(state.model.provider)
 			: false;
-		if (usageTotals.cost || usingSubscription) {
+		if (tokenUsageDisplay !== "off" && (usageTotals.cost || usingSubscription)) {
 			const costStr = `$${usageTotals.cost.toFixed(3)}${usingSubscription ? " (sub)" : ""}`;
 			statsParts.push(costStr);
 		}
 
-		// Colorize context percentage based on usage
+		// Context pressure is signalled through text at every setting -- never
+		// color alone (WCAG 1.4.1) -- with color as an additional channel. The
+		// default error/warning pair (red/amber) is already distinguishable for
+		// most red-green colorblindness; colorBlindMode's palette adjustment
+		// moves the critical (>90%) threshold to "accent" -- a hue outside that
+		// red/amber family entirely -- rather than relying on a style attribute
+		// like bold/underline, which several terminals (and this theme's own
+		// chalk-backed style methods, suppressed outside a real TTY) silently
+		// drop, making it an unreliable second channel.
 		let contextPercentStr: string;
 		const autoIndicator = this.autoCompactEnabled ? " (auto)" : "";
+		const pressureMarker = contextPercentValue > 90 ? "!!" : contextPercentValue > 70 ? "!" : "";
 		const contextPercentDisplay =
 			contextPercent === "?"
 				? `?/${formatTokens(contextWindow)}${autoIndicator}`
-				: `${contextPercent}%/${formatTokens(contextWindow)}${autoIndicator}`;
+				: `${contextPercent}%${pressureMarker}/${formatTokens(contextWindow)}${autoIndicator}`;
 		if (contextPercentValue > 90) {
-			contextPercentStr = theme.fg("error", contextPercentDisplay);
+			contextPercentStr = theme.fg(colorBlindMode ? "accent" : "error", contextPercentDisplay);
 		} else if (contextPercentValue > 70) {
 			contextPercentStr = theme.fg("warning", contextPercentDisplay);
 		} else {
@@ -160,7 +199,7 @@ export class FooterComponent implements Component {
 		}
 		statsParts.push(contextPercentStr);
 		if (areExperimentalFeaturesEnabled()) {
-			statsParts.push(`${theme.fg("dim", "•")} ${theme.bold(theme.fg("warning", "xp"))}`);
+			statsParts.push(`${theme.fg("dim", bulletSymbol)} ${theme.bold(theme.fg("warning", "xp"))}`);
 		}
 
 		let statsLeft = statsParts.join(" ");
@@ -184,7 +223,9 @@ export class FooterComponent implements Component {
 		if (state.model?.reasoning) {
 			const thinkingLevel = state.thinkingLevel || "off";
 			rightSideWithoutProvider =
-				thinkingLevel === "off" ? `${modelName} • thinking off` : `${modelName} • ${thinkingLevel}`;
+				thinkingLevel === "off"
+					? `${modelName} ${bulletSymbol} thinking off`
+					: `${modelName} ${bulletSymbol} ${thinkingLevel}`;
 		}
 
 		// Prepend the provider in parentheses if there are multiple providers and there's enough room
