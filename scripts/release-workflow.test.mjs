@@ -43,3 +43,24 @@ test("release workflow validates tag identity and clean-installs the published C
 	assert.match(commands, /apex-code" --version/);
 	assert.match(source, /apex-code-agent-core@\$\{VERSION\}.*did not become visible/s);
 });
+
+test("macOS verification job depends on publish, runs on the other supported platform, and never re-publishes", async () => {
+	const { source, workflow } = await readWorkflow();
+	const macJob = workflow.jobs["verify-macos-install"];
+
+	assert.ok(macJob, "expected a verify-macos-install job");
+	assert.equal(macJob["runs-on"], "macos-latest");
+	assert.equal(macJob.needs, "publish");
+	assert.equal(workflow.jobs.publish.outputs?.version, "${{ steps.release.outputs.version }}");
+
+	const macCommands = macJob.steps.map((step) => step.run).filter(Boolean).join("\n");
+	assert.match(macCommands, /npm install --global .*--prefer-online .*--ignore-scripts .*apex-code@/);
+	assert.match(macCommands, /"\$scratch\/global\/bin\/apex-code" --version/);
+	assert.doesNotMatch(macCommands, /npm publish/);
+
+	// The exactly-twice publish assertion above only inspected the publish job's
+	// steps; assert it holds for the whole file too, so a publish call hidden in
+	// the new job would fail this test even if the publish-job-scoped one above
+	// were ever loosened.
+	assert.equal((source.match(/npm publish --access public --provenance --tag next/g) ?? []).length, 2);
+});

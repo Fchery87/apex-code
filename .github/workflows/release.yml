@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: npm
+    outputs:
+      version: ${{ steps.release.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -116,6 +118,47 @@ jobs:
           # A newly published version can reach different registry/CDN edges at
           # different times. Use a fresh cache on every attempt so npm does not
           # retain an early ETARGET response, and allow up to ten minutes.
+          for attempt in {1..60}; do
+            rm -rf -- "$scratch/npm-cache"
+            if npm install --global --prefix "$scratch/global" --cache "$scratch/npm-cache" --prefer-online --ignore-scripts "apex-code@${VERSION}"; then
+              break
+            fi
+            if [[ "${attempt}" == 60 ]]; then
+              echo "apex-code@${VERSION} did not install within ten minutes" >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          [[ "$("$scratch/global/bin/apex-code" --version)" == "${VERSION}" ]]
+
+  # ADR 0005: Linux and macOS are the supported platforms (Windows is a standing
+  # exclusion, not reopened here). The Ubuntu job above builds, tests, and
+  # publishes; this job only verifies the already-published artifact installs
+  # and runs on the other supported platform -- it must never re-run the
+  # publish steps, or the release would be published twice.
+  verify-macos-install:
+    name: Verify clean install on macOS
+    runs-on: macos-latest
+    needs: publish
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Verify clean registry install
+        shell: bash
+        env:
+          VERSION: ${{ needs.publish.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+          scratch="$(mktemp -d)"
+          trap 'rm -rf -- "$scratch"' EXIT
+          cd "$scratch"
+          npm init --yes >/dev/null
+          # Same registry-propagation retry as the Ubuntu job: a fresh cache on
+          # every attempt so npm does not retain an early ETARGET response.
           for attempt in {1..60}; do
             rm -rf -- "$scratch/npm-cache"
             if npm install --global --prefix "$scratch/global" --cache "$scratch/npm-cache" --prefer-online --ignore-scripts "apex-code@${VERSION}"; then
