@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { createSandboxNetworkProxy, type SandboxNetworkProxy } from "./network-proxy.ts";
 import type { SandboxBackend, SandboxLaunch } from "./supervisor.ts";
@@ -24,15 +24,19 @@ function waitForExit(child: ReturnType<typeof spawn>): Promise<number> {
 	});
 }
 
-function readOnlyMountArguments(path: string): string[] {
-	const directory = dirname(resolve(path));
+function readOnlyMountArguments(path: string, kind: "directory" | "file" = "directory", descriptor = 3): string[] {
+	const target = resolve(path);
+	const directory = dirname(target);
 	const ancestors: string[] = [];
 	let current = directory;
 	while (current !== "/" && current !== "/home") {
 		ancestors.push(current);
 		current = dirname(current);
 	}
-	return [...ancestors.reverse().flatMap((ancestor) => ["--dir", ancestor]), "--ro-bind", directory, directory];
+	const parentArguments = ancestors.reverse().flatMap((ancestor) => ["--dir", ancestor]);
+	return kind === "file"
+		? [...parentArguments, "--tmpfs", directory, "--perms", "0400", "--file", String(descriptor), target]
+		: [...parentArguments, "--ro-bind", directory, directory];
 }
 
 function classifySandboxFailure(stderr: string): "filesystem" | "network" | "unknown" {
@@ -122,9 +126,13 @@ server.on("error", (err) => {
 `.trim(),
 			);
 
-			const readOnlyMounts = [process.execPath, launch.command, ...(launch.readOnlyPaths ?? [])].flatMap(
-				readOnlyMountArguments,
+			const readOnlyMounts = [process.execPath, launch.command, ...(launch.readOnlyPaths ?? [])].flatMap((path) =>
+				readOnlyMountArguments(path),
 			);
+			const readOnlyFileMounts = (launch.readOnlyFiles ?? []).flatMap((path, index) =>
+				readOnlyMountArguments(path, "file", index + 3),
+			);
+			const readOnlyFileDescriptors = (launch.readOnlyFiles ?? []).map((path) => openSync(path, "r"));
 			const child = spawn(
 				"bwrap",
 				[
@@ -139,6 +147,7 @@ server.on("error", (err) => {
 					"--tmpfs",
 					"/home",
 					...readOnlyMounts,
+					...readOnlyFileMounts,
 					"--bind",
 					launch.policy.workspace,
 					launch.policy.workspace,
@@ -163,7 +172,7 @@ server.on("error", (err) => {
 					launch.command,
 					...launch.args,
 				],
-				{ env: launch.environment, stdio: ["inherit", "inherit", "pipe"] },
+				{ env: launch.environment, stdio: ["inherit", "inherit", "pipe", ...readOnlyFileDescriptors] },
 			);
 			let stderr = "";
 			child.stderr?.setEncoding("utf8");
@@ -172,6 +181,7 @@ server.on("error", (err) => {
 				process.stderr.write(chunk);
 			});
 			const exitCode = await waitForExit(child);
+			for (const descriptor of readOnlyFileDescriptors) closeSync(descriptor);
 			await proxy?.close();
 			const proxyAlreadyRecordedAViolation = (violationStore?.totalCount ?? 0) > violationCountBeforeLaunch;
 			if (exitCode !== 0 && !proxyAlreadyRecordedAViolation) {

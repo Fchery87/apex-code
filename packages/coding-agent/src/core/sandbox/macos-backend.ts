@@ -117,6 +117,13 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 			const proxyPort = proxy.port as number;
 
 			const readOnlyDirs = readOnlyDirectories([process.execPath, launch.command, ...(launch.readOnlyPaths ?? [])]);
+			const readOnlyFiles = (launch.readOnlyFiles ?? []).map((path) => {
+				try {
+					return realpathSync(path);
+				} catch {
+					return resolve(path);
+				}
+			});
 			let userHome: string | undefined;
 			try {
 				userHome = realpathSync(homedir());
@@ -144,6 +151,7 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 				"(allow file-read*)",
 				'(deny file-read* (subpath (param "USER_HOME")))',
 				...readOnlyDirs.map((_, index) => `(allow file-read* (subpath (param "RO_${index}")))`),
+				...readOnlyFiles.map((_, index) => `(allow file-read* (subpath (param "RO_FILE_${index}")))`),
 				'(allow file-read* (subpath (param "WORKSPACE")))',
 				"(deny file-write*)",
 				'(allow file-write* (subpath (param "WORKSPACE")))',
@@ -156,6 +164,9 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 			const params: string[] = ["-D", `USER_HOME=${userHome}`];
 			readOnlyDirs.forEach((dir, index) => {
 				params.push("-D", `RO_${index}=${dir}`);
+			});
+			readOnlyFiles.forEach((file, index) => {
+				params.push("-D", `RO_FILE_${index}=${file}`);
 			});
 			params.push("-D", `WORKSPACE=${workspace}`);
 			params.push("-D", `PROXY_ADDR=localhost:${proxyPort}`);

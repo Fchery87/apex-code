@@ -5,8 +5,10 @@ export interface SandboxLaunch {
 	readonly args: readonly string[];
 	readonly policy: SandboxPolicy;
 	readonly environment?: NodeJS.ProcessEnv;
-	/** Application/runtime paths needed by the child but never writable by it. */
+	/** Application/runtime directories needed by the child but never writable by it. */
 	readonly readOnlyPaths?: readonly string[];
+	/** Individual read-only files, such as a host-owned credential file. */
+	readonly readOnlyFiles?: readonly string[];
 }
 
 /** A platform adapter. Its sole job is to launch a normal Apex child inside an OS boundary. */
