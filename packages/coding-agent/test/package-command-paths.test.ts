@@ -709,7 +709,7 @@ else {
 		process.argv[1] = join(selfPackageDir, "dist", "cli.js");
 		const fakePnpmScript =
 			process.platform === "win32"
-				? `@echo off\r\nif "%1"=="root" if "%2"=="-g" (echo ${globalRoot} & exit /b 0)\r\nexit /b 23\r\n`
+				? `@echo off\r\nif not "%1"=="root" goto fail\r\nif not "%2"=="-g" goto fail\r\necho ${globalRoot}\r\nexit /b 0\r\n:fail\r\nexit /b 23\r\n`
 				: `#!/bin/sh\nif [ "$1" = "root" ] && [ "$2" = "-g" ]; then\n\tprintf '%s\\n' '${globalRoot.replaceAll("'", "'\\''")}'\n\texit 0\nfi\nexit 23\n`;
 		writeFileSync(fakePnpmPath, fakePnpmScript);
 		chmodSync(fakePnpmPath, 0o755);
