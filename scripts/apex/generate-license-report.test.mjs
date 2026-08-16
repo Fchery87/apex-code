@@ -15,6 +15,10 @@ async function writePackage(nodeModulesDir, name, manifest) {
 	await writeFile(join(dir, "package.json"), JSON.stringify({ name, ...manifest }));
 }
 
+async function symlinkDirectory(target, path) {
+	await symlink(target, path, process.platform === "win32" ? "junction" : "dir");
+}
+
 async function fixture() {
 	const root = await mkdtemp(join(tmpdir(), "apex-license-report-"));
 	const nodeModules = join(root, "node_modules");
@@ -52,23 +56,26 @@ test("reports UNKNOWN rather than dropping a package with no license field", asy
 	}
 });
 
-test("excludes workspace packages resolved via a symlink into packages/", async () => {
+test("excludes symlinked workspace packages through a canonicalized checkout path", async () => {
 	const root = await fixture();
+	const checkoutAlias = `${root}-alias`;
 	try {
 		await mkdir(join(root, "packages", "coding-agent"), { recursive: true });
 		await writeFile(
 			join(root, "packages", "coding-agent", "package.json"),
 			JSON.stringify({ name: "apex-code", version: "0.0.3", license: "MIT" }),
 		);
-		await symlink(join(root, "packages", "coding-agent"), join(root, "node_modules", "apex-code"), "dir");
+		await symlinkDirectory(join(root, "packages", "coding-agent"), join(root, "node_modules", "apex-code"));
+		await symlinkDirectory(root, checkoutAlias);
 
-		const entries = collectLicenseEntries(join(root, "node_modules"));
+		const entries = collectLicenseEntries(join(checkoutAlias, "node_modules"));
 		assert.ok(
 			!entries.some((entry) => entry.name === "apex-code"),
 			"workspace package should be excluded from the third-party report",
 		);
 		assert.ok(entries.some((entry) => entry.name === "left-pad"), "real third-party packages still appear");
 	} finally {
+		await rm(checkoutAlias, { recursive: true, force: true });
 		await rm(root, { recursive: true, force: true });
 	}
 });

@@ -1,13 +1,12 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { findPackageDirectories } from "./package-workspaces.mjs";
+import { join, resolve } from "node:path";
 
-export function getPublicWorkspacePackages() {
-	return findPackageDirectories()
-		.map((directory) => ({
-			directory,
-			...JSON.parse(readFileSync(join(directory, "package.json"), "utf8")),
-		}))
-		.filter((pkg) => pkg.private !== true)
-		.map(({ directory, name, version }) => ({ directory, name, version }));
+const APEX_PUBLIC_PACKAGES = ["packages/agent", "packages/coding-agent"];
+
+export function getPublicWorkspacePackages(root = process.cwd()) {
+	return APEX_PUBLIC_PACKAGES.map((relativeDirectory) => {
+		const directory = resolve(root, relativeDirectory);
+		const manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
+		return { directory, name: manifest.name, version: manifest.version };
+	});
 }

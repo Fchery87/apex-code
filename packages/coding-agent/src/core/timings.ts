@@ -1,9 +1,9 @@
 /**
  * Central timing instrumentation for startup profiling.
- * Enable with PI_TIMING=1 environment variable.
+ * Enable with APEX_CODE_TIMING=1 environment variable.
  */
 
-const ENABLED = process.env.PI_TIMING === "1";
+const ENABLED = getApexEnvironment("APEX_CODE_TIMING") === "1";
 interface TimingNamespace {
 	timings: Array<{ label: string; ms: number }>;
 	lastTime: number;
@@ -48,3 +48,5 @@ export function printTimings(): void {
 		printTimingGroup(`Startup Timings: ${namespace}`, timingNamespace.timings);
 	}
 }
+
+import { getApexEnvironment } from "./environment.ts";

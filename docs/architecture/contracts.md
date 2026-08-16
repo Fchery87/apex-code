@@ -337,36 +337,16 @@ The four questions this contract was opened to answer:
   is explicitly a Phase 3 non-goal, so no injectable clock is required and the replay
   gate's identical-metrics requirement holds.
 
-# 3. Session entry schema — open
+# 3. Session entry schema — settled
 
-**Settle by:** start of Phase 6 — **but see the note below.**
-**Consumers:** Phases 1, 5, 6, 7, 9.
+**Decision:** ADR 0006. **Consumers:** Phases 1, 5, 6, 7, 9.
 
-Sessions are JSONL with `id`/`parentId` tree linkage, and every state change is an
-entry. Four phases add entry types: model and role changes (1), delegation and
-recursion depth (5), git provenance and leases (6), evidence references (7). Phase 9
-turns the format into a compatibility promise (ADR 0006).
+Sessions use the versioned native-v3 JSONL format settled by ADR 0006. Entries are
+append-only and linked by `id`/`parentId`; new entry types are additive and carry a
+`type` discriminator. Readers ignore unknown entry types. Removing an entry type or
+changing a field's meaning requires a format-version bump and migration.
 
-**The note:** "settle by Phase 6" is the deadline, not the safe answer. Phase 1 starts
-writing entries immediately, and entries written before the schema is settled become
-migration debt the moment Phase 9 ships. The practical rule until then:
-
-- New entry types are **additive** and carry a `type` discriminator. Readers ignore
-  unknown types rather than failing.
-- No entry type is removed or has a field's meaning changed without a version bump
-  and a migration, even pre-1.0.
-- Every entry type added before Phase 6 is recorded in this section as it lands, so
-  Phase 6 designs against a real inventory rather than reconstructing one.
-
-Open questions for the Phase 6 spec: whether evidence lives inline or by reference;
-whether delegation subtrees are entries in the parent session or separate linked
-sessions; how leases interact with the append-only assumption.
-
-## Entry types added before Phase 6
-
-*(Recorded as they land. Empty until Phase 1.)*
-
-| Phase | `type` | Fields | Added |
-| --- | --- | --- | --- |
-| 5 | `session` (header, extended -- not a new discriminated type) | `delegationDepth?: number` -- recursion depth for delegation; absent means 0, a non-delegated root. Assigned by the delegation runtime (`core/delegation/runtime.ts`), never by the tool, so the bound applies to any future delegation entry point | task 5.3, `2026-08-14-delegation-and-multi-agent.md` |
-| 7 | `evidence` | Additive evidence record with bounded structured facts and optional session-owned artifact references; unknown evidence kinds remain readable by older consumers | ADR 0007, `2026-08-16-evidence-and-verification.md` |
+Current Apex additions preserve that contract: the session header may contain the
+optional `delegationDepth` field (absent means zero), and Phase 7 adds the `evidence`
+entry type with bounded structured facts and optional session-owned artifact
+references. ADR 0006 is authoritative for compatibility and migration rules.

@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 /** The public CLI either supervises a sandbox child or starts an ordinary runtime. */
 import { fileURLToPath } from "node:url";
 import { APP_NAME, getPackageDir } from "./config.ts";
+import { setApexEnvironment } from "./core/environment.ts";
 import { configureHttpDispatcher } from "./core/http-dispatcher.ts";
 import { requiresSandboxedChild } from "./core/sandbox/cli-launch.ts";
 import { launchSandboxedCli } from "./core/sandbox/cli-supervisor.ts";
@@ -42,7 +43,7 @@ async function run(): Promise<void> {
 	}
 
 	process.title = APP_NAME;
-	process.env.PI_CODING_AGENT = "true";
+	setApexEnvironment("APEX_CODE_CODING_AGENT", "true");
 	process.env.AI_AGENT = "apex-code";
 	process.emitWarning = (() => {}) as typeof process.emitWarning;
 	configureHttpDispatcher();

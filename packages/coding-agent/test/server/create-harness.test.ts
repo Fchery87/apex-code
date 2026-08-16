@@ -153,10 +153,15 @@ describe("coding-agent Harness construction", () => {
 			});
 
 			expect(env.executionOverrides).toEqual({
+				APEX_CODE_SESSION_ID: "session-file-harness",
 				PI_SESSION_ID: "session-file-harness",
+				APEX_CODE_SESSION_FILE: "/sessions/current.jsonl",
 				PI_SESSION_FILE: "/sessions/current.jsonl",
+				APEX_CODE_PROVIDER: "google",
 				PI_PROVIDER: "google",
+				APEX_CODE_MODEL: "gemini-2.5-flash",
 				PI_MODEL: "gemini-2.5-flash",
+				APEX_CODE_REASONING_LEVEL: "high",
 				PI_REASONING_LEVEL: "high",
 			});
 			expect(result.content).toEqual([
@@ -195,10 +200,15 @@ describe("coding-agent Harness construction", () => {
 			});
 
 			expect(env.executionOverrides).toEqual({
+				APEX_CODE_SESSION_ID: "dynamic-bash-session",
 				PI_SESSION_ID: "dynamic-bash-session",
+				APEX_CODE_SESSION_FILE: "",
 				PI_SESSION_FILE: "",
+				APEX_CODE_PROVIDER: "anthropic",
 				PI_PROVIDER: "anthropic",
+				APEX_CODE_MODEL: "claude-sonnet-4-5",
 				PI_MODEL: "claude-sonnet-4-5",
+				APEX_CODE_REASONING_LEVEL: "low",
 				PI_REASONING_LEVEL: "low",
 			});
 			expect(Object.hasOwn(env.executionOverrides ?? {}, "PI_SESSION_FILE")).toBe(true);
