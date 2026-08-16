@@ -210,7 +210,7 @@ median criterion.
 | Aggregation | One query module producing cost + latency grouped by model, session, and role over a time range | `src/core/observability/aggregate.ts` (new) |
 | Headless surface | `apex-code cost` subcommand reading the aggregation | `src/cli/cost-command.ts` (new), `src/cli/args.ts` |
 | Interactive surface | Extend `/session` with role attribution and latency | `src/modes/interactive/interactive-mode.ts:5992` |
-| OTLP export | Span-per-turn / per-attempt / per-tool-call, OTLP-HTTP JSON via **global `fetch`**, off unless an endpoint is configured | `src/core/observability/otlp.ts` (new) |
+| OTLP export | **Implemented as span-per-request-attempt** (narrowed from the span-per-turn/per-tool-call design below, on the record before implementation): one span per `UsagePerformanceSample`, the same unit the ledger records, via `instrumentAttempt` — not a full turn/tool-call span tree, which would require touching `agent-session.ts`'s tool-call lifecycle, a separate integration this phase does not open. OTLP-HTTP JSON via **global `fetch`**, off unless an endpoint is configured. `tool_name` stays in the ADR 0012 allowlist for that future work but is never emitted today. | `src/core/observability/otlp.ts` (new) |
 | Settings | `observability.otlpEndpoint`, `observability.otlpHeaders`, `observability.retentionDays`, `terminal.symbolPreset`, `terminal.colorBlindMode`, `terminal.tokenUsageDisplay` | `src/core/settings-manager.ts` |
 | Footer | Non-colour channel for context pressure; ASCII glyph fallback; configurable token display | `src/modes/interactive/components/footer.ts` |
 | Retention | Prune ledger rows older than `retentionDays` (default 90) on store open | `src/core/durable-state/sqlite.ts` |
