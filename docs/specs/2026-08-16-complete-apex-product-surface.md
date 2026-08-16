@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Author | Apex Code |
-| Status | `Active` |
+| Status | `Landed` |
 | Created | 2026-08-16 |
 | Last updated | 2026-08-16 |
 | Roadmap phase | `10 — Complete the Apex Code product surface` |
@@ -246,6 +246,31 @@ Standard local gates after each slice: the narrow failing-first test, `npm run t
 where available or `npx tsgo --noEmit`, `npm run build`, `npm run check`, then root
 `npm test` at completion. CI-only platform claims remain unverified until the real
 required jobs pass.
+
+## Phase outcome
+
+Phase 10 landed on 2026-08-16. The implementation is recorded through
+`6b602044dc2f25dd13bc7e9fb600e7f5b4b9b5b0`; GitHub Actions run
+[31940072123](https://github.com/Fchery87/apex-code/actions/runs/31940072123)
+provided the required exit proof from the asserted `apex code checkout` directory:
+
+| Required job | Result | Gates |
+| --- | --- | --- |
+| Ubuntu | Passed | install, build, check, full root test suite |
+| macOS | Passed | install, build, check, full root test suite |
+| Windows | Passed | install, build, check, full root test suite |
+| Frozen packages match upstream | Passed | consumed-package boundary check |
+
+The Windows repair retained ADR 0005's fail-closed sandbox boundary. Tests that require
+unsupported Windows sandbox or POSIX-only signal/socket semantics are explicitly
+platform-inapplicable; portable behavior remains covered. The repair also made owned
+SQLite resource closure explicit, compared shell paths canonically, normalized public
+path rendering, and exercised pnpm's real virtual-store layout.
+
+The same run independently repeated `npm run build`, `npm run check`, and `npm test` on
+all three required operating systems. Before the final push, the focused portability
+suites and `npm run check` were green locally. The completed execution plan was deleted
+as required by the documentation lifecycle.
 
 ## Rollout
 

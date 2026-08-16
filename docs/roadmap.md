@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0 through 9 landed · Phase 10 active · **Created:** 2026-08-08 · **Last updated:** 2026-08-16
+**Status:** Active — Phases 0 through 10 landed · **Created:** 2026-08-08 · **Last updated:** 2026-08-16
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -92,7 +92,7 @@ capable and measurably worse.
 | 7 | Evidence & verification | **landed** — 7 of 7 tasks · `c82584312` (clean Node 22 verification) | [spec](specs/2026-08-16-evidence-and-verification.md) | — |
 | 8 | Observability & cost | **landed** — 7 of 7 tasks, exit criterion amended before implementation · `9c7c9e9aa` | [spec](specs/2026-08-15-observability-and-cost.md) | — |
 | 9 | Release hardening | **landed** — 6 of 6 tasks · `a0be145d7` | [spec](specs/2026-08-16-release-hardening.md) | — |
-| 10 | Complete the Apex Code product surface | **active** — 0 of 7 tasks | [spec](specs/2026-08-16-complete-apex-product-surface.md) | [plan](plans/2026-08-16-complete-apex-product-surface.md) |
+| 10 | Complete the Apex Code product surface | **landed** — 7 of 7 tasks · `6b602044d` (required three-OS CI run 31940072123) | [spec](specs/2026-08-16-complete-apex-product-surface.md) | — |
 
 ---
 
@@ -785,8 +785,10 @@ outside a reviewed upstream, compatibility, attribution, or historical classific
 Every retained Apex-owned `PI_*` alias has tested Apex-first precedence, one diagnostic
 per process, subprocess compatibility where owed, and a published removal rule.
 
-**Current state.** Active. See the [spec](specs/2026-08-16-complete-apex-product-surface.md)
-and [plan](plans/2026-08-16-complete-apex-product-surface.md).
+**Current state.** Landed. Required Ubuntu, macOS, and Windows jobs passed install,
+build, check, and the full root test suite from the asserted spaced checkout in
+[CI run 31940072123](https://github.com/Fchery87/apex-code/actions/runs/31940072123).
+See the [spec](specs/2026-08-16-complete-apex-product-surface.md) for the durable outcome.
 
 ---
 
