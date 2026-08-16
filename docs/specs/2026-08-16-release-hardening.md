@@ -58,8 +58,9 @@ Verified against the tree at `452d8fa99`, not recalled.
 | README is stale | `README.md:5`: "Status: pre-alpha, Phase 0." Phases 0–8 are landed. The document a stranger reads first states a phase eight behind reality. |
 | `enableInstallTelemetry` (default `true`) gates a real network call, and that call is a verified bug independent of its opt-in status | `interactive-mode.ts:1198-1215`, `reportInstallTelemetry()`: fires once per detected version upgrade (not every startup), `GET https://pi.dev/api/report-install?version=<VERSION>`, `User-Agent: pi/<VERSION> (<platform>; <runtime>; <arch>)` (`utils/pi-user-agent.ts:1-4`, hardcoded `"pi/"` prefix). `VERSION` is Apex Code's own `package.json` version (`config.ts:492`). Unmodified upstream Pi code: the endpoint, and the User-Agent brand string, were never updated for the fork. Today, every Apex Code upgrade reports itself to Pi's telemetry as a Pi install, under Apex Code's real version number — wrong regardless of consent, since it's data sent to a domain Apex Code doesn't own and provides Apex Code no value. |
 | The same setting also gates provider-attribution HTTP headers, a materially different and more defensible mechanism | `provider-attribution.ts:36-65`: `HTTP-Referer`, `X-OpenRouter-Title`, `X-BILLING-INVOKE-ORIGIN`, User-Agent headers attached to requests already going to the user's own configured LLM provider (OpenRouter/NVIDIA NIM/Cloudflare), for that provider's own billing-origin attribution — never sent to a third party. Also still hardcoded `"pi"`/`"Pi"`. |
-| `enableAnalytics`/`trackingId` ("opt-in analytics") is dead code | `getEnableAnalytics()` (`settings-manager.ts:1002`) has zero production consumers anywhere in the tree — only its own getter/setter and `test/first-time-setup.test.ts`, which asserts the *stored preference*, never that anything is sent. Enabling this setting today changes no behavior. |
+| `enableAnalytics`/`trackingId` ("opt-in analytics") is dead code — **and actively presented to every first-time user as if it worked** | `getEnableAnalytics()` (`settings-manager.ts:1002`) has zero production consumers anywhere in the tree — only its own getter/setter and `test/first-time-setup.test.ts`, which asserted the *stored preference*, never that anything is sent. **Found during implementation, beyond this row's original scope:** `first-time-setup.ts`'s onboarding dialog has a whole second step asking every new user "Opt-in to anonymous usage data sharing?" with the text "This helps us to better debug, reproduce, and resolve issues and bugs within Pi. You can observe what is shared using /privacy" — `/privacy` does not exist anywhere in the tree (`grep` confirms zero matches), and even the copy says "Pi," not Apex Code. This is not inert-and-forgotten; it is an active prompt asking for consent to something that never happens, on every fresh install. |
 | No mechanism sends data to the Apex Code project today | Following from the two rows above: there is currently no working or broken Apex-directed telemetry of any kind — only a misdirected Pi ping and an inert dead switch. |
+| **A second, more severe instance of the same root cause: the update-available check compares against the wrong project's version, on every interactive startup, unconditionally.** | `interactive-mode.ts:1024`, `checkForNewPiVersion(this.version)`, called on every interactive session start (fire-and-forget, no settings gate at all — not even `enableInstallTelemetry`). `version-check.ts:5`: `LATEST_VERSION_URL = "https://pi.dev/api/latest-version"`. This returns **Pi's** latest published version, compared against Apex Code's own `this.version` (`config.ts:492`, currently `0.0.3`) via `isNewerPackageVersion`. Since Pi (at `v0.84.x` per `docs/upstream-log.md`) and Apex Code (`0.0.x`) are on entirely unrelated version sequences, this comparison is close to always true — every Apex Code user, on every startup, is likely shown a false "Update Available" banner (`interactive-mode.ts:4108`, `showNewVersionNotification`) naming **Pi's** version number and linking to `https://pi.dev/changelog` (`:4111`), a page with no relationship to Apex Code's actual `packages/coding-agent/CHANGELOG.md`. Confirmed via `npm view apex-code dist-tags --json`: the real, already-published, already-relevant data (`{"next":"0.0.1-alpha.1","latest":"0.0.1-alpha.0"}`) sits on the npm registry Apex Code already publishes to — no new endpoint is needed to fix this, only pointing the existing check at the right one. |
 
 ## The problem
 
@@ -68,6 +69,17 @@ Code install that detects a version upgrade reports itself to Pi's telemetry
 endpoint as a Pi install. This is not a privacy question first; it is a correctness
 bug: the data is wrong (claims to be software it is not) and sent to a party with no
 relationship to it (Apex Code does not operate `pi.dev`).
+
+**P1a — The same root cause, worse: a false update notification on every startup,
+with no settings gate at all.** `checkForNewPiVersion` runs unconditionally (no
+opt-out exists, unlike the install ping) on every interactive session start, compares
+Apex Code's version against Pi's, and — because the two projects' version sequences
+are unrelated and Pi ships far more often (Phase 0 measured one Pi patch release
+moving 57 files) — will show a false "Update Available" banner naming Pi's version
+number to most users most of the time, linking to Pi's changelog. This directly
+undermines the roadmap's own "versioned releases and update path... hardened here"
+scope: the update path currently cannot tell a user whether a real Apex Code update
+exists.
 
 **P2 — A dead setting invites false confidence.** A user who enables "opt-in
 analytics" in good faith, expecting it to do something, is enabling nothing. The
@@ -95,13 +107,33 @@ anything else in this phase.
 - [ ] `reportInstallTelemetry()` and its `pi.dev` network call are removed; no code
       path in the tree sends any network request to a domain Apex Code does not
       operate as an update/version ping.
+- [ ] The update-available check (`version-check.ts`) queries the real, already-used
+      npm registry for `apex-code`'s own `next` dist-tag (matching the README's
+      documented install channel) instead of `pi.dev`'s Pi-version endpoint; the
+      resulting notification's changelog link points at Apex Code's own
+      `CHANGELOG.md` (via its GitHub blob URL — no new hosted page required), not
+      Pi's. Every `Pi`-branded identifier in this module (`LatestPiRelease`,
+      `checkForNewPiVersion`, `getLatestPiVersion`, `getLatestPiRelease`) is renamed
+      to match.
 - [ ] `enableAnalytics` and `trackingId` are removed from `Settings`,
       `SettingsManager`, and the settings-selector UI — dead code, not a feature
-      being cut.
+      being cut. The first-time-setup onboarding dialog's second step, which asked
+      every new user to consent to this non-functional analytics and referenced a
+      nonexistent `/privacy` command under Pi's own name, is removed too — onboarding
+      becomes theme-selection only.
 - [ ] Provider-attribution headers (`provider-attribution.ts`) are retained (real,
       defensible mechanism serving the user's own provider relationship) but
-      rebranded from `"pi"`/`"Pi"` to Apex Code's own identity, and no longer gated
-      by the now-removed install-telemetry setting.
+      rebranded from `"pi"`/`"Pi"` to Apex Code's own identity, and gated by a new,
+      honestly-named `sendProviderAttribution` setting (default `true`) rather than
+      the deleted install-telemetry one. **Correction found during implementation:**
+      the spec originally called for making these headers unconditional once
+      un-gated. `test/sdk-openrouter-attribution.test.ts` (16 existing tests, missed
+      in the initial `grep` for `provider-attribution` by filename) proves a user can
+      currently opt these headers out entirely via `enableInstallTelemetry: false`.
+      Making them unconditional would silently remove that choice for anyone who
+      already made it — a real regression, not a cleanup. A dedicated setting
+      preserves the choice under its correct name instead of conflating it with the
+      (now-deleted) telemetry concept it was never really about.
 - [ ] `SECURITY.md` accurately reflects current code: the "pre-alpha... security
       posture is not hardened until Phase 9" framing is corrected once this phase's
       hardening is verifiable, without overclaiming guarantees this phase does not
@@ -121,6 +153,27 @@ anything else in this phase.
       next (permissions, sandbox, providers) — the "user documentation, not just
       docs/" the roadmap names, scoped to what a pre-alpha adopter actually needs,
       not a full manual.
+
+## Flagged, deliberately not touched
+
+Found while tracing every `pi.dev` reference for this spec; both are genuinely
+different in kind from P1/P1a and are not resolved here.
+
+- **`remote-catalog-provider.ts`'s `DEFAULT_CATALOG_BASE_URL = "https://pi.dev"`**
+  fetches live model pricing/capability data, not app telemetry. This may be a
+  deliberate reliance on upstream Pi's maintained catalog feed (consistent with
+  ADR 0001's "35 providers keep updating for free"), or it may be the same
+  never-repointed-after-fork issue as P1/P1a wearing different clothes. No ADR or
+  spec documents an intentional decision either way. Resolving it requires deciding
+  whether Apex Code should depend on Pi's live infrastructure for functional data at
+  runtime — an architectural question, not a telemetry cleanup.
+- **`config.ts`'s `DEFAULT_SHARE_VIEWER_URL = "https://pi.dev/session/"`**, used by
+  `/share` (session-to-gist sharing) to render a shared session nicely. Same
+  reasoning: a real hosted-viewer dependency Apex Code has no equivalent of, not a
+  telemetry bug.
+
+Both are recorded here so they are not lost, not silently expanded into this spec's
+scope.
 
 ## Non-goals
 
@@ -167,9 +220,13 @@ No load-bearing seam named in `docs/architecture/overview.md` (`beforeToolCall`,
 | Item | Type | Disposition |
 | --- | --- | --- |
 | `reportInstallTelemetry()` and its call site | code | Removed. Sent data to a domain Apex Code doesn't operate, under the wrong product's identity — not a working feature being cut, a bug being fixed. |
-| `isInstallTelemetryEnabled()` / `src/core/telemetry.ts` | code | Removed if, after the attribution un-gating above, nothing references it; otherwise retained solely for the (now Apex-branded, ungated-by-this-setting) attribution headers — resolved during implementation, recorded here either way. |
-| `enableAnalytics`, `trackingId` settings and their UI entry | code, config | Removed. Zero production consumers ever existed; a settings key with no behavior is misleading, not a minimal feature. |
-| `SECURITY.md`'s "security posture is not hardened until Phase 9" caveat | doc | Superseded by accurate, current-state language once this phase's hardening is verified — not deleted, corrected. |
+| `src/core/telemetry.ts` (`isInstallTelemetryEnabled`) | code | Removed — zero remaining consumers once `provider-attribution.ts` reads the new `sendProviderAttribution` setting directly. |
+| `enableAnalytics`, `trackingId` settings and their storage | code, config | Removed. Zero production consumers ever existed. |
+| `first-time-setup.ts`'s analytics onboarding step | code | Removed. Not dead-and-harmless: it actively asked every new user to consent to analytics sharing that never happened, and referenced a nonexistent `/privacy` command under Pi's name. Onboarding is theme-selection only now. |
+| `src/utils/pi-user-agent.ts` | code | Renamed to `apex-code-user-agent.ts` (`getPiUserAgent` → `getApexCodeUserAgent`), not just edited in place — the old name was itself part of the branding bug. |
+| `LatestPiRelease`, `getLatestPiRelease`, `getLatestPiVersion`, `checkForNewPiVersion` (`version-check.ts`) | code | Renamed to their Apex Code equivalents; `LATEST_VERSION_URL` repointed from `pi.dev`'s custom API to the npm registry's `next`-tag endpoint for this package. |
+| `PI_TELEMETRY` env var and its `--help` line | code, doc | Removed — its only consumer (`isInstallTelemetryEnabled`) is gone. `PI_OFFLINE`/`PI_SKIP_VERSION_CHECK` are unchanged; renaming established env var names is a separate compatibility question this spec does not open. |
+| `SECURITY.md`'s "security posture is not hardened until Phase 9" caveat | doc | Superseded by accurate, current-state language once this phase's hardening is verified — not deleted, corrected (task 9.6). |
 
 ## Risks
 

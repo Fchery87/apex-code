@@ -1,11 +1,18 @@
 import { compare, valid } from "semver";
+import { PACKAGE_NAME } from "../config.ts";
+import { getApexCodeUserAgent } from "./apex-code-user-agent.ts";
 import { fetchWithRetry } from "./management-http.ts";
-import { getPiUserAgent } from "./pi-user-agent.ts";
 
-const LATEST_VERSION_URL = "https://pi.dev/api/latest-version";
+/**
+ * npm's own per-tag registry endpoint, not a custom API this project would need to
+ * host and operate. Compares against the "next" dist-tag rather than "latest": the
+ * README documents `npm install --global apex-code@next` as the install channel
+ * this pre-alpha project actually ships through.
+ */
+const LATEST_VERSION_URL = `https://registry.npmjs.org/${PACKAGE_NAME}/next`;
 const DEFAULT_VERSION_CHECK_TIMEOUT_MS = 10000;
 
-export interface LatestPiRelease {
+export interface LatestApexCodeRelease {
 	version: string;
 	packageName?: string;
 	note?: string;
@@ -48,17 +55,17 @@ export function isNewerPackageVersion(candidateVersion: string, currentVersion: 
 	return candidateVersion.trim() !== currentVersion.trim();
 }
 
-export async function getLatestPiRelease(
+export async function getLatestApexCodeRelease(
 	currentVersion: string,
 	options: { timeoutMs?: number; retry?: boolean } = {},
-): Promise<LatestPiRelease | undefined> {
+): Promise<LatestApexCodeRelease | undefined> {
 	if (process.env.PI_OFFLINE) return undefined;
 
 	const response = await fetchWithRetry(
 		LATEST_VERSION_URL,
 		{
 			headers: {
-				"User-Agent": getPiUserAgent(currentVersion),
+				"User-Agent": getApexCodeUserAgent(currentVersion),
 				accept: "application/json",
 			},
 		},
@@ -69,36 +76,35 @@ export async function getLatestPiRelease(
 	);
 	if (!response.ok) return undefined;
 
+	// npm's per-tag registry endpoint returns the full package manifest for that
+	// version; "packageName"/"note" have no npm-registry equivalent and are left
+	// undefined -- callers already treat both as optional with sensible fallbacks.
 	const data = (await response.json()) as {
-		packageName?: unknown;
+		name?: unknown;
 		version?: unknown;
-		note?: unknown;
 	};
 	if (typeof data.version !== "string" || !data.version.trim()) {
 		return undefined;
 	}
-	const packageName =
-		typeof data.packageName === "string" && data.packageName.trim() ? data.packageName.trim() : undefined;
-	const note = typeof data.note === "string" && data.note.trim() ? data.note.trim() : undefined;
+	const packageName = typeof data.name === "string" && data.name.trim() ? data.name.trim() : undefined;
 	return {
 		version: data.version.trim(),
-		packageName,
-		...(note ? { note } : {}),
+		...(packageName && packageName !== PACKAGE_NAME ? { packageName } : {}),
 	};
 }
 
-export async function getLatestPiVersion(
+export async function getLatestApexCodeVersion(
 	currentVersion: string,
 	options: { timeoutMs?: number; retry?: boolean } = {},
 ): Promise<string | undefined> {
-	return (await getLatestPiRelease(currentVersion, options))?.version;
+	return (await getLatestApexCodeRelease(currentVersion, options))?.version;
 }
 
-export async function checkForNewPiVersion(currentVersion: string): Promise<LatestPiRelease | undefined> {
+export async function checkForNewApexCodeVersion(currentVersion: string): Promise<LatestApexCodeRelease | undefined> {
 	if (process.env.PI_SKIP_VERSION_CHECK) return undefined;
 
 	try {
-		const latestRelease = await getLatestPiRelease(currentVersion);
+		const latestRelease = await getLatestApexCodeRelease(currentVersion);
 		if (latestRelease && isNewerPackageVersion(latestRelease.version, currentVersion)) {
 			return latestRelease;
 		}

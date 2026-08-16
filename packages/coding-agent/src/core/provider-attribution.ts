@@ -1,6 +1,5 @@
 import type { Api, Model, ProviderHeaders } from "@earendil-works/pi-ai";
 import type { SettingsManager } from "./settings-manager.ts";
-import { isInstallTelemetryEnabled } from "./telemetry.ts";
 
 const OPENROUTER_HOST = "openrouter.ai";
 const NVIDIA_NIM_HOST = "integrate.api.nvidia.com";
@@ -37,27 +36,27 @@ function getDefaultAttributionHeaders(
 	model: Model<Api>,
 	settingsManager: SettingsManager,
 ): Record<string, string> | undefined {
-	if (!isInstallTelemetryEnabled(settingsManager)) {
+	if (!settingsManager.getSendProviderAttribution()) {
 		return undefined;
 	}
 
 	if (isOpenRouterModel(model)) {
 		return {
-			"HTTP-Referer": "https://pi.dev",
-			"X-OpenRouter-Title": "pi",
+			"HTTP-Referer": "https://github.com/Fchery87/apex-code",
+			"X-OpenRouter-Title": "apex-code",
 			"X-OpenRouter-Categories": "cli-agent",
 		};
 	}
 
 	if (isNvidiaNimModel(model)) {
 		return {
-			"X-BILLING-INVOKE-ORIGIN": "Pi",
+			"X-BILLING-INVOKE-ORIGIN": "Apex-Code",
 		};
 	}
 
 	if (isCloudflareModel(model)) {
 		return {
-			"User-Agent": "pi-coding-agent",
+			"User-Agent": "apex-code",
 		};
 	}
 
@@ -73,7 +72,7 @@ function getSessionHeaders(model: Model<Api>, sessionId: string | undefined): Re
 	) {
 		return undefined;
 	}
-	return { "x-opencode-session": sessionId, "x-opencode-client": "pi" };
+	return { "x-opencode-session": sessionId, "x-opencode-client": "apex-code" };
 }
 
 export function mergeProviderAttributionHeaders(
