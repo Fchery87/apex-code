@@ -230,6 +230,25 @@ No load-bearing seam named in `docs/architecture/overview.md` (`beforeToolCall`,
 | `PI_TELEMETRY` env var and its `--help` line | code, doc | Removed — its only consumer (`isInstallTelemetryEnabled`) is gone. `PI_OFFLINE`/`PI_SKIP_VERSION_CHECK` are unchanged; renaming established env var names is a separate compatibility question this spec does not open. |
 | `SECURITY.md`'s "security posture is not hardened until Phase 9" caveat | doc | Superseded by accurate, current-state language once this phase's hardening is verified — not deleted, corrected (task 9.6). |
 
+## Regression found and fixed during closure verification (9.6)
+
+The full test suite caught a real regression from 9.1's `version-check.ts` rewrite:
+`test/package-command-paths.test.ts`'s two "renamed package" self-update tests
+mocked the version-check response with a `packageName` field — the old custom
+API's shape — but `getLatestApexCodeRelease` reads npm's real per-tag registry
+field, `name`. The mocks silently stopped matching, so the tests exercised (and
+passed) the *wrong* code path (ordinary upgrade, not rename-detection) without
+ever failing loudly until the real assertions on recorded npm CLI arguments
+caught it.
+
+This was not a capability loss: `getSelfUpdatePlan`'s rename-detection logic in
+`package-manager-cli.ts` was never touched and still works — the test mocks were
+speaking the old API's vocabulary. Fixed by updating both mocks to `name`,
+matching what the real npm registry actually returns and what the new
+implementation actually reads. All 27 tests in that file pass, including both
+previously-broken ones, now genuinely exercising the rename path end to end
+rather than accidentally exercising the fallback path.
+
 ## Risks
 
 **Removing a setting a user has already toggled.** A user who set

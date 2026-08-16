@@ -1,7 +1,9 @@
 # Security Policy
 
-> **Pre-alpha.** Apex Code is installable for release-path validation, but its security
-> posture is not hardened until Phase 9.
+> **Pre-alpha.** The permission gate and OS-level sandbox described below landed in
+> Phase 2 and are enforced today, on Linux and macOS. "Pre-alpha" describes the
+> project's overall maturity and release process, not an unenforced security
+> boundary — see [`docs/roadmap.md`](docs/roadmap.md) for what's landed by phase.
 
 ## Reporting a vulnerability
 
