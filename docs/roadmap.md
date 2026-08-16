@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0 through 10 landed · **Created:** 2026-08-08 · **Last updated:** 2026-08-16
+**Status:** Active — Phases 0 through 10 landed · Phase 11 active · **Created:** 2026-08-08 · **Last updated:** 2026-08-16
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -93,6 +93,7 @@ capable and measurably worse.
 | 8 | Observability & cost | **landed** — 7 of 7 tasks, exit criterion amended before implementation · `9c7c9e9aa` | [spec](specs/2026-08-15-observability-and-cost.md) | — |
 | 9 | Release hardening | **landed** — 6 of 6 tasks · `a0be145d7` | [spec](specs/2026-08-16-release-hardening.md) | — |
 | 10 | Complete the Apex Code product surface | **landed** — 7 of 7 tasks · `6b602044d` (required three-OS CI run 31940072123) | [spec](specs/2026-08-16-complete-apex-product-surface.md) | — |
+| 11 | Remove unowned hosted-service defaults | **active** — 1 of 5 tasks | [spec](specs/2026-08-16-remove-unowned-hosted-service-defaults.md) | [plan](plans/2026-08-16-remove-unowned-hosted-service-defaults.md) |
 
 ---
 
@@ -792,6 +793,29 @@ See the [spec](specs/2026-08-16-complete-apex-product-surface.md) for the durabl
 
 ---
 
+## Phase 11 — Remove unowned hosted-service defaults
+
+**Objective.** A fresh Apex Code install depends on no hosted functional service that
+the project does not operate; remote catalog and viewer integrations require explicit
+user configuration, and session publication requires informed confirmation.
+
+**Scope.** Replace the implicit `pi.dev` model-catalog overlay with a user-named endpoint,
+make the share viewer optional, disclose and confirm secret-Gist publication, bind catalog
+caches to their source, and correct the packed product documentation. Do not operate new
+Apex infrastructure or change consumed provider definitions.
+
+**Exit criterion.** Fresh-default tests prove zero catalog/viewer selection, explicit
+integrations retain their existing behavior without cross-origin cache reuse, `/share`
+cannot publish before confirmation, and required Ubuntu/macOS/Windows install, build,
+check, and full tests pass from the spaced checkout.
+
+**Current state.** Active. See the
+[spec](specs/2026-08-16-remove-unowned-hosted-service-defaults.md) and
+[plan](plans/2026-08-16-remove-unowned-hosted-service-defaults.md). ADR 0013 settles the
+hosted-service policy.
+
+---
+
 ## ADRs to write
 
 These are the irreversible or contested calls. Each gets settled once, in
@@ -815,6 +839,7 @@ takes the next free number instead of a reserved one.
 | 0010 | One canonical tool contract, declared by the tool and never re-derived | pre-2 | ✅ |
 | 0011 | Deferred schemas resolve through an explicit model-callable tool, not harness-side injection | 4 | ✅ |
 | 0012 | User-directed OTLP export is not project telemetry; the two never share a switch | 8 | ✅ |
+| 0013 | Hosted functional-service defaults require project ownership or explicit user choice | 11 | ✅ |
 
 ## Cross-phase contracts
 
