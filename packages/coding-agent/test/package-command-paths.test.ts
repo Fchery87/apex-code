@@ -696,7 +696,7 @@ else {
 		}
 	});
 
-	it.skipIf(process.platform === "win32")("prints a pnpm metadata hint when self-update fails", async () => {
+	it("prints a pnpm metadata hint when self-update fails", async () => {
 		const globalRoot = join(tempDir, "pnpm", "global", "v11");
 		const selfPackageDir = join(globalRoot, "node_modules", "@earendil-works", "pi-coding-agent");
 		const fakeBinDir = join(tempDir, "bin");
@@ -704,6 +704,9 @@ else {
 		mkdirSync(selfPackageDir, { recursive: true });
 		mkdirSync(fakeBinDir, { recursive: true });
 		writeFileSync(join(selfPackageDir, "package.json"), JSON.stringify({ name: PACKAGE_NAME, version: VERSION }));
+		mkdirSync(join(selfPackageDir, "dist"), { recursive: true });
+		writeFileSync(join(selfPackageDir, "dist", "cli.js"), "");
+		process.argv[1] = join(selfPackageDir, "dist", "cli.js");
 		const fakePnpmScript =
 			process.platform === "win32"
 				? `@echo off\r\nif "%1"=="root" if "%2"=="-g" (echo ${globalRoot} & exit /b 0)\r\nexit /b 23\r\n`
