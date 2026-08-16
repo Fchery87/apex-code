@@ -1,6 +1,6 @@
 # Phase 10 complete Apex Code product surface
 
-**Status:** Not started — 0 of 7 tasks
+**Status:** Active — 5 done, 1 implemented awaiting CI, 1 pending closure
 
 This plan implements `docs/specs/2026-08-16-complete-apex-product-surface.md`. Task 10.1
 establishes the known failing baseline. Task 10.2 centralizes environment identity
@@ -10,12 +10,12 @@ order is recorded below rather than renumbered.
 
 | Task | State | Commit | Verification |
 | --- | --- | --- | --- |
-| 10.1 External-editor argv and Apex identity | Not started | — | Failing-first native tests for spaced/quoted executable and arguments, invalid input, success/failure/empty outcomes; direct spawn; Apex resume text/temp prefix. |
-| 10.2 Canonical environment compatibility | Not started | — | One registry/module for every Apex-owned legacy variable; table tests for precedence, warnings, internal writes, subprocess exports, and JSON/RPC stdout. |
-| 10.3 Live runtime and packed npm product surface | Not started | — | Help/auth/update/trust/system-prompt/runtime strings corrected; npm README/current docs/path/privacy/container guidance corrected; packed-artifact allowlist test. |
-| 10.4 Install, update, changelog, and release coherence | Not started | — | npm `next` remains authoritative; no upstream binary fallback; Apex current changelog; publishing constrained to Apex-owned packages; release-script tests. |
-| 10.5 Documentation lifecycle repair and validator | Not started | — | Phase 4 measurement moved to spec, completed plan deleted, roadmap fixed, session contract settled; validator wired into check. |
-| 10.6 Cross-platform blockers and required spaced-checkout CI | Not started | — | License-report and any subsequent native failures fixed test-first; action SHAs pinned; matrix required; actual cwd contains a space; workflow structure test. |
+| 10.1 External-editor argv and Apex identity | Done | `dc25d9438` | Failing-first native tests for spaced/quoted executable and arguments, invalid input, success/failure/empty outcomes; direct spawn; Apex resume text/temp prefix. |
+| 10.2 Canonical environment compatibility | Done | `dc25d9438` | One registry/module for every Apex-owned legacy variable; table tests for precedence, warnings, internal writes, subprocess exports, and JSON/RPC stdout. |
+| 10.3 Live runtime and packed npm product surface | Done | `dc25d9438` | Help/auth/update/trust/system-prompt/runtime strings corrected; npm README/current docs/path/privacy/container guidance corrected; packed-artifact allowlist test. |
+| 10.4 Install, update, changelog, and release coherence | Done | `dc25d9438` | npm `next` remains authoritative; no upstream binary fallback; Apex current changelog; publishing constrained to Apex-owned packages; release-script tests. |
+| 10.5 Documentation lifecycle repair and validator | Done | `dc25d9438` | Phase 4 measurement moved to spec, completed plan deleted, roadmap fixed, session contract settled; validator wired into check. |
+| 10.6 Cross-platform blockers and required spaced-checkout CI | Implemented — local verification green; required CI proof pending | `dc25d9438` | License-report and any subsequent native failures fixed test-first; action SHAs pinned; matrix required; actual cwd contains a space; workflow structure test. |
 | 10.7 Phase verification and closure | Not started | — | Typecheck/build/check/root full suite green locally; real required three-OS run green; durable closure moved to spec/roadmap and this plan deleted. |
 
 ## Order changes
