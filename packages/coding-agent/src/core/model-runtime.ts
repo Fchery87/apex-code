@@ -44,16 +44,15 @@ import { operationSignal, raceWithAbortSignal } from "../utils/abort.ts";
 import { AuthStorage as DefaultAuthStorage } from "./auth-storage.ts";
 import {
 	classifyCredentialFailure,
-	drainAttempt,
 	type DrainedAttempt,
-	replayAttempt,
+	drainAttempt,
 	type ResultStream,
+	replayAttempt,
 } from "./credential-failover.ts";
 import type { CredentialFailureKind, CredentialIdentity, CredentialPool } from "./credential-pool.ts";
 import { ModelConfig } from "./model-config.ts";
-import { resolveModelRoles, type RoleResolutionResult } from "./model-resolver.ts";
+import { type RoleResolutionResult, resolveModelRoles } from "./model-resolver.ts";
 import { FileModelsStore, InMemoryCodingAgentModelsStore } from "./models-store.ts";
-import type { UsagePerformanceSample, UsagePerformanceStore } from "./usage-performance-store.ts";
 import {
 	type AuthStatus,
 	type CompatibilityRequestConfig,
@@ -66,6 +65,7 @@ import {
 } from "./provider-composer.ts";
 import { withRemoteCatalog } from "./remote-catalog-provider.ts";
 import { RuntimeCredentials } from "./runtime-credentials.ts";
+import type { UsagePerformanceSample, UsagePerformanceStore } from "./usage-performance-store.ts";
 
 interface ModelRuntimeSnapshot {
 	all: readonly Model<Api>[];
@@ -103,7 +103,9 @@ export interface CreateModelRuntimeOptions {
 	 * Required for pool entries to actually authenticate; an identity with no
 	 * resolver entry falls back to the request's own apiKey/env options.
 	 */
-	resolveCredentialPoolAuth?: (identity: CredentialIdentity) => { apiKey?: string; env?: Record<string, string> } | undefined;
+	resolveCredentialPoolAuth?: (
+		identity: CredentialIdentity,
+	) => { apiKey?: string; env?: Record<string, string> } | undefined;
 	/** Optional durable store for non-secret per-request usage/latency samples. Unset records nothing. */
 	usagePerformanceStore?: UsagePerformanceStore;
 	/** Monotonic clock for usage/latency timing. Defaults to performance.now(); inject a fake in tests. */
@@ -194,7 +196,9 @@ export class ModelRuntime implements Models {
 		providers: readonly Provider[],
 		modelNetworkEnabled: boolean,
 		credentialPool?: CredentialPool,
-		resolveCredentialPoolAuth?: (identity: CredentialIdentity) => { apiKey?: string; env?: Record<string, string> } | undefined,
+		resolveCredentialPoolAuth?: (
+			identity: CredentialIdentity,
+		) => { apiKey?: string; env?: Record<string, string> } | undefined,
 		usagePerformanceStore?: UsagePerformanceStore,
 		performanceClock?: () => number,
 	) {
@@ -726,6 +730,15 @@ export class ModelRuntime implements Models {
 	 * Relies on every call site fully iterating the returned stream (all current
 	 * ones do, via drainAttempt or lazyStream's forwardStream).
 	 */
+	/**
+	 * Durable usage/cost/latency samples this runtime has recorded, if a store was
+	 * configured. Read-only; callers query it (e.g. `aggregateUsagePerformance`)
+	 * rather than this class exposing grouped views itself.
+	 */
+	async listUsagePerformanceSamples(): Promise<readonly UsagePerformanceSample[]> {
+		return this.usagePerformanceStore ? await this.usagePerformanceStore.list() : [];
+	}
+
 	private instrumentAttempt(
 		stream: ResultStream,
 		model: Model<Api>,
@@ -771,7 +784,8 @@ export class ModelRuntime implements Models {
 	): UsagePerformanceSample {
 		const outcome: UsagePerformanceSample["outcome"] =
 			message.stopReason === "aborted" ? "aborted" : message.stopReason === "error" ? "error" : "success";
-		const failureKind: CredentialFailureKind | undefined = outcome === "error" ? classifyCredentialFailure(message) : undefined;
+		const failureKind: CredentialFailureKind | undefined =
+			outcome === "error" ? classifyCredentialFailure(message) : undefined;
 		return {
 			timestamp: Date.now(),
 			provider: model.provider,
@@ -804,7 +818,11 @@ export class ModelRuntime implements Models {
 	 * error. Explicit CLI/session model selection is unaffected: callers must
 	 * opt into this method instead of streamSimple().
 	 */
-	streamSimpleForRole(roleName: string, context: Context, options?: ModelsSimpleStreamOptions): AssistantMessageEventStream {
+	streamSimpleForRole(
+		roleName: string,
+		context: Context,
+		options?: ModelsSimpleStreamOptions,
+	): AssistantMessageEventStream {
 		const outer = createAssistantMessageEventStream();
 		this.attemptRole(roleName, context, options)
 			.then((drained) => {
@@ -905,7 +923,11 @@ export class ModelRuntime implements Models {
 				env: auth?.env ?? options?.env,
 			});
 			const attemptStream = this.instrumentAttempt(
-				prepared.provider.streamSimple(prepared.model, context, prepared.options as SimpleStreamOptions) as ResultStream,
+				prepared.provider.streamSimple(
+					prepared.model,
+					context,
+					prepared.options as SimpleStreamOptions,
+				) as ResultStream,
 				model,
 				role,
 				selection.identity,
