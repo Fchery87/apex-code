@@ -8,7 +8,7 @@ slices at the public seams named by the spec.
 
 | Task | State | Commit | Verification |
 | --- | --- | --- | --- |
-| 11.1 Research, specification, and hosted-service decision | Done | `32d6d8f7d` | Permanent research, ADR 0013, active spec, roadmap entry, and this plan. |
+| 11.1 Research, specification, and hosted-service decision | Done | `34b9c0984` | Permanent research, ADR 0013, active spec, roadmap entry, and this plan. |
 | 11.2 Explicit remote model-catalog integration | Done | `34b9c0984` | Red: fresh runtime/update command and configured endpoint. Green: static default plus explicit host-agnostic overlay. |
 | 11.3 Explicit share-viewer integration and honest Gist result | Done | `34b9c0984` | Red: optional resolver and `/share` output. Green: canonical Gist always, configured preview only. |
 | 11.4 Product documentation and artifact audit | Done | `34b9c0984` | Help/README/user guide/env/changelog corrected; current packed surface rejects unowned defaults. |
