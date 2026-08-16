@@ -53,7 +53,7 @@ Verified against the tree at `452d8fa99`, not recalled.
 | `SECURITY.md` already exists and is substantive | Repo root, 55 lines: private disclosure via GitHub security advisories, explicit in/out-of-scope boundary, "Not a security boundary" section for project trust, guidance for running untrusted work. |
 | `NOTICE` already exists and covers upstream/third-party attribution | Repo root: Pi's MIT notice, frozen-package list, and a stated (unfulfilled) promise of a consolidated dependency license report "generated as part of the release process." |
 | Session format auto-migration already exists | `session-manager.ts`: `migrateV1ToV2` (`:260`), `migrateV2ToV3` (`:289`), version-gated at load (`:316-317`). `CURRENT_SESSION_VERSION = 3` (`:32`), unchanged by any Apex Code phase so far — no new migration is owed, only test coverage for the existing one. |
-| That migration has **zero test coverage** | `grep -rl "migrateV1ToV2\|migrateV2ToV3" test/` returns nothing. The exit criterion "an upgrade... preserves and correctly renders pre-upgrade sessions" is currently unverified, not merely unautomated. |
+| That migration has **partial** test coverage — narrower than an initial `grep` for the function names suggested | **Correction, found before implementing 9.2:** `grep -rl "migrateV1ToV2\|migrateV2ToV3"` returns nothing because `test/session-manager/migration.test.ts` calls the exported `migrateSessionEntries` wrapper, not the internal functions by name — a real, pre-existing test this spec's first pass missed. It covers v1→v2 tree-structure assignment (`id`/`parentId`) and idempotency (already-migrated entries left alone). It does **not** cover: the v2→v3 `hookMessage`→`custom` role rename (only mentioned in a comment, never exercised — no fixture entry has `role: "hookMessage"`); the real `SessionManager.open()` load path, where migration actually runs in production (`session-manager.ts:964`) and rewrites the file; or that migrated entries render the same content (message text, tool calls, usage) as the source, versus merely having correct `id`/`parentId` linkage. Task 9.2 fills these three specific gaps rather than writing migration tests from nothing. |
 | The release pipeline verifies install on Ubuntu only | `.github/workflows/release.yml`: single job, `runs-on: ubuntu-latest`. It publishes both packages, then does a real clean-registry `npm install --global` and version check — but only on one of the two supported platforms. |
 | README is stale | `README.md:5`: "Status: pre-alpha, Phase 0." Phases 0–8 are landed. The document a stranger reads first states a phase eight behind reality. |
 | `enableInstallTelemetry` (default `true`) gates a real network call, and that call is a verified bug independent of its opt-in status | `interactive-mode.ts:1198-1215`, `reportInstallTelemetry()`: fires once per detected version upgrade (not every startup), `GET https://pi.dev/api/report-install?version=<VERSION>`, `User-Agent: pi/<VERSION> (<platform>; <runtime>; <arch>)` (`utils/pi-user-agent.ts:1-4`, hardcoded `"pi/"` prefix). `VERSION` is Apex Code's own `package.json` version (`config.ts:492`). Unmodified upstream Pi code: the endpoint, and the User-Agent brand string, were never updated for the fork. Today, every Apex Code upgrade reports itself to Pi's telemetry as a Pi install, under Apex Code's real version number — wrong regardless of consent, since it's data sent to a domain Apex Code doesn't own and provides Apex Code no value. |
@@ -89,9 +89,11 @@ setting's existence implies a capability that was never built.
 license report is "generated as part of the release process." No script, no CI step,
 and no such report exists anywhere in the tree.
 
-**P4 — The migration path this phase's own exit criterion names is unverified.**
-"Preserves and correctly renders pre-upgrade sessions" cannot be claimed true; it has
-never been tested.
+**P4 — The migration path this phase's own exit criterion names is only partially
+verified.** "Preserves and correctly renders pre-upgrade sessions" cannot yet be
+claimed true: the existing test covers structural linkage (`id`/`parentId`) but not
+the v2→v3 role rename, not the real production load path, and not that rendered
+content survives migration unchanged.
 
 **P5 — The release pipeline cannot detect a macOS-only regression.** A change that
 builds fine on Ubuntu (the only platform `release.yml` exercises) but breaks
