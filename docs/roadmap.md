@@ -91,7 +91,7 @@ capable and measurably worse.
 | 6 | Durable state & daemon | **landed** — 6 of 6 tasks · `baf5e5302` (full-suite audit recorded) | [spec](specs/2026-08-15-durable-state-and-daemon.md) | — |
 | 7 | Evidence & verification | **landed** — 7 of 7 tasks · `c82584312` (clean Node 22 verification) | [spec](specs/2026-08-16-evidence-and-verification.md) | — |
 | 8 | Observability & cost | **landed** — 7 of 7 tasks, exit criterion amended before implementation · `9c7c9e9aa` | [spec](specs/2026-08-15-observability-and-cost.md) | — |
-| 9 | Release hardening | not started | — | — |
+| 9 | Release hardening | spec + plan written, 0 of 6 tasks | [spec](specs/2026-08-16-release-hardening.md) | [plan](plans/2026-08-16-release-hardening.md) |
 
 ---
 
