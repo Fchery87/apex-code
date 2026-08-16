@@ -37,5 +37,7 @@ docs/upstream-log.md.
 
 Additional third-party dependencies are declared in package.json and their
 licenses are distributed with those packages in node_modules. A consolidated
-dependency license report is generated as part of the release process
-(see docs/roadmap.md, Phase 9).
+dependency license report is generated as part of the release process by
+scripts/apex/generate-license-report.mjs (run locally via
+`npm run generate:license-report`) and published as a build artifact on every
+tagged release.

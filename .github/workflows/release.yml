@@ -67,6 +67,15 @@ jobs:
           npm pack --dry-run --ignore-scripts --json --workspace packages/agent >/dev/null
           npm pack --dry-run --ignore-scripts --json --workspace packages/coding-agent >/dev/null
 
+      - name: Generate third-party license report
+        run: npm run generate:license-report
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: third-party-licenses
+          path: .artifacts/third-party-licenses.md
+          if-no-files-found: error
+
       # The core is an exact dependency of the CLI, so it must become visible
       # in the registry before apex-code is published.
       - name: Publish Apex Code agent core
