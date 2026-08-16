@@ -40,6 +40,9 @@ export interface TerminalSettings {
 	imageWidthCells?: number; // default: 60 (preferred inline image width in terminal cells)
 	clearOnShrink?: boolean; // default: false (clear empty rows when content shrinks)
 	showTerminalProgress?: boolean; // default: false (OSC 9;4 terminal progress indicators)
+	symbolPreset?: "unicode" | "ascii"; // default: "unicode" (roadmap Phase 8: footer glyph fallback)
+	colorBlindMode?: boolean; // default: false (roadmap Phase 8: adjusts footer palette; the underlying signal is never color-only regardless of this setting)
+	tokenUsageDisplay?: "off" | "compact" | "full"; // default: "compact" (roadmap Phase 8: footer token/cost stats verbosity)
 }
 
 export interface ImageSettings {
@@ -1137,6 +1140,18 @@ export class SettingsManager {
 		this.globalSettings.terminal.imageWidthCells = Math.max(1, Math.floor(width));
 		this.markModified("terminal", "imageWidthCells");
 		this.save();
+	}
+
+	getSymbolPreset(): "unicode" | "ascii" {
+		return this.settings.terminal?.symbolPreset ?? "unicode";
+	}
+
+	getColorBlindMode(): boolean {
+		return this.settings.terminal?.colorBlindMode ?? false;
+	}
+
+	getTokenUsageDisplay(): "off" | "compact" | "full" {
+		return this.settings.terminal?.tokenUsageDisplay ?? "compact";
 	}
 
 	getClearOnShrink(): boolean {
