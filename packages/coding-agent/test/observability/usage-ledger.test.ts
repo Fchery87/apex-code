@@ -182,4 +182,103 @@ describe("production usage-performance wiring (task 8.1)", () => {
 		expect(store.getCommand("cmd-1")).toMatchObject({ sessionId: "sess-1", state: "completed" });
 		expect(store.getLease("sess-1")).toMatchObject({ ownerId: "owner-1", mode: "exclusive" });
 	});
+
+	it("prunes rows older than its retention window on open, leaving recent rows alone", async () => {
+		const agentDir = scratchDir("retention");
+		cleanups.push(() => rmSync(agentDir, { recursive: true, force: true }));
+		const path = join(agentDir, "state.sqlite");
+
+		const oldSample = {
+			timestamp: Date.now() - 200 * 24 * 60 * 60 * 1000, // 200 days ago
+			provider: "acme",
+			model: "acme-large",
+			outcome: "success" as const,
+			ttftMs: 10,
+			generationMs: 20,
+		};
+		const recentSample = {
+			timestamp: Date.now() - 1000,
+			provider: "acme",
+			model: "acme-large",
+			outcome: "success" as const,
+			ttftMs: 10,
+			generationMs: 20,
+		};
+
+		// Seed both rows through a store whose own construction-time prune runs
+		// before either record() call, so both land regardless of age.
+		const seeder = new SqliteUsagePerformanceStore(path);
+		await seeder.record(oldSample);
+		await seeder.record(recentSample);
+		seeder.close();
+
+		// A fresh store, opened with a 90-day retention window, prunes on open.
+		const store = new SqliteUsagePerformanceStore(path, undefined, 90);
+		cleanups.push(() => store.close());
+		const samples = await store.list();
+
+		expect(samples).toHaveLength(1);
+		expect(samples[0].timestamp).toBe(recentSample.timestamp);
+	});
+
+	it("degrades to a runtime diagnostic instead of throwing when the ledger cannot be opened", async () => {
+		const agentDir = scratchDir("degradation");
+		cleanups.push(() => rmSync(agentDir, { recursive: true, force: true }));
+
+		// state.sqlite exists as a directory, not a file: DatabaseSync reliably
+		// fails to open it, without relying on platform-specific permission bits.
+		mkdirSync(join(agentDir, "state.sqlite"));
+
+		const providerId = "usage-ledger-degradation";
+		const faux = fauxProvider({ provider: providerId });
+		faux.setResponses([fauxAssistantMessage([], { stopReason: "stop" })]);
+
+		const services = await createAgentSessionServices({
+			cwd: agentDir,
+			agentDir,
+			sessionId: "session-degradation-1",
+			resourceLoaderOptions: { noSkills: true, noPromptTemplates: true, noThemes: true },
+		});
+
+		expect(services.diagnostics).toContainEqual(
+			expect.objectContaining({
+				type: "warning",
+				message: expect.stringContaining("Usage/cost recording unavailable"),
+			}),
+		);
+
+		// The turn itself is unaffected by the ledger being unavailable.
+		services.modelRuntime.registerNativeProvider(faux.provider);
+		await services.modelRuntime.refresh({ allowNetwork: false, providers: [providerId] });
+		const message = await services.modelRuntime.streamSimple(faux.getModel(), { messages: [] }).result();
+		expect(message.stopReason).toBe("stop");
+	});
+
+	it("tolerates two stores concurrently open against the same database path", async () => {
+		const agentDir = scratchDir("concurrent");
+		cleanups.push(() => rmSync(agentDir, { recursive: true, force: true }));
+		const path = join(agentDir, "state.sqlite");
+
+		// Simulates two CLI invocations against one agent directory: both open
+		// the same durable-state database independently, interleaving writes.
+		const storeA = new SqliteUsagePerformanceStore(path, "session-concurrent-a");
+		const storeB = new SqliteUsagePerformanceStore(path, "session-concurrent-b");
+		cleanups.push(
+			() => storeA.close(),
+			() => storeB.close(),
+		);
+
+		const base = { provider: "acme", model: "acme-large", outcome: "success" as const, ttftMs: 5, generationMs: 5 };
+		await Promise.all([
+			storeA.record({ ...base, timestamp: Date.now() }),
+			storeB.record({ ...base, timestamp: Date.now() }),
+			storeA.record({ ...base, timestamp: Date.now() }),
+			storeB.record({ ...base, timestamp: Date.now() }),
+		]);
+
+		const seenViaA = await storeA.list();
+		expect(seenViaA).toHaveLength(4);
+		expect(seenViaA.filter((s) => s.sessionId === "session-concurrent-a")).toHaveLength(2);
+		expect(seenViaA.filter((s) => s.sessionId === "session-concurrent-b")).toHaveLength(2);
+	});
 });
