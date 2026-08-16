@@ -698,7 +698,14 @@ else {
 
 	it("prints a pnpm metadata hint when self-update fails", async () => {
 		const globalRoot = join(tempDir, "pnpm", "global", "v11");
-		const selfPackageDir = join(globalRoot, "node_modules", "@earendil-works", "pi-coding-agent");
+		const selfPackageDir = join(
+			globalRoot,
+			".pnpm",
+			"@earendil-works+pi-coding-agent@0.0.0",
+			"node_modules",
+			"@earendil-works",
+			"pi-coding-agent",
+		);
 		const fakeBinDir = join(tempDir, "bin");
 		const fakePnpmPath = join(fakeBinDir, process.platform === "win32" ? "pnpm.cmd" : "pnpm");
 		mkdirSync(selfPackageDir, { recursive: true });
@@ -707,10 +714,7 @@ else {
 		mkdirSync(join(selfPackageDir, "dist"), { recursive: true });
 		writeFileSync(join(selfPackageDir, "dist", "cli.js"), "");
 		process.argv[1] = join(selfPackageDir, "dist", "cli.js");
-		const fakePnpmScript =
-			process.platform === "win32"
-				? `@echo off\r\nif not "%1"=="root" goto fail\r\nif not "%2"=="-g" goto fail\r\necho ${globalRoot}\r\nexit /b 0\r\n:fail\r\nexit /b 23\r\n`
-				: `#!/bin/sh\nif [ "$1" = "root" ] && [ "$2" = "-g" ]; then\n\tprintf '%s\\n' '${globalRoot.replaceAll("'", "'\\''")}'\n\texit 0\nfi\nexit 23\n`;
+		const fakePnpmScript = process.platform === "win32" ? "@echo off\r\nexit /b 23\r\n" : "#!/bin/sh\nexit 23\n";
 		writeFileSync(fakePnpmPath, fakePnpmScript);
 		chmodSync(fakePnpmPath, 0o755);
 		process.env.PATH = `${fakeBinDir}${process.env.PATH ? `${delimiter}${process.env.PATH}` : ""}`;
