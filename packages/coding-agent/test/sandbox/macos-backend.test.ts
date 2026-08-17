@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -52,6 +52,35 @@ describe.skipIf(!canEnforceMacosSandbox())("macOS sandbox backend", () => {
 			await expect(
 				supervisor.launch({ command: "/bin/sh", args: ["-c", `test ! -e ${join(homedir(), ".zshrc")}`] }),
 			).resolves.toBe(0);
+		} finally {
+			await supervisor.close();
+		}
+	});
+
+	it("projects a host credential file read-only without exposing sibling files", async () => {
+		const cwd = workspace();
+		const hostDirectory = workspace();
+		const authPath = join(hostDirectory, "auth.json");
+		const siblingPath = join(hostDirectory, "settings.json");
+		mkdirSync(hostDirectory, { recursive: true });
+		writeFileSync(authPath, "host-secret", { mode: 0o600 });
+		writeFileSync(siblingPath, "host-settings", { mode: 0o600 });
+		const backend = createMacosSandboxBackend();
+		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+
+		try {
+			const script = `test "$(cat ${authPath})" = host-secret && test ! -e ${siblingPath}`;
+			await expect(
+				supervisor.launch({ command: "/bin/sh", args: ["-c", script], readOnlyFiles: [authPath] }),
+			).resolves.toBe(0);
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: ["-c", `printf changed > ${authPath}`],
+					readOnlyFiles: [authPath],
+				}),
+			).resolves.not.toBe(0);
+			expect(readFileSync(authPath, "utf8")).toBe("host-secret");
 		} finally {
 			await supervisor.close();
 		}

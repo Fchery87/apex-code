@@ -1,4 +1,15 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import type { ChildProcess, spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	readlinkSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -115,5 +126,44 @@ describe("Linux sandbox preflight", () => {
 			kind: "unavailable",
 			reason: "Bubblewrap (bwrap) is required for OS sandboxing.",
 		});
+	});
+});
+
+function openFileDescriptorTargets(): string[] {
+	const fdDirectory = "/proc/self/fd";
+	return readdirSync(fdDirectory).flatMap((entry) => {
+		try {
+			return [readlinkSync(join(fdDirectory, entry))];
+		} catch {
+			return [];
+		}
+	});
+}
+
+describe.skipIf(process.platform !== "linux")("Linux sandbox crash cleanup", () => {
+	it("closes an open read-only credential descriptor even when the sandboxed spawn itself fails", async () => {
+		const cwd = workspace();
+		const hostDirectory = workspace();
+		const authPath = join(hostDirectory, "auth.json");
+		writeFileSync(authPath, "host-secret", { mode: 0o600 });
+
+		const backend = createLinuxSandboxBackend({
+			platform: "linux",
+			commandExists: () => true,
+			spawnChild: (() => {
+				const fake = new EventEmitter() as unknown as ChildProcess;
+				queueMicrotask(() => fake.emit("error", new Error("bwrap vanished mid-launch")));
+				return fake;
+			}) as unknown as typeof spawn,
+		});
+		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+
+		await expect(
+			supervisor.launch({ command: "/bin/sh", args: ["-c", "true"], readOnlyFiles: [authPath] }),
+		).rejects.toThrow("bwrap vanished mid-launch");
+		await supervisor.close();
+
+		const leaked = openFileDescriptorTargets().some((target) => target.includes(authPath));
+		expect(leaked).toBe(false);
 	});
 });
