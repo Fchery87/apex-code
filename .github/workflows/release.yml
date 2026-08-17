@@ -39,13 +39,24 @@ jobs:
           version="$(node scripts/apex/validate-release-tag.mjs "${GITHUB_REF_NAME}")"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 
+      # Mirrors ci.yml's own Linux system-dependencies step (canvas/image libs,
+      # fd/ripgrep, and bubblewrap for OS sandbox enforcement). This step had
+      # drifted to installing only fd-find/ripgrep, so every real Test run here
+      # failed on every OS-sandbox-enforcing test with "Bubblewrap (bwrap) is
+      # required for OS sandboxing" -- discovered running the actual v0.0.1-alpha.2
+      # release (task 12.15); ci.yml itself never caught this because ci.yml has
+      # its own separate, already-correct copy of this step.
       - name: System dependencies
         shell: bash
         run: |
           set -Eeuo pipefail
           sudo apt-get update
-          sudo apt-get install -y fd-find ripgrep
+          sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev \
+            libgif-dev librsvg2-dev fd-find ripgrep bubblewrap
           sudo ln -s "$(command -v fdfind)" /usr/local/bin/fd
+          # See ci.yml's identical step for why this is required on Ubuntu 24.04
+          # runner images (docs/plans/2026-08-12-os-sandbox.md, task 2b.7).
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       - name: Install
         run: npm ci --ignore-scripts
