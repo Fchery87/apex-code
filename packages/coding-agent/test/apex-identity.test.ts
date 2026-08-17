@@ -20,11 +20,16 @@ describe("Apex Code identity", () => {
 		const binaryScript = readFileSync(resolve(import.meta.dirname, "../../../scripts/build-binaries.sh"), "utf8");
 
 		expect(codingAgent.name).toBe("apex-code");
-		expect(codingAgent.version).toBe("0.0.1-alpha.1");
+		expect(codingAgent.version).toMatch(/^\d+\.\d+\.\d+/);
 		expect(codingAgent.bin).toEqual({ "apex-code": "dist/cli.js" });
-		expect(codingAgent.dependencies["apex-code-agent-core"]).toBe("0.0.1-alpha.1");
 		expect(agentCore.name).toBe("apex-code-agent-core");
-		expect(agentCore.version).toBe("0.0.1-alpha.1");
+		// sync-versions.js keeps the two Apex-owned packages lockstep versioned
+		// (scripts/sync-versions.test.mjs), so the dependency range and the
+		// core's own version always equal the CLI's own version -- asserted
+		// against each other, not a hardcoded literal that goes stale on every
+		// release (task 12.15 caught this: it broke on the first real bump).
+		expect(codingAgent.dependencies["apex-code-agent-core"]).toBe(codingAgent.version);
+		expect(agentCore.version).toBe(codingAgent.version);
 		expect(binaryScript).toContain("apex-code-$platform.tar.gz");
 		expect(binaryScript).toContain("apex-code-$platform.zip");
 	});

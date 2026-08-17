@@ -1,6 +1,6 @@
 # Apex Code changelog
 
-## 0.0.1-alpha.1
+## [Unreleased]
 
 - Published the Apex Code CLI and agent core through npm Trusted Publishing.
 - Added provider failover, permissions and sandboxing, context engineering, expanded tools, delegation, durable state, evidence, observability, and release hardening.
@@ -8,6 +8,13 @@
 - Removed implicit `pi.dev` model-catalog and share-viewer dependencies. Bundled catalogs
   are now the default; remote catalogs and preview viewers require explicit Apex
   environment configuration, and `/share` confirms the secret GitHub Gist upload.
+- Fixed stale Pi-branded content shipped in the packed npm tarball's `docs/` (fictional
+  installer, broken command examples, wrong file paths, an ADR 0013 hosted-service
+  reference) across 29 files; added pnpm/Yarn/Bun install commands.
+- Extended the packed-artifact identity gate to scan every packed `.md` file, not just
+  `README.md`, so this class of defect fails CI instead of shipping.
+- Replaces `apex-code@0.0.1-alpha.1`, whose `next`-tagged tarball shipped this stale
+  content; see the release-integrity runbook for the deprecation of prior versions.
 
 ## Upstream Pi history
 
