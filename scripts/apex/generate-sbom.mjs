@@ -14,9 +14,10 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { npmCommand } from "./npm-command.mjs";
 import { getPublicWorkspacePackages } from "../release-packages.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -24,10 +25,14 @@ const DEFAULT_OUT_DIR = join(REPO_ROOT, ".artifacts");
 
 /** Generate one package's SBOM. Throws if npm sbom fails or the output is empty/malformed. */
 export function generateSbomFor(pkg, cwd = REPO_ROOT) {
+	// npm resolves --workspace against its own internally realpath'd workspace
+	// list; on macOS /tmp is itself a symlink (-> /private/tmp), so an
+	// unresolved path can fail to match with "No workspaces found" even though
+	// it is the correct directory. Resolve both sides the same way.
 	const output = execFileSync(
-		"npm",
-		["sbom", "--workspace", pkg.directory, "--omit", "dev", "--sbom-format", "cyclonedx"],
-		{ cwd, encoding: "utf8" },
+		npmCommand(),
+		["sbom", "--workspace", realpathSync(pkg.directory), "--omit", "dev", "--sbom-format", "cyclonedx"],
+		{ cwd: realpathSync(cwd), encoding: "utf8" },
 	);
 	let document;
 	try {

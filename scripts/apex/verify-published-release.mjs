@@ -16,10 +16,11 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { npmCommand } from "./npm-command.mjs";
 
 /** `npm view <name>@<version> --json`, parsed. Throws if the version is unknown. */
 export function fetchPublishedMetadata(name, version) {
-	const output = execFileSync("npm", ["view", `${name}@${version}`, "--json"], { encoding: "utf8" });
+	const output = execFileSync(npmCommand(), ["view", `${name}@${version}`, "--json"], { encoding: "utf8" });
 	return JSON.parse(output);
 }
 
