@@ -38,6 +38,34 @@ const REJECTED_IDENTITY_PATTERNS = [
 	{ pattern: /https:\/\/pi\.dev/, reason: "references an unowned hosted pi.dev endpoint (ADR 0013)" },
 ];
 
+/**
+ * `packages/coding-agent` and `packages/agent` are forked, not frozen (ADR 0001) --
+ * a link to their upstream `earendil-works/pi-mono` copy points a reader at code
+ * that is not what actually shipped, unlike a frozen-package link (`packages/ai`,
+ * `tui`, `client`, `protocol`, `server`, `telemetry`), which is correctly the
+ * canonical upstream source and must not be flagged. Mechanically precise --
+ * zero false-positive risk -- found and fixed across six real doc files in the
+ * same audit that established this gate.
+ */
+const REJECTED_LINK_PATTERNS = [
+	{
+		pattern: /earendil-works\/pi-mono\/(?:blob|tree)\/main\/packages\/(?:coding-agent|agent)\//,
+		reason: "links to upstream Pi source for a forked (not frozen) package instead of Fchery87/apex-code",
+	},
+];
+
+/**
+ * The only real binary this package ships is `apex-code` (see `bin` in
+ * package.json) -- a literal bare "pi" spawned, invoked, or set as a container
+ * ENTRYPOINT is never correct example code, regardless of surrounding prose.
+ * Found and fixed in real Dockerfile/RPC-client examples in the same audit.
+ */
+const REJECTED_BARE_BINARY_PATTERNS = [
+	{ pattern: /ENTRYPOINT\s*\[\s*"pi"\s*\]/, reason: "container ENTRYPOINT names a nonexistent `pi` binary" },
+	{ pattern: /spawn\(\s*"pi"\s*,/, reason: "example code spawns a nonexistent `pi` binary" },
+	{ pattern: /\[\s*"pi"\s*,\s*"--mode"/, reason: "example code invokes a nonexistent `pi` binary" },
+];
+
 /** Secret-shaped strings that must never appear in a packed artifact. */
 const REJECTED_SECRET_PATTERNS = [
 	{ pattern: /sk-[A-Za-z0-9]{20,}/, reason: "looks like an API key" },
@@ -64,7 +92,13 @@ const REJECTED_ABSOLUTE_PATH_PATTERNS = [
 	{ pattern: /\/(home|Users)\/runner\//, reason: "looks like a GitHub Actions runner absolute path" },
 ];
 
-const ALL_PATTERNS = [...REJECTED_IDENTITY_PATTERNS, ...REJECTED_SECRET_PATTERNS, ...REJECTED_ABSOLUTE_PATH_PATTERNS];
+const ALL_PATTERNS = [
+	...REJECTED_IDENTITY_PATTERNS,
+	...REJECTED_LINK_PATTERNS,
+	...REJECTED_BARE_BINARY_PATTERNS,
+	...REJECTED_SECRET_PATTERNS,
+	...REJECTED_ABSOLUTE_PATH_PATTERNS,
+];
 
 /** Pack a package directory for real and extract the tarball. Never `--dry-run`:
  * a dry run proves the tarball builds, not that its contents are reviewed. */
@@ -104,16 +138,24 @@ function listFiles(root, predicate) {
  * Inspect a package's *extracted, packed* contents. Scans compiled `.js`
  * output (not `.map` files -- ADR 0018 scopes this gate to the identity
  * surfaces the spec names: README, compiled runtime, metadata; source-map
- * debug-symbol policy is a separate, not-yet-made decision) plus the packed
- * README and package.json.
+ * debug-symbol policy is a separate, not-yet-made decision) plus every packed
+ * `.md` file -- not just the top-level README. `packages/coding-agent`'s
+ * `files` field ships `docs/` and `CHANGELOG.md` too, and a real audit found
+ * stale, occasionally broken (nonexistent `pi` command, wrong upstream links)
+ * "Pi"-branded content across most of `docs/` that a README-only scan never
+ * observed, exactly the kind of gap this gate exists to close.
  */
 export function checkPackedProductSurface(extractedDirectory, options = {}) {
 	const violations = [];
-	const scanned = listFiles(extractedDirectory, (path) => path.endsWith(".js"));
-	for (const readmeCandidate of ["README.md"]) {
-		const path = join(extractedDirectory, readmeCandidate);
-		if (fileExists(path)) scanned.push(path);
-	}
+	// CHANGELOG.md is a past-tense historical record (mirrors the source-level
+	// scans in scripts/product-surface.test.mjs, which never read it either):
+	// entries like "Removed implicit pi.dev model-catalog..." or "restarting
+	// with `pi -ne`" describe what Pi/Apex Code *used to* do, not a live
+	// violation, and must not be flagged.
+	const scanned = listFiles(
+		extractedDirectory,
+		(path) => (path.endsWith(".js") || path.endsWith(".md")) && !path.endsWith("/CHANGELOG.md"),
+	);
 
 	for (const file of scanned) {
 		const content = readFileSync(file, "utf8");

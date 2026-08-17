@@ -1,6 +1,6 @@
 # Termux (Android) Setup
 
-Pi runs on Android via [Termux](https://termux.dev/), a terminal emulator and Linux environment for Android.
+Apex Code runs on Android via [Termux](https://termux.dev/), a terminal emulator and Linux environment for Android.
 
 ## Prerequisites
 
@@ -16,14 +16,14 @@ pkg update && pkg upgrade
 # Install dependencies
 pkg install nodejs termux-api git
 
-# Install pi
+# Install Apex Code
 npm install -g --ignore-scripts apex-code
 
 # Create config directory
 mkdir -p ~/.apex-code/agent
 
-# Run pi
-pi
+# Run Apex Code
+apex-code
 ```
 
 ## Clipboard Support

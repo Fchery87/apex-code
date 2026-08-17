@@ -1,25 +1,28 @@
 # Containerization
 
-Pi runs with all permissions by default, but in some cases, you will want to have more control over what directories Pi can write to and which accesses it has.
+Apex Code has its own permission gate and, on Linux and macOS, an OS-level sandbox (see
+[Security](security.md)); Windows has no supported sandbox backend, and even where the
+built-in sandbox applies, you may want stronger or environment-level control over what
+directories Apex Code can write to and which accesses it has.
 
 There are two general options. You can either
-1. run the whole `pi` process inside an isolated environment, or
-2. run `pi` on the host and route tool execution into an isolated environment.
+1. run the whole `apex-code` process inside an isolated environment, or
+2. run `apex-code` on the host and route tool execution into an isolated environment.
 
 ## Choose a pattern
 
 | Pattern | What is isolated | Best for | Notes |
 | --- | --- | --- | --- |
 | Gondolin extension | Built-in tools and `!` commands | Local micro-VM isolation while keeping auth on host | See [`examples/extensions/gondolin/`](../examples/extensions/gondolin/). |
-| Plain Docker | Whole `pi` process in a local container | Simple local isolation | Provider API keys enter the container. |
-| OpenShell | Whole `pi` process in a policy-controlled sandbox | Local or remote managed sandbox | Requires an OpenShell gateway |
+| Plain Docker | Whole `apex-code` process in a local container | Simple local isolation | Provider API keys enter the container. |
+| OpenShell | Whole `apex-code` process in a policy-controlled sandbox | Local or remote managed sandbox | Requires an OpenShell gateway |
 
-Extensions run wherever the `pi` process runs. If you run host `pi` with a tool-routing extension, other custom extension tools still run on the host unless they also delegate their operations.
+Extensions run wherever the `apex-code` process runs. If you run host `apex-code` with a tool-routing extension, other custom extension tools still run on the host unless they also delegate their operations.
 
 ## Gondolin
 
 [Gondolin](https://github.com/earendil-works/gondolin) is a local Linux micro-VM.
-Use the [example extension](../examples/extensions/gondolin) when you want `pi` on the host but all built-in tools routed into the VM.
+Use the [example extension](../examples/extensions/gondolin) when you want `apex-code` on the host but all built-in tools routed into the VM.
 
 Setup:
 
@@ -44,9 +47,9 @@ Requirements: Node.js >= 23.6.0 for `@earendil-works/gondolin`, plus QEMU (requi
 
 ## Plain Docker
 
-Run the whole `pi` process in Docker when you want the simplest local container boundary.
+Run the whole `apex-code` process in Docker when you want the simplest local container boundary.
 
-`Dockerfile.pi`:
+`Dockerfile.apex-code`:
 
 ```dockerfile
 FROM node:24-bookworm-slim
@@ -57,19 +60,19 @@ RUN apt-get update \
 RUN npm install -g --ignore-scripts apex-code
 
 WORKDIR /workspace
-ENTRYPOINT ["pi"]
+ENTRYPOINT ["apex-code"]
 ```
 
 Build and run:
 
 ```bash
-docker build -t pi-sandbox -f Dockerfile.pi .
+docker build -t apex-code-sandbox -f Dockerfile.apex-code .
 
 docker run --rm -it \
   -e ANTHROPIC_API_KEY \
   -v "$PWD:/workspace" \
-  -v pi-agent-home:/root/.apex-code/agent \
-  pi-sandbox
+  -v apex-code-agent-home:/root/.apex-code/agent \
+  apex-code-sandbox
 ```
 
 The `-v "$PWD:/workspace"` mounts your current directory into the container at /workspace such that reads and writes in `/workspace` inside Docker directly affect your host files, like in the Gondolin example.
@@ -89,23 +92,23 @@ openshell gateway add <gateway-url> --name <name>
 openshell gateway select <name>
 ```
 
-Launch `pi` inside an OpenShell sandbox:
+Launch `apex-code` inside an OpenShell sandbox:
 
 ```bash
-openshell sandbox create --name pi-sandbox --from apex-code -- pi
+openshell sandbox create --name apex-code-sandbox --from apex-code -- apex-code
 ```
 
-In this pattern, the whole `pi` process runs inside the sandbox.
+In this pattern, the whole `apex-code` process runs inside the sandbox.
 Built-in tools, `!` commands, and extension tools execute inside the OpenShell boundary.
 
 If the gateway is remote, project files are not bind-mounted from the host, meaning writes in the sandbox are not reflected on your machine.
 Clone the repository inside the sandbox or use OpenShell file transfer commands:
 
 ```bash
-openshell sandbox upload pi-sandbox ./repo /workspace
-openshell sandbox download pi-sandbox /workspace/repo ./repo-out
+openshell sandbox upload apex-code-sandbox ./repo /workspace
+openshell sandbox download apex-code-sandbox /workspace/repo ./repo-out
 ```
 
 OpenShell providers can keep raw model API keys outside the sandbox.
 When inference routing is configured, code inside the sandbox can call `https://inference.local`, and the gateway injects the configured provider credentials upstream.
-Configure Pi to use the corresponding OpenAI-compatible or Anthropic-compatible endpoint if you want model traffic to use this route.
+Configure Apex Code to use the corresponding OpenAI-compatible or Anthropic-compatible endpoint if you want model traffic to use this route.
