@@ -1,6 +1,6 @@
 # Providers
 
-Pi supports subscription-based providers via OAuth and API key providers via environment variables or auth file. Built-in catalogs ship with pi; configured providers may refresh newer catalogs and cache them in `~/.apex-code/agent/models-store.json` for offline use.
+Apex Code supports subscription-based providers via OAuth and API key providers via environment variables or auth file. Built-in catalogs ship with Apex Code; configured providers may refresh newer catalogs and cache them in `~/.apex-code/agent/models-store.json` for offline use.
 
 ## Table of Contents
 
@@ -63,7 +63,7 @@ Use `/login` in interactive mode and select a provider to store an API key in `a
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-pi
+apex-code
 ```
 
 | Provider | Environment Variable | `auth.json` key |
@@ -154,7 +154,7 @@ API key credentials can also include provider-scoped environment values. These v
 }
 ```
 
-Use this when pi should use different provider settings than the project shell environment.
+Use this when Apex Code should use different provider settings than the project shell environment.
 
 ### Key Resolution
 
@@ -269,7 +269,7 @@ AI Gateway authentication uses `CLOUDFLARE_API_KEY` as `cf-aig-authorization`. U
 | Stored BYOK | Cloudflare token only | Cloudflare injects provider keys stored in the AI Gateway dashboard |
 | Inline BYOK | Cloudflare token plus upstream `Authorization` header | The request supplies the upstream provider key |
 
-For normal pi usage, prefer unified billing or stored BYOK. Inline BYOK requires configuring an additional upstream `Authorization` header for the Cloudflare AI Gateway provider, for example via a `models.json` provider/model override.
+For normal Apex Code usage, prefer unified billing or stored BYOK. Inline BYOK requires configuring an additional upstream `Authorization` header for the Cloudflare AI Gateway provider, for example via a `models.json` provider/model override.
 
 ### Cloudflare Workers AI
 
@@ -281,7 +281,7 @@ export CLOUDFLARE_ACCOUNT_ID=...
 apex-code --provider cloudflare-workers-ai --model "@cf/moonshotai/kimi-k2.6"
 ```
 
-Pi automatically sets `x-session-affinity` for [prefix caching](https://developers.cloudflare.com/workers-ai/features/prompt-caching/) discounts.
+Apex Code automatically sets `x-session-affinity` for [prefix caching](https://developers.cloudflare.com/workers-ai/features/prompt-caching/) discounts.
 
 ### Google Vertex AI
 
@@ -297,7 +297,7 @@ Or set `GOOGLE_APPLICATION_CREDENTIALS` to a service account key file.
 
 ## llama.cpp
 
-Pi supports the llama.cpp router server. Configure it with `/login llama.cpp`, manage loaded models with `/llama`, and select a loaded model with `/model`.
+Apex Code supports the llama.cpp router server. Configure it with `/login llama.cpp`, manage loaded models with `/llama`, and select a loaded model with `/model`.
 
 See [llama.cpp](llama-cpp.md) for server setup, model directory layout, environment variables, and command usage.
 

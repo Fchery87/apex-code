@@ -1,38 +1,38 @@
 # Development
 
-See [AGENTS.md](https://github.com/earendil-works/pi-mono/blob/main/AGENTS.md) for additional guidelines.
+See [AGENTS.md](https://github.com/Fchery87/apex-code/blob/main/AGENTS.md) for additional guidelines.
 
 ## Setup
 
 ```bash
-git clone https://github.com/earendil-works/pi-mono
-cd pi-mono
+git clone https://github.com/Fchery87/apex-code
+cd apex-code
 npm install
 npm run build
 ```
 
-Run from source:
+Run tests from source:
 
 ```bash
-/path/to/pi-mono/pi-test.sh
+/path/to/apex-code/test.sh
 ```
 
-The script can be run from any directory. Pi keeps the caller's current working directory.
+The script can be run from any directory. Apex Code keeps the caller's current working directory.
 
 ## Forking / Rebranding
 
-Configure via `package.json`:
+Apex Code itself is a fork of Pi configured this way. Configure via `package.json`:
 
 ```json
 {
   "piConfig": {
-    "name": "pi",
-    "configDir": ".pi"
+    "name": "apex-code",
+    "configDir": ".apex-code"
   }
 }
 ```
 
-Change `name`, `configDir`, and `bin` field for your fork. Affects CLI banner, config paths, and environment variable names.
+Change `name`, `configDir`, and `bin` field for your own fork. Affects CLI banner, config paths, and environment variable names. `piConfig` is the retained upstream key name for this mechanism, not a reference to a running "pi" product.
 
 ## Path Resolution
 
@@ -48,7 +48,7 @@ Never use `__dirname` directly for package assets.
 
 ## Debug Command
 
-`/debug` (hidden) writes to `~/.apex-code/agent/pi-debug.log`:
+`/debug` (hidden) writes to `~/.apex-code/agent/apex-code-debug.log`:
 - Rendered TUI lines with ANSI codes
 - Last messages sent to the LLM
 

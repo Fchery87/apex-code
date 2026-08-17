@@ -45,6 +45,68 @@ test("catches active Pi product misidentification in compiled dist output", asyn
 	});
 });
 
+test("catches a doc link to upstream Pi source for a forked package", async () => {
+	await withTempDir(async (root) => {
+		await writeFile(join(root, "README.md"), "# Apex Code\n");
+		await mkdir(join(root, "docs"), { recursive: true });
+		await writeFile(
+			join(root, "docs", "extensions.md"),
+			"See https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/extensions.md for tool source.\n",
+		);
+
+		const violations = checkPackedProductSurface(root);
+		assert.equal(violations.length, 1);
+		assert.equal(violations[0].file, join("docs", "extensions.md"));
+		assert.match(violations[0].reason, /forked \(not frozen\) package/);
+	});
+});
+
+test("does not flag a doc link to upstream Pi source for a frozen package", async () => {
+	await withTempDir(async (root) => {
+		await writeFile(join(root, "README.md"), "# Apex Code\n");
+		await mkdir(join(root, "docs"), { recursive: true });
+		await writeFile(
+			join(root, "docs", "custom-provider.md"),
+			"See https://github.com/earendil-works/pi-mono/blob/main/packages/ai/src/providers.ts for the frozen provider interface.\n",
+		);
+
+		assert.deepEqual(checkPackedProductSurface(root), []);
+	});
+});
+
+test("catches example code that spawns or names a nonexistent `pi` binary", async () => {
+	await withTempDir(async (root) => {
+		await writeFile(join(root, "README.md"), "# Apex Code\n");
+		await mkdir(join(root, "docs"), { recursive: true });
+		await writeFile(
+			join(root, "docs", "containerization.md"),
+			'```dockerfile\nFROM node:20\nENTRYPOINT ["pi"]\n```\n',
+		);
+		await writeFile(
+			join(root, "docs", "rpc.md"),
+			"```js\nconst child = spawn(\"pi\", [\"--mode\", \"rpc\"]);\n```\n",
+		);
+
+		const violations = checkPackedProductSurface(root);
+		const reasons = violations.map((v) => v.reason).sort();
+		assert.equal(violations.length, 2);
+		assert.match(reasons[0], /ENTRYPOINT names a nonexistent `pi` binary/);
+		assert.match(reasons[1], /spawns a nonexistent `pi` binary/);
+	});
+});
+
+test("does not flag legitimate historical CHANGELOG.md entries mentioning old pi.dev/pi flags", async () => {
+	await withTempDir(async (root) => {
+		await writeFile(join(root, "README.md"), "# Apex Code\n");
+		await writeFile(
+			join(root, "CHANGELOG.md"),
+			"# Changelog\n\n- Removed implicit `pi.dev` model-catalog fallback.\n- Fixed a bug where the agent would suggest restarting with `pi -ne`.\n",
+		);
+
+		assert.deepEqual(checkPackedProductSurface(root), []);
+	});
+});
+
 test("catches a secret-shaped string in compiled dist output", async () => {
 	await withTempDir(async (root) => {
 		await writeFile(join(root, "README.md"), "# Apex Code\n");

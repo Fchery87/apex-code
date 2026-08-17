@@ -7,16 +7,22 @@ a broader tool surface, delegation, durable execution, evidence, and cost visibi
 ## Install
 
 Apex Code is currently published on npm's prerelease `next` channel and requires
-Node.js 22.19 or newer:
+Node.js 22.19 or newer. It installs the same way with npm, pnpm, Yarn, or Bun — all
+resolve it from the same npm registry:
 
 ```bash
-npm install --global apex-code@next
+npm install --global apex-code@next      # npm
+pnpm add --global apex-code@next         # pnpm
+yarn global add apex-code@next           # Yarn
+bun add --global apex-code@next          # Bun
+
 apex-code --version
 apex-code
 ```
 
-Apex Code does not operate a shell installer or standalone binary release channel.
-Update it through npm:
+Apex Code does not operate a separate shell/curl installer or a standalone binary
+release channel — a package manager install is the only distribution channel. Update
+it the same way:
 
 ```bash
 npm install --global apex-code@next
