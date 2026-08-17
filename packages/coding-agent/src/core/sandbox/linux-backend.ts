@@ -91,7 +91,10 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 				violationStore,
 			});
 
-			const relayScriptPath = join(stateDirectory, "relay.js");
+			// .cjs forces CommonJS regardless of the target workspace's package.json "type"
+			// field -- a plain .js here would be parsed as ESM under "type": "module" and
+			// crash on `require`, since Node resolves module type from the nearest package.json.
+			const relayScriptPath = join(stateDirectory, "relay.cjs");
 			writeFileSync(
 				relayScriptPath,
 				`
