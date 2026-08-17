@@ -94,7 +94,7 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		}
 	});
 
-	it("launches inside a workspace whose package.json declares \"type\": \"module\"", async () => {
+	it('launches inside a workspace whose package.json declares "type": "module"', async () => {
 		const cwd = workspace();
 		writeFileSync(join(cwd, "package.json"), JSON.stringify({ type: "module" }));
 		const backend = createLinuxSandboxBackend();
