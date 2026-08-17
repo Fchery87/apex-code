@@ -106,6 +106,9 @@ jobs:
           name: third-party-licenses
           path: .artifacts/third-party-licenses.md
           if-no-files-found: error
+          # .artifacts/ is dot-prefixed ("hidden"); see the sbom upload step
+          # below for why every upload from it needs this set.
+          include-hidden-files: true
 
       - name: Generate SBOM
         run: node scripts/apex/generate-sbom.mjs
@@ -115,6 +118,17 @@ jobs:
           name: sbom
           path: .artifacts/sbom-*.cyclonedx.json
           if-no-files-found: error
+          # actions/upload-artifact defaults to excluding dot-prefixed ("hidden")
+          # path segments during its glob search, and .artifacts/ is one -- this
+          # wildcarded pattern silently matched zero files because of it
+          # (confirmed live running the real v0.0.1-alpha.2 release -- task
+          # 12.15 -- and by reproducing search.ts's own getDefaultGlobOptions()
+          # locally: excludeHiddenFiles defaults to true unless this is set).
+          # The literal-filename uploads elsewhere in this workflow happened to
+          # still work without it, since a literal path bypasses glob expansion
+          # entirely, but that is coincidental, not guaranteed -- so this is set
+          # on every .artifacts/-sourced upload in this workflow, not just here.
+          include-hidden-files: true
 
       # The core is an exact dependency of the CLI, so it must become visible
       # in the registry before apex-code is published.
@@ -194,6 +208,9 @@ jobs:
           name: release-evidence
           path: .artifacts/release-evidence.json
           if-no-files-found: error
+          # .artifacts/ is dot-prefixed ("hidden"); see the sbom upload step
+          # above for why every upload from it needs this set.
+          include-hidden-files: true
 
   # ADR 0005: Linux and macOS are the supported platforms (Windows is a standing
   # exclusion, not reopened here). The Ubuntu job above builds, tests, and
