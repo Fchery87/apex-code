@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Fixed the Linux OS sandbox crashing with `ReferenceError: require is not defined in ES module
+  scope` when launched inside a workspace whose `package.json` declares `"type": "module"`; the
+  sandbox's network relay script is now written as `relay.cjs` instead of `relay.js`.
+
 ## [0.0.1-alpha.2] - 2026-08-17
 
 - Published the Apex Code CLI and agent core through npm Trusted Publishing.
