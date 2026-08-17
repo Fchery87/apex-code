@@ -10,6 +10,8 @@ export interface LinuxSandboxBackendOptions {
 	platform?: NodeJS.Platform;
 	commandExists?: (command: string) => boolean;
 	violationStore?: SandboxViolationStore;
+	/** Injectable only to prove crash cleanup in tests; production spawns `bwrap` directly. */
+	spawnChild?: typeof spawn;
 }
 
 function commandExists(command: string): boolean {
@@ -133,70 +135,77 @@ server.on("error", (err) => {
 				readOnlyMountArguments(path, "file", index + 3),
 			);
 			const readOnlyFileDescriptors = (launch.readOnlyFiles ?? []).map((path) => openSync(path, "r"));
-			const child = spawn(
-				"bwrap",
-				[
-					"--new-session",
-					"--die-with-parent",
-					"--unshare-user",
-					"--unshare-pid",
-					"--unshare-net",
-					"--ro-bind",
-					"/",
-					"/",
-					"--tmpfs",
-					"/home",
-					...readOnlyMounts,
-					...readOnlyFileMounts,
-					"--bind",
-					launch.policy.workspace,
-					launch.policy.workspace,
-					"--dev",
-					"/dev",
-					"--proc",
-					"/proc",
-					"--chdir",
-					launch.policy.workspace,
-					"--setenv",
-					"HOME",
-					launch.environment?.HOME ?? stateDirectory,
-					"--setenv",
-					"TMPDIR",
-					launch.environment?.TMPDIR ?? stateDirectory,
-					"--setenv",
-					"APEX_UDS_PATH",
-					socketPath,
-					"--",
-					process.execPath,
-					relayScriptPath,
-					launch.command,
-					...launch.args,
-				],
-				{ env: launch.environment, stdio: ["inherit", "inherit", "pipe", ...readOnlyFileDescriptors] },
-			);
-			let stderr = "";
-			child.stderr?.setEncoding("utf8");
-			child.stderr?.on("data", (chunk: string) => {
-				stderr += chunk;
-				process.stderr.write(chunk);
-			});
-			const exitCode = await waitForExit(child);
-			for (const descriptor of readOnlyFileDescriptors) closeSync(descriptor);
-			await proxy?.close();
-			const proxyAlreadyRecordedAViolation = (violationStore?.totalCount ?? 0) > violationCountBeforeLaunch;
-			if (exitCode !== 0 && !proxyAlreadyRecordedAViolation) {
-				const kind = classifySandboxFailure(stderr);
-				violationStore?.add({
-					kind,
-					command: [launch.command, ...launch.args].join(" "),
-					detail:
-						kind === "unknown"
-							? "Sandboxed process exited unsuccessfully; inspect its stderr for the OS refusal."
-							: stderr.trim(),
-					timestamp: new Date(),
+			// The descriptors above are opened before the child spawns and must be closed
+			// on every exit path -- including a spawn/wait rejection -- or a crashed launch
+			// leaks an open handle onto a host-owned credential file for the process's life.
+			try {
+				const spawnBwrap = options?.spawnChild ?? spawn;
+				const child = spawnBwrap(
+					"bwrap",
+					[
+						"--new-session",
+						"--die-with-parent",
+						"--unshare-user",
+						"--unshare-pid",
+						"--unshare-net",
+						"--ro-bind",
+						"/",
+						"/",
+						"--tmpfs",
+						"/home",
+						...readOnlyMounts,
+						...readOnlyFileMounts,
+						"--bind",
+						launch.policy.workspace,
+						launch.policy.workspace,
+						"--dev",
+						"/dev",
+						"--proc",
+						"/proc",
+						"--chdir",
+						launch.policy.workspace,
+						"--setenv",
+						"HOME",
+						launch.environment?.HOME ?? stateDirectory,
+						"--setenv",
+						"TMPDIR",
+						launch.environment?.TMPDIR ?? stateDirectory,
+						"--setenv",
+						"APEX_UDS_PATH",
+						socketPath,
+						"--",
+						process.execPath,
+						relayScriptPath,
+						launch.command,
+						...launch.args,
+					],
+					{ env: launch.environment, stdio: ["inherit", "inherit", "pipe", ...readOnlyFileDescriptors] },
+				);
+				let stderr = "";
+				child.stderr?.setEncoding("utf8");
+				child.stderr?.on("data", (chunk: string) => {
+					stderr += chunk;
+					process.stderr.write(chunk);
 				});
+				const exitCode = await waitForExit(child);
+				await proxy?.close();
+				const proxyAlreadyRecordedAViolation = (violationStore?.totalCount ?? 0) > violationCountBeforeLaunch;
+				if (exitCode !== 0 && !proxyAlreadyRecordedAViolation) {
+					const kind = classifySandboxFailure(stderr);
+					violationStore?.add({
+						kind,
+						command: [launch.command, ...launch.args].join(" "),
+						detail:
+							kind === "unknown"
+								? "Sandboxed process exited unsuccessfully; inspect its stderr for the OS refusal."
+								: stderr.trim(),
+						timestamp: new Date(),
+					});
+				}
+				return exitCode;
+			} finally {
+				for (const descriptor of readOnlyFileDescriptors) closeSync(descriptor);
 			}
-			return exitCode;
 		},
 		async close() {
 			await proxy?.close();

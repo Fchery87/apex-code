@@ -53,6 +53,14 @@ jobs:
       - name: Check frozen package boundary
         run: node scripts/apex/check-frozen-packages.mjs
 
+      # ADR 0018 (task 12.11): a release does not ship a production dependency
+      # with a known high/critical vulnerability, even one already present
+      # before this release's own changes. --omit=dev: a vulnerable dev-only
+      # tool (a linter, a test runner) never reaches an end user's install and
+      # is not a release blocker on its own.
+      - name: Production dependency vulnerability audit
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Build
         run: npm run build
 
@@ -62,20 +70,39 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Validate package contents
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          npm pack --dry-run --ignore-scripts --json --workspace packages/agent >/dev/null
-          npm pack --dry-run --ignore-scripts --json --workspace packages/coding-agent >/dev/null
+      # ADR 0018 (task 12.8): a dry-run pack only proves the tarball builds, not
+      # that its packed contents are what the maintainer believes they are --
+      # the concrete trigger for this phase was exactly a tarball that packed
+      # successfully but shipped stale Pi-branded content. This packs both
+      # Apex-owned tarballs for real, inspects their packed README/dist/metadata
+      # against a reviewed allowlist, then installs them into an isolated
+      # scratch directory and runs a real, provider-independent scripted turn
+      # through the real sandbox -- before either package is published.
+      - name: Packed-artifact identity and functional smoke gate
+        run: node scripts/apex/packed-product-surface.mjs --out "${RUNNER_TEMP}/packed-product-surface" --smoke
 
+      # Scoped to the packed-and-installed production dependency graph (the
+      # scratch install the smoke gate above just created), not this monorepo's
+      # own root node_modules -- which also contains devDependencies (biome,
+      # vitest, tsx, ...) no end user's install ever receives. "Complete
+      # transitive production dependency license closure" means what actually
+      # ships, not everything this repository happens to have installed.
       - name: Generate third-party license report
-        run: npm run generate:license-report
+        run: npm run generate:license-report -- --node-modules "${RUNNER_TEMP}/packed-product-surface/smoke-install/node_modules"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: third-party-licenses
           path: .artifacts/third-party-licenses.md
+          if-no-files-found: error
+
+      - name: Generate SBOM
+        run: node scripts/apex/generate-sbom.mjs
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sbom
+          path: .artifacts/sbom-*.cyclonedx.json
           if-no-files-found: error
 
       # The core is an exact dependency of the CLI, so it must become visible
@@ -130,6 +157,32 @@ jobs:
             sleep 10
           done
           [[ "$("$scratch/global/bin/apex-code" --version)" == "${VERSION}" ]]
+
+      # ADR 0018 (task 12.9): "the install printed the right --version string"
+      # is not release evidence -- it does not prove the registry actually
+      # distributed the commit CI built and published. This compares the
+      # registry's own gitHead against the tag commit, re-downloads and
+      # rehashes each published tarball against the registry's own reported
+      # digests, and confirms npm provenance is attached.
+      - name: Verify registry gitHead, tarball hash, and provenance
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+          node scripts/apex/verify-published-release.mjs \
+            "apex-code-agent-core@${VERSION}" "apex-code@${VERSION}" \
+            --git-head "${GITHUB_SHA}" \
+            --manifest-out .artifacts/release-evidence.json
+
+      # Durable, retrievable release evidence (ADR 0018, task 12.11): the exact
+      # gitHead, tarball hash, and provenance attestation URL the registry
+      # reported for this release, independent of the workflow log.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-evidence
+          path: .artifacts/release-evidence.json
+          if-no-files-found: error
 
   # ADR 0005: Linux and macOS are the supported platforms (Windows is a standing
   # exclusion, not reopened here). The Ubuntu job above builds, tests, and

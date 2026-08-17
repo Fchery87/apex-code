@@ -839,13 +839,25 @@ executables reject unverified artifacts; Apex-only release tooling leaves frozen
 untouched; security/support ownership and the latest-supported-release policy are published.
 This phase does not claim Windows sandbox enforcement or 24/7 support.
 
-**Current state.** Active. The specification and ADR 0014 are written; implementation has not
-started. The published `apex-code@next` artifact remains stale relative to current `main` until
-a new verified prerelease is cut.
+**Current state.** Active. 13 of 15 plan tasks complete (12.1–12.13): security-boundary ADRs
+(0015, 0016), the sandbox credential/state handoff and trust-first policy resolution, pinned
+and verified tool-artifact installation (ADR 0017), Apex-only release/version tooling (ADR
+0018 — which also found and fixed a real, previously-latent defect: inherited release scripts
+would have bumped and corrupted the six frozen upstream packages' own `package.json`/
+`CHANGELOG.md` files on the next version bump), the pre-publication packed-artifact identity
+and functional-smoke gate, post-publication registry/provenance verification, supply-chain
+evidence (Dependabot, `npm audit`, SBOM, scoped production license closure, a durable
+release-evidence manifest), and the published sole-maintainer support policy and governance
+checklist (`docs/support.md`, `docs/release-integrity-runbook.md`,
+`docs/release-governance-checklist.md`). A full unscoped `npm test` run is clean: 2811 tests
+passed, 0 failures. Remaining: 12.14's required three-OS CI run (needs a real push to trigger)
+and 12.15 (publish the corrected prerelease) — both withheld pending explicit maintainer
+go-ahead, not because anything is unverified. The published `apex-code@next` artifact remains
+stale relative to current `main` until that prerelease is cut.
 
-See the [spec](specs/2026-08-16-production-graduation-and-release-integrity.md) and the
-[research](research/2026-08-16-production-operations-and-release-integrity.md). A plan will be
-created only after the security-boundary design decisions are settled.
+See the [spec](specs/2026-08-16-production-graduation-and-release-integrity.md), the
+[research](research/2026-08-16-production-operations-and-release-integrity.md), and the
+[plan](plans/2026-08-16-production-graduation-and-release-integrity.md).
 
 ## ADRs to write
 
@@ -874,6 +886,8 @@ takes the next free number instead of a reserved one.
 | 0014 | Sole-maintainer production operations, support targets, and succession | 12 | ✅ |
 | 0015 | Host-owned credentials with an explicit sandbox read-only handoff | 12 | ✅ |
 | 0016 | Trust-first supervisor policy inputs | 12 | ✅ |
+| 0017 | Downloaded tool artifact integrity: pinned metadata, bounded/verified/atomic install | 12 | ✅ |
+| 0018 | Apex-only release/version authority and artifact contract | 12 | ✅ |
 
 ## Cross-phase contracts
 

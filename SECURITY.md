@@ -5,13 +5,28 @@
 > project's overall maturity and release process, not an unenforced security
 > boundary — see [`docs/roadmap.md`](docs/roadmap.md) for what's landed by phase.
 
+## Maintainer and support policy
+
+Apex Code is currently maintained by one person, **Frantz Chery**, who owns security triage,
+release authorization, and disclosure coordination. Response targets are best-effort, not a
+staffed-team SLA — see [`docs/support.md`](docs/support.md) for the concrete targets,
+supported-version line, and succession policy, and
+[ADR 0014](docs/adr/0014-sole-maintainer-production-operations.md) for the full decision.
+
 ## Reporting a vulnerability
 
 Report privately through [GitHub private vulnerability reporting](https://github.com/Fchery87/apex-code/security/advisories/new).
 Do not open a public issue.
 - Include what you did, what happened, what you expected, and the version or commit.
-- Expect an acknowledgement within a few days. We will tell you whether it is in
-  scope, and coordinate disclosure timing with you if it is.
+- Expect an acknowledgement within 5 business days (best-effort — see
+  [`docs/support.md`](docs/support.md)). We will tell you whether it is in scope, and
+  coordinate disclosure timing with you if it is.
+
+## Compromised or incorrect published release
+
+npm versions are immutable, so a bad release is deprecated and superseded, never edited in
+place. See [`docs/release-integrity-runbook.md`](docs/release-integrity-runbook.md) for the
+exact recovery sequence.
 
 ## What Apex Code is, security-wise
 

@@ -28,6 +28,28 @@ test("release workflow is tag-triggered, least-privilege, and publishes only Ape
 	assert.equal((source.match(/npm publish --access public --provenance --tag next/g) ?? []).length, 2);
 });
 
+test("release environment reference is present for external deployment-protection configuration (task 12.13)", async () => {
+	const { workflow } = await readWorkflow();
+	// This can only assert the workflow *references* a named GitHub Environment
+	// -- whether "npm" has required reviewers or a branch/tag deployment policy
+	// configured is an external GitHub setting, not something a workflow file
+	// can prove on its own. See docs/release-governance-checklist.md.
+	assert.equal(workflow.jobs.publish.environment, "npm");
+});
+
+test("the frozen-package boundary check runs before any build/test/publish step (task 12.13)", async () => {
+	const { workflow } = await readWorkflow();
+	const steps = workflow.jobs.publish.steps;
+
+	const frozenCheckIndex = steps.findIndex((step) => step.run?.includes("scripts/apex/check-frozen-packages.mjs"));
+	assert.notEqual(frozenCheckIndex, -1, "expected a frozen-package boundary check step");
+
+	const buildIndex = steps.findIndex((step) => step.name === "Build");
+	const firstPublishIndex = steps.findIndex((step) => step.run?.includes("npm publish"));
+	assert.ok(frozenCheckIndex < buildIndex, "frozen boundary must be checked before build");
+	assert.ok(frozenCheckIndex < firstPublishIndex, "frozen boundary must be checked before publish");
+});
+
 test("release workflow validates tag identity and clean-installs the published CLI", async () => {
 	const { source, workflow } = await readWorkflow();
 	const commands = workflow.jobs.publish.steps.map((step) => step.run).filter(Boolean).join("\n");
@@ -42,6 +64,63 @@ test("release workflow validates tag identity and clean-installs the published C
 	assert.match(commands, /for attempt in \{1\.\.60\}/);
 	assert.match(commands, /apex-code" --version/);
 	assert.match(source, /apex-code-agent-core@\$\{VERSION\}.*did not become visible/s);
+});
+
+test("packed-artifact identity and functional smoke gate runs before either publish step (ADR 0018, task 12.8)", async () => {
+	const { workflow } = await readWorkflow();
+	const steps = workflow.jobs.publish.steps;
+
+	const gateIndex = steps.findIndex((step) => step.run?.includes("scripts/apex/packed-product-surface.mjs"));
+	assert.notEqual(gateIndex, -1, "expected a packed-product-surface gate step");
+	assert.match(steps[gateIndex].run, /--smoke\b/);
+
+	const firstPublishIndex = steps.findIndex((step) => step.run?.includes("npm publish"));
+	assert.notEqual(firstPublishIndex, -1, "expected a publish step");
+	assert.ok(gateIndex < firstPublishIndex, "the packed-artifact gate must run before publication, not after");
+});
+
+test("production dependency vulnerability audit and SBOM generation are required release gates (task 12.11)", async () => {
+	const { workflow } = await readWorkflow();
+	const steps = workflow.jobs.publish.steps;
+	const commands = steps.map((step) => step.run).filter(Boolean).join("\n");
+
+	assert.match(commands, /npm audit --omit=dev --audit-level=high/);
+	assert.match(commands, /node scripts\/apex\/generate-sbom\.mjs/);
+
+	const auditIndex = steps.findIndex((step) => step.run?.includes("npm audit"));
+	const publishIndex = steps.findIndex((step) => step.run?.includes("npm publish"));
+	assert.ok(auditIndex < publishIndex, "the vulnerability audit must run before publication");
+
+	const uploadNames = steps.filter((step) => step.uses?.includes("upload-artifact")).map((step) => step.with?.name);
+	assert.ok(uploadNames.includes("sbom"));
+	assert.ok(uploadNames.includes("release-evidence"));
+	assert.ok(uploadNames.includes("third-party-licenses"));
+});
+
+test("third-party license report is scoped to the packed production install, not the monorepo's own devDependencies (task 12.11)", async () => {
+	const { workflow } = await readWorkflow();
+	const steps = workflow.jobs.publish.steps;
+
+	const licenseIndex = steps.findIndex((step) => step.run?.includes("generate:license-report"));
+	assert.notEqual(licenseIndex, -1, "expected a license-report step");
+	assert.match(steps[licenseIndex].run, /--node-modules ".*packed-product-surface\/smoke-install\/node_modules"/);
+
+	const gateIndex = steps.findIndex((step) => step.run?.includes("scripts/apex/packed-product-surface.mjs"));
+	assert.ok(gateIndex < licenseIndex, "the scratch install must exist before the license report reads it");
+});
+
+test("post-publication registry verification runs after both publish steps with the tag's commit SHA (ADR 0018, task 12.9)", async () => {
+	const { workflow } = await readWorkflow();
+	const steps = workflow.jobs.publish.steps;
+
+	const verifyIndex = steps.findIndex((step) => step.run?.includes("scripts/apex/verify-published-release.mjs"));
+	assert.notEqual(verifyIndex, -1, "expected a verify-published-release step");
+	assert.match(steps[verifyIndex].run, /apex-code-agent-core@\$\{VERSION\}/);
+	assert.match(steps[verifyIndex].run, /apex-code@\$\{VERSION\}/);
+	assert.match(steps[verifyIndex].run, /--git-head "\$\{GITHUB_SHA\}"/);
+
+	const lastPublishIndex = steps.map((step) => step.run?.includes("npm publish") ?? false).lastIndexOf(true);
+	assert.ok(verifyIndex > lastPublishIndex, "registry verification must run after both packages are published");
 });
 
 test("macOS verification job depends on publish, runs on the other supported platform, and never re-publishes", async () => {

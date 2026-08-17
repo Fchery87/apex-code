@@ -22,14 +22,12 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { FROZEN_PACKAGE_DIRECTORIES } from "./frozen-packages.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 /**
  * Consumed packages. Everything under packages/ that Apex Code does NOT fork.
- *
- * Forked packages — coding-agent, agent — are deliberately absent: they are
- * expected to diverge, and that divergence is what ADR 0003 measures.
  *
  * `evals` and `session-backends` were deleted from the tree rather than frozen.
  * Both depended on the two forked packages, so the Task 0.3 rename would have
@@ -38,14 +36,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
  * against UPSTREAM's published packages while CI stayed green. Neither is used
  * by Apex Code. See docs/upstream-log.md.
  */
-const FROZEN = [
-  "packages/ai",
-  "packages/tui",
-  "packages/client",
-  "packages/protocol",
-  "packages/server",
-  "packages/telemetry",
-];
+const FROZEN = FROZEN_PACKAGE_DIRECTORIES;
 
 const git = (args, opts = {}) =>
   execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8", ...opts }).trim();

@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 /**
- * Release script for pi-mono
+ * Release preparation script for Apex Code (ADR 0018).
+ *
+ * Operates on exactly the two Apex-owned packages -- apex-code-agent-core and
+ * apex-code -- never on the frozen, consumed Pi packages (ADR 0001). Prepares
+ * and pushes the release commit and tag; `.github/workflows/release.yml` does
+ * the actual npm publication once the pushed tag triggers it.
  *
  * Usage:
  *   node scripts/release.mjs <major|minor|patch>
@@ -8,21 +13,20 @@
  *
  * Steps:
  * 1. Check for uncommitted changes
- * 2. Verify every public workspace package is registered on npm
+ * 2. Verify both Apex-owned packages are registered on npm
  * 3. Bump version via npm run version:xxx or set an explicit version
- * 4. Update CHANGELOG.md files: [Unreleased] -> [version] - date
+ * 4. Update the two Apex-owned CHANGELOG.md files: [Unreleased] -> [version] - date
  * 5. Regenerate release artifacts
  * 6. Run checks and tests
  * 7. Commit and tag the release
- * 8. Add new [Unreleased] section to changelogs
+ * 8. Add new [Unreleased] section to the Apex-owned changelogs
  * 9. Commit next-cycle changelog updates
- * 10. Push main and the tag to trigger CI publication and verified pi.dev announcement
+ * 10. Push main and the tag; .github/workflows/release.yml publishes on tag push
  */
 
 import { execSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { findPackageDirectories } from "./package-workspaces.mjs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { addUnreleasedSection, getOwnedChangelogPaths, updateChangelogsForRelease } from "./apex/release-changelogs.mjs";
 import { getPublicWorkspacePackages } from "./release-packages.mjs";
 
 const RELEASE_TARGET = process.argv[2];
@@ -48,7 +52,7 @@ function run(cmd, options = {}) {
 }
 
 function getVersion() {
-	const pkg = JSON.parse(readFileSync("packages/ai/package.json", "utf-8"));
+	const pkg = JSON.parse(readFileSync("packages/coding-agent/package.json", "utf-8"));
 	return pkg.version;
 }
 
@@ -152,7 +156,9 @@ function bumpOrSetVersion(target) {
 		}
 
 		console.log(`Setting explicit version (${target})...`);
-		run(`npm version ${target} --workspaces --no-git-tag-version --no-workspaces-update && node scripts/sync-versions.js && npm install --package-lock-only --ignore-scripts`);
+		run(
+			`npm version ${target} --workspace packages/agent --workspace packages/coding-agent --no-git-tag-version --no-workspaces-update && node scripts/sync-versions.js && npm install --package-lock-only --ignore-scripts`,
+		);
 	}
 
 	// npm version can temporarily install the previous workspace versions before
@@ -162,50 +168,6 @@ function bumpOrSetVersion(target) {
 	run("npm install --package-lock-only --ignore-scripts");
 	run("npm ci --ignore-scripts");
 	return getVersion();
-}
-
-function getChangelogs() {
-	return findPackageDirectories()
-		.map((directory) => join(directory, "CHANGELOG.md"))
-		.filter((path) => existsSync(path));
-}
-
-function updateChangelogsForRelease(version) {
-	const date = new Date().toISOString().split("T")[0];
-	const changelogs = getChangelogs();
-
-	for (const changelog of changelogs) {
-		const content = readFileSync(changelog, "utf-8");
-
-		if (!content.includes("## [Unreleased]")) {
-			console.log(`  Skipping ${changelog}: no [Unreleased] section`);
-			continue;
-		}
-
-		const updated = content.replace(
-			"## [Unreleased]",
-			`## [${version}] - ${date}`
-		);
-		writeFileSync(changelog, updated);
-		console.log(`  Updated ${changelog}`);
-	}
-}
-
-function addUnreleasedSection() {
-	const changelogs = getChangelogs();
-	const unreleasedSection = "## [Unreleased]\n\n";
-
-	for (const changelog of changelogs) {
-		const content = readFileSync(changelog, "utf-8");
-
-		// Insert after "# Changelog\n\n"
-		const updated = content.replace(
-			/^(# Changelog\n\n)/,
-			`$1${unreleasedSection}`
-		);
-		writeFileSync(changelog, updated);
-		console.log(`  Added [Unreleased] to ${changelog}`);
-	}
 }
 
 // Main flow
@@ -230,7 +192,7 @@ console.log(`  New version: ${version}\n`);
 
 // 4. Update changelogs
 console.log("Updating CHANGELOG.md files...");
-updateChangelogsForRelease(version);
+updateChangelogsForRelease(getOwnedChangelogPaths(process.cwd()), version);
 console.log();
 
 // 5. Regenerate release artifacts
@@ -263,7 +225,7 @@ console.log();
 
 // 8. Add new [Unreleased] sections
 console.log("Adding [Unreleased] sections for next cycle...");
-addUnreleasedSection();
+addUnreleasedSection(getOwnedChangelogPaths(process.cwd()));
 console.log();
 
 // 9. Commit
@@ -278,4 +240,4 @@ run("git push origin main");
 run(`git push origin v${version}`);
 console.log();
 
-console.log(`=== Prepared release v${version}; CI publication and pi.dev announcement start after the tag push ===`);
+console.log(`=== Prepared release v${version}; .github/workflows/release.yml publishes after the tag push ===`);

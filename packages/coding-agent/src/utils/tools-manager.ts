@@ -1,16 +1,26 @@
 import chalk from "chalk";
 import { type SpawnSyncReturns, spawnSync } from "child_process";
-import { chmodSync, createWriteStream, existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "fs";
+import { createHash } from "crypto";
+import {
+	chmodSync,
+	createReadStream,
+	createWriteStream,
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	renameSync,
+	rmSync,
+	statSync,
+} from "fs";
 import { arch, platform } from "os";
-import { join } from "path";
+import { basename, join, relative, resolve as resolvePath } from "path";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
-import { APP_NAME, getBinDir } from "../config.ts";
+import { getBinDir } from "../config.ts";
 import { getApexEnvironment } from "../core/environment.ts";
 import { fetchWithRetry } from "./management-http.ts";
 
 const TOOLS_DIR = getBinDir();
-const NETWORK_TIMEOUT_MS = 10_000;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 
 function isOfflineModeEnabled(): boolean {
@@ -25,9 +35,10 @@ interface ToolConfig {
 	binaryName: string; // Name of the binary inside the archive
 	systemBinaryNames?: string[]; // Alternative system command names to try before downloading
 	tagPrefix: string; // Prefix for tags (e.g., "v" for v1.0.0, "" for 1.0.0)
-	getAssetName: (version: string, plat: string, architecture: string) => string | null;
 }
 
+// Per-platform/architecture asset names live in MANAGED_TOOL_PINS (ADR 0017) as the
+// single reviewed source of truth, not derived here.
 const TOOLS: Record<string, ToolConfig> = {
 	fd: {
 		name: "fd",
@@ -35,40 +46,12 @@ const TOOLS: Record<string, ToolConfig> = {
 		binaryName: "fd",
 		systemBinaryNames: ["fd", "fdfind"],
 		tagPrefix: "v",
-		getAssetName: (version, plat, architecture) => {
-			if (plat === "darwin") {
-				const archStr = architecture === "arm64" ? "aarch64" : "x86_64";
-				return `fd-v${version}-${archStr}-apple-darwin.tar.gz`;
-			} else if (plat === "linux") {
-				const archStr = architecture === "arm64" ? "aarch64" : "x86_64";
-				return `fd-v${version}-${archStr}-unknown-linux-gnu.tar.gz`;
-			} else if (plat === "win32") {
-				const archStr = architecture === "arm64" ? "aarch64" : "x86_64";
-				return `fd-v${version}-${archStr}-pc-windows-msvc.zip`;
-			}
-			return null;
-		},
 	},
 	rg: {
 		name: "ripgrep",
 		repo: "BurntSushi/ripgrep",
 		binaryName: "rg",
 		tagPrefix: "",
-		getAssetName: (version, plat, architecture) => {
-			if (plat === "darwin") {
-				const archStr = architecture === "arm64" ? "aarch64" : "x86_64";
-				return `ripgrep-${version}-${archStr}-apple-darwin.tar.gz`;
-			} else if (plat === "linux") {
-				if (architecture === "arm64") {
-					return `ripgrep-${version}-aarch64-unknown-linux-gnu.tar.gz`;
-				}
-				return `ripgrep-${version}-x86_64-unknown-linux-musl.tar.gz`;
-			} else if (plat === "win32") {
-				const archStr = architecture === "arm64" ? "aarch64" : "x86_64";
-				return `ripgrep-${version}-${archStr}-pc-windows-msvc.zip`;
-			}
-			return null;
-		},
 	},
 };
 
@@ -105,26 +88,149 @@ export function getToolPath(tool: "fd" | "rg"): string | null {
 	return null;
 }
 
-// Fetch latest release version from GitHub
-async function getLatestVersion(repo: string): Promise<string> {
-	const response = await fetchWithRetry(
-		`https://api.github.com/repos/${repo}/releases/latest`,
-		{
-			headers: { "User-Agent": `${APP_NAME}-coding-agent` },
-		},
-		{ timeoutMs: NETWORK_TIMEOUT_MS },
-	);
-
-	if (!response.ok) {
-		throw new Error(`GitHub API error: ${response.status}`);
-	}
-
-	const data = (await response.json()) as { tag_name: string };
-	return data.tag_name.replace(/^v/, "");
+/**
+ * Reviewed, pinned release metadata for auto-downloaded executable tools (ADR 0017).
+ * Never resolved from a mutable "latest" API call. Updating a version, asset name, or
+ * digest here is itself the reviewed change that authorizes installing a new release.
+ *
+ * Every digest and byte size below was established by downloading the artifact,
+ * computing its SHA-256 locally, and cross-checking that value against the
+ * upstream-published digest (ripgrep's own `.sha256` release sidecars; GitHub's own
+ * per-asset `digest` field for both projects) — not invented, and not taken from a
+ * single unverified source.
+ */
+interface ManagedToolPin {
+	version: string;
+	assetName: string;
+	sha256: string;
+	expectedBytes: number;
+	archiveKind: "tar.gz" | "zip";
 }
 
-// Download a file from URL
-async function downloadFile(url: string, dest: string): Promise<void> {
+const MANAGED_TOOL_PINS: Record<"fd" | "rg", Partial<Record<string, ManagedToolPin>>> = {
+	rg: {
+		"linux:x64": {
+			version: "14.1.1",
+			assetName: "ripgrep-14.1.1-x86_64-unknown-linux-musl.tar.gz",
+			sha256: "4cf9f2741e6c465ffdb7c26f38056a59e2a2544b51f7cc128ef28337eeae4d8e",
+			expectedBytes: 2566310,
+			archiveKind: "tar.gz",
+		},
+		"linux:arm64": {
+			version: "14.1.1",
+			assetName: "ripgrep-14.1.1-aarch64-unknown-linux-gnu.tar.gz",
+			sha256: "c827481c4ff4ea10c9dc7a4022c8de5db34a5737cb74484d62eb94a95841ab2f",
+			expectedBytes: 2047405,
+			archiveKind: "tar.gz",
+		},
+		"darwin:x64": {
+			version: "14.1.1",
+			assetName: "ripgrep-14.1.1-x86_64-apple-darwin.tar.gz",
+			sha256: "fc87e78f7cb3fea12d69072e7ef3b21509754717b746368fd40d88963630e2b3",
+			expectedBytes: 2082672,
+			archiveKind: "tar.gz",
+		},
+		"darwin:arm64": {
+			version: "14.1.1",
+			assetName: "ripgrep-14.1.1-aarch64-apple-darwin.tar.gz",
+			sha256: "24ad76777745fbff131c8fbc466742b011f925bfa4fffa2ded6def23b5b937be",
+			expectedBytes: 1787248,
+			archiveKind: "tar.gz",
+		},
+		"win32:x64": {
+			version: "14.1.1",
+			assetName: "ripgrep-14.1.1-x86_64-pc-windows-msvc.zip",
+			sha256: "d0f534024c42afd6cb4d38907c25cd2b249b79bbe6cc1dbee8e3e37c2b6e25a1",
+			expectedBytes: 2058893,
+			archiveKind: "zip",
+		},
+		// No upstream win32/arm64 ripgrep release asset exists at 14.1.1; resolution
+		// fails closed for that combination rather than constructing a URL that 404s.
+	},
+	fd: {
+		"linux:x64": {
+			version: "10.4.2",
+			assetName: "fd-v10.4.2-x86_64-unknown-linux-gnu.tar.gz",
+			sha256: "def59805cd14b5651b68990855f426ad087f3b96881296d963910431ba3143c8",
+			expectedBytes: 1700779,
+			archiveKind: "tar.gz",
+		},
+		"linux:arm64": {
+			version: "10.4.2",
+			assetName: "fd-v10.4.2-aarch64-unknown-linux-gnu.tar.gz",
+			sha256: "6c51f7c5446b3338b1e401ff15dc194c590bb2fa64fd43ff3278300f073adec5",
+			expectedBytes: 1559490,
+			archiveKind: "tar.gz",
+		},
+		// Upstream stopped shipping an Intel macOS fd binary after 10.3.0 (see
+		// 7afd80d78, "pin fd for macos x64"); preserved here rather than special-cased.
+		"darwin:x64": {
+			version: "10.3.0",
+			assetName: "fd-v10.3.0-x86_64-apple-darwin.tar.gz",
+			sha256: "50d30f13fe3d5914b14c4fff5abcbd4d0cdab4b855970a6956f4f006c17117a3",
+			expectedBytes: 1430203,
+			archiveKind: "tar.gz",
+		},
+		"darwin:arm64": {
+			version: "10.4.2",
+			assetName: "fd-v10.4.2-aarch64-apple-darwin.tar.gz",
+			sha256: "623dc0afc81b92e4d4606b380d7bc91916ba7b97814263e554d50923a39e480a",
+			expectedBytes: 1328933,
+			archiveKind: "tar.gz",
+		},
+		"win32:x64": {
+			version: "10.4.2",
+			assetName: "fd-v10.4.2-x86_64-pc-windows-msvc.zip",
+			sha256: "b2816e506390a89941c63c9187d58a3cc10e9a55f2ef0685f9ea0eccaf7c98c8",
+			expectedBytes: 1525898,
+			archiveKind: "zip",
+		},
+		"win32:arm64": {
+			version: "10.4.2",
+			assetName: "fd-v10.4.2-aarch64-pc-windows-msvc.zip",
+			sha256: "4f9110c2d5b33a7f760bfa5510f4c113d828109f7277d421b1053a9943c0fc92",
+			expectedBytes: 1370473,
+			archiveKind: "zip",
+		},
+	},
+};
+
+export interface ManagedToolArtifact {
+	version: string;
+	url: string;
+	sha256: string;
+	expectedBytes: number;
+	/** Bounded download ceiling (ADR 0017): four times the reviewed expected size. */
+	maxBytes: number;
+	binaryName: string;
+	archiveKind: "tar.gz" | "zip";
+}
+
+/** Resolve reviewed, pinned metadata for a managed tool. Never queries "latest". */
+export function resolveManagedToolArtifact(options: {
+	tool: "fd" | "rg";
+	platform: NodeJS.Platform | string;
+	architecture: string;
+}): ManagedToolArtifact {
+	const config = TOOLS[options.tool];
+	const pin = MANAGED_TOOL_PINS[options.tool]?.[`${options.platform}:${options.architecture}`];
+	if (!config || !pin) {
+		throw new Error(`No reviewed pinned artifact for ${options.tool} on ${options.platform}/${options.architecture}`);
+	}
+	return {
+		version: pin.version,
+		url: `https://github.com/${config.repo}/releases/download/${config.tagPrefix}${pin.version}/${pin.assetName}`,
+		sha256: pin.sha256,
+		expectedBytes: pin.expectedBytes,
+		maxBytes: pin.expectedBytes * 4,
+		binaryName: config.binaryName,
+		archiveKind: pin.archiveKind,
+	};
+}
+
+// Download a file from URL, aborting if the declared or received size exceeds the
+// bounded ceiling (ADR 0017) rather than writing an unbounded stream to disk.
+async function downloadFile(url: string, dest: string, maxBytes: number): Promise<void> {
 	const response = await fetchWithRetry(url, undefined, { timeoutMs: DOWNLOAD_TIMEOUT_MS });
 
 	if (!response.ok) {
@@ -135,8 +241,27 @@ async function downloadFile(url: string, dest: string): Promise<void> {
 		throw new Error("No response body");
 	}
 
+	const declaredLength = Number(response.headers.get("content-length") ?? Number.NaN);
+	if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+		throw new Error(`Refusing download: declared size ${declaredLength} exceeds bounded limit ${maxBytes}`);
+	}
+
+	let received = 0;
+	const source = Readable.fromWeb(response.body as any);
+	source.on("data", (chunk: Buffer) => {
+		received += chunk.length;
+		if (received > maxBytes) {
+			source.destroy(new Error(`Refusing download: exceeded bounded limit ${maxBytes} bytes`));
+		}
+	});
+
 	const fileStream = createWriteStream(dest);
-	await pipeline(Readable.fromWeb(response.body as any), fileStream);
+	try {
+		await pipeline(source, fileStream);
+	} catch (error) {
+		rmSync(dest, { force: true });
+		throw error;
+	}
 }
 
 function findBinaryRecursively(rootDir: string, binaryFileName: string): string | null {
@@ -240,82 +365,112 @@ function extractZipArchive(archivePath: string, extractDir: string, assetName: s
 	throw new Error(`Failed to extract ${assetName}: ${failures.join("; ")}`);
 }
 
-// Download and install a tool
-async function downloadTool(tool: "fd" | "rg"): Promise<string> {
-	const config = TOOLS[tool];
-	if (!config) throw new Error(`Unknown tool: ${tool}`);
+async function sha256File(path: string): Promise<string> {
+	const hash = createHash("sha256");
+	for await (const chunk of createReadStream(path)) {
+		hash.update(chunk as Buffer);
+	}
+	return hash.digest("hex");
+}
 
-	const plat = platform();
-	const architecture = arch();
+export interface InstallManagedToolArchiveOptions {
+	archivePath: string;
+	destination: string;
+	binaryName: string;
+	archiveKind: "tar.gz" | "zip";
+	expectedSha256: string;
+	maxBytes: number;
+}
 
-	// Get latest version
-	let version = await getLatestVersion(config.repo);
-	if (tool === "fd" && plat === "darwin" && architecture === "x64") {
-		version = "10.3.0";
+/**
+ * Verify a downloaded tool archive against its pinned digest, extract it into a
+ * per-install quarantine directory, confirm the located binary did not escape that
+ * quarantine, and only then atomically promote it into the live tools directory
+ * (ADR 0017). Rejects a digest mismatch or an out-of-bounds archive before anything
+ * is written to `destination`.
+ */
+export async function installManagedToolArchive(options: InstallManagedToolArchiveOptions): Promise<string> {
+	const { archivePath, destination, binaryName, archiveKind, expectedSha256, maxBytes } = options;
+
+	const { size } = statSync(archivePath);
+	if (size > maxBytes) {
+		throw new Error(`Refusing install: archive size ${size} exceeds bounded limit ${maxBytes}`);
 	}
 
-	// Get asset name for this platform
-	const assetName = config.getAssetName(version, plat, architecture);
-	if (!assetName) {
-		throw new Error(`Unsupported platform: ${plat}/${architecture}`);
+	const actualSha256 = await sha256File(archivePath);
+	if (actualSha256.toLowerCase() !== expectedSha256.toLowerCase()) {
+		throw new Error(`Refusing install: digest mismatch for ${basename(archivePath)}`);
 	}
 
-	// Create tools directory
-	mkdirSync(TOOLS_DIR, { recursive: true });
-
-	const downloadUrl = `https://github.com/${config.repo}/releases/download/${config.tagPrefix}${version}/${assetName}`;
-	const archivePath = join(TOOLS_DIR, assetName);
-	const binaryExt = plat === "win32" ? ".exe" : "";
-	const binaryPath = join(TOOLS_DIR, config.binaryName + binaryExt);
-
-	// Download
-	await downloadFile(downloadUrl, archivePath);
-
-	// Extract into a unique temp directory. fd and rg downloads can run concurrently
-	// during startup, so sharing a fixed directory causes races.
-	const extractDir = join(
-		TOOLS_DIR,
-		`extract_tmp_${config.binaryName}_${process.pid}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+	mkdirSync(destination, { recursive: true });
+	const quarantineDirectory = join(
+		destination,
+		`.quarantine_${process.pid}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
 	);
-	mkdirSync(extractDir, { recursive: true });
+	mkdirSync(quarantineDirectory, { recursive: true });
 
 	try {
-		if (assetName.endsWith(".tar.gz")) {
-			extractTarGzArchive(archivePath, extractDir, assetName);
-		} else if (assetName.endsWith(".zip")) {
-			extractZipArchive(archivePath, extractDir, assetName);
+		const assetName = basename(archivePath);
+		if (archiveKind === "tar.gz") {
+			extractTarGzArchive(archivePath, quarantineDirectory, assetName);
 		} else {
-			throw new Error(`Unsupported archive format: ${assetName}`);
+			extractZipArchive(archivePath, quarantineDirectory, assetName);
 		}
 
-		// Find the binary in extracted files. Some archives contain files directly
-		// at root, others nest under a versioned subdirectory.
-		const binaryFileName = config.binaryName + binaryExt;
-		const extractedDir = join(extractDir, assetName.replace(/\.(tar\.gz|zip)$/, ""));
-		const extractedBinaryCandidates = [join(extractedDir, binaryFileName), join(extractDir, binaryFileName)];
-		let extractedBinary = extractedBinaryCandidates.find((candidate) => existsSync(candidate));
-
+		const binaryFileName = binaryName + (platform() === "win32" ? ".exe" : "");
+		const extractedBinary = findBinaryRecursively(quarantineDirectory, binaryFileName);
 		if (!extractedBinary) {
-			extractedBinary = findBinaryRecursively(extractDir, binaryFileName) ?? undefined;
+			throw new Error(`Binary not found in verified archive: expected ${binaryFileName}`);
 		}
 
-		if (extractedBinary) {
-			renameSync(extractedBinary, binaryPath);
-		} else {
-			throw new Error(`Binary not found in archive: expected ${binaryFileName} under ${extractDir}`);
+		const resolvedBinary = resolvePath(extractedBinary);
+		const containmentPath = relative(resolvePath(quarantineDirectory), resolvedBinary);
+		if (containmentPath.startsWith("..") || resolvePath(containmentPath) === containmentPath) {
+			throw new Error(`Refusing install: archive entry escaped its quarantine directory: ${extractedBinary}`);
 		}
 
-		// Make executable (Unix only)
-		if (plat !== "win32") {
-			chmodSync(binaryPath, 0o755);
+		const finalPath = join(destination, binaryFileName);
+		renameSync(resolvedBinary, finalPath);
+		if (platform() !== "win32") {
+			chmodSync(finalPath, 0o755);
 		}
+		return finalPath;
 	} finally {
-		// Cleanup
-		rmSync(archivePath, { force: true });
-		rmSync(extractDir, { recursive: true, force: true });
+		rmSync(quarantineDirectory, { recursive: true, force: true });
 	}
+}
 
-	return binaryPath;
+// Download and install a tool from reviewed, pinned metadata (ADR 0017): bounded
+// download, digest verification, quarantine extraction, then atomic promotion.
+async function downloadTool(tool: "fd" | "rg"): Promise<string> {
+	const plat = platform();
+	const architecture = arch();
+	const artifact = resolveManagedToolArtifact({ tool, platform: plat, architecture });
+
+	mkdirSync(TOOLS_DIR, { recursive: true });
+
+	// Unique download filename: fd and rg downloads can run concurrently during
+	// startup, so sharing a fixed path causes races.
+	const archivePath = join(
+		TOOLS_DIR,
+		`download_${artifact.binaryName}_${process.pid}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}${
+			artifact.archiveKind === "zip" ? ".zip" : ".tar.gz"
+		}`,
+	);
+
+	try {
+		await downloadFile(artifact.url, archivePath, artifact.maxBytes);
+		return await installManagedToolArchive({
+			archivePath,
+			destination: TOOLS_DIR,
+			binaryName: artifact.binaryName,
+			archiveKind: artifact.archiveKind,
+			expectedSha256: artifact.sha256,
+			maxBytes: artifact.maxBytes,
+		});
+	} finally {
+		rmSync(archivePath, { force: true });
+	}
 }
 
 // Termux package names for tools

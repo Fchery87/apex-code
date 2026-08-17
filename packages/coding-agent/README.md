@@ -73,6 +73,13 @@ upstream vocabulary, not executable or product branding.
 - [`CHANGELOG.md`](CHANGELOG.md) — current Apex Code changes and upstream history
 - [Source repository](https://github.com/Fchery87/apex-code)
 
+## Support and security
+
+Apex Code is currently maintained by one person on a best-effort basis; see
+[the support policy](https://github.com/Fchery87/apex-code/blob/main/docs/support.md) for
+response targets, the supported-version line, and platform support. Report vulnerabilities
+privately per [`SECURITY.md`](https://github.com/Fchery87/apex-code/blob/main/SECURITY.md).
+
 ## Relationship to Pi
 
 Apex Code forks `pi-coding-agent` and `pi-agent-core`, while consuming `pi-ai` and

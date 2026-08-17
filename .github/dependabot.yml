@@ -1,0 +1,44 @@
+# Scheduled dependency vulnerability scanning (ADR 0018, task 12.11).
+#
+# Scoped to the root (devDependencies and the shared lockfile) and the two
+# Apex-owned packages only -- never the six frozen, consumed Pi packages
+# (ADR 0001, scripts/apex/frozen-packages.mjs). A Dependabot PR that edited a
+# frozen package's package.json would immediately fail
+# scripts/apex/check-frozen-packages.mjs's byte-identity check; upstream Pi
+# owns those packages' own dependency versions, not this repository.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+
+  - package-ecosystem: npm
+    directory: "/packages/agent"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+
+  - package-ecosystem: npm
+    directory: "/packages/coding-agent"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+
+  # Actions are SHA-pinned (ADR 0018's release workflow, ci.yml); Dependabot
+  # still tracks the pinned SHA against upstream tags and opens a PR bumping
+  # both the SHA and its version comment when a new release ships.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
