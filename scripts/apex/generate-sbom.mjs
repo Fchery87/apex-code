@@ -17,7 +17,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { npmSpawnOptions } from "./npm-command.mjs";
+import { npmSpawnArgs, npmSpawnOptions } from "./npm-command.mjs";
 import { getPublicWorkspacePackages } from "../release-packages.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -31,7 +31,7 @@ export function generateSbomFor(pkg, cwd = REPO_ROOT) {
 	// it is the correct directory. Resolve both sides the same way.
 	const output = execFileSync(
 		"npm",
-		["sbom", "--workspace", realpathSync(pkg.directory), "--omit", "dev", "--sbom-format", "cyclonedx"],
+		npmSpawnArgs(["sbom", "--workspace", realpathSync(pkg.directory), "--omit", "dev", "--sbom-format", "cyclonedx"]),
 		npmSpawnOptions({ cwd: realpathSync(cwd), encoding: "utf8" }),
 	);
 	let document;

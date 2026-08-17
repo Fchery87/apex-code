@@ -16,11 +16,15 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { npmSpawnOptions } from "./npm-command.mjs";
+import { npmSpawnArgs, npmSpawnOptions } from "./npm-command.mjs";
 
 /** `npm view <name>@<version> --json`, parsed. Throws if the version is unknown. */
 export function fetchPublishedMetadata(name, version) {
-	const output = execFileSync("npm", ["view", `${name}@${version}`, "--json"], npmSpawnOptions({ encoding: "utf8" }));
+	const output = execFileSync(
+		"npm",
+		npmSpawnArgs(["view", `${name}@${version}`, "--json"]),
+		npmSpawnOptions({ encoding: "utf8" }),
+	);
 	return JSON.parse(output);
 }
 
