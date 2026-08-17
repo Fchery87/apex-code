@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0 through 11 landed · Phase 12 active · **Created:** 2026-08-08 · **Last updated:** 2026-08-16
+**Status:** Active — Phases 0 through 12 landed · **Created:** 2026-08-08 · **Last updated:** 2026-08-17
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -94,7 +94,7 @@ capable and measurably worse.
 | 9 | Release hardening | **landed** — 6 of 6 tasks · `a0be145d7` | [spec](specs/2026-08-16-release-hardening.md) | — |
 | 10 | Complete the Apex Code product surface | **landed** — 7 of 7 tasks · `6b602044d` (required three-OS CI run 31940072123) | [spec](specs/2026-08-16-complete-apex-product-surface.md) | — |
 | 11 | Remove unowned hosted-service defaults | **landed** — 5 of 5 tasks · `bfa746d0c` (required three-OS CI run 31945192886) | [spec](specs/2026-08-16-remove-unowned-hosted-service-defaults.md) | — |
-| 12 | Production graduation and release integrity | **active** — specification accepted; implementation not started | [spec](specs/2026-08-16-production-graduation-and-release-integrity.md) | [plan](plans/2026-08-16-production-graduation-and-release-integrity.md) |
+| 12 | Production graduation and release integrity | **landed** — 15 of 15 tasks · `eb6df850d` (corrected `apex-code@0.0.1-alpha.2` published and verified, release.yml run 32030755704) | [spec](specs/2026-08-16-production-graduation-and-release-integrity.md) | — |
 
 ---
 
@@ -839,7 +839,7 @@ executables reject unverified artifacts; Apex-only release tooling leaves frozen
 untouched; security/support ownership and the latest-supported-release policy are published.
 This phase does not claim Windows sandbox enforcement or 24/7 support.
 
-**Current state.** Active. 14 of 15 plan tasks complete (12.1–12.14): security-boundary ADRs
+**Current state.** Landed. All 15 plan tasks complete: security-boundary ADRs
 (0015, 0016), the sandbox credential/state handoff and trust-first policy resolution, pinned
 and verified tool-artifact installation (ADR 0017), Apex-only release/version tooling (ADR
 0018 — which also found and fixed a real, previously-latent defect: inherited release scripts
@@ -857,13 +857,28 @@ four real, previously-latent cross-platform bugs were found and fixed through it
 required-CI runs (a Linux sandbox fd leak, Windows npm/npm.cmd shell invocation, Windows shell
 argument quoting for the spaced checkout path, and a Windows/macOS test-fixture mismatch),
 exactly the kind of defect three-OS CI exists to catch and this Linux-only dev environment
-cannot. Remaining: 12.15 (publish the corrected prerelease), withheld pending explicit
-maintainer go-ahead, not because anything is unverified. The published `apex-code@next`
-artifact remains stale relative to current `main` until that prerelease is cut.
+cannot. 12.15 (publish the corrected prerelease) is also complete: `apex-code@0.0.1-alpha.2`
+and `apex-code-agent-core@0.0.1-alpha.2` are published on the npm `next` tag, verified via
+[release.yml run 32030755704](https://github.com/Fchery87/apex-code/actions/runs/32030755704)
+(registry `gitHead`, tarball hash, and provenance all matched; clean installs passed on
+Ubuntu and macOS), and the stale `0.0.1-alpha.0`/`0.0.1-alpha.1` versions of both packages
+are deprecated. See the plan's task 12.15 row for the full defect list this uncovered and
+fixed in the release tooling itself along the way. The published `apex-code@next` artifact
+now matches current `main`. Getting there surfaced and fixed five further real defects beyond
+the packed-artifact identity gate itself: stale/broken Pi-branded content across 29 packed
+`docs/*.md` files and a misdirected runtime link in `src/migrations.ts` (root cause: the
+identity gate only ever scanned `README.md`, not the rest of `docs/`, now fixed); `release.mjs`
+could not produce a prerelease version at all despite task 12.7 requiring prerelease-semver
+support, and would have staged a frozen-package violation via its model-regeneration step;
+a hardcoded version literal in `test/apex-identity.test.ts`; and two defects `release.yml`'s
+own real tagged run was the first thing ever to exercise end-to-end — a missing `bubblewrap`
+system dependency (present in `ci.yml` but never ported over) and `actions/upload-artifact`'s
+default exclusion of dot-prefixed ("hidden") paths silently dropping the SBOM upload from the
+gitignored `.artifacts/` directory.
 
-See the [spec](specs/2026-08-16-production-graduation-and-release-integrity.md), the
-[research](research/2026-08-16-production-operations-and-release-integrity.md), and the
-[plan](plans/2026-08-16-production-graduation-and-release-integrity.md).
+See the [spec](specs/2026-08-16-production-graduation-and-release-integrity.md) and the
+[research](research/2026-08-16-production-operations-and-release-integrity.md) for the durable
+outcome.
 
 ## ADRs to write
 
