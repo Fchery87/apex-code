@@ -10,6 +10,7 @@
  * Usage:
  *   node scripts/release.mjs <major|minor|patch>
  *   node scripts/release.mjs <x.y.z>
+ *   node scripts/release.mjs <x.y.z-prerelease.n>
  *
  * Steps:
  * 1. Check for uncommitted changes
@@ -26,15 +27,22 @@
 
 import { execSync, spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
+import semver from "semver";
 import { addUnreleasedSection, getOwnedChangelogPaths, updateChangelogsForRelease } from "./apex/release-changelogs.mjs";
 import { getPublicWorkspacePackages } from "./release-packages.mjs";
 
 const RELEASE_TARGET = process.argv[2];
 const BUMP_TYPES = new Set(["major", "minor", "patch"]);
-const SEMVER_RE = /^\d+\.\d+\.\d+$/;
 
-if (!RELEASE_TARGET || (!BUMP_TYPES.has(RELEASE_TARGET) && !SEMVER_RE.test(RELEASE_TARGET))) {
-	console.error("Usage: node scripts/release.mjs <major|minor|patch|x.y.z>");
+// Apex Code is still pre-1.0 (task 12.15 requires staying a prerelease until a
+// separate stable-graduation decision). `major`/`minor`/`patch` reuse `npm
+// version`, whose semver.inc() rules drop any existing prerelease identifier
+// on those bump types (0.0.1-alpha.1 -> 0.0.1) -- correct once graduating to
+// stable, but not a way to publish the next alpha. An explicit target must
+// therefore accept a full prerelease version (0.0.1-alpha.2), not just a bare
+// x.y.z, or there is no way to invoke this script for an alpha release at all.
+if (!RELEASE_TARGET || (!BUMP_TYPES.has(RELEASE_TARGET) && !semver.valid(RELEASE_TARGET))) {
+	console.error("Usage: node scripts/release.mjs <major|minor|patch|x.y.z|x.y.z-prerelease.n>");
 	process.exit(1);
 }
 
@@ -88,20 +96,6 @@ function assertPackagesAreRegisteredWithNpm() {
 	console.log("  All public workspace packages are registered on npm\n");
 }
 
-function compareVersions(a, b) {
-	const aParts = a.split(".").map(Number);
-	const bParts = b.split(".").map(Number);
-
-	for (let i = 0; i < 3; i++) {
-		const diff = (aParts[i] || 0) - (bParts[i] || 0);
-		if (diff !== 0) {
-			return diff;
-		}
-	}
-
-	return 0;
-}
-
 function shellQuote(value) {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
@@ -150,7 +144,7 @@ function bumpOrSetVersion(target) {
 		console.log(`Bumping version (${target})...`);
 		run(`npm run version:${target}`);
 	} else {
-		if (compareVersions(target, currentVersion) <= 0) {
+		if (semver.compare(target, currentVersion) <= 0) {
 			console.error(`Error: explicit version ${target} must be greater than current version ${currentVersion}.`);
 			process.exit(1);
 		}
