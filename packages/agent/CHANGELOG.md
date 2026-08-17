@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.0.1-alpha.2] - 2026-08-17
 
 - No apex-code-agent-core-specific changes in this cycle; republished lockstep with
   apex-code@0.0.1-alpha.2 (sync-versions.js keeps the two Apex-owned packages on the

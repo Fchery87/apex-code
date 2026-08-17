@@ -1,6 +1,6 @@
 # Apex Code changelog
 
-## [Unreleased]
+## [0.0.1-alpha.2] - 2026-08-17
 
 - Published the Apex Code CLI and agent core through npm Trusted Publishing.
 - Added provider failover, permissions and sandboxing, context engineering, expanded tools, delegation, durable state, evidence, observability, and release hardening.
