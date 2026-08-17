@@ -839,7 +839,7 @@ executables reject unverified artifacts; Apex-only release tooling leaves frozen
 untouched; security/support ownership and the latest-supported-release policy are published.
 This phase does not claim Windows sandbox enforcement or 24/7 support.
 
-**Current state.** Active. 13 of 15 plan tasks complete (12.1–12.13): security-boundary ADRs
+**Current state.** Active. 14 of 15 plan tasks complete (12.1–12.14): security-boundary ADRs
 (0015, 0016), the sandbox credential/state handoff and trust-first policy resolution, pinned
 and verified tool-artifact installation (ADR 0017), Apex-only release/version tooling (ADR
 0018 — which also found and fixed a real, previously-latent defect: inherited release scripts
@@ -847,13 +847,19 @@ would have bumped and corrupted the six frozen upstream packages' own `package.j
 `CHANGELOG.md` files on the next version bump), the pre-publication packed-artifact identity
 and functional-smoke gate, post-publication registry/provenance verification, supply-chain
 evidence (Dependabot, `npm audit`, SBOM, scoped production license closure, a durable
-release-evidence manifest), and the published sole-maintainer support policy and governance
+release-evidence manifest), the published sole-maintainer support policy and governance
 checklist (`docs/support.md`, `docs/release-integrity-runbook.md`,
-`docs/release-governance-checklist.md`). A full unscoped `npm test` run is clean: 2811 tests
-passed, 0 failures. Remaining: 12.14's required three-OS CI run (needs a real push to trigger)
-and 12.15 (publish the corrected prerelease) — both withheld pending explicit maintainer
-go-ahead, not because anything is unverified. The published `apex-code@next` artifact remains
-stale relative to current `main` until that prerelease is cut.
+`docs/release-governance-checklist.md`), and full verification. A full unscoped `npm test` run
+is clean: 2811 tests passed, 0 failures. Required [CI run
+31993235802](https://github.com/Fchery87/apex-code/actions/runs/31993235802) passed Ubuntu,
+macOS, Windows, and the frozen-package-boundary job from the asserted spaced checkout — after
+four real, previously-latent cross-platform bugs were found and fixed through iterative
+required-CI runs (a Linux sandbox fd leak, Windows npm/npm.cmd shell invocation, Windows shell
+argument quoting for the spaced checkout path, and a Windows/macOS test-fixture mismatch),
+exactly the kind of defect three-OS CI exists to catch and this Linux-only dev environment
+cannot. Remaining: 12.15 (publish the corrected prerelease), withheld pending explicit
+maintainer go-ahead, not because anything is unverified. The published `apex-code@next`
+artifact remains stale relative to current `main` until that prerelease is cut.
 
 See the [spec](specs/2026-08-16-production-graduation-and-release-integrity.md), the
 [research](research/2026-08-16-production-operations-and-release-integrity.md), and the
