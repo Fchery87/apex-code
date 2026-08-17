@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { npmCommand } from "./npm-command.mjs";
 
 /**
  * package.json's version:patch/minor/major/set scripts previously ran
@@ -36,7 +37,7 @@ test("npm version scoped to the two Apex-owned workspaces leaves a frozen packag
 		});
 
 		const result = spawnSync(
-			"npm",
+			npmCommand(),
 			[
 				"version",
 				"patch",
