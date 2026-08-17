@@ -1,6 +1,6 @@
 # Apex Code changelog
 
-## [Unreleased]
+## [0.0.1-alpha.3] - 2026-08-17
 
 - Fixed the Linux OS sandbox crashing with `ReferenceError: require is not defined in ES module
   scope` when launched inside a workspace whose `package.json` declares `"type": "module"`; the
