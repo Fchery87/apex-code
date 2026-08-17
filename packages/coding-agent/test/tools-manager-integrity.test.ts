@@ -76,10 +76,14 @@ describe("managed executable artifacts", () => {
 	it("verifies, quarantines, and atomically promotes a real archive to an executable binary", async () => {
 		const destination = await temporaryDirectory();
 		const stagingDirectory = await temporaryDirectory();
-		const binarySource = join(stagingDirectory, "rg");
+		// installManagedToolArchive looks for "<binaryName>.exe" on Windows and
+		// "<binaryName>" everywhere else -- the archive fixture must match
+		// whichever this test is actually running under.
+		const binaryFileName = process.platform === "win32" ? "rg.exe" : "rg";
+		const binarySource = join(stagingDirectory, binaryFileName);
 		writeFileSync(binarySource, "#!/bin/sh\necho fake-rg\n");
 		const archive = join(stagingDirectory, "tool.tar.gz");
-		execFileSync("tar", ["czf", archive, "-C", stagingDirectory, "rg"]);
+		execFileSync("tar", ["czf", archive, "-C", stagingDirectory, binaryFileName]);
 		const expectedSha256 = createHash("sha256")
 			.update(await readFile(archive))
 			.digest("hex");
@@ -93,11 +97,15 @@ describe("managed executable artifacts", () => {
 			maxBytes: 1_000_000,
 		});
 
-		expect(installedPath).toBe(join(destination, "rg"));
+		expect(installedPath).toBe(join(destination, binaryFileName));
 		expect((await readFile(installedPath, "utf8")).trim()).toBe("#!/bin/sh\necho fake-rg");
-		expect(statSync(installedPath).mode & 0o777).toBe(0o755);
+		// chmod is a no-op on Windows (tools-manager.ts skips it there; POSIX
+		// mode bits don't represent Windows ACL-based permissions).
+		if (process.platform !== "win32") {
+			expect(statSync(installedPath).mode & 0o777).toBe(0o755);
+		}
 		// No quarantine directory survives a successful install.
 		const entries = await readdir(destination);
-		expect(entries).toEqual(["rg"]);
+		expect(entries).toEqual([binaryFileName]);
 	});
 });
