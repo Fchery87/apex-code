@@ -17,7 +17,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { npmCommand } from "./npm-command.mjs";
+import { npmSpawnOptions } from "./npm-command.mjs";
 import { getPublicWorkspacePackages } from "../release-packages.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -30,9 +30,9 @@ export function generateSbomFor(pkg, cwd = REPO_ROOT) {
 	// unresolved path can fail to match with "No workspaces found" even though
 	// it is the correct directory. Resolve both sides the same way.
 	const output = execFileSync(
-		npmCommand(),
+		"npm",
 		["sbom", "--workspace", realpathSync(pkg.directory), "--omit", "dev", "--sbom-format", "cyclonedx"],
-		{ cwd: realpathSync(cwd), encoding: "utf8" },
+		npmSpawnOptions({ cwd: realpathSync(cwd), encoding: "utf8" }),
 	);
 	let document;
 	try {

@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { npmCommand } from "./npm-command.mjs";
+import { npmSpawnOptions } from "./npm-command.mjs";
 
 /**
  * package.json's version:patch/minor/major/set scripts previously ran
@@ -37,7 +37,7 @@ test("npm version scoped to the two Apex-owned workspaces leaves a frozen packag
 		});
 
 		const result = spawnSync(
-			npmCommand(),
+			"npm",
 			[
 				"version",
 				"patch",
@@ -48,7 +48,7 @@ test("npm version scoped to the two Apex-owned workspaces leaves a frozen packag
 				"--no-git-tag-version",
 				"--no-workspaces-update",
 			],
-			{ cwd: root, encoding: "utf8" },
+			npmSpawnOptions({ cwd: root, encoding: "utf8" }),
 		);
 		assert.equal(result.status, 0, result.stderr);
 

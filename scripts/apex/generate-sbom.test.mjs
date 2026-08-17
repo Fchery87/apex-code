@@ -7,7 +7,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { getPublicWorkspacePackages } from "../release-packages.mjs";
 import { generateAllSboms, generateSbomFor } from "./generate-sbom.mjs";
-import { npmCommand } from "./npm-command.mjs";
+import { npmSpawnOptions } from "./npm-command.mjs";
 
 const bothOwnedPackagesAreBuilt = getPublicWorkspacePackages().every((pkg) => existsSync(join(pkg.directory, "dist")));
 
@@ -52,7 +52,7 @@ test("generateSbomFor refuses to treat an empty component list as evidence", asy
 			join(packageDirectory, "package.json"),
 			JSON.stringify({ name: "apex-sbom-empty-fixture", version: "1.0.0" }, null, "\t"),
 		);
-		spawnSync(npmCommand(), ["install", "--ignore-scripts"], { cwd: root });
+		spawnSync("npm", ["install", "--ignore-scripts"], npmSpawnOptions({ cwd: root }));
 
 		assert.throws(
 			() => generateSbomFor({ name: "apex-sbom-empty-fixture", directory: packageDirectory }, root),
