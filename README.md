@@ -10,7 +10,7 @@ boundary around the upstream provider and terminal foundations. It keeps the bre
 Pi's provider layer while adding a safety floor, a larger tool surface, durable state,
 verification evidence, and operational visibility.
 
-> **Status: pre-alpha — Phases 0 through 11 have landed.** The product is usable and
+> **Status: pre-alpha — Phases 0 through 12 have landed.** The product is usable and
 > actively developed, but APIs, configuration, and release practices may still change.
 > The [roadmap](docs/roadmap.md) records what is implemented and how each phase was
 > verified.
@@ -47,10 +47,15 @@ verification evidence, and operational visibility.
 ### Install the prerelease from npm
 
 Apex Code currently uses npm's `next` prerelease channel rather than the stable
-`latest` tag:
+`latest` tag. It installs the same way with npm, pnpm, Yarn, or Bun — all resolve it
+from the same npm registry:
 
 ```bash
-npm install --global apex-code@next
+npm install --global apex-code@next      # npm
+pnpm add --global apex-code@next         # pnpm
+yarn global add apex-code@next           # Yarn
+bun add --global apex-code@next          # Bun
+
 apex-code --version
 ```
 
@@ -532,6 +537,8 @@ before opening a change.
 | [`packages/coding-agent/docs/extensions.md`](packages/coding-agent/docs/extensions.md) | Extension API and examples |
 | [`packages/coding-agent/docs/environment-variables.md`](packages/coding-agent/docs/environment-variables.md) | Runtime controls and compatibility aliases |
 | [`SECURITY.md`](SECURITY.md) | Security boundary and vulnerability reporting |
+| [`docs/support.md`](docs/support.md) | Maintainer, response targets, and supported-version line |
+| [`docs/release-integrity-runbook.md`](docs/release-integrity-runbook.md) | Recovery steps for a compromised or incorrect published release |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution workflow and source hygiene |
 
 ## License
