@@ -94,6 +94,19 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		}
 	});
 
+	it("launches inside a workspace whose package.json declares \"type\": \"module\"", async () => {
+		const cwd = workspace();
+		writeFileSync(join(cwd, "package.json"), JSON.stringify({ type: "module" }));
+		const backend = createLinuxSandboxBackend();
+		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+
+		try {
+			await expect(supervisor.launch({ command: "/bin/sh", args: ["-c", "true"] })).resolves.toBe(0);
+		} finally {
+			await supervisor.close();
+		}
+	});
+
 	it("blocks and records an attempted connection to a host absent from the allowlist", async () => {
 		const cwd = workspace();
 		const violations = new SandboxViolationStore();
