@@ -17,7 +17,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { npmSpawnArgs, npmSpawnOptions } from "./npm-command.mjs";
 import { getPublicWorkspacePackages } from "../release-packages.mjs";
@@ -154,7 +154,7 @@ export function checkPackedProductSurface(extractedDirectory, options = {}) {
 	// violation, and must not be flagged.
 	const scanned = listFiles(
 		extractedDirectory,
-		(path) => (path.endsWith(".js") || path.endsWith(".md")) && !path.endsWith("/CHANGELOG.md"),
+		(path) => (path.endsWith(".js") || path.endsWith(".md")) && basename(path) !== "CHANGELOG.md",
 	);
 
 	for (const file of scanned) {
