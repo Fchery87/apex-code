@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -18,6 +18,25 @@ function workspace(): string {
 	const directory = mkdtempSync(join(tmpdir(), "apex-sandbox-macos-"));
 	temporaryDirectories.push(directory);
 	return directory;
+}
+
+/**
+ * A temp directory under the real invoking account's home directory. Seatbelt's
+ * per-file read allowance (RO_FILE_n) only matters where the surrounding
+ * `(deny file-read* (subpath USER_HOME))` rule would otherwise apply -- outside
+ * USER_HOME, the broad base `(allow file-read*)` rule already permits reading
+ * everything, siblings included, regardless of any RO_FILE allowlist. Real
+ * credentials live under `~/.apex-code/agent/`, inside USER_HOME, so a fixture
+ * under the system temp directory (outside USER_HOME) does not exercise the
+ * same code path production actually relies on for sibling-hiding.
+ */
+function homeDirectory(): string {
+	const directory = mkdtempSync(join(homedir(), ".apex-sandbox-macos-test-"));
+	temporaryDirectories.push(directory);
+	// Matches macos-backend.ts's own realpathSync(homedir()) for USER_HOME --
+	// belt-and-suspenders in case the account home is itself reached through a
+	// symlink on some runner configuration.
+	return realpathSync(directory);
 }
 
 function canEnforceMacosSandbox(): boolean {
@@ -59,7 +78,7 @@ describe.skipIf(!canEnforceMacosSandbox())("macOS sandbox backend", () => {
 
 	it("projects a host credential file read-only without exposing sibling files", async () => {
 		const cwd = workspace();
-		const hostDirectory = workspace();
+		const hostDirectory = homeDirectory();
 		const authPath = join(hostDirectory, "auth.json");
 		const siblingPath = join(hostDirectory, "settings.json");
 		mkdirSync(hostDirectory, { recursive: true });
