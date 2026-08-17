@@ -19,7 +19,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeF
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { npmSpawnOptions } from "./npm-command.mjs";
+import { npmSpawnArgs, npmSpawnOptions } from "./npm-command.mjs";
 import { getPublicWorkspacePackages } from "../release-packages.mjs";
 
 const SMOKE_EXTENSION_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "fixtures/packed-smoke-extension.mjs");
@@ -72,7 +72,7 @@ export function packToDirectory(packageDirectory, destinationDirectory) {
 	mkdirSync(destinationDirectory, { recursive: true });
 	const output = execFileSync(
 		"npm",
-		["pack", "--json", "--ignore-scripts", "--pack-destination", destinationDirectory],
+		npmSpawnArgs(["pack", "--json", "--ignore-scripts", "--pack-destination", destinationDirectory]),
 		npmSpawnOptions({ cwd: packageDirectory, encoding: "utf8" }),
 	);
 	const packed = JSON.parse(output)[0];
@@ -180,7 +180,7 @@ export function installPackedTarballs(tarballsByName, installDirectory) {
 	);
 	execFileSync(
 		"npm",
-		["install", "--omit=dev", "--ignore-scripts"],
+		npmSpawnArgs(["install", "--omit=dev", "--ignore-scripts"]),
 		npmSpawnOptions({ cwd: installDirectory, stdio: "inherit" }),
 	);
 }
