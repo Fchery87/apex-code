@@ -190,8 +190,14 @@ updateChangelogsForRelease(getOwnedChangelogPaths(process.cwd()), version);
 console.log();
 
 // 5. Regenerate release artifacts
+//
+// generate:models is deliberately not run here: it only ever writes into
+// packages/ai (frozen, ADR 0001) by refreshing its own model-catalog
+// snapshot from external APIs, never anything Apex-owned. Running it here
+// would stage a frozen-boundary violation straight into the release commit;
+// check:model-data below validates the already-committed (pinned) data
+// instead of regenerating it.
 console.log("Regenerating release artifacts...");
-run("npm run generate:models");
 run("npm run check:model-data");
 run("npm run shrinkwrap:coding-agent");
 run("npm run install-lock:coding-agent");
