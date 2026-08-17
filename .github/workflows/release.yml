@@ -101,7 +101,7 @@ jobs:
       - name: Generate third-party license report
         run: npm run generate:license-report -- --node-modules "${RUNNER_TEMP}/packed-product-surface/smoke-install/node_modules"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: third-party-licenses
           path: .artifacts/third-party-licenses.md
@@ -113,7 +113,7 @@ jobs:
       - name: Generate SBOM
         run: node scripts/apex/generate-sbom.mjs
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: sbom
           path: .artifacts/sbom-*.cyclonedx.json
@@ -203,7 +203,7 @@ jobs:
       # Durable, retrievable release evidence (ADR 0018, task 12.11): the exact
       # gitHead, tarball hash, and provenance attestation URL the registry
       # reported for this release, independent of the workflow log.
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-evidence
           path: .artifacts/release-evidence.json
