@@ -10,6 +10,12 @@
   installing them there once if missing, where the network is still reachable — and projects
   each one read-only into the child at the path its own lookup already checks. One host-side
   install now serves every workspace, and no network access is required at startup.
+- The OS sandbox now permits the built-in model-provider hosts and the update check by
+  default, so a fresh install can reach its provider without first discovering
+  `network.allowedHosts` and the provider's endpoint. Configured hosts are added on top;
+  `network.allowDefaultHosts: false` restores the previous deny-all behaviour. Providers whose
+  endpoint depends on account or environment configuration — Bedrock, Azure, Cloudflare,
+  Vertex — still need an explicit entry.
 - A request refused by the sandbox network allowlist now says which host was refused and how to
   permit it, instead of surfacing undici's bare `fetch failed`. The refusal is also attempted
   once rather than retried three times, since an allowlist decision cannot change on retry.

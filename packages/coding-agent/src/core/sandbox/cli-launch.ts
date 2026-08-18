@@ -2,6 +2,7 @@ import { mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { HostToolBinary } from "../../utils/tools-manager.ts";
 import { SettingsManager } from "../settings-manager.ts";
+import { resolveDefaultAllowedHosts } from "./default-hosts.ts";
 import type { SandboxLaunch } from "./supervisor.ts";
 
 const NON_SESSION_COMMANDS = new Set(["auth", "config", "install", "remove", "uninstall", "update", "list"]);
@@ -23,9 +24,19 @@ export interface SandboxedCliLaunch extends SandboxLaunch {
 	readonly environment: NodeJS.ProcessEnv;
 }
 
-/** Read supervisor policy only from global settings; project settings are untrusted here. */
+/**
+ * Read supervisor policy only from global settings; project settings are untrusted here.
+ *
+ * The built-in provider hosts are added unless explicitly refused, because a deny-all
+ * default made a fresh install unable to reach any model while giving the user no way to
+ * learn which host to permit. Configured hosts are additive on top, and
+ * `allowDefaultHosts: false` restores the strict behaviour for anyone who wants it.
+ */
 export function resolveSupervisorAllowedHosts(cwd: string, agentDir: string): readonly string[] | undefined {
-	return SettingsManager.create(cwd, agentDir, { projectTrusted: false }).getNetworkSettings()?.allowedHosts;
+	const network = SettingsManager.create(cwd, agentDir, { projectTrusted: false }).getNetworkSettings();
+	const configured = network?.allowedHosts ?? [];
+	if (network?.allowDefaultHosts === false) return configured;
+	return [...new Set([...resolveDefaultAllowedHosts(), ...configured])];
 }
 
 const SAFE_CHILD_ENVIRONMENT_KEYS = new Set([

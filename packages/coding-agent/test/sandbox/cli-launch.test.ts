@@ -127,7 +127,29 @@ describe("sandbox CLI launch", () => {
 			JSON.stringify({ network: { allowedHosts: ["provider.example"] } }),
 		);
 
-		expect(resolveSupervisorAllowedHosts(cwd, agentDir)).toEqual(["provider.example"]);
+		const resolved = resolveSupervisorAllowedHosts(cwd, agentDir) ?? [];
+		expect(resolved).toContain("provider.example");
+		expect(resolved).not.toContain("attacker.example");
+	});
+
+	it("permits the model providers a fresh install has no way to know it needs", () => {
+		const agentDir = workspace();
+		// No settings file at all: the shipped default, which previously denied everything
+		// and left a first run failing with no usable indication of why.
+		const resolved = resolveSupervisorAllowedHosts(workspace(), agentDir) ?? [];
+
+		expect(resolved).toContain("generativelanguage.googleapis.com");
+		expect(resolved).toContain("api.anthropic.com");
+	});
+
+	it("honours an explicit opt-out back to deny-all plus whatever was configured", () => {
+		const agentDir = workspace();
+		writeFileSync(
+			join(agentDir, "settings.json"),
+			JSON.stringify({ network: { allowDefaultHosts: false, allowedHosts: ["only.example"] } }),
+		);
+
+		expect(resolveSupervisorAllowedHosts(workspace(), agentDir)).toEqual(["only.example"]);
 	});
 
 	it("routes every agent-session shape through the child while exempting only non-session commands", () => {

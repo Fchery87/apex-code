@@ -709,3 +709,50 @@ deterministic policy decision and retrying it cannot change the outcome.
 **Deletion inventory.** Nothing is removed. The violation store keeps recording
 refusals and printing them at exit; this adds the message at the point of failure,
 where it can still affect what the user does next.
+
+### Amendment (2026-08-17, fourth): model providers are reachable by default
+
+`network.allowedHosts` defaulted to empty, and the proxy denies anything absent from
+it. The consequence was not a hardened default but a non-functional one: a fresh
+install could not reach any model at all. Verified on a clean configuration directory
+before this change — the first request failed, four identical violations printed at
+exit, and nothing on screen named `generativelanguage.googleapis.com`, which is an
+implementation detail of the provider rather than something a user could be expected
+to know. Denying by default only protects anyone if the working configuration is
+reachable without it; otherwise the first thing every user does is discover the
+setting and widen it, with less information than we have.
+
+`core/sandbox/default-hosts.ts` now supplies the 31 statically known model-provider
+hosts plus the update check host, and `resolveSupervisorAllowedHosts()` merges
+configured entries on top. `network.allowDefaultHosts: false` restores strict
+deny-all for anyone who wants it.
+
+Two implementation constraints, both measured rather than assumed:
+
+- **The list is materialised, not derived at runtime.** Importing
+  `@earendil-works/pi-ai/providers/all` costs ~190ms, which the supervisor would pay on
+  every launch before the child starts. `test/sandbox/default-hosts.test.ts` recomputes
+  the set from `builtinProviders()` and fails if the copy drifts, so a provider added
+  upstream cannot silently become unreachable.
+- **The update-check host is duplicated, not imported.** Importing `version-check.ts`
+  for one string pulled ~40ms of dependency chain into the supervisor's path (best of
+  five: 66ms for the module versus 2.9ms without it). A test asserts the constant
+  matches `VERSION_CHECK_HOST`.
+
+Scope is deliberately limited to providers whose `baseUrl` is statically knowable.
+Bedrock, Azure, Cloudflare, Vertex, and the self-hosted providers resolve their
+endpoint from account or environment configuration the supervisor cannot see; they
+still need an explicit entry, and the refusal message from the previous amendment now
+names the host to add. A mid-session `/model` switch to such a provider is likewise
+still refused, because the proxy's allowlist is fixed when the session starts.
+
+**Known consequence, not fixed here.** With provider hosts reachable, an ordinary
+non-zero child exit — an invalid API key, a failing command — now surfaces
+`Sandbox violation (unknown): … Sandboxed process exited unsuccessfully`, because
+`linux-backend.ts` records a fallback violation for any unsuccessful exit that the
+proxy did not already explain. That line blames the boundary for failures it had no
+part in. It was largely masked before, since a first run failed at the network refusal
+instead. Tracked as follow-up work.
+
+**Deletion inventory.** Nothing is removed. `network.allowedHosts` keeps its meaning
+and remains the way to permit anything outside the default set.
