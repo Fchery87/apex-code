@@ -11,6 +11,12 @@ export interface MacosSandboxBackendOptions {
 	platform?: NodeJS.Platform;
 	commandExists?: (command: string) => boolean;
 	violationStore?: SandboxViolationStore;
+	/**
+	 * Injectable only so violation attribution can be tested off macOS; production
+	 * spawns `sandbox-exec` directly. Without this the decision about what counts as a
+	 * violation would be verifiable only on a macOS host.
+	 */
+	spawnChild?: typeof spawn;
 }
 
 function sandboxExecExists(command: string): boolean {
@@ -51,17 +57,26 @@ function readOnlyDirectories(paths: readonly string[]): string[] {
 	return [...new Set(canonical)];
 }
 
-function classifySandboxFailure(stderr: string): "filesystem" | "network" | "unknown" {
+/** Seatbelt refuses through the blocked call's own errno text, not a wrapper message. */
+const DENIAL_EVIDENCE = /Operation not permitted|Permission denied|EPERM|EACCES/i;
+
+function classifySandboxFailure(stderr: string): "filesystem" | "network" | "unknown" | undefined {
 	// Confirmed empirically (2b.5 prototype): unlike Linux's bwrap, macOS Seatbelt
 	// denials surface through the launched command's own generic "Operation not
 	// permitted"/EPERM text for filesystem AND network refusals alike -- there is no
 	// macOS-specific phrase equivalent to Linux's distinct "Network is unreachable".
 	// Only sandbox-exec's own wrapper-level exec refusal (a sign our own profile
 	// forgot to allow a binary, not a policy decision) is unambiguous from stderr
-	// text. Anything else stays "unknown"; network-proxy.ts's own precise per-request
-	// recording is the reliable "network" signal on this platform.
+	// text. Anything else that still shows a refusal stays "unknown";
+	// network-proxy.ts's own precise per-request recording is the reliable "network"
+	// signal on this platform.
 	if (/execvp\(\) of .* failed: Operation not permitted/i.test(stderr)) return "filesystem";
-	return "unknown";
+	if (DENIAL_EVIDENCE.test(stderr)) return "unknown";
+	// No refusal in evidence. The coarseness above is about telling filesystem from
+	// network, not about telling a denial from an ordinary failure -- a non-zero exit
+	// on its own says nothing about the boundary, and reporting it as a violation
+	// sends the reader looking for a refusal that never happened.
+	return undefined;
 }
 
 /**
@@ -171,17 +186,22 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 			params.push("-D", `WORKSPACE=${workspace}`);
 			params.push("-D", `PROXY_ADDR=localhost:${proxyPort}`);
 
-			const child = spawn("sandbox-exec", ["-f", profilePath, ...params, "--", launch.command, ...launch.args], {
-				cwd: workspace,
-				env: {
-					...launch.environment,
-					HOME: launch.environment?.HOME ?? stateDirectory,
-					TMPDIR: launch.environment?.TMPDIR ?? stateDirectory,
-					HTTP_PROXY: `http://127.0.0.1:${proxyPort}`,
-					HTTPS_PROXY: `http://127.0.0.1:${proxyPort}`,
+			const spawnSandboxExec = options?.spawnChild ?? spawn;
+			const child = spawnSandboxExec(
+				"sandbox-exec",
+				["-f", profilePath, ...params, "--", launch.command, ...launch.args],
+				{
+					cwd: workspace,
+					env: {
+						...launch.environment,
+						HOME: launch.environment?.HOME ?? stateDirectory,
+						TMPDIR: launch.environment?.TMPDIR ?? stateDirectory,
+						HTTP_PROXY: `http://127.0.0.1:${proxyPort}`,
+						HTTPS_PROXY: `http://127.0.0.1:${proxyPort}`,
+					},
+					stdio: ["inherit", "inherit", "pipe"],
 				},
-				stdio: ["inherit", "inherit", "pipe"],
-			});
+			);
 			let stderr = "";
 			child.stderr?.setEncoding("utf8");
 			child.stderr?.on("data", (chunk: string) => {
@@ -191,15 +211,12 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 			const exitCode = await waitForExit(child);
 			await proxy?.close();
 			const proxyAlreadyRecordedAViolation = (violationStore?.totalCount ?? 0) > violationCountBeforeLaunch;
-			if (exitCode !== 0 && !proxyAlreadyRecordedAViolation) {
-				const kind = classifySandboxFailure(stderr);
+			const kind = exitCode !== 0 && !proxyAlreadyRecordedAViolation ? classifySandboxFailure(stderr) : undefined;
+			if (kind) {
 				violationStore?.add({
 					kind,
 					command: [launch.command, ...launch.args].join(" "),
-					detail:
-						kind === "unknown"
-							? "Sandboxed process exited unsuccessfully; inspect its stderr for the OS refusal."
-							: stderr.trim(),
+					detail: stderr.trim(),
 					timestamp: new Date(),
 				});
 			}

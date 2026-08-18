@@ -782,3 +782,28 @@ open, and is not claimed as fixed.
 **Deletion inventory.** The `unknown` classification is gone from the Linux backend and
 with it the "inspect its stderr for the OS refusal" detail string. `SandboxViolation`
 keeps the `unknown` kind, which macOS still uses.
+
+**Follow-up, same day: macOS narrowed the same way.** The previous paragraph left the
+macOS equivalent open on the grounds that its classifier reports genuine denials as
+`unknown`. Re-reading that classifier showed the reasoning was wrong: its coarseness is
+about telling *filesystem from network*, not about telling *a denial from an ordinary
+failure*. Seatbelt refusals do surface through the blocked call's own
+`Operation not permitted`/EPERM text — that is exactly what the existing comment
+records — so the same evidence test applies. `macos-backend.ts` now returns `undefined`
+when stderr shows no refusal, keeps `filesystem` for `sandbox-exec`'s own `execvp()`
+refusal, and keeps `unknown` for any other refusal in evidence, which is what the
+macOS-gated tests assert.
+
+Verifying it needed a way to exercise the decision off macOS, so the backend gained the
+same `spawnChild` injection `linux-backend.ts` already had, and
+`test/sandbox/macos-backend.test.ts` now drives violation attribution with a fake child
+on any platform: an ordinary non-zero exit records nothing, an EPERM denial records
+`unknown`, an `execvp()` refusal records `filesystem`, and a successful exit records
+nothing regardless of stderr chatter.
+
+The real macOS integration tests remain unrunnable here and are still gated on a macOS
+host, so this narrowing is verified by injected-child tests and by reading, not by a
+live Seatbelt denial. The risk that carries is bounded and worth stating plainly:
+enforcement is untouched — a denied write is still denied — and the only exposure is
+that a refusal whose stderr wording we failed to anticipate would go unrecorded rather
+than misreported. A logging gap, not a hole in the boundary.
