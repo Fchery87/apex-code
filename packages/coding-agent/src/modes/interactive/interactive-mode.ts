@@ -94,7 +94,7 @@ import { DefaultPackageManager } from "../../core/package-manager.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
 import { type SessionEntry, SessionManager, sessionEntryToContextMessages } from "../../core/session-manager.ts";
-import { publishSessionShare } from "../../core/session-share.ts";
+import { formatShareUnavailableMessage, publishSessionShare } from "../../core/session-share.ts";
 import type { TuiMode } from "../../core/settings-manager.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
@@ -5837,11 +5837,11 @@ export class InteractiveMode {
 		try {
 			const authResult = spawnSync("gh", ["auth", "status"], { encoding: "utf-8" });
 			if (authResult.status !== 0) {
-				this.showError("GitHub CLI is not logged in. Run 'gh auth login' first.");
+				this.showError(formatShareUnavailableMessage("unauthenticated"));
 				return;
 			}
 		} catch {
-			this.showError("GitHub CLI (gh) is not installed. Install it from https://cli.github.com/");
+			this.showError(formatShareUnavailableMessage("missing"));
 			return;
 		}
 

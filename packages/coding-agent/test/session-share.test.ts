@@ -2,7 +2,7 @@ import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { publishSessionShare } from "../src/core/session-share.ts";
+import { formatShareUnavailableMessage, publishSessionShare } from "../src/core/session-share.ts";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -67,5 +67,27 @@ describe("session sharing", () => {
 		} finally {
 			await rm(temporaryRoot, { recursive: true, force: true });
 		}
+	});
+});
+
+// The OS sandbox is the normal startup path, and it cannot see the host's gh
+// credentials (~/.config/gh sits under the tmpfs that replaces /home, and the token
+// usually lives in a system keyring). The old message blamed a missing login and sent
+// users to `gh auth login`, which does not help and is not even true on the host.
+describe("share preflight messaging", () => {
+	it("points an unauthenticated session at the export path that actually works", () => {
+		const message = formatShareUnavailableMessage("unauthenticated");
+
+		expect(message).toContain("/export");
+		expect(message).toContain("gh gist create");
+		expect(message).toMatch(/sandbox/i);
+	});
+
+	it("still tells a user with no GitHub CLI where to get one", () => {
+		const message = formatShareUnavailableMessage("missing");
+
+		expect(message).toContain("cli.github.com");
+		// Nothing to say about exporting when the tool needed to publish is absent.
+		expect(message).not.toContain("gh gist create");
 	});
 });

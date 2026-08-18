@@ -10,6 +10,12 @@
   installing them there once if missing, where the network is still reachable — and projects
   each one read-only into the child at the path its own lookup already checks. One host-side
   install now serves every workspace, and no network access is required at startup.
+- Fixed `/share` reporting `GitHub CLI is not logged in. Run 'gh auth login' first.` inside the
+  OS sandbox, where that diagnosis is wrong and the suggested fix does not help. The sandbox
+  cannot reach the host's gh credentials — `~/.config/gh` sits under the tmpfs that replaces
+  `/home`, `XDG_CONFIG_HOME` is redirected, and the token usually lives in a system keyring.
+  The message now points at the workflow that works: `/export` inside the session, then
+  `gh gist create --public=false <file>` outside the sandbox.
 - Hardened the managed-tool lookup against an unusable leftover file. A projected tool is
   bind-mounted over a file in the child's tools directory, and Bubblewrap materialises that
   mountpoint as an empty file that outlives the namespace. `getToolPath()` now requires an
