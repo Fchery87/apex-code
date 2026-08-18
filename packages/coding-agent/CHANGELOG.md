@@ -14,6 +14,18 @@
   before it would be squeezed, and a long working directory keeps its leaf rather than its
   root, so `cwd` still identifies the session.
 - The first-run theme picker now shows the Apex Code mark instead of the leftover upstream one.
+- New `apex` theme, now the default on dark terminals. It replaces the inherited palette's
+  unrelated accent/blue/cyan split with a single cool-teal primary that carries through the
+  accent and every border, over layered near-black surfaces. Semantic names (`primary`,
+  `surface`, `panel`, `grid`) replace raw colour names, and the harsher inherited values —
+  notably pure `#ffff00` for warnings — give way to desaturated ones that sit together.
+  `dark` and `light` are unchanged and still selectable via `/theme`; light terminals continue
+  to default to `light`, as there is no light brand palette yet.
+- The input box now shows a teal `>` prompt marker on its first line, with wrapped and
+  additional lines indented to align under it, and a dim placeholder — `Ask anything, / for
+  commands, ! for bash` — while the input is empty. On a terminal too narrow to spare the
+  marker's columns, the box silently falls back to the previous full-width layout rather than
+  overflowing.
 
 ## [0.0.1-alpha.4] - 2026-08-18
 

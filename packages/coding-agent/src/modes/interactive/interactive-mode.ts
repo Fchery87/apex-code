@@ -565,6 +565,10 @@ export class InteractiveMode {
 		this.defaultEditor = new CustomEditor(this.ui, getEditorTheme(), this.keybindings, {
 			paddingX: editorPaddingX,
 			autocompleteMaxVisible,
+			promptPrefix: "> ",
+			promptColor: (text) => theme.fg("accent", text),
+			placeholder: "Ask anything, / for commands, ! for bash",
+			placeholderColor: (text) => theme.fg("dim", text),
 		});
 		this.editor = this.defaultEditor;
 		this.editorContainer = new Container();
