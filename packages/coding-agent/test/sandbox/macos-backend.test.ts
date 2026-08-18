@@ -144,6 +144,14 @@ describe.skipIf(!canEnforceMacosSandbox())("macOS sandbox backend", () => {
 		// not "network" -- macOS's own denial text does not reliably distinguish
 		// filesystem from network refusals the way Linux's bwrap stderr does (see
 		// the 2b.5 prototype and the comment on classifySandboxFailure).
+		//
+		// The child MUST print the error before exiting. Attribution is evidence-based:
+		// a bare non-zero exit records nothing, because it cannot be told apart from a
+		// command that failed for its own reasons. Seatbelt returns EPERM to the
+		// blocked connect(), so echoing the message puts that errno on stderr where
+		// the classifier can see it -- the same shape as the Linux test, whose bash
+		// child prints "Network is unreachable" of its own accord. Dropping the
+		// console.error here silently stops this asserting anything about attribution.
 		const cwd = workspace();
 		const violations = new SandboxViolationStore();
 		const backend = createMacosSandboxBackend({ violationStore: violations });
@@ -153,10 +161,13 @@ describe.skipIf(!canEnforceMacosSandbox())("macOS sandbox backend", () => {
 			await expect(
 				supervisor.launch({
 					command: process.execPath,
-					args: ["-e", "require('node:net').connect(443,'198.51.100.1').on('error',()=>process.exit(1))"],
+					args: [
+						"-e",
+						"require('node:net').connect(443,'198.51.100.1').on('error',(e)=>{console.error(e.message);process.exit(1)})",
+					],
 				}),
 			).resolves.not.toBe(0);
-			expect(violations.list()).toHaveLength(1);
+			expect(violations.list()).toMatchObject([{ kind: "unknown" }]);
 		} finally {
 			await supervisor.close();
 		}
@@ -226,6 +237,24 @@ describe("macOS violation attribution", () => {
 
 	it("stays silent on a successful run regardless of stderr chatter", async () => {
 		const violations = await launchWith(0, "warning: something noisy\n");
+		expect(violations.list()).toEqual([]);
+	});
+
+	it("does not record a denial the child swallowed without printing", async () => {
+		// The known cost of evidence-based attribution, pinned here so it is a
+		// decision rather than a surprise.
+		//
+		// A child that installs its own error handler exits non-zero having written
+		// nothing -- `net.connect(...).on("error", () => process.exit(1))` is the
+		// textbook shape. At this layer that is byte-for-byte identical to a command
+		// that simply failed, so the denial goes unrecorded. Enforcement is
+		// unaffected: the connection was still refused. Only the violation log is
+		// short an entry.
+		//
+		// Linux carries the same gap for the same reason. Closing it needs a signal
+		// other than stderr -- macOS's unified log, or the per-request records
+		// network-proxy.ts already keeps for traffic that goes through the proxy.
+		const violations = await launchWith(1, "");
 		expect(violations.list()).toEqual([]);
 	});
 });
