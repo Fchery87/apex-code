@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+- The interactive startup screen now leads with the Apex Code brand mark and a short metadata
+  column — version, model, and working directory — rather than a keybinding list. The previous
+  screen spent four of its five elements on instructions and never showed which model was
+  loaded or which directory the session was rooted in, the two things that actually differ
+  between launches. The full keybinding cheatsheet moved behind `--verbose`. `ctrl+o` still
+  expands tool output and loaded resources; it just no longer unfolds the header.
+- The startup mark degrades rather than breaking: a compact variant below 36 columns, and a
+  line-drawing variant under `terminal.symbolPreset: "ascii"`, whose users opted out of block
+  glyphs precisely because their terminal renders them badly. The metadata column is dropped
+  before it would be squeezed, and a long working directory keeps its leaf rather than its
+  root, so `cwd` still identifies the session.
+- The first-run theme picker now shows the Apex Code mark instead of the leftover upstream one.
+
 ## [0.0.1-alpha.4] - 2026-08-18
 
 - Fixed `fd not found. Downloading...` / `Failed to download fd: fetch failed` (and the same
