@@ -139,6 +139,27 @@ describe("ApexSplashHeader", () => {
 			expect(output).toContain("the-actual-project");
 			expect(output).toContain("…/");
 		});
+
+		it("clips an over-long single segment without splitting a character", () => {
+			// One path segment wider than the whole value column, made of
+			// double-width astral characters. Clipping by UTF-16 offset would emit a
+			// lone surrogate; clipping by code unit would also miscount the width.
+			const cwd = `/${"🚀".repeat(120)}`;
+			for (const width of [100, 81, 80, 60]) {
+				for (const line of render(width, { cwd })) {
+					expect(visibleWidth(line), `width ${width}`).toBeLessThanOrEqual(width);
+					expect(plain(line), `width ${width}`).not.toContain("�");
+					// Iterating a string yields whole code points, so an intact pair
+					// arrives as a two-unit string. Only a one-unit yield in the
+					// surrogate range is an actual orphan.
+					for (const codePoint of line) {
+						if (codePoint.length !== 1) continue;
+						const code = codePoint.charCodeAt(0);
+						expect(code >= 0xd800 && code <= 0xdfff, `lone surrogate at width ${width}`).toBe(false);
+					}
+				}
+			}
+		});
 	});
 
 	describe("verbose instructions", () => {
