@@ -4,6 +4,7 @@ import {
 	type EditorOptions,
 	type EditorTheme,
 	type TUI,
+	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
 import type { AppKeybinding, KeybindingsManager } from "../../../core/keybindings.ts";
@@ -22,8 +23,21 @@ export interface CustomEditorOptions extends EditorOptions {
 	commandColor?: (text: string) => string;
 }
 
-/** Box-drawing horizontal rule: the first character of every border line. */
+/** Box-drawing horizontal rule: the character the base Editor draws borders from. */
 const BORDER_CHAR = "─";
+
+/**
+ * The two shapes the base Editor draws a border in: a plain full-width rule, and
+ * the scroll indicator (`─── ↑ 3 more ────`).
+ *
+ * Both are anchored deliberately. A prefix test would count any content line that
+ * merely *starts* with the rule character — a pasted divider, `─notes` — as a
+ * border, which is worse than it sounds: {@link CustomEditor.render} tells the
+ * content region from the autocomplete region by counting borders, so one
+ * miscount shifts every later line into the wrong region.
+ */
+const BORDER_RULE = /^─+$/;
+const BORDER_SCROLL = /^─+ [↑↓] \d+ more/;
 
 /**
  * A leading `/command` token: optional indent, a slash, then non-space.
@@ -135,7 +149,7 @@ export class CustomEditor extends Editor {
 	private readonly promptColor: (text: string) => string;
 	private readonly placeholderColor: (text: string) => string;
 	private readonly commandColor: ((text: string) => string) | undefined;
-	private placeholder: string | undefined;
+	private readonly placeholder: string | undefined;
 	public actionHandlers: Map<AppKeybinding, () => void> = new Map();
 
 	// Special handlers that can be dynamically replaced
@@ -153,10 +167,6 @@ export class CustomEditor extends Editor {
 		this.placeholder = options?.placeholder;
 		this.placeholderColor = options?.placeholderColor ?? ((text) => text);
 		this.commandColor = options?.commandColor;
-	}
-
-	setPlaceholder(placeholder: string | undefined): void {
-		this.placeholder = placeholder;
 	}
 
 	override render(width: number): string[] {
@@ -196,7 +206,8 @@ export class CustomEditor extends Editor {
 	}
 
 	private isBorderLine(line: string): boolean {
-		return stripAnsi(line).startsWith(BORDER_CHAR);
+		const visible = stripAnsi(line.split(CURSOR_MARKER).join(""));
+		return BORDER_RULE.test(visible) || BORDER_SCROLL.test(visible);
 	}
 
 	/**
@@ -253,7 +264,11 @@ export class CustomEditor extends Editor {
 		if (available <= 0) {
 			return lines;
 		}
-		const text = placeholder.slice(0, available);
+		// Cut by display width, not by String.slice: `available` counts terminal
+		// columns, while slice counts UTF-16 code units. They only agree for
+		// plain ASCII, and disagreeing splits a surrogate pair or overruns the
+		// line on the first wide character.
+		const text = truncateToWidth(placeholder, available, "");
 		const padding = " ".repeat(Math.max(0, available - visibleWidth(text)));
 		const updated = [...lines];
 		updated[1] = cursorCell + this.placeholderColor(text) + padding;

@@ -196,4 +196,62 @@ describe("CustomEditor chrome", () => {
 			expect(plain(makeEditor().render(50)[1])).toContain(PLACEHOLDER);
 		});
 	});
+
+	describe("border classification", () => {
+		it("does not mistake typed box-drawing text for a border", () => {
+			// render() tells the content region from the autocomplete region by
+			// counting borders, so misreading one content line as a border shifts
+			// every later line into the wrong region. A prefix test on "─" did.
+			const editor = makeEditor();
+			editor.setText("─notes on the design\nsecond line");
+			const lines = editor.render(60).map(plain);
+
+			expect(lines[1].startsWith("> ─notes")).toBe(true);
+			expect(lines[2].startsWith("  second line")).toBe(true);
+			// Exactly two real borders, top and bottom.
+			expect(lines.filter((line) => /^─+$/.test(line))).toHaveLength(2);
+		});
+
+		it("keeps widths correct for a line of pure rule characters", () => {
+			const editor = makeEditor();
+			editor.setText("─".repeat(20));
+			for (const line of editor.render(60)) {
+				expect(visibleWidth(line)).toBe(60);
+			}
+		});
+	});
+
+	describe("unicode safety", () => {
+		it("cuts the placeholder by display width, not by code unit count", () => {
+			// "中" is the discriminating case: ONE UTF-16 code unit but TWO display
+			// columns. String.slice(0, available) therefore yields `available`
+			// characters occupying 2 x available columns, overflowing the box.
+			// (An emoji is a poor test here — it is 2 units AND 2 columns, so the
+			// two measures coincide and the bug hides.)
+			const editor = makeEditor({ placeholder: "中".repeat(60) });
+			for (const width of [50, 31, 30, 12, 7]) {
+				for (const line of editor.render(width)) {
+					expect(visibleWidth(line), `width ${width}`).toBeLessThanOrEqual(width);
+				}
+			}
+		});
+
+		it("does not emit a lone surrogate when the budget splits an astral pair", () => {
+			// The box must leave an ODD number of columns for the placeholder, since
+			// an even budget divides cleanly into 2-column graphemes and hides the
+			// split. available = width - prefix(2) - cursor cell(1), so an even
+			// width gives an odd budget.
+			const editor = makeEditor({ placeholder: "🚀".repeat(40) });
+			for (const width of [32, 50, 60]) {
+				// Iterating a string yields whole code points, so an intact pair
+				// arrives as a two-unit string. Only a one-unit yield in the
+				// surrogate range is an actual orphan.
+				for (const codePoint of editor.render(width)[1]) {
+					if (codePoint.length !== 1) continue;
+					const code = codePoint.charCodeAt(0);
+					expect(code >= 0xd800 && code <= 0xdfff, `lone surrogate at width ${width}`).toBe(false);
+				}
+			}
+		});
+	});
 });
