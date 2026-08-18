@@ -1,5 +1,6 @@
 import { Container, getKeybindings, Spacer, Text } from "@earendil-works/pi-tui";
 import { APP_NAME } from "../../../config.ts";
+import { APEX_PEAK_LOGO_COMPACT } from "../../../themes/apex-logo.ts";
 import { type TerminalTheme, theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, rawKeyHint } from "./keybinding-hints.ts";
@@ -20,7 +21,7 @@ const THEME_OPTIONS: Array<{ value: TerminalTheme; label: string }> = [
 	{ value: "light", label: "Light" },
 ];
 
-const SETUP_LOGO_LINES = ["██████", "██  ██", "████  ██", "██    ██"];
+const SETUP_LOGO_LINES = APEX_PEAK_LOGO_COMPACT.split("\n");
 
 /** First-time setup dialog: theme choice. */
 export class FirstTimeSetupComponent extends Container {
