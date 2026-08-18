@@ -807,3 +807,34 @@ live Seatbelt denial. The risk that carries is bounded and worth stating plainly
 enforcement is untouched — a denied write is still denied — and the only exposure is
 that a refusal whose stderr wording we failed to anticipate would go unrecorded rather
 than misreported. A logging gap, not a hole in the boundary.
+
+**Correction, 2026-08-18: the exposure above is stated too narrowly, and it broke a
+test.** The gap is not only refusals *whose wording* we failed to anticipate. It is
+refusals the child never writes down **at all**. A program that installs its own error
+handler exits non-zero having printed nothing —
+`net.connect(...).on("error", () => process.exit(1))` is the textbook shape, not an
+exotic one. At the attribution point that is byte-for-byte identical to a command that
+failed for its own reasons, so no amount of additional regex coverage closes it.
+
+This surfaced as a CI failure rather than as reasoning: the macOS-gated test
+`blocks a direct connection attempt to a host outside the sandbox proxy` used exactly
+that swallowing child, so under the narrowed classifier it recorded nothing and the
+assertion of one violation failed. The test was skipped on the Linux host where the
+narrowing was written and its own CI run was cancelled, so nothing caught it before
+merge. The Linux equivalent passes only because *its* child is `bash`, which prints
+`Network is unreachable` unprompted — the two tests were written against different child
+behaviour, not different platform semantics.
+
+The macOS test now prints the errno before exiting, so it exercises the contract the
+classifier actually offers: Seatbelt denies → the child surfaces the refusal → it is
+recorded as `unknown`. The silent case is pinned by its own injected-child test
+asserting that nothing is recorded, so the cost is a decision on the record rather than
+a surprise.
+
+**The gap is shared with Linux**, which narrows on the same evidence and would equally
+miss a denial its child swallowed; Linux simply has no test for that shape. Closing it
+on either platform needs a signal other than the child's stderr — macOS's unified log,
+or the per-request records `network-proxy.ts` already keeps for traffic routed through
+the proxy. Neither is in scope here, and the trade is still the right one: reporting
+every non-zero exit as a violation is what sent readers looking for refusals that never
+happened.
