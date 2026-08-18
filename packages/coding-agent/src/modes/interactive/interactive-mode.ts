@@ -139,6 +139,7 @@ import { ScopedModelsSelectorComponent } from "./components/scoped-models-select
 import { SessionSelectorComponent } from "./components/session-selector.ts";
 import { SettingsSelectorComponent } from "./components/settings-selector.ts";
 import { SkillInvocationMessageComponent } from "./components/skill-invocation-message.ts";
+import { ApexSplashHeader } from "./components/splash-header.ts";
 import {
 	BranchSummaryStatusIndicator,
 	CompactionStatusIndicator,
@@ -906,13 +907,15 @@ export class InteractiveMode {
 
 		await this.themeController.applyFromSettings();
 
-		// Add header with keybindings from config (unless silenced)
+		// Brand splash: mark on the left, runtime metadata on the right. The model
+		// and cwd are read through live getters, so they fill in once the session
+		// binds in rebindCurrentSession below.
 		if (this.options.verbose || !this.settingsManager.getQuietStartup()) {
-			const logo = theme.bold(theme.fg("accent", APP_NAME)) + theme.fg("dim", ` v${this.version}`);
-
 			// Build startup instructions using keybinding hint helpers
 			const hint = (keybinding: AppKeybinding, description: string) => keyHint(keybinding, description);
 
+			// The full cheatsheet is verbose-only. The default screen leads with the
+			// mark and the runtime facts that actually differ between launches.
 			const expandedInstructions = [
 				hint("app.interrupt", "to interrupt"),
 				hint("app.clear", "to clear"),
@@ -934,31 +937,19 @@ export class InteractiveMode {
 				hint("app.clipboard.pasteImage", "to paste image (with text fallback)"),
 				rawKeyHint("drop files", "to attach"),
 			].join("\n");
-			const compactInstructions = [
-				hint("app.interrupt", "interrupt"),
-				rawKeyHint(`${keyText("app.clear")}/${keyText("app.exit")}`, "clear/exit"),
-				rawKeyHint("/", "commands"),
-				rawKeyHint("!", "bash"),
-				hint("app.tools.expand", "more"),
-			].join(theme.fg("muted", " · "));
-			const compactOnboarding = theme.fg(
-				"dim",
-				`Press ${keyText("app.tools.expand")} to show full startup help and loaded resources.`,
-			);
-			const onboarding = theme.fg(
-				"dim",
-				`Apex Code can explain its own features and look up its docs. Ask it how to use or extend Apex Code.`,
-			);
-			this.builtInHeader = new ExpandableText(
-				() => `${logo}\n${compactInstructions}\n${compactOnboarding}\n\n${onboarding}`,
-				() => `${logo}\n${expandedInstructions}\n\n${onboarding}`,
-				this.getStartupExpansionState(),
-				1,
-				0,
+			this.builtInHeader = new ApexSplashHeader(
+				this.version,
+				() => this.session.state.model?.id,
+				() => this.session.sessionManager.getCwd(),
+				this.options.verbose ? expandedInstructions : undefined,
+				{
+					topPadding: true,
+					getSymbolPreset: () => this.settingsManager.getSymbolPreset(),
+					getHint: () => "Apex Code can explain its own features and look up its docs.",
+				},
 			);
 
 			// Setup UI layout
-			this.headerContainer.addChild(new Spacer(1));
 			this.headerContainer.addChild(this.builtInHeader);
 			this.headerContainer.addChild(new Spacer(1));
 		} else {
