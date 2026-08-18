@@ -93,6 +93,21 @@ describe("sandbox CLI launch", () => {
 		expect(launch.readOnlyBinaries).toEqual([]);
 	});
 
+	it("clears a stale mountpoint stub for a tool it is no longer projecting", () => {
+		const cwd = workspace();
+		const toolsDirectory = join(cwd, ".apex-code", "sandbox-agent", "bin");
+		mkdirSync(toolsDirectory, { recursive: true });
+		// Left behind by a previous launch's bind mount, after the host tool went away.
+		writeFileSync(join(toolsDirectory, "fd"), "", { mode: 0o444 });
+		// A genuinely downloaded binary from before the sandbox existed must survive.
+		writeFileSync(join(toolsDirectory, "rg"), "#!/bin/sh\n", { mode: 0o755 });
+
+		buildSandboxedCliLaunch({ workspace: cwd, command: "/usr/bin/node", args: [], environment: {} });
+
+		expect(existsSync(join(toolsDirectory, "fd"))).toBe(false);
+		expect(existsSync(join(toolsDirectory, "rg"))).toBe(true);
+	});
+
 	it("keeps supervision state out of the child environment", () => {
 		const cwd = workspace();
 		const launch = buildSandboxedCliLaunch({ workspace: cwd, command: "/usr/bin/node", args: [], environment: {} });
