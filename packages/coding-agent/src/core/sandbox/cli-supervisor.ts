@@ -1,3 +1,4 @@
+import type { HostToolBinary } from "../../utils/tools-manager.ts";
 import { buildSandboxedCliLaunch } from "./cli-launch.ts";
 import { createLinuxSandboxBackend } from "./linux-backend.ts";
 import { createMacosSandboxBackend } from "./macos-backend.ts";
@@ -35,6 +36,7 @@ export async function launchSandboxedCli(options: {
 	allowedHosts?: readonly string[];
 	readOnlyPaths?: readonly string[];
 	authPath?: string;
+	toolBinaries?: readonly HostToolBinary[];
 	dependencies?: Partial<CliSandboxDependencies>;
 }): Promise<number> {
 	const dependencies = { ...defaultDependencies, ...options.dependencies };
@@ -54,6 +56,7 @@ export async function launchSandboxedCli(options: {
 		allowedHosts: options.allowedHosts,
 		readOnlyPaths: options.readOnlyPaths,
 		authPath: options.authPath,
+		toolBinaries: options.toolBinaries,
 	});
 	try {
 		return await supervisor.launch(launch);

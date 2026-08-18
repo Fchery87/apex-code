@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -63,6 +63,34 @@ describe("sandbox CLI launch", () => {
 		expect(launch.environment.APEX_CODE_AUTH_PATH).toBe(authPath);
 		expect(launch.readOnlyPaths).toEqual([]);
 		expect(launch.readOnlyFiles).toEqual([authPath]);
+	});
+
+	it("projects host tool executables at the paths the child already looks in", () => {
+		const cwd = workspace();
+		const hostToolsDirectory = workspace();
+		const fdSource = join(hostToolsDirectory, "fdfind");
+		writeFileSync(fdSource, "#!/bin/sh\n", { mode: 0o755 });
+
+		const launch = buildSandboxedCliLaunch({
+			workspace: cwd,
+			command: "/usr/bin/node",
+			args: [],
+			environment: {},
+			toolBinaries: [{ name: "fd", path: fdSource }],
+		});
+
+		// The destination is the child's own getBinDir(), so the child finds the tool
+		// through its existing lookup instead of attempting a download.
+		expect(launch.readOnlyBinaries).toEqual([
+			{ source: fdSource, destination: join(cwd, ".apex-code", "sandbox-agent", "bin", "fd") },
+		]);
+		expect(existsSync(join(cwd, ".apex-code", "sandbox-agent", "bin"))).toBe(true);
+	});
+
+	it("projects nothing when the host has no managed tools to offer", () => {
+		const cwd = workspace();
+		const launch = buildSandboxedCliLaunch({ workspace: cwd, command: "/usr/bin/node", args: [], environment: {} });
+		expect(launch.readOnlyBinaries).toEqual([]);
 	});
 
 	it("keeps supervision state out of the child environment", () => {

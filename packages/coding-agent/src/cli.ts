@@ -8,6 +8,7 @@ import { setApexEnvironment } from "./core/environment.ts";
 import { configureHttpDispatcher } from "./core/http-dispatcher.ts";
 import { requiresSandboxedChild, resolveSupervisorAllowedHosts } from "./core/sandbox/cli-launch.ts";
 import { launchSandboxedCli } from "./core/sandbox/cli-supervisor.ts";
+import { prepareHostToolBinaries } from "./utils/tools-manager.ts";
 
 async function run(): Promise<void> {
 	const args = process.argv.slice(2);
@@ -25,6 +26,13 @@ async function run(): Promise<void> {
 	if (requiresSandboxedChild(args)) {
 		const allowedHosts = resolveSupervisorAllowedHosts(process.cwd(), getAgentDir());
 		const authPath = join(getAgentDir(), "auth.json");
+		// Resolve fd and rg out here, where the host home and the network are both still
+		// reachable. The child's own PATH still names host directories the sandbox has
+		// replaced, so without this projection it finds nothing and cannot download either.
+		// Silent because this runs ahead of every mode, including --print and --mode rpc,
+		// whose stdout carries machine-readable output; the child still reports a genuinely
+		// missing tool through its own startup path.
+		const toolBinaries = await prepareHostToolBinaries(true);
 
 		process.exitCode = await launchSandboxedCli({
 			command: process.execPath,
@@ -39,6 +47,7 @@ async function run(): Promise<void> {
 			allowedHosts,
 			authPath: existsSync(authPath) ? authPath : undefined,
 			readOnlyPaths: [getPackageDir(), dirname(getPackageDir())],
+			toolBinaries,
 		});
 		return;
 	}

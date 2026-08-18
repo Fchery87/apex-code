@@ -80,6 +80,38 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		}
 	});
 
+	it("projects a host tool executable read-only at the child's managed tools path", async () => {
+		const cwd = workspace();
+		const hostToolsDirectory = workspace();
+		// The host name differs from the child name on purpose: Debian ships fd as fdfind.
+		const source = join(hostToolsDirectory, "fdfind");
+		writeFileSync(source, "#!/bin/sh\necho projected-tool\n", { mode: 0o755 });
+		const destination = join(cwd, ".apex-code", "sandbox-agent", "bin", "fd");
+		mkdirSync(dirname(destination), { recursive: true });
+		const backend = createLinuxSandboxBackend();
+		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+
+		try {
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: ["-c", `test "$(${destination})" = projected-tool`],
+					readOnlyBinaries: [{ source, destination }],
+				}),
+			).resolves.toBe(0);
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: ["-c", `printf tampered > ${destination}`],
+					readOnlyBinaries: [{ source, destination }],
+				}),
+			).resolves.not.toBe(0);
+			expect(readFileSync(source, "utf8")).toContain("projected-tool");
+		} finally {
+			await supervisor.close();
+		}
+	});
+
 	it("does not expose the invoking account home outside the workspace mount", async () => {
 		const cwd = workspace();
 		const backend = createLinuxSandboxBackend();

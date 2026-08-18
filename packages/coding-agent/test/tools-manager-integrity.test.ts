@@ -5,7 +5,11 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { installManagedToolArchive, resolveManagedToolArtifact } from "../src/utils/tools-manager.ts";
+import {
+	installManagedToolArchive,
+	resolveHostToolBinary,
+	resolveManagedToolArtifact,
+} from "../src/utils/tools-manager.ts";
 
 const directories: string[] = [];
 
@@ -107,5 +111,45 @@ describe("managed executable artifacts", () => {
 		// No quarantine directory survives a successful install.
 		const entries = await readdir(destination);
 		expect(entries).toEqual([binaryFileName]);
+	});
+});
+
+// A sandboxed child cannot see the host home directory, so the supervisor has to hand it
+// an absolute path for each managed tool rather than relying on the child's own PATH.
+describe.skipIf(process.platform === "win32")("host tool resolution for sandbox projection", () => {
+	it("prefers the managed tools directory over a system installation", async () => {
+		const toolsDirectory = await temporaryDirectory();
+		const systemDirectory = await temporaryDirectory();
+		writeFileSync(join(toolsDirectory, "rg"), "#!/bin/sh\n", { mode: 0o755 });
+		writeFileSync(join(systemDirectory, "rg"), "#!/bin/sh\n", { mode: 0o755 });
+
+		expect(resolveHostToolBinary("rg", { toolsDirectory, pathValue: systemDirectory })).toBe(
+			join(toolsDirectory, "rg"),
+		);
+	});
+
+	it("accepts the distribution's alternative name for a system binary", async () => {
+		const toolsDirectory = await temporaryDirectory();
+		const systemDirectory = await temporaryDirectory();
+		writeFileSync(join(systemDirectory, "fdfind"), "#!/bin/sh\n", { mode: 0o755 });
+
+		expect(resolveHostToolBinary("fd", { toolsDirectory, pathValue: systemDirectory })).toBe(
+			join(systemDirectory, "fdfind"),
+		);
+	});
+
+	it("ignores a non-executable file that merely shares the tool's name", async () => {
+		const toolsDirectory = await temporaryDirectory();
+		const systemDirectory = await temporaryDirectory();
+		writeFileSync(join(systemDirectory, "fd"), "not executable", { mode: 0o644 });
+
+		expect(resolveHostToolBinary("fd", { toolsDirectory, pathValue: systemDirectory })).toBeUndefined();
+	});
+
+	it("reports nothing to project when the tool is installed nowhere", async () => {
+		const toolsDirectory = await temporaryDirectory();
+		const systemDirectory = await temporaryDirectory();
+
+		expect(resolveHostToolBinary("rg", { toolsDirectory, pathValue: systemDirectory })).toBeUndefined();
 	});
 });
