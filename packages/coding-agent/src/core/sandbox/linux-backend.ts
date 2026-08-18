@@ -1,9 +1,14 @@
 import { spawn, spawnSync } from "node:child_process";
-import { closeSync, mkdirSync, openSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { closeSync, mkdirSync, openSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createSandboxNetworkProxy, type SandboxNetworkProxy } from "./network-proxy.ts";
 import type { SandboxBackend, SandboxLaunch } from "./supervisor.ts";
 import type { SandboxViolationStore } from "./violations.ts";
+
+/** AF_UNIX `sun_path` is 108 bytes on Linux, including the terminating NUL. */
+const SUN_PATH_LIMIT = 108;
 
 export interface LinuxSandboxBackendOptions {
 	/** Injectable only for preflight tests; production uses the running platform. */
@@ -39,6 +44,28 @@ function readOnlyMountArguments(path: string, kind: "directory" | "file" = "dire
 	return kind === "file"
 		? [...parentArguments, "--tmpfs", directory, "--perms", "0400", "--file", String(descriptor), target]
 		: [...parentArguments, "--ro-bind", directory, directory];
+}
+
+/**
+ * Where the supervisor's proxy socket lives on each side of the boundary.
+ *
+ * AF_UNIX caps `sun_path` at 108 bytes, so the socket cannot live under the workspace:
+ * a deep-but-ordinary project directory exhausts that budget and the sandbox fails to
+ * start at all with `listen EINVAL`. The host side therefore gets a short, unique path
+ * under the system temp directory, and it is bind-mounted into the child.
+ *
+ * The child-side path has to sit under `/home`. That is the one writable mount at the
+ * point the mountpoint is created — the sandbox root is a read-only bind, so bwrap
+ * cannot create a mountpoint at `/run`, `/tmp`, or anywhere else on it.
+ */
+export function resolveProxySocketPaths(temporaryDirectory: string = tmpdir()): {
+	hostSocketPath: string;
+	childSocketPath: string;
+} {
+	const name = `apex-${process.pid}-${randomBytes(4).toString("hex")}.sock`;
+	// An unusually long TMPDIR would reintroduce the very limit this avoids.
+	const base = join(temporaryDirectory, name).length + 1 > SUN_PATH_LIMIT ? "/tmp" : temporaryDirectory;
+	return { hostSocketPath: join(base, name), childSocketPath: `/home/${name}` };
 }
 
 function classifySandboxFailure(stderr: string): "filesystem" | "network" | "unknown" {
@@ -84,9 +111,9 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 
 			const violationCountBeforeLaunch = violationStore?.totalCount ?? 0;
 
-			const socketPath = join(stateDirectory, "proxy.sock");
+			const { hostSocketPath, childSocketPath } = resolveProxySocketPaths();
 			proxy = await createSandboxNetworkProxy({
-				socketPath,
+				socketPath: hostSocketPath,
 				allowedHosts: launch.policy.allowedHosts,
 				violationStore,
 			});
@@ -156,6 +183,11 @@ server.on("error", (err) => {
 						"/",
 						"--tmpfs",
 						"/home",
+						// Immediately after the /home tmpfs: that is the only writable mount at
+						// this point, so it is the only place bwrap can create the mountpoint.
+						"--bind",
+						hostSocketPath,
+						childSocketPath,
 						...readOnlyMounts,
 						...readOnlyFileMounts,
 						"--bind",
@@ -182,7 +214,7 @@ server.on("error", (err) => {
 						launch.environment?.TMPDIR ?? stateDirectory,
 						"--setenv",
 						"APEX_UDS_PATH",
-						socketPath,
+						childSocketPath,
 						"--",
 						process.execPath,
 						relayScriptPath,
@@ -215,6 +247,9 @@ server.on("error", (err) => {
 				return exitCode;
 			} finally {
 				for (const descriptor of readOnlyFileDescriptors) closeSync(descriptor);
+				// The socket now lives outside the workspace, so nothing else will ever clean
+				// it up; leaving it would litter the temp directory once per launch.
+				rmSync(hostSocketPath, { force: true });
 			}
 		},
 		async close() {

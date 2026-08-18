@@ -632,3 +632,43 @@ executable file rather than an existing one (sharing `isExecutableFile` with
 from the tools directory before each launch. A genuinely downloaded binary is never
 empty, so size is a safe discriminator. Verified against real leftover stubs from an
 earlier launch: both were removed, and a real executable alongside them survived.
+
+### Amendment (2026-08-17, second): the proxy socket moves out of the workspace
+
+The allowlist proxy's Unix domain socket was created at
+`<workspace>/.apex-code/sandbox-state/proxy.sock`. AF_UNIX caps `sun_path` at 108
+bytes, and that fixed 36-character suffix left roughly 72 characters for the user's
+own directory layout. Past that the sandbox did not degrade — it failed to start at
+all, with `Error: listen EINVAL: invalid argument <path>`, which names the socket but
+not the reason. Measured on a real machine: a 108-character socket path still binds,
+126 does not. On the development machine that wrote this, 24 of 143 scanned project
+directories exceeded the limit, including this repo's own
+`packages/coding-agent` — running `apex-code` there could not launch.
+
+Two constraints shaped the fix, both established by experiment rather than assumed:
+
+- **Abstract sockets cannot be used.** The Linux abstract namespace is scoped per
+  network namespace, and `--unshare-net` is the boundary's foundation. Verified: a
+  listener on the host accepts a same-namespace connection and the identical connect
+  from inside `bwrap --unshare-net` fails with `ECONNREFUSED`.
+- **The child-side mountpoint must sit under `/home`.** The sandbox root is a
+  read-only bind, so bwrap cannot create a mountpoint on it: `--bind` to
+  `/run/apex.sock` or `/tmp/apex.sock` both fail with "Can't create file … Read-only
+  file system", and `--dir /run/apex` fails with "Can't mkdir". The `/home` tmpfs is
+  the one writable mount at that point in the argument order, so the bind is emitted
+  immediately after it.
+
+The host side now gets a short unique path under the system temp directory
+(`resolveProxySocketPaths()`, which falls back to `/tmp` if an unusually long `TMPDIR`
+would reintroduce the same limit), bind-mounted to `/home/<name>.sock` in the child.
+`APEX_UDS_PATH` carries the child-side path to the relay. Because the socket no longer
+lives under the workspace, nothing else would ever clean it up, so the launch path
+unlinks it in its `finally`.
+
+Verified end to end: `packages/coding-agent`, which previously could not start, now
+launches; so does a 171-character workspace whose old socket path would have been 207
+bytes. No socket is left behind in the temp directory afterwards.
+
+**Deletion inventory.** Nothing is removed. The socket's old location under
+`sandbox-state` is no longer used; the directory itself remains, as it still holds the
+relay script and the child's `HOME`.

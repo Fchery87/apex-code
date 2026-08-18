@@ -112,6 +112,25 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		}
 	});
 
+	it("launches from a workspace too deep for a socket path inside it", async () => {
+		// AF_UNIX caps sun_path at 108 bytes. Keeping the proxy socket under the workspace
+		// spent that budget on the user's directory layout, so a deep-but-ordinary project
+		// failed to start at all with "listen EINVAL".
+		const root = workspace();
+		const deep = join(root, "a".repeat(60), "b".repeat(60));
+		mkdirSync(deep, { recursive: true });
+		expect(join(deep, ".apex-code", "sandbox-state", "proxy.sock").length).toBeGreaterThan(108);
+
+		const backend = createLinuxSandboxBackend();
+		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: deep, allowedHosts: [] } });
+
+		try {
+			await expect(supervisor.launch({ command: "/bin/sh", args: ["-c", "true"] })).resolves.toBe(0);
+		} finally {
+			await supervisor.close();
+		}
+	});
+
 	it("does not expose the invoking account home outside the workspace mount", async () => {
 		const cwd = workspace();
 		const backend = createLinuxSandboxBackend();
