@@ -1,3 +1,5 @@
+import type { ChildProcess, spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -173,5 +175,57 @@ describe("macOS sandbox preflight", () => {
 			kind: "unavailable",
 			reason: "sandbox-exec (Seatbelt) is required for OS sandboxing.",
 		});
+	});
+});
+
+// These drive the real backend with an injected child, so the decision about what
+// counts as a violation is covered on any platform rather than only on macOS CI --
+// which matters because the machine that wrote this has no macOS host.
+describe("macOS violation attribution", () => {
+	function launchWith(exitCode: number, stderr: string): Promise<SandboxViolationStore> {
+		const violations = new SandboxViolationStore();
+		const backend = createMacosSandboxBackend({
+			platform: "darwin",
+			commandExists: () => true,
+			violationStore: violations,
+			spawnChild: (() => {
+				const fake = new EventEmitter() as unknown as ChildProcess;
+				const stderrStream = new EventEmitter() as unknown as NonNullable<ChildProcess["stderr"]>;
+				(stderrStream as unknown as { setEncoding: (encoding: string) => void }).setEncoding = () => {};
+				(fake as { stderr: unknown }).stderr = stderrStream;
+				setImmediate(() => {
+					if (stderr) stderrStream.emit("data", stderr);
+					fake.emit("exit", exitCode);
+				});
+				return fake;
+			}) as unknown as typeof spawn,
+		});
+		const cwd = workspace();
+		return backend
+			.launch({ command: "/bin/sh", args: ["-c", "true"], policy: { workspace: cwd, allowedHosts: [] } })
+			.then(async () => {
+				await backend.close();
+				return violations;
+			});
+	}
+
+	it("stays silent when the child failed for its own reasons", async () => {
+		const violations = await launchWith(3, "error: invalid API key\n");
+		expect(violations.list()).toEqual([]);
+	});
+
+	it("records a Seatbelt denial, which surfaces as a generic EPERM message", async () => {
+		const violations = await launchWith(1, "sh: /outside/file.txt: Operation not permitted\n");
+		expect(violations.list()).toMatchObject([{ kind: "unknown" }]);
+	});
+
+	it("still distinguishes the profile's own exec refusal", async () => {
+		const violations = await launchWith(1, "sandbox-exec: execvp() of '/bin/sh' failed: Operation not permitted\n");
+		expect(violations.list()).toMatchObject([{ kind: "filesystem" }]);
+	});
+
+	it("stays silent on a successful run regardless of stderr chatter", async () => {
+		const violations = await launchWith(0, "warning: something noisy\n");
+		expect(violations.list()).toEqual([]);
 	});
 });
