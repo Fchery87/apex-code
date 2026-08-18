@@ -756,3 +756,29 @@ instead. Tracked as follow-up work.
 
 **Deletion inventory.** Nothing is removed. `network.allowedHosts` keeps its meaning
 and remains the way to permit anything outside the default set.
+
+### Amendment (2026-08-17, fifth): the boundary stops blaming itself
+
+The follow-up recorded in the previous amendment is closed. `linux-backend.ts` recorded
+a violation for *any* non-zero child exit the proxy had not already explained,
+classifying it as `unknown` with the detail "Sandboxed process exited unsuccessfully;
+inspect its stderr for the OS refusal." Nothing had been refused. An invalid API key, a
+failing test command, or a script exiting 1 all produced a sandbox violation, sending
+whoever read the output looking for a refusal that never happened.
+
+`classifySandboxFailure()` now returns `undefined` when the child's stderr evidences no
+OS refusal, and the caller records nothing in that case. A non-zero exit is not a
+violation; Linux's own refusal wording still is, and network refusals are recorded by
+the proxy before this fallback is consulted.
+
+This is deliberately Linux-only. `macos-backend.ts` keeps its own coarser
+classification, which reports genuine denials as `unknown` because Seatbelt's denial
+text does not reliably separate filesystem from network — `cli-supervisor.test.ts` and
+`macos-backend.test.ts` assert exactly that. Applying the same narrowing there would
+suppress real enforcement signals, and this development environment has no macOS host
+to verify a replacement against. The equivalent macOS false positive is therefore still
+open, and is not claimed as fixed.
+
+**Deletion inventory.** The `unknown` classification is gone from the Linux backend and
+with it the "inspect its stderr for the OS refusal" detail string. `SandboxViolation`
+keeps the `unknown` kind, which macOS still uses.

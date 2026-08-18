@@ -10,6 +10,10 @@
   installing them there once if missing, where the network is still reachable — and projects
   each one read-only into the child at the path its own lookup already checks. One host-side
   install now serves every workspace, and no network access is required at startup.
+- The Linux OS sandbox no longer reports `Sandbox violation (unknown)` when a sandboxed process
+  simply failed on its own. An invalid API key, a failing test command, or a script exiting 1
+  are not boundary refusals, and reporting them as such sent users looking for a refusal that
+  never happened. Genuine filesystem and network refusals are still recorded.
 - The OS sandbox now permits the built-in model-provider hosts and the update check by
   default, so a fresh install can reach its provider without first discovering
   `network.allowedHosts` and the provider's endpoint. Configured hosts are added on top;

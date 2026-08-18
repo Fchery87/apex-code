@@ -68,10 +68,21 @@ export function resolveProxySocketPaths(temporaryDirectory: string = tmpdir()): 
 	return { hostSocketPath: join(base, name), childSocketPath: `/home/${name}` };
 }
 
-function classifySandboxFailure(stderr: string): "filesystem" | "network" | "unknown" {
+/**
+ * Classify an unsuccessful child from what its stderr actually evidences, or return
+ * undefined when nothing suggests the boundary refused anything.
+ *
+ * A non-zero exit is not a violation. An invalid API key, a failing test command, or a
+ * script exiting 1 are the child's own business, and recording them as sandbox
+ * violations blames the boundary for failures it had no part in — which is worse than
+ * silence, because it sends whoever reads the output looking for a refusal that never
+ * happened. Only Linux's own refusal wording earns a violation here; the proxy records
+ * network refusals itself, before this fallback is consulted.
+ */
+function classifySandboxFailure(stderr: string): "filesystem" | "network" | undefined {
 	if (/Read-only file system|Permission denied|Operation not permitted/i.test(stderr)) return "filesystem";
 	if (/Network is unreachable|ENETUNREACH|EHOSTUNREACH/i.test(stderr)) return "network";
-	return "unknown";
+	return undefined;
 }
 
 /**
@@ -232,15 +243,12 @@ server.on("error", (err) => {
 				const exitCode = await waitForExit(child);
 				await proxy?.close();
 				const proxyAlreadyRecordedAViolation = (violationStore?.totalCount ?? 0) > violationCountBeforeLaunch;
-				if (exitCode !== 0 && !proxyAlreadyRecordedAViolation) {
-					const kind = classifySandboxFailure(stderr);
+				const kind = exitCode !== 0 && !proxyAlreadyRecordedAViolation ? classifySandboxFailure(stderr) : undefined;
+				if (kind) {
 					violationStore?.add({
 						kind,
 						command: [launch.command, ...launch.args].join(" "),
-						detail:
-							kind === "unknown"
-								? "Sandboxed process exited unsuccessfully; inspect its stderr for the OS refusal."
-								: stderr.trim(),
+						detail: stderr.trim(),
 						timestamp: new Date(),
 					});
 				}
