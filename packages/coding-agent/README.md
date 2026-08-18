@@ -41,9 +41,13 @@ Sessions, settings, credentials, extensions, prompts, and other state live under
 
 ## Safety and capabilities
 
-Every tool has a declared contract and passes through the permission gate. Linux and
-macOS tool execution can additionally run inside the supported OS sandbox. Windows is
-a required build/test portability target, but its sandbox backend remains unsupported.
+Every tool has a declared contract and passes through the permission gate. On Linux and
+macOS, every command that can start a session runs inside the OS sandbox: the workspace is
+the only writable location, the invoking account's home directory is hidden, and egress
+goes through an allowlist proxy that permits the built-in model-provider hosts by default
+and reports anything it refuses. Add hosts with `network.allowedHosts` in global
+`settings.json`. Windows is a required build/test portability target, but its sandbox
+backend remains unsupported.
 Built-in capabilities include file/search tools, shell execution, web tools, user
 questions, planning, and bounded subagent delegation.
 

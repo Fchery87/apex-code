@@ -262,12 +262,47 @@ commands that will run.
 
 ### OS sandbox
 
-On Linux and macOS, supported tool execution can additionally run inside an OS-level
-sandbox that restricts filesystem and network access beneath the application-level
-permission decision. Windows remains a portability target, not a sandbox-enforcement
-target. For untrusted repositories or unattended generated code, use a container, VM,
-or micro-VM with only the files and credentials the task requires. Read
-[`SECURITY.md`](SECURITY.md) before relying on Apex Code for higher-risk work.
+On Linux and macOS, every command that can start an agent session runs inside an OS-level
+sandbox, beneath the application-level permission decision. Commands that only inspect or
+maintain host configuration — `auth`, `config`, `install`, `--version`, `--help` — stay
+outside it. Windows remains a portability target, not a sandbox-enforcement target.
+
+**Filesystem.** The workspace is the only writable location. The invoking account's home
+directory is hidden, so a session cannot read `~/.ssh`, `~/.aws`, or shell history, and its
+own state lives under `<workspace>/.apex-code/`. Provider credentials are projected in
+read-only from `auth.json`. `fd` and `ripgrep` are resolved on the host and projected in
+read-only, so search works without the session needing to download anything.
+
+**Network.** All egress passes through an allowlist proxy; the session has no direct route
+out. The built-in model-provider hosts and the npm update check are permitted by default,
+so a new install can reach its provider without configuration. Add anything else in global
+`settings.json`:
+
+```json
+{
+  "network": {
+    "allowedHosts": ["registry.internal.example", "proxy.internal.example:8443"]
+  }
+}
+```
+
+A bare hostname matches any port; `hostname:port` pins one. Adding
+`"allowDefaultHosts": false` to that block denies everything the list does not name. A
+refused request reports the host and the setting that would permit it, and the refusals
+for a session are summarised when it exits.
+
+Providers whose endpoint depends on account or environment configuration — Amazon Bedrock,
+Azure OpenAI, Cloudflare, Google Vertex — are not in the default set and need an explicit
+entry. So does a mid-session `/model` switch to one of them, because the allowlist is fixed
+when the session starts.
+
+**`/share`.** Gist upload runs the GitHub CLI, whose credentials live in the host home that
+the sandbox hides. Run `/export <file>` inside the session, then
+`gh gist create --public=false <file>` outside it.
+
+For untrusted repositories or unattended generated code, use a container, VM, or micro-VM
+with only the files and credentials the task requires. Read [`SECURITY.md`](SECURITY.md)
+before relying on Apex Code for higher-risk work.
 
 ### Project trust and extensions
 
@@ -434,9 +469,13 @@ tool arguments, tool results, file paths, workspace paths, and environment value
 
 The default model catalog is local. The `/share` viewer is not a default hosted service;
 `APEX_CODE_SHARE_VIEWER_URL` is an explicit opt-in endpoint. The npm registry, your model
-provider, GitHub when you explicitly run `/share`, and any configured integration can
-still receive data required for that operation. Read the destination's policies and
-review sensitive content before sending it.
+provider, GitHub when you explicitly publish an export as a gist, and any configured
+integration can still receive data required for that operation. Read the destination's
+policies and review sensitive content before sending it.
+
+Inside the OS sandbox these requests are additionally constrained by the network allowlist
+described under [OS sandbox](#os-sandbox): a host that is not permitted is refused before
+the request leaves the machine.
 
 ## Configuration and environment variables
 
