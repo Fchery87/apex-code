@@ -545,3 +545,76 @@ See `docs/plans/2026-08-12-os-sandbox.md` task 2b.7 for the full investigation
 record. This does not change any boundary guarantee — it only makes the guarantee
 ADR 0005 already claims for Linux actually checked by CI going forward, which it
 was not before.
+
+### Amendment (2026-08-17): host tool projection — fd and rg cross the boundary
+
+The boundary had a gap that only showed up once the sandbox became the normal
+startup path: **the child could neither find nor install `fd` and `rg`.** Launching
+`apex-code` in any workspace printed
+
+```
+fd not found. Downloading...
+ripgrep not found. Downloading...
+Failed to download fd: fetch failed
+Failed to download ripgrep: fetch failed
+```
+
+Two independent causes, both by design and both confirmed by running the real
+captured `bwrap` argv rather than by reading the code:
+
+1. **`--tmpfs /home` hides every host installation.** The child inherits `PATH`
+   (`PATH` is in `SAFE_CHILD_ENVIRONMENT_KEYS`), so its `PATH` still names
+   `~/.local/bin` and the host tools directory — but both live under `/home`, which
+   the sandbox replaces with an empty tmpfs. `commandExists()` therefore gets ENOENT
+   for `fd`, `rg`, and `fdfind` alike. The host tool cache at
+   `~/.apex-code/agent/bin` is hidden by the same mount, plus the `--tmpfs` that the
+   credential projection lays over `~/.apex-code/agent`.
+2. **The fallback download cannot succeed either.** `--unshare-net` leaves the child
+   with no route, and its only egress is the relay's `HTTP_PROXY` into the
+   supervisor's CONNECT proxy, which refuses any host absent from
+   `network.allowedHosts`. That list is empty unless the user configures one, so
+   `github.com` is refused with 403 and undici surfaces the generic `fetch failed`.
+
+Deferring to `network.allowedHosts` was rejected as the fix. It would require every
+user to allowlist GitHub to get a working default install, it re-downloads into every
+workspace (the child's `getBinDir()` resolves under the per-workspace
+`sandbox-agent` directory), and it widens the network policy to solve a filesystem
+problem.
+
+**What was implemented instead.** The supervisor resolves both tools on the host —
+where the home directory and the network are both still reachable — and projects each
+one read-only at the exact path the child's existing lookup already checks:
+
+- `resolveHostToolBinary()` (`utils/tools-manager.ts`) returns an *absolute* host
+  path, checking the managed tools directory first and then scanning `PATH` for each
+  accepted system name. `getToolPath()` may return a bare command name because its
+  callers spawn through `PATH`; a sandboxed child cannot use that, so this is a
+  separate resolver rather than a change to the existing one. Debian's `fdfind` alias
+  resolves here and is projected under the child-side name `fd`.
+- `prepareHostToolBinaries()` runs `ensureTool()` on the host first, so a missing tool
+  is downloaded once, outside the boundary, and then serves every workspace.
+- `SandboxLaunch.readOnlyBinaries` carries `{source, destination}` pairs;
+  `buildSandboxedCliLaunch()` sets each destination to
+  `<workspace>/.apex-code/sandbox-agent/bin/<name>`, mirroring the child's own
+  `getBinDir()`.
+- The Linux backend emits `--ro-bind source destination` **after** the workspace
+  `--bind`. Order is load-bearing: the destinations sit inside the workspace, so an
+  earlier mount would be masked when the workspace is bound over it.
+
+The child's startup call is unchanged and now returns working paths with no output
+and no network. Verified inside the real sandbox: `ensureTool("fd")` and
+`ensureTool("rg")` print nothing and return
+`<workspace>/.apex-code/sandbox-agent/bin/{fd,rg}`, which execute as `fd 10.4.2` and
+`ripgrep 14.1.1`. A write to a projected binary fails with `Read-only file system`.
+
+No boundary guarantee is relaxed. Two specific host executables become readable and
+executable inside the child; nothing becomes writable, and the network policy is
+untouched — a workspace with no allowlisted hosts still reaches nothing.
+
+macOS needs no equivalent change: Seatbelt leaves the host filesystem readable, so
+the child's `PATH` lookup already finds host installations there. `readOnlyBinaries`
+is optional and the macOS backend ignores it.
+
+**Deletion inventory.** Nothing is made obsolete. No file, flag, or setting is
+removed; `network.allowedHosts` keeps its meaning and remains the only way to permit
+outbound hosts.

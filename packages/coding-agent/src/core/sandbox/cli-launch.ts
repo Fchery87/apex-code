@@ -1,5 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import type { HostToolBinary } from "../../utils/tools-manager.ts";
 import { SettingsManager } from "../settings-manager.ts";
 import type { SandboxLaunch } from "./supervisor.ts";
 
@@ -118,28 +119,43 @@ export function buildSandboxedCliLaunch(options: {
 	allowedHosts?: readonly string[];
 	readOnlyPaths?: readonly string[];
 	authPath?: string;
+	toolBinaries?: readonly HostToolBinary[];
 }): SandboxedCliLaunch {
 	const stateDirectory = join(options.workspace, ".apex-code", "sandbox-state");
 	const agentDirectory = join(options.workspace, ".apex-code", "sandbox-agent");
 	const sessionDirectory = join(options.workspace, ".apex-code", "sandbox-sessions");
+	// Mirrors getBinDir() as the child will compute it from APEX_CODE_CODING_AGENT_DIR,
+	// so a projected tool lands exactly where the child's own lookup already checks.
+	const toolsDirectory = join(agentDirectory, "bin");
 	const xdgDirectories = {
 		XDG_CONFIG_HOME: join(stateDirectory, "config"),
 		XDG_CACHE_HOME: join(stateDirectory, "cache"),
 		XDG_DATA_HOME: join(stateDirectory, "data"),
 		XDG_STATE_HOME: join(stateDirectory, "state"),
 	};
-	for (const directory of [stateDirectory, agentDirectory, sessionDirectory, ...Object.values(xdgDirectories)]) {
+	for (const directory of [
+		stateDirectory,
+		agentDirectory,
+		sessionDirectory,
+		toolsDirectory,
+		...Object.values(xdgDirectories),
+	]) {
 		mkdirSync(directory, { recursive: true });
 	}
 	const childEnvironment = buildChildEnvironment(options.environment);
 	const readOnlyPaths = [...(options.readOnlyPaths ?? [])];
 	const readOnlyFiles = options.authPath ? [options.authPath] : [];
+	const readOnlyBinaries = (options.toolBinaries ?? []).map((binary) => ({
+		source: binary.path,
+		destination: join(toolsDirectory, binary.name),
+	}));
 	return {
 		command: options.command,
 		args: [...options.args],
 		policy: { workspace: options.workspace, allowedHosts: options.allowedHosts ?? [] },
 		readOnlyPaths,
 		readOnlyFiles,
+		readOnlyBinaries,
 		environment: {
 			...childEnvironment,
 			...(options.authPath ? { APEX_CODE_AUTH_PATH: options.authPath } : {}),

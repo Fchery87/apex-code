@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+- Fixed `fd not found. Downloading...` / `Failed to download fd: fetch failed` (and the same
+  pair for ripgrep) on every sandboxed startup. The OS sandbox replaces `/home` with an empty
+  tmpfs, so the child could not see host installations of `fd` and `rg` even though its `PATH`
+  still named them, and `--unshare-net` plus an empty `network.allowedHosts` meant the fallback
+  download could not reach GitHub either. The supervisor now resolves both tools on the host —
+  installing them there once if missing, where the network is still reachable — and projects
+  each one read-only into the child at the path its own lookup already checks. One host-side
+  install now serves every workspace, and no network access is required at startup.
+
 ## [0.0.1-alpha.3] - 2026-08-17
 
 - Fixed the Linux OS sandbox crashing with `ReferenceError: require is not defined in ES module

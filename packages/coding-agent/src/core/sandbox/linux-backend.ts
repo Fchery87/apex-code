@@ -161,6 +161,13 @@ server.on("error", (err) => {
 						"--bind",
 						launch.policy.workspace,
 						launch.policy.workspace,
+						// After the workspace bind: these destinations sit inside it, and an
+						// earlier mount would be masked when the workspace is bound over them.
+						...(launch.readOnlyBinaries ?? []).flatMap(({ source, destination }) => [
+							"--ro-bind",
+							source,
+							destination,
+						]),
 						"--dev",
 						"/dev",
 						"--proc",

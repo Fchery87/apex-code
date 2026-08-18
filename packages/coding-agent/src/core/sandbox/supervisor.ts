@@ -9,6 +9,12 @@ export interface SandboxLaunch {
 	readonly readOnlyPaths?: readonly string[];
 	/** Individual read-only files, such as a host-owned credential file. */
 	readonly readOnlyFiles?: readonly string[];
+	/**
+	 * Host executables projected read-only at an exact path inside the child. The
+	 * destination is chosen by the caller because only it knows where the child will
+	 * look; the backend just places the file there without write access.
+	 */
+	readonly readOnlyBinaries?: readonly { readonly source: string; readonly destination: string }[];
 }
 
 /** A platform adapter. Its sole job is to launch a normal Apex child inside an OS boundary. */
