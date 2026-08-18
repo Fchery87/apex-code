@@ -453,9 +453,11 @@ let BUILTIN_THEMES: Record<string, ThemeJson> | undefined;
 function getBuiltinThemes(): Record<string, ThemeJson> {
 	if (!BUILTIN_THEMES) {
 		const themesDir = getThemesDir();
+		const apexPath = path.join(themesDir, "apex.json");
 		const darkPath = path.join(themesDir, "dark.json");
 		const lightPath = path.join(themesDir, "light.json");
 		BUILTIN_THEMES = {
+			apex: JSON.parse(fs.readFileSync(apexPath, "utf-8")) as ThemeJson,
 			dark: JSON.parse(fs.readFileSync(darkPath, "utf-8")) as ThemeJson,
 			light: JSON.parse(fs.readFileSync(lightPath, "utf-8")) as ThemeJson,
 		};
@@ -811,7 +813,10 @@ export async function detectTerminalThemeForAuto({
 }
 
 export function getDefaultTheme(): string {
-	return detectTerminalBackgroundFromEnv().theme;
+	// `apex` is the brand theme and the default on dark terminals; `dark` remains
+	// available for anyone who prefers the inherited upstream palette. Light
+	// terminals still get `light` — there is no light brand palette yet.
+	return detectTerminalBackgroundFromEnv().theme === "light" ? "light" : "apex";
 }
 
 // ============================================================================
