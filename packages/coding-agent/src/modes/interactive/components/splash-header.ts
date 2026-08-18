@@ -52,7 +52,34 @@ function truncatePathTail(path: string, maxWidth: number): string {
 		tail = candidate;
 	}
 	// A single segment longer than the whole budget: clip it from the left.
-	return tail ? ellipsis + tail : ellipsis + path.slice(Math.max(0, path.length - budget));
+	return tail ? ellipsis + tail : ellipsis + trailingByWidth(path, budget);
+}
+
+/**
+ * The widest suffix of `text` that fits `maxWidth` terminal columns.
+ *
+ * Walks grapheme clusters from the right rather than using `String.slice`, whose
+ * UTF-16 offsets would cut an astral character in half — emitting a lone
+ * surrogate — and would miscount every double-width character on the way.
+ */
+function trailingByWidth(text: string, maxWidth: number): string {
+	if (maxWidth <= 0) {
+		return "";
+	}
+	const graphemes = [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text)].map(
+		(entry) => entry.segment,
+	);
+	let width = 0;
+	let index = graphemes.length;
+	while (index > 0) {
+		const next = width + visibleWidth(graphemes[index - 1]);
+		if (next > maxWidth) {
+			break;
+		}
+		width = next;
+		index -= 1;
+	}
+	return graphemes.slice(index).join("");
 }
 
 /**
