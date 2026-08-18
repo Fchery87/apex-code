@@ -11,6 +11,8 @@ import { fetchWithRetry } from "./management-http.ts";
  * this pre-alpha project actually ships through.
  */
 const LATEST_VERSION_URL = `https://registry.npmjs.org/${PACKAGE_NAME}/next`;
+/** Exported so the sandbox's default allowlist cannot drift from the URL used here. */
+export const VERSION_CHECK_HOST = new URL(LATEST_VERSION_URL).host;
 const DEFAULT_VERSION_CHECK_TIMEOUT_MS = 10000;
 
 export interface LatestApexCodeRelease {

@@ -91,6 +91,11 @@ export type PackageSource =
 
 export interface NetworkSettings {
 	allowedHosts?: string[];
+	/**
+	 * Permit the built-in model-provider hosts and the update check inside the sandbox.
+	 * Defaults to true; set false to return to denying everything `allowedHosts` omits.
+	 */
+	allowDefaultHosts?: boolean;
 }
 
 export interface Settings {
