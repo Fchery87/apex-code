@@ -10,6 +10,9 @@
   installing them there once if missing, where the network is still reachable — and projects
   each one read-only into the child at the path its own lookup already checks. One host-side
   install now serves every workspace, and no network access is required at startup.
+- A request refused by the sandbox network allowlist now says which host was refused and how to
+  permit it, instead of surfacing undici's bare `fetch failed`. The refusal is also attempted
+  once rather than retried three times, since an allowlist decision cannot change on retry.
 - Fixed the OS sandbox failing to start with `Error: listen EINVAL: invalid argument` in any
   workspace with a moderately long path. The allowlist proxy's Unix socket lived under the
   workspace, and AF_UNIX caps socket paths at 108 bytes, leaving only ~72 characters for the
