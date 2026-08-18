@@ -23,9 +23,19 @@ function makeEditor(options?: { placeholder?: string; promptPrefix?: string; foc
 		promptColor: (text) => theme.fg("accent", text),
 		placeholder: options?.placeholder ?? PLACEHOLDER,
 		placeholderColor: (text) => theme.fg("dim", text),
+		commandColor: (text) => theme.fg("accent", text),
 	});
 	editor.focused = options?.focused ?? true;
 	return editor;
+}
+
+const CURSOR_LEFT = `${ESC}[D`;
+
+/** Drive the caret leftwards through real key handling. */
+function moveLeft(editor: CustomEditor, times: number): void {
+	for (let index = 0; index < times; index++) {
+		editor.handleInput(CURSOR_LEFT);
+	}
 }
 
 describe("CustomEditor chrome", () => {
@@ -120,6 +130,70 @@ describe("CustomEditor chrome", () => {
 			for (const line of editor.render(30)) {
 				expect(visibleWidth(line)).toBeLessThanOrEqual(30);
 			}
+		});
+	});
+
+	describe("command colouring", () => {
+		it("tints the command token but not its arguments", () => {
+			const editor = makeEditor();
+			editor.setText("/model something");
+			const line = editor.render(50)[1];
+
+			expect(line).toContain(theme.fg("accent", "/model"));
+			// The argument must stay unstyled, so the highlight marks what is being
+			// invoked rather than the whole line.
+			expect(line).not.toContain(theme.fg("accent", "something"));
+			expect(plain(line)).toContain("/model something");
+		});
+
+		it("leaves a line that is not a command untouched", () => {
+			const editor = makeEditor();
+			editor.setText("not a command");
+			const line = editor.render(50)[1];
+			// Only the prompt marker should carry the accent.
+			expect(line.split(theme.fg("accent", "> ")).length - 1).toBe(1);
+			expect(line).not.toContain(theme.fg("accent", "not"));
+		});
+
+		it("skips the indent and tints only the token", () => {
+			const editor = makeEditor();
+			editor.setText("  /help");
+			const line = editor.render(50)[1];
+			expect(line).toContain(theme.fg("accent", "/help"));
+			expect(plain(line)).toContain("  /help");
+		});
+
+		it("keeps the token tinted when the cursor splits it", () => {
+			// The caret's reverse-video cell lands mid-token and emits its own
+			// ESC[0m, which would cancel a single wrap around the whole token.
+			// Colour has to be re-opened after every control sequence.
+			const editor = makeEditor();
+			editor.setText("/model something");
+			moveLeft(editor, 13); // caret to column 3, inside "/model"
+			const line = editor.render(50)[1];
+
+			expect(editor.getCursor()).toEqual({ line: 0, col: 3 });
+			expect(line).toContain(theme.fg("accent", "/mo"));
+			// The character under the caret is still part of the token.
+			expect(line).toContain(theme.fg("accent", "d"));
+			expect(plain(line)).toContain("/model something");
+		});
+
+		it("preserves line width with the cursor at every position in the token", () => {
+			// Colouring splices SGR codes into the line; none of them may be counted
+			// as visible columns.
+			for (let offset = 0; offset <= 6; offset++) {
+				const editor = makeEditor();
+				editor.setText("/model something");
+				moveLeft(editor, offset);
+				for (const line of editor.render(50)) {
+					expect(visibleWidth(line), `offset ${offset}`).toBe(50);
+				}
+			}
+		});
+
+		it("still renders the placeholder rather than a command on an empty line", () => {
+			expect(plain(makeEditor().render(50)[1])).toContain(PLACEHOLDER);
 		});
 	});
 });

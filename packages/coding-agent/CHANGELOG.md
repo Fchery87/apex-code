@@ -26,6 +26,9 @@
   commands, ! for bash` — while the input is empty. On a terminal too narrow to spare the
   marker's columns, the box silently falls back to the previous full-width layout rather than
   overflowing.
+- A leading `/command` in the input box is now tinted with the accent colour as you type it,
+  so it reads as an invocation rather than as ordinary text. Arguments after the command stay
+  plain, and the tint survives the cursor landing in the middle of the token.
 
 ## [0.0.1-alpha.4] - 2026-08-18
 
