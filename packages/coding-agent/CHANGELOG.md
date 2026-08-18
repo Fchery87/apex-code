@@ -1,6 +1,6 @@
 # Apex Code changelog
 
-## [Unreleased]
+## [0.0.1-alpha.4] - 2026-08-18
 
 - Fixed `fd not found. Downloading...` / `Failed to download fd: fetch failed` (and the same
   pair for ripgrep) on every sandboxed startup. The OS sandbox replaces `/home` with an empty
