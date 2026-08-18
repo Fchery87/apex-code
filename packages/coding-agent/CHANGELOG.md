@@ -10,6 +10,12 @@
   installing them there once if missing, where the network is still reachable — and projects
   each one read-only into the child at the path its own lookup already checks. One host-side
   install now serves every workspace, and no network access is required at startup.
+- Fixed the OS sandbox failing to start with `Error: listen EINVAL: invalid argument` in any
+  workspace with a moderately long path. The allowlist proxy's Unix socket lived under the
+  workspace, and AF_UNIX caps socket paths at 108 bytes, leaving only ~72 characters for the
+  project's own directory layout — a deep-but-ordinary checkout could not launch at all. The
+  socket now uses a short path in the system temp directory, bind-mounted into the child, and
+  is cleaned up on exit.
 - Fixed `/share` reporting `GitHub CLI is not logged in. Run 'gh auth login' first.` inside the
   OS sandbox, where that diagnosis is wrong and the suggested fix does not help. The sandbox
   cannot reach the host's gh credentials — `~/.config/gh` sits under the tmpfs that replaces
