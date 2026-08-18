@@ -67,14 +67,19 @@ function commandExists(cmd: string): boolean {
 }
 
 // Get the path to a tool (system-wide or in our tools dir)
-export function getToolPath(tool: "fd" | "rg"): string | null {
+export function getToolPath(tool: "fd" | "rg", options: { toolsDirectory?: string } = {}): string | null {
 	const config = TOOLS[tool];
 	if (!config) return null;
 
-	// Check our tools directory first
-	const localPath = join(TOOLS_DIR, config.binaryName + (platform() === "win32" ? ".exe" : ""));
-	if (existsSync(localPath)) {
-		return localPath;
+	// Check our tools directory first. Existence alone is not enough: the sandbox
+	// projects host tools by bind-mounting over a file here, and bwrap leaves that
+	// mountpoint behind as an empty, non-executable stub once the namespace is gone.
+	const managedPath = join(
+		options.toolsDirectory ?? TOOLS_DIR,
+		config.binaryName + (platform() === "win32" ? ".exe" : ""),
+	);
+	if (isExecutableFile(managedPath, platform())) {
+		return managedPath;
 	}
 
 	// Check system PATH - if found, just return the command name (it's in PATH)

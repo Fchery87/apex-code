@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+	getToolPath,
 	installManagedToolArchive,
 	resolveHostToolBinary,
 	resolveManagedToolArtifact,
@@ -151,5 +152,24 @@ describe.skipIf(process.platform === "win32")("host tool resolution for sandbox 
 		const systemDirectory = await temporaryDirectory();
 
 		expect(resolveHostToolBinary("rg", { toolsDirectory, pathValue: systemDirectory })).toBeUndefined();
+	});
+});
+
+// The sandbox projects host tools by bind-mounting over a file in the child's tools
+// directory. bwrap creates that mountpoint as an empty file on the host, which outlives
+// the namespace — so an unusable 0-byte stub can be sitting there on a later launch.
+describe.skipIf(process.platform === "win32")("managed tool lookup ignores unusable files", () => {
+	it("does not return a leftover mountpoint stub as if it were the tool", async () => {
+		const toolsDirectory = await temporaryDirectory();
+		writeFileSync(join(toolsDirectory, "fd"), "", { mode: 0o444 });
+
+		expect(getToolPath("fd", { toolsDirectory })).not.toBe(join(toolsDirectory, "fd"));
+	});
+
+	it("still returns a real executable in the managed tools directory", async () => {
+		const toolsDirectory = await temporaryDirectory();
+		writeFileSync(join(toolsDirectory, "fd"), "#!/bin/sh\n", { mode: 0o755 });
+
+		expect(getToolPath("fd", { toolsDirectory })).toBe(join(toolsDirectory, "fd"));
 	});
 });

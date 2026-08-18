@@ -618,3 +618,17 @@ is optional and the macOS backend ignores it.
 **Deletion inventory.** Nothing is made obsolete. No file, flag, or setting is
 removed; `network.allowedHosts` keeps its meaning and remains the only way to permit
 outbound hosts.
+
+**Follow-up within this amendment: the mountpoint stub.** Projecting a tool means
+bind-mounting a host binary over a path in the child's tools directory, and Bubblewrap
+materialises that destination as an empty file on the host before mounting over it.
+That stub outlives the namespace. It is harmless while projection keeps happening —
+the next launch mounts the real binary straight back over it — but if the host tool
+later disappears, nothing is projected and `getToolPath()`'s `existsSync` check would
+hand the child a 0-byte, non-executable file as its binary, failing at exec time with
+no indication of the cause. Closed on both sides: `getToolPath()` now requires an
+executable file rather than an existing one (sharing `isExecutableFile` with
+`resolveHostToolBinary`), and `buildSandboxedCliLaunch()` clears zero-byte entries
+from the tools directory before each launch. A genuinely downloaded binary is never
+empty, so size is a safe discriminator. Verified against real leftover stubs from an
+earlier launch: both were removed, and a real executable alongside them survived.

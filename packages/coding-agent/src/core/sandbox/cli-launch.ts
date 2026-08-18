@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { HostToolBinary } from "../../utils/tools-manager.ts";
 import { SettingsManager } from "../settings-manager.ts";
@@ -107,6 +107,25 @@ function buildChildEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEn
 }
 
 /**
+ * Drop empty files left in the child's tools directory by a previous launch.
+ *
+ * A projected tool is bind-mounted over a file there, and bwrap materialises that
+ * mountpoint as an empty file on the host which outlives the namespace. If the host
+ * tool later disappears, nothing is projected over the stub and the child would
+ * otherwise find a 0-byte file where its binary should be. A real downloaded binary
+ * is never empty, so size is a safe discriminator.
+ */
+function clearStaleToolMountpoints(toolsDirectory: string): void {
+	for (const entry of readdirSync(toolsDirectory, { withFileTypes: true })) {
+		if (!entry.isFile()) continue;
+		const entryPath = join(toolsDirectory, entry.name);
+		if (statSync(entryPath).size === 0) {
+			rmSync(entryPath, { force: true });
+		}
+	}
+}
+
+/**
  * Allocate agent-owned state under the sole writable workspace mount. The child does
  * not inherit a host home or a host session/config directory, preventing the sandbox
  * from presenting a write boundary while its own state quietly escapes it.
@@ -142,6 +161,7 @@ export function buildSandboxedCliLaunch(options: {
 	]) {
 		mkdirSync(directory, { recursive: true });
 	}
+	clearStaleToolMountpoints(toolsDirectory);
 	const childEnvironment = buildChildEnvironment(options.environment);
 	const readOnlyPaths = [...(options.readOnlyPaths ?? [])];
 	const readOnlyFiles = options.authPath ? [options.authPath] : [];

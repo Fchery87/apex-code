@@ -10,6 +10,12 @@
   installing them there once if missing, where the network is still reachable — and projects
   each one read-only into the child at the path its own lookup already checks. One host-side
   install now serves every workspace, and no network access is required at startup.
+- Hardened the managed-tool lookup against an unusable leftover file. A projected tool is
+  bind-mounted over a file in the child's tools directory, and Bubblewrap materialises that
+  mountpoint as an empty file that outlives the namespace. `getToolPath()` now requires an
+  executable file rather than merely an existing one, and the supervisor clears stale
+  zero-byte mountpoints, so a host tool that later disappears can no longer leave the child
+  treating a 0-byte stub as its binary.
 
 ## [0.0.1-alpha.3] - 2026-08-17
 
