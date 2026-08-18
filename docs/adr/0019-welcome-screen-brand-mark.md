@@ -246,16 +246,47 @@ three regions without depending on how many lines each holds — the marker goes
 the first content line, continuations and autocomplete rows get matching indent,
 and borders are extended across the reserved columns.
 
-Two measurement hazards, both found by rendering rather than by reading:
+**Command colouring.** A leading `/command` is tinted with the accent; arguments
+stay plain, so the highlight marks what is being invoked rather than the whole
+line. The token is read from `getText()` rather than the rendered row, and
+applied only when that row still starts with it, so a scrolled view cannot tint
+unrelated text.
 
-- `stripAnsi` does **not** remove the APC hardware-cursor marker
-  (`ESC _pi:c BEL`), while `visibleWidth` correctly scores it zero. Composing the
-  two counted seven phantom columns on every placeholder line. Width maths uses
-  `visibleWidth` alone.
-- The empty line is `CURSOR_MARKER ESC[7m <space> ESC[0m`. Matching the leading
-  run with a general `(?:ESC\[[0-9;]*m)*` swallowed the `ESC[7m`, leaving reverse
-  video open across the placeholder and the rest of the frame. The reverse-video
-  run is matched explicitly instead.
+The awkward part is that the caret's reverse-video cell can land *inside* the
+token — with the caret at column 3 of `/model` the row reads `/mo` +
+`CURSOR_MARKER` + `ESC[7m` + `d` + `ESC[0m` + `el`. A single wrap around the
+token would be cancelled partway through by that `ESC[0m`, so `colorVisibleRange`
+walks the row in visible-column space and re-opens the colour after every control
+sequence.
+
+This was initially assessed as impossible without amending ADR 0001, on the
+grounds that prime-agent implements it through a `commandColor` on `EditorTheme`
+and a `protected styleDisplayText` hook. That assessment was wrong: it is only
+the *clean* implementation that needs those. Post-processing achieves the same
+result from outside, and amending ADR 0001 would have permanently forfeited
+byte-identity with upstream and added merge cost to every future Pi upgrade — a
+poor trade for one cosmetic feature.
+
+### ANSI measuring hazards
+
+Two traps live in the rendered strings this code post-processes. Both produced
+real bugs, both are cheap to re-introduce, and both are documented at the top of
+`custom-editor.ts` next to the code that has to respect them.
+
+- **Never compose `stripAnsi` with `visibleWidth`.** `stripAnsi` removes SGR
+  codes but leaves the APC hardware-cursor marker (`ESC _pi:c BEL`) fully intact,
+  all seven bytes. `visibleWidth` already scores that marker zero. So
+  `visibleWidth(stripAnsi(line))` counts seven phantom columns on every line
+  carrying a cursor, which silently widened each placeholder line past the
+  terminal width. Measure with `visibleWidth` alone; use `stripAnsi` only to read
+  text, never to measure it.
+- **Never match the leading sequence run generically.** The empty line is
+  `CURSOR_MARKER ESC[7m <space> ESC[0m`. A permissive prefix match such as
+  `(?:ESC\[[0-9;]*m)*` consumes that `ESC[7m` as ordinary leading styling;
+  whatever is appended next inherits reverse video, and because the matching
+  `ESC[0m` stays behind in the discarded remainder, the inversion runs on through
+  the placeholder and the rest of the frame. Match the reverse-video run
+  explicitly.
 
 ## Files
 

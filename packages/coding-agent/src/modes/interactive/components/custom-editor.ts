@@ -1,4 +1,11 @@
-import { Editor, type EditorOptions, type EditorTheme, type TUI, visibleWidth } from "@earendil-works/pi-tui";
+import {
+	CURSOR_MARKER,
+	Editor,
+	type EditorOptions,
+	type EditorTheme,
+	type TUI,
+	visibleWidth,
+} from "@earendil-works/pi-tui";
 import type { AppKeybinding, KeybindingsManager } from "../../../core/keybindings.ts";
 import { stripAnsi } from "../../../utils/ansi.ts";
 
@@ -11,10 +18,109 @@ export interface CustomEditorOptions extends EditorOptions {
 	placeholder?: string;
 	/** Styles the placeholder. Defaults to leaving it unstyled. */
 	placeholderColor?: (text: string) => string;
+	/** Styles a leading `/command` token. Defaults to leaving it unstyled. */
+	commandColor?: (text: string) => string;
 }
 
 /** Box-drawing horizontal rule: the first character of every border line. */
 const BORDER_CHAR = "─";
+
+/**
+ * A leading `/command` token: optional indent, a slash, then non-space.
+ * Matched against the line's *visible* text, not the rendered string.
+ */
+const COMMAND_TOKEN = /^(\s*)(\/\S+)/;
+
+/**
+ * One ANSI control sequence: a CSI escape (`ESC [ … letter`) or the APC
+ * hardware-cursor marker (`ESC _ … BEL`). Sticky, for position-by-position
+ * scanning in {@link colorVisibleRange}.
+ */
+const CONTROL_SEQUENCE = /\x1b\[[0-9;]*[A-Za-z]|\x1b_[^\x07]*\x07/y;
+
+/**
+ * ============================ ANSI measuring hazards ============================
+ *
+ * Two traps live in the rendered strings this file post-processes. Both produced
+ * real bugs; both are cheap to re-introduce. Read this before touching the width
+ * maths or any leading-sequence match.
+ *
+ * 1. DO NOT COMPOSE `stripAnsi` WITH `visibleWidth`.
+ *
+ *    `stripAnsi` removes SGR colour codes but leaves the APC hardware-cursor
+ *    marker (`ESC _pi:c BEL`, see CURSOR_MARKER in packages/tui) fully intact —
+ *    all seven bytes of it. `visibleWidth` already handles that marker correctly
+ *    and scores it zero.
+ *
+ *    So `visibleWidth(stripAnsi(line))` counts seven phantom columns on every
+ *    line carrying a cursor, which silently widened each placeholder line past
+ *    the terminal width. Measure with `visibleWidth` alone. Use `stripAnsi` only
+ *    to read text, never to measure it.
+ *
+ * 2. DO NOT MATCH THE LEADING SEQUENCE RUN GENERICALLY.
+ *
+ *    The base Editor renders an empty line as:
+ *        CURSOR_MARKER  ESC[7m  <space>  ESC[0m  <padding>
+ *    The `ESC[7m` turns on reverse video for exactly the one-cell cursor block,
+ *    and `ESC[0m` turns it back off.
+ *
+ *    A permissive prefix match such as `(?:\x1b\[[0-9;]*m)*` consumes that
+ *    `ESC[7m` as though it were ordinary leading styling. Whatever is appended
+ *    next then inherits reverse video, and because the matching `ESC[0m` was
+ *    left behind in the discarded remainder, the inversion runs on through the
+ *    placeholder and the rest of the frame. Match the reverse-video run
+ *    explicitly instead — see {@link CustomEditor.sliceLeadingCursorCell}.
+ *
+ * ==============================================================================
+ */
+
+/**
+ * Wrap the visible characters in `[start, end)` with `colorFn`, leaving every
+ * control sequence in place.
+ *
+ * The range is in visible columns, so it is unaffected by however many escape
+ * sequences are interleaved. That matters because the cursor cell can land in
+ * the middle of the token being coloured: with the caret at column 3 of
+ * `/model`, the line reads `/mo` + CURSOR_MARKER + `ESC[7m` + `d` + `ESC[0m` +
+ * `el`. Colour is therefore re-opened after every control sequence rather than
+ * once around the whole token, since the cursor cell's `ESC[0m` would otherwise
+ * cancel it partway through.
+ */
+function colorVisibleRange(line: string, start: number, end: number, colorFn: (text: string) => string): string {
+	let out = "";
+	let buffer = "";
+	let column = 0;
+	let index = 0;
+
+	const flush = () => {
+		if (buffer) {
+			out += colorFn(buffer);
+			buffer = "";
+		}
+	};
+
+	while (index < line.length) {
+		CONTROL_SEQUENCE.lastIndex = index;
+		const control = CONTROL_SEQUENCE.exec(line);
+		if (control) {
+			flush();
+			out += control[0];
+			index = CONTROL_SEQUENCE.lastIndex;
+			continue;
+		}
+		const char = line[index];
+		if (column >= start && column < end) {
+			buffer += char;
+		} else {
+			flush();
+			out += char;
+		}
+		column += visibleWidth(char);
+		index += 1;
+	}
+	flush();
+	return out;
+}
 
 /**
  * Custom editor that handles app-level keybindings for coding-agent.
@@ -28,6 +134,7 @@ export class CustomEditor extends Editor {
 	private readonly promptPrefix: string;
 	private readonly promptColor: (text: string) => string;
 	private readonly placeholderColor: (text: string) => string;
+	private readonly commandColor: ((text: string) => string) | undefined;
 	private placeholder: string | undefined;
 	public actionHandlers: Map<AppKeybinding, () => void> = new Map();
 
@@ -45,6 +152,7 @@ export class CustomEditor extends Editor {
 		this.promptColor = options?.promptColor ?? ((text) => text);
 		this.placeholder = options?.placeholder;
 		this.placeholderColor = options?.placeholderColor ?? ((text) => text);
+		this.commandColor = options?.commandColor;
 	}
 
 	setPlaceholder(placeholder: string | undefined): void {
@@ -57,10 +165,10 @@ export class CustomEditor extends Editor {
 		// wrapping, scrolling and cursor column all account for the space the
 		// prefix occupies. Bail out entirely when the terminal cannot spare it.
 		if (prefixWidth === 0 || width <= prefixWidth + 4) {
-			return this.withPlaceholder(super.render(width));
+			return this.withCommandColor(this.withPlaceholder(super.render(width)));
 		}
 
-		const inner = this.withPlaceholder(super.render(width - prefixWidth));
+		const inner = this.withCommandColor(this.withPlaceholder(super.render(width - prefixWidth)));
 		const borderPad = this.borderColor(BORDER_CHAR.repeat(prefixWidth));
 		const blank = " ".repeat(prefixWidth);
 		const styledPrefix = this.promptColor(this.promptPrefix);
@@ -92,6 +200,39 @@ export class CustomEditor extends Editor {
 	}
 
 	/**
+	 * Tint a leading `/command` on the first input line.
+	 *
+	 * The base Editor emits input text unstyled, so the only styling already
+	 * present on the line is the cursor cell — which `colorVisibleRange` steps
+	 * over. Only the command token is tinted; arguments after it stay plain, so
+	 * the highlight marks what is being invoked rather than the whole line.
+	 */
+	private withCommandColor(lines: string[]): string[] {
+		const commandColor = this.commandColor;
+		if (!commandColor || lines.length < 2) {
+			return lines;
+		}
+		// Read the token from the model rather than the rendered line: the first
+		// visual row is the start of the text only when the caret has not scrolled
+		// the view down, and getText is unambiguous either way.
+		const firstLine = this.getText().split("\n", 1)[0] ?? "";
+		const match = COMMAND_TOKEN.exec(firstLine);
+		if (!match) {
+			return lines;
+		}
+		const [, indent, token] = match;
+		// The rendered row must still begin with that token, or the view has
+		// scrolled and the highlight would land on unrelated text.
+		if (!stripAnsi(lines[1].split(CURSOR_MARKER).join("")).startsWith(`${indent}${token}`)) {
+			return lines;
+		}
+		const start = visibleWidth(indent);
+		const updated = [...lines];
+		updated[1] = colorVisibleRange(lines[1], start, start + visibleWidth(token), commandColor);
+		return updated;
+	}
+
+	/**
 	 * Replace the sole content line with the placeholder while the input is
 	 * empty. Index 1 is always the first content line, and an empty editor has
 	 * exactly one, so no line classification is needed here.
@@ -105,8 +246,9 @@ export class CustomEditor extends Editor {
 		// Preserve the cursor cell when focused; unfocused there is none, and the
 		// placeholder simply starts at column zero.
 		const cursorCell = this.sliceLeadingCursorCell(contentLine);
-		// Measure with visibleWidth alone. stripAnsi leaves the APC cursor marker
-		// intact, so composing the two would count its bytes as seven columns.
+		// Measure with visibleWidth alone — never visibleWidth(stripAnsi(...)),
+		// which scores the cursor marker as seven columns. See hazard 1 at the top
+		// of this file.
 		const available = visibleWidth(contentLine) - visibleWidth(cursorCell);
 		if (available <= 0) {
 			return lines;
@@ -123,9 +265,9 @@ export class CustomEditor extends Editor {
 	 * followed by a reverse-video cell: `CURSOR_MARKER ESC[7m <space> ESC[0m`.
 	 * Both parts are kept verbatim.
 	 *
-	 * The reverse-video run is matched explicitly rather than via a general
-	 * leading-SGR match, which would consume the `ESC[7m` and leave reverse
-	 * video open across the whole placeholder.
+	 * The `ESC[7m … ESC[0m` run is matched explicitly. Do not "simplify" this to
+	 * a general leading-SGR match such as `(?:\x1b\[[0-9;]*m)*` — see hazard 2 at
+	 * the top of this file for what that breaks.
 	 */
 	private sliceLeadingCursorCell(line: string): string {
 		const match = /^(?:\x1b_pi:c\x07)?(?:\x1b\[7m.\x1b\[(?:0|27)m)?/.exec(line);
