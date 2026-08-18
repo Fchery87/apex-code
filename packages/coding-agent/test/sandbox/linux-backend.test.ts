@@ -112,6 +112,27 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		}
 	});
 
+	it("does not report a violation when the child simply failed on its own", async () => {
+		// An invalid API key, a failing test command, a script exiting 1: the boundary
+		// refused nothing, so blaming it misdirects whoever reads the output.
+		const cwd = workspace();
+		const violations = new SandboxViolationStore();
+		const backend = createLinuxSandboxBackend({ violationStore: violations });
+		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+
+		try {
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: ["-c", "echo 'ordinary application failure' >&2; exit 3"],
+				}),
+			).resolves.toBe(3);
+			expect(violations.list()).toEqual([]);
+		} finally {
+			await supervisor.close();
+		}
+	});
+
 	it("launches from a workspace too deep for a socket path inside it", async () => {
 		// AF_UNIX caps sun_path at 108 bytes. Keeping the proxy socket under the workspace
 		// spent that budget on the user's directory layout, so a deep-but-ordinary project
