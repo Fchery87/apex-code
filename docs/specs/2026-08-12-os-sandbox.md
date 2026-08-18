@@ -672,3 +672,40 @@ bytes. No socket is left behind in the temp directory afterwards.
 **Deletion inventory.** Nothing is removed. The socket's old location under
 `sandbox-state` is no longer used; the directory itself remains, as it still holds the
 relay script and the child's `HOME`.
+
+### Amendment (2026-08-17, third): a refused host now says so
+
+The boundary refused correctly and reported uselessly. A host absent from
+`network.allowedHosts` got a 403 on CONNECT; undici phrases that as
+`Proxy response (403) !== 200 when HTTP Tunneling`, but `fetch` surfaces only
+`TypeError: fetch failed` at the top of the cause chain. The caller — a model
+provider, the version check, a catalog fetch — therefore reported a bare network
+failure naming no host, no reason, and no remedy. The recorded violation did name the
+host, but it printed at process exit, after the operation had already failed.
+
+That single missing sentence is what made every gap in this spec expensive to
+diagnose. The tool-download failure that prompted the projection amendment presented
+as `Failed to download fd: fetch failed`; the real cause was an empty allowlist, and
+nothing on screen said so.
+
+`core/sandbox/network-refusal.ts` walks the cause chain for undici's tunnel-refusal
+wording and, on a match, replaces the message with one naming the host and the setting
+that would permit it. It is installed by `child-entry.ts` only — the sandboxed child is
+the one context where attributing a refused CONNECT to the sandbox allowlist is a fact
+rather than a guess about whose proxy answered. Anything that is not a refusal is
+rethrown untouched, so retry and abort handling are unchanged for every other failure.
+
+Before: `fetch failed`, then four identical violation lines at exit.
+After: `Host generativelanguage.googleapis.com is not on the sandbox network allowlist,
+so the request was refused. Add it to "network.allowedHosts" in your global Apex Code
+settings to permit it.`
+
+A deliberate side effect worth recording: the refusal is now reported as a plain
+`Error` rather than the transport `TypeError` upstream retry logic recognises, so a
+refusal is attempted once instead of three times — four violation lines collapse to
+one. This is correct rather than merely quieter, because an allowlist refusal is a
+deterministic policy decision and retrying it cannot change the outcome.
+
+**Deletion inventory.** Nothing is removed. The violation store keeps recording
+refusals and printing them at exit; this adds the message at the point of failure,
+where it can still affect what the user does next.
