@@ -1,4 +1,4 @@
-# ADR 0019 — Welcome screen brand mark and startup header
+# ADR 0019 — Brand mark, palette, and input chrome
 
 **Status:** Accepted · **Date:** 2026-08-18
 
@@ -7,6 +7,11 @@
 The interactive startup header leads with a brand mark — a half-block peak — and a
 compact runtime metadata column, replacing the text-only header and its inline
 keybinding cheatsheet. The cheatsheet moves behind `--verbose`.
+
+A new `apex` theme becomes the default on dark terminals, built around a single
+cool-teal primary that carries the accent and every border. The input box gains a
+prompt marker and a placeholder, implemented without modifying the frozen
+`packages/tui` (see "Palette" and "Input chrome" below).
 
 ## Goal
 
@@ -194,6 +199,64 @@ New `test/splash-header.test.ts`, 24 cases:
 `test/first-time-setup.test.ts` contains no logo assertions, so it needs no
 update.
 
+## Palette
+
+`apex.json` is a new built-in theme, default on dark terminals. It follows
+prime-agent's construction rather than the inherited upstream one:
+
+- **Semantic var names** (`primary`, `primarySoft`, `surface`, `panel`, `grid`)
+  instead of raw colour names (`cyan`, `blue`, `green`). A palette named after
+  roles can be retuned; one named after hues cannot.
+- **One hue through the chrome.** `accent`, `border`, and `borderAccent` all
+  resolve to `primary` (`#5fa8a0`). The inherited `dark.json` split these three
+  ways — accent teal, border blue, borderAccent cyan — so nothing read as a
+  brand colour.
+- **Desaturated, harmonised values.** The inherited palette included pure
+  `#ffff00` for warnings, which vibrates against every background.
+
+The teal builds on the `#8abeb7` accent already in `dark.json`, so this reads as
+an evolution of the existing look rather than an unrelated rebrand — and stays
+clearly distinct from prime-agent's purple.
+
+`dark` and `light` are untouched and still selectable. Light terminals keep
+defaulting to `light`; there is no light brand palette yet, and deriving one
+mechanically from a dark palette produces worse results than the existing theme.
+
+## Input chrome
+
+The input box gains a `>` prompt marker and an empty-state placeholder. Both are
+layered on in `CustomEditor.render` rather than inside the base `Editor`, because
+`packages/tui` is **frozen under ADR 0001** — byte-identity is enforced by
+`check-frozen-packages.mjs` in both `ci.yml` and `release.yml`. The local
+`EditorOptions` is `{ paddingX?, autocompleteMaxVisible? }` with a `private theme`
+and no overridable hooks, so prime-agent's approach (which extends `EditorOptions`
+and overrides four `protected` methods) is not available without unfreezing.
+
+Two mechanisms make this work from outside:
+
+**Width reservation.** `render` calls `super.render(width - prefixWidth)` and
+prepends the marker afterwards. Handing the base Editor the reduced width keeps
+its wrapping, scroll offset, and cursor column all consistent with where the text
+actually lands. Below `prefixWidth + 4` columns the marker is dropped entirely
+rather than overflowing.
+
+**Border counting.** The base render emits: top border, content lines, bottom
+border, then optional autocomplete rows. Counting border lines separates the
+three regions without depending on how many lines each holds — the marker goes on
+the first content line, continuations and autocomplete rows get matching indent,
+and borders are extended across the reserved columns.
+
+Two measurement hazards, both found by rendering rather than by reading:
+
+- `stripAnsi` does **not** remove the APC hardware-cursor marker
+  (`ESC _pi:c BEL`), while `visibleWidth` correctly scores it zero. Composing the
+  two counted seven phantom columns on every placeholder line. Width maths uses
+  `visibleWidth` alone.
+- The empty line is `CURSOR_MARKER ESC[7m <space> ESC[0m`. Matching the leading
+  run with a general `(?:ESC\[[0-9;]*m)*` swallowed the `ESC[7m`, leaving reverse
+  video open across the placeholder and the rest of the frame. The reverse-video
+  run is matched explicitly instead.
+
 ## Files
 
 | File | Change |
@@ -201,6 +264,11 @@ update.
 | `src/themes/apex-logo.ts` | new — three mark constants |
 | `src/modes/interactive/components/splash-header.ts` | new — `ApexSplashHeader` |
 | `src/modes/interactive/components/index.ts` | export the component |
-| `src/modes/interactive/interactive-mode.ts` | replace header block 909-968 |
+| `src/modes/interactive/interactive-mode.ts` | replace header block; wire editor chrome |
 | `src/modes/interactive/components/first-time-setup.ts` | swap `SETUP_LOGO_LINES` |
+| `src/modes/interactive/theme/apex.json` | new — brand palette |
+| `src/modes/interactive/theme/theme.ts` | register `apex`; default it on dark terminals |
+| `src/modes/interactive/components/custom-editor.ts` | prompt marker and placeholder |
 | `test/splash-header.test.ts` | new — width and preset coverage |
+| `test/apex-theme.test.ts` | new — schema, var resolution, default selection |
+| `test/custom-editor-chrome.test.ts` | new — width safety, marker, placeholder, ANSI balance |
