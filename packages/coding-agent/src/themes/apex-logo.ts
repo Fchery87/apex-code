@@ -14,32 +14,20 @@
  */
 
 /** 10 rows x 34 cols. The default brand mark — half-block peak with a hollow summit. */
-export const APEX_PEAK_LOGO = `                ▄▄
-              ▄████▄
-            ▄████████▄
-          ▄████▀  ▀████▄
-        ▄████▀      ▀████▄
-      ▄████▀          ▀████▄
-    ▄████▀              ▀████▄
-  ▄████▀                  ▀████▄
-▄████▀                      ▀████▄
-▀▀▀                            ▀▀▀`;
+export const APEX_PEAK_LOGO = ` ▄▄▄▄▄  ▄▄▄▄▄▄  ▄▄▄▄▄▄ ▄▄   ▄▄
+██   ██ ██   ██ ██      ██ ██ 
+███████ ██████  █████    ███  
+██   ██ ██      ██      ██ ██ 
+▀▀   ▀▀ ▀▀      ▀▀▀▀▀▀ ▀▀   ▀▀`;
 
 /** 6 rows x 18 cols. Same silhouette for terminals too narrow for the full mark. */
-export const APEX_PEAK_LOGO_COMPACT = `        ▄▄
-      ▄████▄
-    ▄███▀▀███▄
-  ▄███▀    ▀███▄
-▄███▀        ▀███▄
-▀▀▀            ▀▀▀`;
+export const APEX_PEAK_LOGO_COMPACT = ` ▄▄▄▄▄ 
+██   ██
+███████
+██   ██
+▀▀   ▀▀`;
 
 /** 9 rows x 19 cols. Line-drawing fallback for `symbolPreset: "ascii"`. */
-export const APEX_PEAK_LOGO_ASCII = `         /\\
-        /  \\
-       /    \\
-      /  /\\  \\
-     /  /  \\  \\
-    /  /    \\  \\
-   /  /      \\  \\
-  /  /        \\  \\
- /__/          \\__\\`;
+export const APEX_PEAK_LOGO_ASCII = `  _   _  ____ __ 
+ / \\ |_) |__  \\/ 
+ \\_/ |   |___ /\\ `;
