@@ -29,6 +29,20 @@
 - A leading `/command` in the input box is now tinted with the accent colour as you type it,
   so it reads as an invocation rather than as ordinary text. Arguments after the command stay
   plain, and the tint survives the cursor landing in the middle of the token.
+- Fixed the startup "What's New" section replaying the entire changelog — roughly 270 entries
+  going back to November 2025 — on every single launch. Three defects compounded. The stored
+  "last seen" version was parsed with `split(".").map(Number)`, so any prerelease
+  (`0.0.1-alpha.4`) collapsed to `0.0.0` and every entry in the file compared newer; because
+  the version was then re-stamped in the same unparseable form, the flood repeated on the next
+  launch instead of clearing. The upstream Pi history retained in this file for attribution
+  (`0.10.0`–`0.84.1`) was still in scope, and those versions sort *above* Apex Code's own
+  `0.0.x` line, so no amount of version comparison would ever have suppressed them. And the
+  version heading regex discarded the prerelease identifier, leaving `alpha.2`, `alpha.3`, and
+  `alpha.4` indistinguishable from each other. Version parsing and comparison are now
+  semver-correct including prerelease precedence, parsing stops at the `## Upstream Pi history`
+  boundary, and an unparseable stored version now shows nothing rather than everything.
+  `/changelog` is scoped to Apex Code's own releases for the same reason; the upstream history
+  remains in the file as written attribution.
 
 ## [0.0.1-alpha.4] - 2026-08-18
 
