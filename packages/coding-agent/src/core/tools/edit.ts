@@ -7,6 +7,8 @@ import { type Static, Type } from "typebox";
 import { renderDiff } from "../../modes/interactive/components/diff.ts";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import type { ApexToolDefinition } from "./contract.ts";
+import type { DiagnosticsOperations, DiagnosticsOutcome } from "./diagnostics.ts";
+import { formatDiagnosticsOutcome } from "./diagnostics.ts";
 import {
 	applyEditsToNormalizedContent,
 	computeEditsDiff,
@@ -81,6 +83,8 @@ export interface EditToolDetails {
 	patch: string;
 	/** Line number of the first change in the new file (for editor navigation) */
 	firstChangedLine?: number;
+	/** Present only when `EditToolOptions.diagnosticsOperations` is configured (LSP.4). */
+	diagnostics?: DiagnosticsOutcome;
 }
 
 /**
@@ -105,6 +109,13 @@ const defaultEditOperations: EditOperations = {
 export interface EditToolOptions {
 	/** Custom operations for file editing. Default: local filesystem */
 	operations?: EditOperations;
+	/**
+	 * Optional post-mutation diagnostics (LSP.4). Absent by default -- byte-identical
+	 * existing behavior. When present, called inside `withFileMutationQueue` after the
+	 * write succeeds and before the queue releases, matching `TestOperations`/
+	 * `GrepOperations`' injection pattern (`test.ts:28`, `grep.ts:58`).
+	 */
+	diagnosticsOperations?: DiagnosticsOperations;
 }
 
 function prepareEditArguments(input: unknown): EditToolInput {
@@ -305,6 +316,7 @@ export function createEditToolDefinition(
 	options?: EditToolOptions,
 ): ApexToolDefinition<typeof editSchema, EditToolDetails | undefined, EditRenderState> {
 	const ops = options?.operations ?? defaultEditOperations;
+	const diagnosticsOperations = options?.diagnosticsOperations;
 	return {
 		name: "edit",
 		label: "edit",
@@ -378,13 +390,18 @@ export function createEditToolDefinition(
 
 				const diffResult = generateDiffString(baseContent, newContent);
 				const patch = generateUnifiedPatch(path, baseContent, newContent);
+				const successText = `Successfully replaced ${edits.length} block(s) in ${path}.`;
+
+				if (diagnosticsOperations) {
+					const diagnostics = await diagnosticsOperations.afterMutation(absolutePath, signal);
+					return {
+						content: [{ type: "text", text: `${successText}\n\n${formatDiagnosticsOutcome(diagnostics)}` }],
+						details: { diff: diffResult.diff, patch, firstChangedLine: diffResult.firstChangedLine, diagnostics },
+					};
+				}
+
 				return {
-					content: [
-						{
-							type: "text",
-							text: `Successfully replaced ${edits.length} block(s) in ${path}.`,
-						},
-					],
+					content: [{ type: "text", text: successText }],
 					details: { diff: diffResult.diff, patch, firstChangedLine: diffResult.firstChangedLine },
 				};
 			});

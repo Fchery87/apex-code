@@ -8,6 +8,8 @@ import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts"
 import { getLanguageFromPath, highlightCode, type Theme } from "../../modes/interactive/theme/theme.ts";
 import type { ToolRenderResultOptions } from "../extensions/types.ts";
 import type { ApexToolDefinition } from "./contract.ts";
+import type { DiagnosticsOperations, DiagnosticsOutcome } from "./diagnostics.ts";
+import { formatDiagnosticsOutcome } from "./diagnostics.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
 import { resolveToCwd } from "./path-utils.ts";
@@ -29,6 +31,8 @@ export type WriteToolInput = Static<typeof writeSchema>;
 export interface WriteToolDetails {
 	byteCount: number;
 	contentHash: string;
+	/** Present only when `WriteToolOptions.diagnosticsOperations` is configured (LSP.4). */
+	diagnostics?: DiagnosticsOutcome;
 }
 
 function sha256(value: string): string {
@@ -54,6 +58,13 @@ const defaultWriteOperations: WriteOperations = {
 export interface WriteToolOptions {
 	/** Custom operations for file writing. Default: local filesystem */
 	operations?: WriteOperations;
+	/**
+	 * Optional post-mutation diagnostics (LSP.4). Absent by default -- byte-identical
+	 * existing behavior. When present, called inside `withFileMutationQueue` after the
+	 * write succeeds and before the queue releases, matching `TestOperations`/
+	 * `GrepOperations`' injection pattern (`test.ts:28`, `grep.ts:58`).
+	 */
+	diagnosticsOperations?: DiagnosticsOperations;
 }
 
 type WriteHighlightCache = {
@@ -200,6 +211,7 @@ export function createWriteToolDefinition(
 	options?: WriteToolOptions,
 ): ApexToolDefinition<typeof writeSchema, WriteToolDetails> {
 	const ops = options?.operations ?? defaultWriteOperations;
+	const diagnosticsOperations = options?.diagnosticsOperations;
 	return {
 		name: "write",
 		label: "write",
@@ -261,8 +273,18 @@ export function createWriteToolDefinition(
 				await ops.writeFile(absolutePath, content);
 				throwIfAborted();
 
+				const successText = `Successfully wrote ${content.length} bytes to ${path}`;
+
+				if (diagnosticsOperations) {
+					const diagnostics = await diagnosticsOperations.afterMutation(absolutePath, signal);
+					return {
+						content: [{ type: "text", text: `${successText}\n\n${formatDiagnosticsOutcome(diagnostics)}` }],
+						details: { byteCount: Buffer.byteLength(content), contentHash: sha256(content), diagnostics },
+					};
+				}
+
 				return {
-					content: [{ type: "text", text: `Successfully wrote ${content.length} bytes to ${path}` }],
+					content: [{ type: "text", text: successText }],
 					details: { byteCount: Buffer.byteLength(content), contentHash: sha256(content) },
 				};
 			});
