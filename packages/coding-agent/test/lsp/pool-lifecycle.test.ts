@@ -1,6 +1,6 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { LspPool } from "../../src/core/lsp/pool.ts";
 import { type LspSettings, resolveLspRegistry } from "../../src/core/lsp/registry.ts";
@@ -12,6 +12,15 @@ function temporaryDirectory(): string {
 	const directory = mkdtempSync(join(tmpdir(), "apex-lsp-pool-test-"));
 	temporaryDirectories.push(directory);
 	return directory;
+}
+
+/** Mirrors registry.ts's `canonical()` -- see the identical helper in registry.test.ts. */
+function canonical(path: string): string {
+	try {
+		return realpathSync(path);
+	} catch {
+		return resolve(path);
+	}
 }
 
 function createPool(workspace: string, logPath: string): LspPool {
@@ -54,7 +63,7 @@ describe("LspPool lifecycle", () => {
 		await pool.dispose();
 
 		expect(methods(logPath)).toEqual(["initialize", "initialized", "shutdown", "exit"]);
-		expect(pool.status()).toEqual([{ serverId: "test", root: workspace, state: "closed", attempts: 1 }]);
+		expect(pool.status()).toEqual([{ serverId: "test", root: canonical(workspace), state: "closed", attempts: 1 }]);
 	});
 
 	test("restarts only on demand and disables a server-root after three total attempts", async () => {
@@ -67,7 +76,7 @@ describe("LspPool lifecycle", () => {
 
 		for (let attempt = 1; attempt <= 3; attempt++) {
 			const connection = await pool.acquire(sourcePath);
-			expect(connection?.selection.root).toBe(workspace);
+			expect(connection?.selection.root).toBe(canonical(workspace));
 			connection?.client.notify("test/exit");
 			await expect.poll(() => pool.status()[0]?.state).toBe(attempt === 3 ? "disabled" : "degraded");
 			if (attempt < 3) {
