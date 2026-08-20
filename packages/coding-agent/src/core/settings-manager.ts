@@ -8,6 +8,7 @@ import { CONFIG_DIR_NAME, getAgentDir } from "../config.ts";
 import { normalizePath, resolvePath } from "../utils/paths.ts";
 import { getApexEnvironment } from "./environment.ts";
 import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-dispatcher.ts";
+import type { LspSettings } from "./lsp/registry.ts";
 
 export interface CompactionSettings {
 	enabled?: boolean; // default: true
@@ -150,6 +151,7 @@ export interface Settings {
 	network?: NetworkSettings;
 	delegationMaxDepth?: number; // Max delegation recursion depth (roadmap Phase 5, task 5.3). default: 2, hard-capped at DELEGATION_MAX_DEPTH_HARD_CAP
 	observability?: ObservabilitySettings;
+	lsp?: LspSettings;
 }
 
 /**
@@ -837,6 +839,10 @@ export class SettingsManager {
 
 	getNetworkSettings(): NetworkSettings | undefined {
 		return this.settings.network;
+	}
+
+	getLspSettings(): LspSettings | undefined {
+		return this.settings.lsp === undefined ? undefined : structuredClone(this.settings.lsp);
 	}
 
 	getBranchSummarySkipPrompt(): boolean {

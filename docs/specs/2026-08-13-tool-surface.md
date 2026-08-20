@@ -391,3 +391,17 @@ Phase 4 completed with a 14-tool registry measuring 2,706 tokens without deferra
 2,300 tokens (`ENFORCED_PRODUCTION_PREFIX_BUDGET`). The deferred first-party set is
 `grep`, `find`, `ls`, `todo_write`, `web_search`, `web_fetch`, `ask_user`, and
 `delegate`; `tool_schema` remains always loaded.
+
+### Amendment (2026-08-19): the LSP non-goal landed
+
+The LSP non-goal above is resolved: `docs/specs/2026-08-18-lsp.md` and
+`docs/plans/2026-08-18-lsp.md` shipped the subsystem after this phase had already closed
+(the roadmap carries its own dated note on this). It registers one deferred tool
+(`lsp`) rather than one per LSP method, consistent with this phase's deferral design.
+
+Landing it also revealed the 2,150/2,300 figures immediately above were no longer
+current — unrelated tool-description growth across phases 5–8 had already carried the
+no-`lsp` baseline to 2,292 before LSP touched anything. `ENFORCED_PRODUCTION_PREFIX_BUDGET`
+is now 2,500, re-measured rather than assumed; see the LSP spec's own closure amendment
+for the full record. The figures in this section are left as the historical Phase 4
+measurement, not corrected in place.

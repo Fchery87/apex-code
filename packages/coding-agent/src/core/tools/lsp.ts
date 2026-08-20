@@ -230,8 +230,7 @@ export function createLspToolDefinition(
 	return {
 		name: "lsp",
 		label: "lsp",
-		description:
-			"Query a configured language server for definition, references, or document symbols. Positions are one-based.",
+		description: "Query the configured language server for definitions, references, or symbols.",
 		parameters: lspSchema,
 		contract: {
 			// `grep` spawns `rg` and declares {fs.read}, not {exec}, because the caller
