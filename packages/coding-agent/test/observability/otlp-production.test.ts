@@ -14,9 +14,14 @@ function scratchDir(label: string): string {
 }
 
 describe("OTLP export through production wiring (task 8.5)", () => {
-	const cleanups: Array<() => void> = [];
-	afterEach(() => {
-		while (cleanups.length > 0) cleanups.pop()?.();
+	// `AgentSessionServices.close()` is async (LSP.1 awaits pool/diagnostics teardown) --
+	// this cleanup stack must await each entry or a later entry (deleting `agentDir`, the
+	// state.sqlite file's own directory) can run before close() has actually released the
+	// database handle. POSIX tolerates unlinking an open file; Windows does not, so an
+	// unawaited close here reproduces as an EBUSY on `state.sqlite` in CI, not locally.
+	const cleanups: Array<() => Promise<void> | void> = [];
+	afterEach(async () => {
+		while (cleanups.length > 0) await cleanups.pop()?.();
 		vi.restoreAllMocks();
 	});
 
