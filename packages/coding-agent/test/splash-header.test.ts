@@ -65,7 +65,7 @@ describe("ApexSplashHeader", () => {
 	describe("degradation tiers", () => {
 		it("shows the full mark and the metadata column when there is room", () => {
 			const output = render(100).map(plain).join("\n");
-			expect(output).toContain("▄████▀");
+			expect(output).toContain(APEX_PEAK_LOGO.split("\n")[0].trim());
 			expect(output).toContain("version");
 			expect(output).toContain("v0.0.1-alpha.4");
 			expect(output).toContain("claude-opus-5");
@@ -74,7 +74,7 @@ describe("ApexSplashHeader", () => {
 
 		it("drops the metadata column but keeps the full mark at mid widths", () => {
 			const output = render(50).map(plain).join("\n");
-			expect(output).toContain("▄████▀");
+			expect(output).toContain(APEX_PEAK_LOGO.split("\n")[0].trim());
 			expect(output).not.toContain("version");
 			expect(output).not.toContain("claude-opus-5");
 		});
@@ -83,7 +83,7 @@ describe("ApexSplashHeader", () => {
 			const output = render(COMPACT_WIDTH + 6)
 				.map(plain)
 				.join("\n");
-			expect(output).toContain("▄███▀");
+			expect(output).toContain(APEX_PEAK_LOGO_COMPACT.split("\n")[0].trim());
 			// The full mark's widest row cannot fit here.
 			expect(visibleWidth(output.split("\n")[1] ?? "")).toBeLessThan(LOGO_WIDTH);
 		});
@@ -173,7 +173,7 @@ describe("ApexSplashHeader", () => {
 			expect(output).toContain("to exit");
 			// It sits below the mark, not beside it.
 			const lines = output.split("\n");
-			const markRow = lines.findIndex((line) => line.includes("▄████▀"));
+			const markRow = lines.findIndex((line) => line.includes(APEX_PEAK_LOGO.split("\n")[0].trim()));
 			const hintRow = lines.findIndex((line) => line.includes("to interrupt"));
 			expect(hintRow).toBeGreaterThan(markRow);
 		});
