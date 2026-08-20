@@ -32,6 +32,7 @@ import { AuthStorage } from "../src/core/auth-storage.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import type { Settings } from "../src/core/settings-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
+import type { DiagnosticsOperations } from "../src/core/tools/diagnostics.ts";
 import type { InlineExtension, ResourceLoader } from "../src/index.ts";
 import {
 	type CreateTestExtensionsResultInput,
@@ -339,6 +340,8 @@ export interface HarnessOptions {
 	tools?: AgentTool[];
 	/** Base tools override (replaces built-in read/bash/edit/write). */
 	baseToolsOverride?: Record<string, AgentTool>;
+	/** Diagnostics operations injected into the default edit/write tools (LSP.4). */
+	diagnosticsOperations?: DiagnosticsOperations;
 	/** Optional resource loader override. */
 	resourceLoader?: ResourceLoader;
 	/** Inline extensions to load into the session resource loader. */
@@ -425,6 +428,7 @@ async function createHarnessWithResourceLoader(
 		modelRuntime: getModelRuntime(modelRegistry),
 		resourceLoader,
 		baseToolsOverride: options.baseToolsOverride,
+		diagnosticsOperations: options.diagnosticsOperations,
 	});
 
 	const events: AgentSessionEvent[] = [];
