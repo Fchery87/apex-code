@@ -28,6 +28,7 @@ describe("file mutation source evidence", () => {
 		const result = await wrapToolDefinition(definition).execute("call-write", params);
 
 		expect(readFileSync(join(cwd, params.path), "utf8")).toBe(params.content);
+		expect([...definition.contract.evidence.emits]).toEqual(["diff"]);
 		expect(definition.contract.evidence.capture(params, result)).toEqual([
 			{
 				kind: "diff",
@@ -52,5 +53,80 @@ describe("file mutation source evidence", () => {
 			expect.objectContaining({ kind: "diff", path: params.path, patchHash: expect.any(String) }),
 		]);
 		expect(JSON.stringify(evidence)).not.toContain("three");
+	});
+
+	it("captures diagnostic severity totals without retaining server-controlled content", async () => {
+		const cwd = scratchDirectory();
+		const definition = createWriteToolDefinition(cwd, {
+			diagnosticsOperations: {
+				afterMutation: async () => ({
+					status: "ok",
+					serverId: "typescript",
+					truncated: false,
+					diagnostics: [
+						{
+							range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+							severity: 1,
+							message: "private source text",
+						},
+						{
+							range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+							message: "another private diagnostic",
+						},
+						{
+							range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+							severity: -1,
+							message: "unknown severity",
+						},
+					],
+				}),
+			},
+		});
+		const params = { path: "index.ts", content: "const value = true;\n" };
+		const result = await wrapToolDefinition(definition).execute("call-write", params);
+
+		expect([...definition.contract.evidence.emits]).toEqual(["diff", "diagnostic"]);
+		const evidence = definition.contract.evidence.capture(params, result);
+		expect(evidence).toEqual([
+			expect.objectContaining({ kind: "diff", path: params.path }),
+			{
+				kind: "diagnostic",
+				path: params.path,
+				status: "ok",
+				serverId: "typescript",
+				diagnosticCount: 3,
+				severityCounts: { error: 1, warning: 0, information: 0, hint: 0, unspecified: 1, other: 1 },
+				truncated: false,
+			},
+		]);
+		expect(JSON.stringify(evidence)).not.toContain("private source text");
+	});
+
+	it("captures a stable unavailable kind without retaining the rendered reason", async () => {
+		const cwd = scratchDirectory();
+		const definition = createEditToolDefinition(cwd, {
+			diagnosticsOperations: {
+				afterMutation: async () => ({
+					status: "unavailable",
+					serverId: "typescript",
+					unavailableKind: "server-failed",
+					reason: "server leaked /private/workspace/path",
+				}),
+			},
+		});
+		const path = join(cwd, "edited.ts");
+		writeFileSync(path, "const before = true;\n");
+		const params = { path: "edited.ts", edits: [{ oldText: "before", newText: "after" }] };
+		const result = await wrapToolDefinition(definition).execute("call-edit", params);
+
+		const evidence = definition.contract.evidence.capture(params, result);
+		expect(evidence).toContainEqual({
+			kind: "diagnostic",
+			path: params.path,
+			status: "unavailable",
+			serverId: "typescript",
+			unavailableKind: "server-failed",
+		});
+		expect(JSON.stringify(evidence)).not.toContain("/private/workspace/path");
 	});
 });

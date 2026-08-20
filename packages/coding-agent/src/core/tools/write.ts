@@ -7,9 +7,9 @@ import { type Static, Type } from "typebox";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
 import { getLanguageFromPath, highlightCode, type Theme } from "../../modes/interactive/theme/theme.ts";
 import type { ToolRenderResultOptions } from "../extensions/types.ts";
-import type { ApexToolDefinition } from "./contract.ts";
+import type { ApexToolDefinition, EvidenceRecord } from "./contract.ts";
 import type { DiagnosticsOperations, DiagnosticsOutcome } from "./diagnostics.ts";
-import { formatDiagnosticsOutcome } from "./diagnostics.ts";
+import { diagnosticEvidenceForPath, formatDiagnosticsOutcome } from "./diagnostics.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
 import { resolveToCwd } from "./path-utils.ts";
@@ -230,10 +230,10 @@ export function createWriteToolDefinition(
 			}),
 			context: { resultRecoverable: true, deferSchema: false },
 			evidence: {
-				emits: new Set(["diff"]),
+				emits: new Set(diagnosticsOperations ? ["diff", "diagnostic"] : ["diff"]),
 				capture: (params, result) => {
 					const details = result.details;
-					return details
+					const records: EvidenceRecord[] = details
 						? [
 								{
 									kind: "diff",
@@ -243,6 +243,8 @@ export function createWriteToolDefinition(
 								},
 							]
 						: [{ kind: "diff", path: params.path }];
+					if (details?.diagnostics) records.push(diagnosticEvidenceForPath(params.path, details.diagnostics));
+					return records;
 				},
 			},
 		},

@@ -1,3 +1,7 @@
+import type { DiagnosticEvidenceRecord, DiagnosticSeverityCounts, DiagnosticUnavailableKind } from "./contract.ts";
+
+export type { DiagnosticEvidenceRecord, DiagnosticSeverityCounts, DiagnosticUnavailableKind } from "./contract.ts";
+
 /** A zero-based position reported by a language server. */
 export interface DiagnosticPosition {
 	readonly line: number;
@@ -19,8 +23,67 @@ export interface Diagnostic {
 }
 
 export type DiagnosticsOutcome =
-	| { readonly status: "ok"; readonly diagnostics: readonly Diagnostic[] }
-	| { readonly status: "unavailable"; readonly reason: string };
+	| {
+			readonly status: "ok";
+			readonly serverId: string;
+			readonly diagnostics: readonly Diagnostic[];
+			readonly truncated: boolean;
+	  }
+	| {
+			readonly status: "unavailable";
+			readonly serverId?: string;
+			readonly unavailableKind: DiagnosticUnavailableKind;
+			readonly reason: string;
+	  };
+
+function emptySeverityCounts(): DiagnosticSeverityCounts {
+	return { error: 0, warning: 0, information: 0, hint: 0, unspecified: 0, other: 0 };
+}
+
+/** Convert a live outcome into bounded evidence without copying server-controlled text. */
+export function diagnosticEvidenceForPath(path: string, outcome: DiagnosticsOutcome): DiagnosticEvidenceRecord {
+	if (outcome.status === "unavailable") {
+		return {
+			kind: "diagnostic",
+			path,
+			status: "unavailable",
+			...(outcome.serverId === undefined ? {} : { serverId: outcome.serverId }),
+			unavailableKind: outcome.unavailableKind,
+		};
+	}
+
+	const severityCounts = emptySeverityCounts();
+	for (const diagnostic of outcome.diagnostics) {
+		switch (diagnostic.severity) {
+			case 1:
+				severityCounts.error += 1;
+				break;
+			case 2:
+				severityCounts.warning += 1;
+				break;
+			case 3:
+				severityCounts.information += 1;
+				break;
+			case 4:
+				severityCounts.hint += 1;
+				break;
+			case undefined:
+				severityCounts.unspecified += 1;
+				break;
+			default:
+				severityCounts.other += 1;
+		}
+	}
+	return {
+		kind: "diagnostic",
+		path,
+		status: "ok",
+		serverId: outcome.serverId,
+		diagnosticCount: outcome.diagnostics.length,
+		severityCounts,
+		truncated: outcome.truncated,
+	};
+}
 
 /** Optional diagnostics integration for a successful file mutation. */
 export interface DiagnosticsOperations {

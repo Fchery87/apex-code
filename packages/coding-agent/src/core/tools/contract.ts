@@ -70,7 +70,7 @@ export interface ContextSpec {
 	outputBudgetTokens?: number;
 }
 
-export type EvidenceKind = "diff" | "test" | "command" | "manual" | "workflow";
+export type EvidenceKind = "diff" | "test" | "command" | "manual" | "workflow" | "diagnostic";
 
 /** Source-observed command facts. `exitCode` is absent only when execution never began. */
 export interface CommandEvidenceRecord {
@@ -90,6 +90,45 @@ export interface DiffEvidenceRecord {
 	contentHash?: string;
 	byteCount?: number;
 }
+
+/** Zero-filled diagnostic severity buckets for one bounded language-server outcome. */
+export interface DiagnosticSeverityCounts {
+	error: number;
+	warning: number;
+	information: number;
+	hint: number;
+	unspecified: number;
+	other: number;
+}
+
+/** Stable durable classification. Free-form server and process errors never enter evidence. */
+export type DiagnosticUnavailableKind =
+	| "no-server"
+	| "disposed"
+	| "unsupported-sync"
+	| "timed-out"
+	| "aborted"
+	| "superseded"
+	| "server-failed";
+
+/** Bounded post-mutation diagnostic facts, never diagnostic messages or rendered failure reasons. */
+export type DiagnosticEvidenceRecord =
+	| {
+			kind: "diagnostic";
+			path: string;
+			status: "ok";
+			serverId: string;
+			diagnosticCount: number;
+			severityCounts: DiagnosticSeverityCounts;
+			truncated: boolean;
+	  }
+	| {
+			kind: "diagnostic";
+			path: string;
+			status: "unavailable";
+			serverId?: string;
+			unavailableKind: DiagnosticUnavailableKind;
+	  };
 
 /** Normalized argv-based test execution facts. */
 export interface TestEvidenceRecord {
@@ -122,6 +161,7 @@ export interface WorkflowEvidenceRecord {
 export type EvidenceRecord =
 	| CommandEvidenceRecord
 	| DiffEvidenceRecord
+	| DiagnosticEvidenceRecord
 	| TestEvidenceRecord
 	| ManualEvidenceRecord
 	| WorkflowEvidenceRecord;

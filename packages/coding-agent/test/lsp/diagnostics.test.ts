@@ -11,7 +11,7 @@ const diagnosticsServices: LspDiagnostics[] = [];
 const pools: LspPool[] = [];
 
 function createDiagnostics(
-	mode: "stale-then-exact" | "none",
+	mode: "stale-then-exact" | "many" | "none",
 	timeoutMs = 100,
 ): {
 	diagnostics: LspDiagnostics;
@@ -66,6 +66,8 @@ describe("LspDiagnostics", () => {
 
 		await expect(diagnostics.afterMutation(sourcePath)).resolves.toEqual({
 			status: "ok",
+			serverId: "test",
+			truncated: false,
 			diagnostics: [
 				{
 					message: "diagnostic for version 1",
@@ -77,12 +79,46 @@ describe("LspDiagnostics", () => {
 		expect(methods(logPath)).toContain("textDocument/didOpen");
 	});
 
+	test("reports disposed without inventing a server id", async () => {
+		const { diagnostics, sourcePath } = createDiagnostics("none");
+		await diagnostics.dispose();
+
+		await expect(diagnostics.afterMutation(sourcePath)).resolves.toEqual({
+			status: "unavailable",
+			unavailableKind: "disposed",
+			reason: "diagnostics are disposed",
+		});
+	});
+
+	test("classifies a path with no matching server without inventing a server id", async () => {
+		const { diagnostics, sourcePath } = createDiagnostics("none");
+		const unmatchedPath = join(sourcePath, "..", "notes.txt");
+		writeFileSync(unmatchedPath, "plain text\n");
+
+		await expect(diagnostics.afterMutation(unmatchedPath)).resolves.toEqual({
+			status: "unavailable",
+			unavailableKind: "no-server",
+			reason: "no language server configured for path",
+		});
+	});
+
 	test("returns unavailable rather than clean when the server does not publish", async () => {
 		const { diagnostics, sourcePath } = createDiagnostics("none");
 
 		await expect(diagnostics.afterMutation(sourcePath)).resolves.toEqual({
 			status: "unavailable",
+			serverId: "test",
+			unavailableKind: "timed-out",
 			reason: "timed out after 100ms",
 		});
+	});
+
+	test("reports when a server publish exceeds the diagnostic retention bound", async () => {
+		const { diagnostics, sourcePath } = createDiagnostics("many");
+
+		const outcome = await diagnostics.afterMutation(sourcePath);
+
+		expect(outcome).toMatchObject({ status: "ok", serverId: "test", truncated: true });
+		if (outcome.status === "ok") expect(outcome.diagnostics).toHaveLength(1_000);
 	});
 });

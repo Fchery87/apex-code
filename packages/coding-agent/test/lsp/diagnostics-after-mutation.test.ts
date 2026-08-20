@@ -34,6 +34,8 @@ describe("diagnostics after file mutations", () => {
 				return content.includes("BROKEN")
 					? {
 							status: "ok" as const,
+							serverId: "test-lsp",
+							truncated: false,
 							diagnostics: [
 								{
 									range: { start: { line: 0, character: 6 }, end: { line: 0, character: 12 } },
@@ -44,7 +46,7 @@ describe("diagnostics after file mutations", () => {
 								},
 							],
 						}
-					: { status: "ok" as const, diagnostics: [] };
+					: { status: "ok" as const, serverId: "test-lsp", truncated: false, diagnostics: [] };
 			},
 		};
 		const harness = await createHarness({
@@ -84,7 +86,12 @@ describe("diagnostics after file mutations", () => {
 	test("write renders unavailable distinctly from a clean diagnostics result", async () => {
 		const harness = await createHarness({
 			diagnosticsOperations: {
-				afterMutation: async () => ({ status: "unavailable", reason: "server did not publish before timeout" }),
+				afterMutation: async () => ({
+					status: "unavailable",
+					serverId: "test-lsp",
+					unavailableKind: "timed-out",
+					reason: "server did not publish before timeout",
+				}),
 			},
 			responses: [
 				{ toolCalls: [{ name: "write", args: { path: "index.ts", content: "const value = true;\n" } }] },

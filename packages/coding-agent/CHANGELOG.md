@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- `edit` and `write` now capture bounded language-server diagnostic evidence after a
+  mutation. Records identify the selected server when known, count diagnostics by
+  severity without storing diagnostic messages, distinguish stable unavailable states,
+  and report when the 1,000-diagnostic collector bound truncated a result. Sessions
+  without configured LSP diagnostics keep their previous tool contracts and evidence.
 - The interactive startup screen now leads with the Apex Code brand mark and a short metadata
   column — version, model, and working directory — rather than a keybinding list. The previous
   screen spent four of its five elements on instructions and never showed which model was
