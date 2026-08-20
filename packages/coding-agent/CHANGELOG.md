@@ -1,6 +1,6 @@
 # Apex Code changelog
 
-## [Unreleased]
+## [0.0.1-alpha.5] - 2026-08-20
 
 - `edit` and `write` now capture bounded language-server diagnostic evidence after a
   mutation. Records identify the selected server when known, count diagnostics by
