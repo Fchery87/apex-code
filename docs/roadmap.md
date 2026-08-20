@@ -503,6 +503,28 @@ excluded default tools are most of that growth and were never eligible to shrink
 Enforced in `test/context/static-prefix.test.ts`; full record in
 [the Phase 4 spec](specs/2026-08-13-tool-surface.md)'s verified measurement record.
 
+**Follow-up (2026-08-18 — LSP, the one scope item that did not land with the phase.)**
+This phase's scope line ends "worktree isolation, LSP," and the Phase 4 spec deferred LSP
+to its own document as a subsystem rather than a tool, naming the filename and the trigger
+condition ("when the tools below are landed"). The tools landed at `faffaa79e`; the LSP
+spec did not follow, and because Phases 5–12 are all closed there is no later phase whose
+scope would pick it up. It is now specced and planned as a Phase 4 follow-up rather than a
+new phase: [spec](specs/2026-08-18-lsp.md), [plan](plans/2026-08-18-lsp.md). Phase 4's
+own **landed** state is unchanged and is not reopened by this — the phase met its stated
+exit criterion, and this records an item that was scoped to it, deferred with a reason,
+and left without an owner.
+
+**Follow-up (2026-08-19 — the LSP follow-up landed, minus one severable task.)** Tasks
+LSP.1–5 and LSP.7 (registry/client/pool, settings and fail-fast startup, sandbox spawn
+inheritance and egress, diagnostics collector wired to `edit`/`write`, the `lsp` tool,
+and closure verification) are done. LSP.6 (a `"diagnostic"` evidence-kind extension,
+gated on an ADR that was never written) is deferred, not dropped — the plan always
+treated it as severable from the rest. Landing LSP also found the token-budget figures
+two paragraphs up were stale: unrelated tool-description growth across phases 5–8 had
+already carried the measured prefix from 2,150 toward the 2,300 ceiling before LSP
+registered anything. `ENFORCED_PRODUCTION_PREFIX_BUDGET` is now **2,500**, re-measured
+rather than assumed — full record in the LSP spec's own closure amendment.
+
 ---
 
 ## Phase 5 — Delegation & multi-agent
