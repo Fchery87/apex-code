@@ -5,8 +5,16 @@ import { createAllToolDefinitions } from "../../src/core/tools/index.ts";
 
 const CWD = "/workspace";
 
+// `lsp` (LSP.5) is conditionally registered -- pass operations here so the registry
+// this file's per-tool loops iterate over includes it like every other tool. This is
+// what "enumerate it without a new exceptions list" means for these generic loops:
+// they already iterate `Object.entries(registry())` rather than a fixed name list, so
+// including lsp here is enough for every invariant below to cover it automatically.
 function registry(): Record<string, ApexToolDefinition> {
-	return createAllToolDefinitions(CWD) as unknown as Record<string, ApexToolDefinition>;
+	return createAllToolDefinitions(CWD, { lsp: { operations: { request: async () => [] } } }) as unknown as Record<
+		string,
+		ApexToolDefinition
+	>;
 }
 
 /**
@@ -31,6 +39,7 @@ const REPRESENTATIVE_PARAMS: Record<string, unknown> = {
 	plan_present: { plan: "1. Do a thing" },
 	delegate: { agentType: "explore", task: "find the config loader" },
 	test: { executable: "npm", args: ["test"] },
+	lsp: { operation: "definition", path: "src/index.ts", line: 1, character: 1 },
 };
 
 describe("tool contracts", () => {
@@ -59,7 +68,7 @@ describe("tool contracts", () => {
 
 	it("defaults read-only tools to allow and mutating tools to ask", () => {
 		const tools = registry();
-		for (const name of ["read", "grep", "find", "ls"]) {
+		for (const name of ["read", "grep", "find", "ls", "lsp"]) {
 			expect(tools[name].contract.permission.defaultBehavior, name).toBe("allow");
 		}
 		for (const name of ["write", "edit", "bash"]) {

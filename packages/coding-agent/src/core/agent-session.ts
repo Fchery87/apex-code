@@ -116,7 +116,9 @@ import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.ts";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
 import type { ApexToolDefinition, EvidenceSink } from "./tools/contract.ts";
+import type { DiagnosticsOperations } from "./tools/diagnostics.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
+import type { LspOperations } from "./tools/lsp.ts";
 import { createTodoWriteToolDefinition } from "./tools/todo-write.ts";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
 import { createToolSchemaToolDefinition } from "./tools/tool-schema.ts";
@@ -248,6 +250,19 @@ export interface AgentSessionConfig {
 	permissionGate?: Omit<PermissionGateOptions, "getContract">;
 	/** Optional durable evidence destination. Capture remains active without any policy extension. */
 	evidenceSink?: EvidenceSink;
+	/**
+	 * Optional post-mutation diagnostics (LSP.4), injected into the default `edit`/
+	 * `write` tools. Absent by default -- byte-identical existing behavior. Ignored
+	 * when `baseToolsOverride` is set (the caller owns tool construction then).
+	 */
+	diagnosticsOperations?: DiagnosticsOperations;
+	/**
+	 * Optional `lsp` navigation tool transport (LSP.5). When present, the `lsp` tool
+	 * is registered and made active by default alongside read/bash/edit/write. Absent
+	 * by default -- an unconfigured session's registry is unaffected. Ignored when
+	 * `baseToolsOverride` is set.
+	 */
+	lspOperations?: LspOperations;
 }
 
 export interface ExtensionBindings {
@@ -378,6 +393,8 @@ export class AgentSession {
 	private _sessionStartEvent: SessionStartEvent;
 	private _permissionGate?: Omit<PermissionGateOptions, "getContract">;
 	private _evidenceSink?: EvidenceSink;
+	private _diagnosticsOperations?: DiagnosticsOperations;
+	private _lspOperations?: LspOperations;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionMode: ExtensionMode = "print";
 	private _extensionCommandContextActions?: ExtensionCommandContextActions;
@@ -417,6 +434,8 @@ export class AgentSession {
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
 		this._permissionGate = config.permissionGate;
 		this._evidenceSink = config.evidenceSink ?? new SessionEvidenceSink(this.sessionManager);
+		this._diagnosticsOperations = config.diagnosticsOperations;
+		this._lspOperations = config.lspOperations;
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, extensions, auto-compaction, retry logic)
@@ -2692,6 +2711,9 @@ export class AgentSession {
 			: createAllToolDefinitions(this._cwd, {
 					read: { autoResizeImages },
 					bash: { commandPrefix: shellCommandPrefix, shellPath },
+					edit: { diagnosticsOperations: this._diagnosticsOperations },
+					write: { diagnosticsOperations: this._diagnosticsOperations },
+					...(this._lspOperations ? { lsp: { operations: this._lspOperations } } : {}),
 				});
 		baseToolDefinitions.tool_schema = createToolSchemaToolDefinition({
 			getTool: (name) => {
@@ -2735,7 +2757,9 @@ export class AgentSession {
 
 		const defaultActiveToolNames = this._baseToolsOverride
 			? Object.keys(this._baseToolsOverride)
-			: ["read", "bash", "edit", "write"];
+			: this._lspOperations
+				? ["read", "bash", "edit", "write", "lsp"]
+				: ["read", "bash", "edit", "write"];
 		const baseActiveToolNames = options.activeToolNames ?? defaultActiveToolNames;
 		this._refreshToolRegistry({
 			activeToolNames: baseActiveToolNames,

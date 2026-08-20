@@ -10,7 +10,18 @@ import { createPermissionGate, evaluateToolCall } from "../../src/core/permissio
 import type { PermissionResponder } from "../../src/core/permissions/responder.ts";
 import { FilePermissionRuleStore } from "../../src/core/permissions/store.ts";
 import { type ToolContract, UNCLASSIFIED } from "../../src/core/tools/contract.ts";
-import { allToolNames, createAllToolDefinitions, createAllTools, type ToolName } from "../../src/core/tools/index.ts";
+import {
+	allToolNames,
+	createAllToolDefinitions,
+	createAllTools,
+	type ToolName,
+	type ToolsOptions,
+} from "../../src/core/tools/index.ts";
+import type { LspOperations } from "../../src/core/tools/lsp.ts";
+
+/** Inert transport: enough to register the tool, never enough to reach a real process. */
+const lspToolsOptions: ToolsOptions = { lsp: { operations: { request: async () => [] } as LspOperations } };
+const LSP_PARAMS = { operation: "definition", path: "file.txt", line: 1, character: 1 };
 
 /** Schema-valid representative params per tool, so a call reaches the gate rather than failing argument validation first. */
 const REPRESENTATIVE_PARAMS: Record<ToolName, unknown> = {
@@ -43,9 +54,10 @@ afterEach(async () => {
 });
 
 async function driveOneToolCallTurn(
-	toolName: ToolName,
+	toolName: string,
 	params: unknown,
 	beforeToolCall: (context: BeforeToolCallContext, signal?: AbortSignal) => Promise<BeforeToolCallResult | undefined>,
+	toolsOptions?: ToolsOptions,
 ): Promise<{ blocked: boolean; reason: string | undefined; toolExecuted: boolean }> {
 	const providerId = `gate-test-${toolName}`;
 	const faux = fauxProvider({ provider: providerId });
@@ -60,7 +72,7 @@ async function driveOneToolCallTurn(
 	await writeFile(join(scratch, "file.txt"), "a\n", "utf-8");
 
 	let toolExecuted = false;
-	const tools = Object.values(createAllTools(scratch)).map((tool) => ({
+	const tools = Object.values(createAllTools(scratch, toolsOptions)).map((tool) => ({
 		...tool,
 		execute: async (...executeArgs: Parameters<typeof tool.execute>) => {
 			toolExecuted = true;
@@ -133,6 +145,54 @@ describe("permission gate — universal (invariant 2: every registered tool pass
 		const result = await driveOneToolCallTurn(toolName, REPRESENTATIVE_PARAMS[toolName], beforeToolCall);
 		expect(result.blocked, `${toolName} should not have been blocked`).toBe(false);
 		expect(result.toolExecuted, `${toolName} should have executed`).toBe(true);
+	});
+});
+
+// `lsp` is conditionally registered (LSP.5) -- it is absent from `allToolNames` because
+// it does not exist in an unconfigured registry, so the loop above cannot enumerate it.
+// This is not an exceptions list: the same invariant 2 gate behavior is exercised here,
+// just against a registry built with `{ lsp: {...} }` so the tool is actually present.
+describe("permission gate — lsp (invariant 2, conditionally registered tool)", () => {
+	it("blocks lsp when a blanket deny rule applies, and never executes it", async () => {
+		const store = new FilePermissionRuleStore({
+			cwd: scratch,
+			agentDir: join(scratch, "agent"),
+			policyPath: join(scratch, "missing-policy.json"),
+		});
+		await store.apply({ type: "addRules", destination: "local", rules: [{ toolName: "lsp", behavior: "deny" }] });
+
+		const definitions = createAllToolDefinitions(scratch, lspToolsOptions);
+		const beforeToolCall = createPermissionGate({
+			getContract: (name) => definitions[name as ToolName]?.contract,
+			store,
+			getMode: () => "default",
+		});
+
+		const result = await driveOneToolCallTurn("lsp", LSP_PARAMS, beforeToolCall, lspToolsOptions);
+
+		expect(result.blocked, "lsp should have been blocked").toBe(true);
+		expect(result.toolExecuted, "lsp must never execute once blocked").toBe(false);
+		expect(result.reason).toBeTruthy();
+	});
+
+	it("allows lsp to execute when an explicit allow rule applies", async () => {
+		const store = new FilePermissionRuleStore({
+			cwd: scratch,
+			agentDir: join(scratch, "agent"),
+			policyPath: join(scratch, "missing-policy.json"),
+		});
+		await store.apply({ type: "addRules", destination: "local", rules: [{ toolName: "lsp", behavior: "allow" }] });
+
+		const definitions = createAllToolDefinitions(scratch, lspToolsOptions);
+		const beforeToolCall = createPermissionGate({
+			getContract: (name) => definitions[name as ToolName]?.contract,
+			store,
+			getMode: () => "default",
+		});
+
+		const result = await driveOneToolCallTurn("lsp", LSP_PARAMS, beforeToolCall, lspToolsOptions);
+		expect(result.blocked, "lsp should not have been blocked").toBe(false);
+		expect(result.toolExecuted, "lsp should have executed").toBe(true);
 	});
 });
 
