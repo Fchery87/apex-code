@@ -50,6 +50,16 @@ export {
 	type LsToolOptions,
 } from "./ls.ts";
 export {
+	createLspTool,
+	createLspToolDefinition,
+	type LspLocation,
+	type LspOperations,
+	type LspSymbol,
+	type LspToolDetails,
+	type LspToolInput,
+	type LspToolOptions,
+} from "./lsp.ts";
+export {
 	createPlanPresentTool,
 	createPlanPresentToolDefinition,
 	type PlanPresentDetails,
@@ -127,6 +137,7 @@ import { createEditTool, createEditToolDefinition, type EditToolOptions } from "
 import { createFindTool, createFindToolDefinition, type FindToolOptions } from "./find.ts";
 import { createGrepTool, createGrepToolDefinition, type GrepToolOptions } from "./grep.ts";
 import { createLsTool, createLsToolDefinition, type LsToolOptions } from "./ls.ts";
+import { createLspTool, createLspToolDefinition, type LspToolOptions } from "./lsp.ts";
 import { createPlanPresentTool, createPlanPresentToolDefinition } from "./plan-present.ts";
 import { createReadTool, createReadToolDefinition, type ReadToolOptions } from "./read.ts";
 import { createTestTool, createTestToolDefinition, type TestToolOptions } from "./test.ts";
@@ -186,6 +197,12 @@ export interface ToolsOptions {
 	web_fetch?: WebFetchToolOptions;
 	delegate?: { runtime?: DelegationRuntimeOptions };
 	test?: TestToolOptions;
+	/**
+	 * The `lsp` navigation tool (LSP.5). Undefined by default -- the registry-building
+	 * functions below include the `lsp` key only when this is provided, which is what
+	 * keeps an unconfigured session's tool set (and static prompt prefix) unaffected.
+	 */
+	lsp?: LspToolOptions;
 }
 
 /** Default store when no session/workspace context supplies one (mirrors emptyToolSchemaResolver below). */
@@ -308,7 +325,10 @@ const emptyToolSchemaResolver: ToolSchemaResolver = {
 	markLoaded: () => {},
 };
 
-export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): Record<ToolName, ToolDef> {
+export function createAllToolDefinitions(
+	cwd: string,
+	options?: ToolsOptions,
+): Record<ToolName, ToolDef> & { lsp?: ToolDef } {
 	const definitions = {
 		read: createReadToolDefinition(cwd, options?.read),
 		bash: createBashToolDefinition(cwd, options?.bash),
@@ -332,6 +352,9 @@ export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): R
 		plan_present: createPlanPresentToolDefinition(),
 		delegate: createDelegateToolDefinition(options?.delegate?.runtime ?? noopDelegationRuntime),
 		test: createTestToolDefinition(cwd, options?.test),
+		// Registered only when configured (LSP.5): an unconfigured session's registry,
+		// and therefore its static prompt prefix, is unaffected by this subsystem.
+		...(options?.lsp ? { lsp: createLspToolDefinition(cwd, options.lsp) } : {}),
 	};
 }
 
@@ -353,7 +376,7 @@ export function createReadOnlyTools(cwd: string, options?: ToolsOptions): Tool[]
 	];
 }
 
-export function createAllTools(cwd: string, options?: ToolsOptions): Record<ToolName, Tool> {
+export function createAllTools(cwd: string, options?: ToolsOptions): Record<ToolName, Tool> & { lsp?: Tool } {
 	const definitions = createAllToolDefinitions(cwd, options);
 	const resolver = options?.tool_schema?.resolver ?? {
 		getTool: (name: string) => definitions[name as ToolName],
@@ -375,5 +398,6 @@ export function createAllTools(cwd: string, options?: ToolsOptions): Record<Tool
 		plan_present: createPlanPresentTool(),
 		delegate: createDelegateTool(options?.delegate?.runtime ?? noopDelegationRuntime),
 		test: createTestTool(cwd, options?.test),
+		...(options?.lsp ? { lsp: createLspTool(cwd, options.lsp) } : {}),
 	};
 }
