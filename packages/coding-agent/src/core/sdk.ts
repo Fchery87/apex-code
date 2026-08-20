@@ -92,6 +92,10 @@ export interface CreateAgentSessionOptions {
 	permissionGate?: AgentSessionConfig["permissionGate"];
 	/** Optional destination for source-level evidence; defaults to the durable session sink. */
 	evidenceSink?: EvidenceSink;
+	/** Optional post-mutation diagnostics injected into `edit`/`write` (LSP.4). */
+	diagnosticsOperations?: AgentSessionConfig["diagnosticsOperations"];
+	/** Optional `lsp` navigation tool transport (LSP.5); registers and activates `lsp` when present. */
+	lspOperations?: AgentSessionConfig["lspOperations"];
 	/**
 	 * Delegation entry point (roadmap Phase 5, ADR 0008). When set, `delegate`
 	 * executes real child sessions through `resolveAgent`, with the child's
@@ -281,7 +285,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		thinkingLevel = clampThinkingLevel(model, thinkingLevel) as ThinkingLevel;
 	}
 
-	const defaultActiveToolNames: ToolName[] = ["read", "bash", "edit", "write"];
+	const defaultActiveToolNames: string[] = options.lspOperations
+		? (["read", "bash", "edit", "write", "lsp"] satisfies (ToolName | "lsp")[])
+		: (["read", "bash", "edit", "write"] satisfies ToolName[]);
 	const allowedToolNames = options.tools ?? (options.noTools === "all" ? [] : undefined);
 	const excludedToolNames = options.excludeTools;
 	const excludedToolNameSet = excludedToolNames ? new Set(excludedToolNames) : undefined;
@@ -498,6 +504,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					// human for a call the human did not make (ADR 0008, "Who answers a
 					// child's ask").
 					permissionGate: { store: derivedStore, getMode: parentPermissionGate.getMode },
+					// A delegated child shares the parent's cwd-bound LSP pool (spec, "no
+					// multi-root LSP connection and no sharing across cwd-bound service
+					// lifetimes" -- delegated children are the one sharing exception).
+					diagnosticsOperations: options.diagnosticsOperations,
+					lspOperations: options.lspOperations,
 					// Forwarded so a child that itself holds `delegate` can delegate again
 					// (bounded by the depth guard above, read fresh from its own session
 					// header on its next createAgentSession call) -- otherwise recursion
@@ -538,6 +549,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		sessionStartEvent: options.sessionStartEvent,
 		permissionGate: options.permissionGate,
 		evidenceSink: options.evidenceSink,
+		diagnosticsOperations: options.diagnosticsOperations,
+		lspOperations: options.lspOperations,
 	});
 	parentSessionRef.current = session;
 	const extensionsResult = resourceLoader.getExtensions();
