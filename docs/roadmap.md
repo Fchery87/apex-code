@@ -530,6 +530,15 @@ Windows async-close race in test cleanup, both fixed and both recorded in the LS
 closure amendment. `docs/plans/2026-08-18-lsp.md` is deleted; the spec above is now the
 durable record.
 
+
+**Follow-up (2026-08-20 — LSP.6 diagnostic evidence accepted and implemented.)** ADR
+[0020](adr/0020-diagnostic-evidence-kind.md) is Accepted. `edit` and `write` now add a
+bounded `"diagnostic"` evidence record when their diagnostics operation runs: selected
+server where known, total and severity counts, explicit collector truncation, and a
+stable unavailable classification. Diagnostic messages and free-form server errors stay
+out of the durable ledger. The no-LSP path remains unchanged and emits no diagnostic
+record. The [LSP spec](specs/2026-08-18-lsp.md) carries the final interface and amendment.
+
 ---
 
 ## Phase 5 — Delegation & multi-agent

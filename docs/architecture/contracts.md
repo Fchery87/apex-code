@@ -175,7 +175,7 @@ concern, not a per-tool one — see Contract 2.
 ```ts
 export interface EvidenceSpec<TParams extends TSchema, TDetails> {
   /** Kinds this tool can emit. Empty set is valid and explicit. */
-  emits: ReadonlySet<EvidenceKind>;   // "diff" | "test" | "command" | "manual" | "workflow"
+  emits: ReadonlySet<EvidenceKind>;   // "diff" | "test" | "command" | "manual" | "workflow" | "diagnostic"
 
   /**
    * Derive evidence from a completed call. Runs inside the tool's own execution
@@ -192,6 +192,11 @@ export interface EvidenceSpec<TParams extends TSchema, TDetails> {
 This is the field that justifies moving evidence into core at all. An extension
 observing `tool_result` can only parse what was rendered; the bash tool already holds
 its exit code as a number. `capture` runs where that number lives.
+
+`"diagnostic"` records follow the same rule. Mutation tools capture the selected server,
+bounded total and severity counts, and whether the collector truncated its result.
+Diagnostic messages and free-form failure reasons are presentation data and may contain
+source or server-controlled text, so they never enter durable evidence. See ADR 0020.
 
 ## Foreign tools
 

@@ -1,4 +1,5 @@
 import { pathToFileURL } from "node:url";
+import type { DiagnosticUnavailableKind } from "../tools/contract.ts";
 import type { LspClient, LspNotification } from "./client.ts";
 import type { LspPool } from "./pool.ts";
 import { LspDocumentSync } from "./sync.ts";
@@ -22,8 +23,18 @@ export interface Diagnostic {
 }
 
 export type DiagnosticsOutcome =
-	| { readonly status: "ok"; readonly diagnostics: readonly Diagnostic[] }
-	| { readonly status: "unavailable"; readonly reason: string };
+	| {
+			readonly status: "ok";
+			readonly serverId: string;
+			readonly diagnostics: readonly Diagnostic[];
+			readonly truncated: boolean;
+	  }
+	| {
+			readonly status: "unavailable";
+			readonly serverId?: string;
+			readonly unavailableKind: DiagnosticUnavailableKind;
+			readonly reason: string;
+	  };
 
 interface PublishDiagnostics {
 	readonly uri: string;
@@ -33,6 +44,7 @@ interface PublishDiagnostics {
 
 interface Waiter {
 	readonly version: number;
+	readonly serverId: string;
 	readonly resolve: (outcome: DiagnosticsOutcome) => void;
 	readonly timer: NodeJS.Timeout;
 	readonly removeAbort: () => void;
@@ -57,8 +69,7 @@ function isPosition(value: unknown): value is DiagnosticPosition {
 function isDiagnostic(value: unknown): value is Diagnostic {
 	if (!isRecord(value) || typeof value.message !== "string" || !isRecord(value.range)) return false;
 	if (!isPosition(value.range.start) || !isPosition(value.range.end)) return false;
-	if (value.severity !== undefined && (!Number.isSafeInteger(value.severity) || (value.severity as number) < 1))
-		return false;
+	if (value.severity !== undefined && !Number.isSafeInteger(value.severity)) return false;
 	if (value.code !== undefined && typeof value.code !== "string" && typeof value.code !== "number") return false;
 	if (value.source !== undefined && typeof value.source !== "string") return false;
 	return true;
@@ -89,10 +100,27 @@ export class LspDiagnostics {
 	}
 
 	async afterMutation(path: string, signal?: AbortSignal): Promise<DiagnosticsOutcome> {
-		if (this.disposed) return { status: "unavailable", reason: "diagnostics are disposed" };
+		if (this.disposed)
+			return { status: "unavailable", unavailableKind: "disposed", reason: "diagnostics are disposed" };
+		let selectedServerId: string | undefined;
 		try {
 			const connection = await this.pool.acquire(path);
-			if (!connection) return { status: "unavailable", reason: "no language server configured for path" };
+			if (this.disposed) {
+				return {
+					status: "unavailable",
+					...(connection === undefined ? {} : { serverId: connection.selection.server.id }),
+					unavailableKind: "disposed",
+					reason: "diagnostics are disposed",
+				};
+			}
+			if (!connection)
+				return {
+					status: "unavailable",
+					unavailableKind: "no-server",
+					reason: "no language server configured for path",
+				};
+			const serverId = connection.selection.server.id;
+			selectedServerId = serverId;
 			// `connection.selection.path` is the registry's canonicalized form of `path`
 			// (symlinks resolved -- see `registry.ts`'s `selectLspServerForPath`). It must
 			// be the one URI-keying basis used everywhere below: `sync.synchronize()` opens
@@ -105,6 +133,7 @@ export class LspDiagnostics {
 			const pending = this.waitFor(
 				this.uri(canonicalPath),
 				nextVersion,
+				serverId,
 				connection.selection.server.diagnosticsTimeoutMs,
 				signal,
 			);
@@ -115,15 +144,38 @@ export class LspDiagnostics {
 			);
 			if (!document) {
 				pending.cancel();
-				return { status: "unavailable", reason: "language server does not support text document synchronization" };
+				return {
+					status: "unavailable",
+					serverId,
+					unavailableKind: "unsupported-sync",
+					reason: "language server does not support text document synchronization",
+				};
 			}
 			if (document.version !== nextVersion) {
 				pending.cancel();
-				return { status: "unavailable", reason: "document synchronization version changed unexpectedly" };
+				return {
+					status: "unavailable",
+					serverId,
+					unavailableKind: "server-failed",
+					reason: "document synchronization version changed unexpectedly",
+				};
 			}
 			return await pending.outcome;
 		} catch (error) {
-			return { status: "unavailable", reason: unavailableReason(error) };
+			if (this.disposed) {
+				return {
+					status: "unavailable",
+					...(selectedServerId === undefined ? {} : { serverId: selectedServerId }),
+					unavailableKind: "disposed",
+					reason: "diagnostics are disposed",
+				};
+			}
+			return {
+				status: "unavailable",
+				...(selectedServerId === undefined ? {} : { serverId: selectedServerId }),
+				unavailableKind: "server-failed",
+				reason: unavailableReason(error),
+			};
 		}
 	}
 
@@ -135,7 +187,12 @@ export class LspDiagnostics {
 		this.unsubscribeByClient.clear();
 		for (const [uri, waiters] of this.waiters) {
 			for (const waiter of [...waiters])
-				this.settle(uri, waiter, { status: "unavailable", reason: "diagnostics are disposed" });
+				this.settle(uri, waiter, {
+					status: "unavailable",
+					serverId: waiter.serverId,
+					unavailableKind: "disposed",
+					reason: "diagnostics are disposed",
+				});
 		}
 	}
 
@@ -163,6 +220,7 @@ export class LspDiagnostics {
 	private waitFor(
 		uri: string,
 		version: number,
+		serverId: string,
 		timeoutMs: number,
 		signal?: AbortSignal,
 	): {
@@ -171,13 +229,25 @@ export class LspDiagnostics {
 	} {
 		let waiter: Waiter;
 		const outcome = new Promise<DiagnosticsOutcome>((resolve) => {
-			const abort = () => this.settle(uri, waiter, { status: "unavailable", reason: "diagnostics aborted" });
+			const abort = () =>
+				this.settle(uri, waiter, {
+					status: "unavailable",
+					serverId,
+					unavailableKind: "aborted",
+					reason: "diagnostics aborted",
+				});
 			const timer = setTimeout(
-				() => this.settle(uri, waiter, { status: "unavailable", reason: `timed out after ${timeoutMs}ms` }),
+				() =>
+					this.settle(uri, waiter, {
+						status: "unavailable",
+						serverId,
+						unavailableKind: "timed-out",
+						reason: `timed out after ${timeoutMs}ms`,
+					}),
 				timeoutMs,
 			);
 			signal?.addEventListener("abort", abort, { once: true });
-			waiter = { version, resolve, timer, removeAbort: () => signal?.removeEventListener("abort", abort) };
+			waiter = { version, serverId, resolve, timer, removeAbort: () => signal?.removeEventListener("abort", abort) };
 			const waiters = this.waiters.get(uri) ?? new Set<Waiter>();
 			waiters.add(waiter);
 			this.waiters.set(uri, waiters);
@@ -185,7 +255,13 @@ export class LspDiagnostics {
 		});
 		return {
 			outcome,
-			cancel: () => this.settle(uri, waiter, { status: "unavailable", reason: "diagnostics cancelled" }),
+			cancel: () =>
+				this.settle(uri, waiter, {
+					status: "unavailable",
+					serverId,
+					unavailableKind: "aborted",
+					reason: "diagnostics cancelled",
+				}),
 		};
 	}
 
@@ -199,11 +275,18 @@ export class LspDiagnostics {
 			if (publish.version > waiter.version) {
 				this.settle(publish.uri, waiter, {
 					status: "unavailable",
+					serverId: waiter.serverId,
+					unavailableKind: "superseded",
 					reason: "diagnostics were superseded by a newer document version",
 				});
 				continue;
 			}
-			this.settle(publish.uri, waiter, { status: "ok", diagnostics: publish.diagnostics.slice(0, MAX_DIAGNOSTICS) });
+			this.settle(publish.uri, waiter, {
+				status: "ok",
+				serverId: waiter.serverId,
+				diagnostics: publish.diagnostics.slice(0, MAX_DIAGNOSTICS),
+				truncated: publish.diagnostics.length > MAX_DIAGNOSTICS,
+			});
 		}
 	}
 

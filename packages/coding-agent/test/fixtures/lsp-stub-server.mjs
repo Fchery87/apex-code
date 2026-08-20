@@ -49,19 +49,18 @@ function publishDiagnosticsForVersion(uri, version) {
 			params: { uri, version: version - 1, diagnostics: [] },
 		});
 	}
+	const diagnostic = {
+		message: `diagnostic for version ${version}`,
+		range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } },
+		severity: 1,
+	};
 	send({
 		jsonrpc: "2.0",
 		method: "textDocument/publishDiagnostics",
 		params: {
 			uri,
 			version,
-			diagnostics: [
-				{
-					message: `diagnostic for version ${version}`,
-					range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } },
-					severity: 1,
-				},
-			],
+			diagnostics: diagnosticsMode === "many" ? Array.from({ length: 1001 }, () => diagnostic) : [diagnostic],
 		},
 	});
 }

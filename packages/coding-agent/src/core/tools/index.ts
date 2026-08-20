@@ -16,6 +16,16 @@ export {
 	type DelegateDetails,
 	type DelegateInput,
 } from "./delegate.ts";
+export type {
+	Diagnostic,
+	DiagnosticEvidenceRecord,
+	DiagnosticPosition,
+	DiagnosticRange,
+	DiagnosticSeverityCounts,
+	DiagnosticsOperations,
+	DiagnosticsOutcome,
+	DiagnosticUnavailableKind,
+} from "./diagnostics.ts";
 export {
 	createEditTool,
 	createEditToolDefinition,

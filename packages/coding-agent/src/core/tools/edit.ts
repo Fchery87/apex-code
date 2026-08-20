@@ -6,9 +6,9 @@ import { access as fsAccess, readFile as fsReadFile, writeFile as fsWriteFile } 
 import { type Static, Type } from "typebox";
 import { renderDiff } from "../../modes/interactive/components/diff.ts";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
-import type { ApexToolDefinition } from "./contract.ts";
+import type { ApexToolDefinition, EvidenceRecord } from "./contract.ts";
 import type { DiagnosticsOperations, DiagnosticsOutcome } from "./diagnostics.ts";
-import { formatDiagnosticsOutcome } from "./diagnostics.ts";
+import { diagnosticEvidenceForPath, formatDiagnosticsOutcome } from "./diagnostics.ts";
 import {
 	applyEditsToNormalizedContent,
 	computeEditsDiff,
@@ -335,12 +335,15 @@ export function createEditToolDefinition(
 			}),
 			context: { resultRecoverable: true, deferSchema: false },
 			evidence: {
-				emits: new Set(["diff"]),
+				emits: new Set(diagnosticsOperations ? ["diff", "diagnostic"] : ["diff"]),
 				capture: (params, result) => {
 					const patch = result.details?.patch;
-					return patch
+					const records: EvidenceRecord[] = patch
 						? [{ kind: "diff", path: params.path, patchHash: sha256(patch) }]
 						: [{ kind: "diff", path: params.path }];
+					const diagnostics = result.details?.diagnostics;
+					if (diagnostics) records.push(diagnosticEvidenceForPath(params.path, diagnostics));
+					return records;
 				},
 			},
 		},
