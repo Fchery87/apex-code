@@ -531,13 +531,14 @@ closure amendment. `docs/plans/2026-08-18-lsp.md` is deleted; the spec above is 
 durable record.
 
 
-**Follow-up (2026-08-20 — LSP.6 diagnostic evidence accepted and implemented.)** ADR
+**Follow-up (2026-08-20 — LSP.6 diagnostic evidence accepted and implemented, spec Complete.)** ADR
 [0020](adr/0020-diagnostic-evidence-kind.md) is Accepted. `edit` and `write` now add a
 bounded `"diagnostic"` evidence record when their diagnostics operation runs: selected
 server where known, total and severity counts, explicit collector truncation, and a
 stable unavailable classification. Diagnostic messages and free-form server errors stay
 out of the durable ledger. The no-LSP path remains unchanged and emits no diagnostic
-record. The [LSP spec](specs/2026-08-18-lsp.md) carries the final interface and amendment.
+record. This 2026-08-20 amendment supersedes the earlier 2026-08-19 deferred state of LSP.6;
+all tasks (LSP.1–LSP.7) are now complete, and the [LSP spec](specs/2026-08-18-lsp.md) is marked `Complete`.
 
 ---
 
