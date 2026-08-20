@@ -1,4 +1,4 @@
-import { appendFileSync } from "node:fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 
 const logPath = process.env.APEX_LSP_STUB_LOG;
 const initializeDelayMs = Number(process.env.APEX_LSP_STUB_INITIALIZE_DELAY_MS ?? "0");
@@ -7,6 +7,11 @@ const initializeRequestMethod = process.env.APEX_LSP_STUB_INITIALIZE_REQUEST_MET
 // handshake tests and LSP.4's diagnostics-collector tests.
 const textDocumentSyncMode = process.env.APEX_LSP_STUB_TEXT_DOCUMENT_SYNC;
 const diagnosticsMode = process.env.APEX_LSP_STUB_DIAGNOSTICS;
+// LSP.3: when set, report this server's own process.env before doing anything else,
+// so a sandboxed-launch test can assert on what the spawned child actually saw
+// (private sandbox state paths) rather than what the spawning process saw.
+const reportEnvPath = process.env.APEX_LSP_STUB_REPORT_ENV_PATH;
+if (reportEnvPath) writeFileSync(reportEnvPath, JSON.stringify(process.env));
 let nextServerRequestId = 1000;
 let input = Buffer.alloc(0);
 let shutdownRequested = false;
