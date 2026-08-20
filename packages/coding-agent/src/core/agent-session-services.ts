@@ -4,6 +4,9 @@ import type { ThinkingLevel } from "apex-code-agent-core";
 import { getAgentDir, getAuthPath } from "../config.ts";
 import { resolvePath } from "../utils/paths.ts";
 import type { SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
+import { LspDiagnostics } from "./lsp/diagnostics.ts";
+import { LspPool } from "./lsp/pool.ts";
+import { resolveLspRegistry } from "./lsp/registry.ts";
 import { ModelRuntime } from "./model-runtime.ts";
 import type { PermissionGateOptions } from "./permissions/gate.ts";
 import {
@@ -15,6 +18,7 @@ import {
 import { type CreateAgentSessionOptions, type CreateAgentSessionResult, createAgentSession } from "./sdk.ts";
 import type { SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
+import type { LspOperations } from "./tools/lsp.ts";
 import { SqliteUsagePerformanceStore } from "./usage-performance-store.ts";
 
 /** Filename of the shared durable-state database within an agent directory (roadmap Phase 8). */
@@ -88,8 +92,17 @@ export interface AgentSessionServices {
 	modelRuntime: ModelRuntime;
 	settingsManager: SettingsManager;
 	resourceLoader: ResourceLoader;
+	lspPool: LspPool;
+	/**
+	 * Wraps `lspPool` for `DiagnosticsOperations.afterMutation` (LSP.4). Structurally
+	 * compatible with `core/tools/diagnostics.ts`'s `DiagnosticsOperations` -- callers
+	 * pass this value directly, never importing `core/lsp/*` themselves.
+	 */
+	lspDiagnostics: LspDiagnostics;
+	/** True when at least one LSP server resolved -- gates registering the `lsp` tool (LSP.5). */
+	lspConfigured: boolean;
 	diagnostics: AgentSessionRuntimeDiagnostic[];
-	close(): void;
+	close(): Promise<void>;
 }
 
 function applyExtensionFlagValues(
@@ -218,14 +231,37 @@ export async function createAgentSessionServices(
 	await modelRuntime.refresh({ allowNetwork: false });
 	diagnostics.push(...applyExtensionFlagValues(resourceLoader, options.extensionFlagValues));
 
+	let lspPool: LspPool;
+	let lspConfigured = false;
+	try {
+		const registry = resolveLspRegistry(settingsManager.getLspSettings(), { workspace: cwd });
+		lspPool = new LspPool(registry);
+		lspConfigured = registry.servers.length > 0;
+		if (lspConfigured) await lspPool.start();
+	} catch (error) {
+		diagnostics.push({
+			type: "error",
+			message: `LSP startup failed: ${error instanceof Error ? error.message : String(error)}`,
+		});
+		lspPool = new LspPool({ workspace: cwd, servers: [], platform: process.platform });
+	}
+	const lspDiagnostics = new LspDiagnostics(lspPool);
+
 	return {
 		cwd,
 		agentDir,
 		modelRuntime,
 		settingsManager,
 		resourceLoader,
+		lspPool,
+		lspDiagnostics,
+		lspConfigured,
 		diagnostics,
-		close: () => {
+		close: async () => {
+			// Diagnostics first: it still needs live LSP clients to send didClose
+			// during its own teardown, so it must not outlive the pool it wraps.
+			await lspDiagnostics.dispose();
+			await lspPool.dispose();
 			if (!options.modelRuntime) modelRuntime.close();
 		},
 	};
@@ -241,6 +277,27 @@ export async function createAgentSessionServices(
 export async function createAgentSessionFromServices(
 	options: CreateAgentSessionFromServicesOptions,
 ): Promise<CreateAgentSessionResult> {
+	const { lspPool, lspDiagnostics, lspConfigured } = options.services;
+	// Both gated on `lspConfigured` (at least one server resolved), not per-path:
+	// the spec's "no diagnostics injection or result change whatsoever when `lsp` is
+	// unconfigured" is a session-level guarantee. A session with servers configured
+	// for *some* languages still injects diagnosticsOperations -- a mutated path with
+	// no matching server correctly resolves to the explicit `unavailable` outcome via
+	// `LspDiagnostics.afterMutation`'s own per-path `pool.acquire`, it is simply never
+	// asked at all when the session has no servers whatsoever. `lspDiagnostics`
+	// already matches `DiagnosticsOperations` structurally, so it is passed directly
+	// rather than wrapped.
+	const diagnosticsOperations = lspConfigured ? lspDiagnostics : undefined;
+	const lspOperations: LspOperations | undefined = lspConfigured
+		? {
+				request: async (absolutePath, method, params, signal) => {
+					const connection = await lspPool.acquire(absolutePath);
+					if (!connection) return undefined;
+					return connection.client.request(method, params, signal);
+				},
+			}
+		: undefined;
+
 	return createAgentSession({
 		cwd: options.services.cwd,
 		agentDir: options.services.agentDir,
@@ -257,5 +314,7 @@ export async function createAgentSessionFromServices(
 		customTools: options.customTools,
 		sessionStartEvent: options.sessionStartEvent,
 		permissionGate: options.permissionGate,
+		diagnosticsOperations,
+		lspOperations,
 	});
 }
