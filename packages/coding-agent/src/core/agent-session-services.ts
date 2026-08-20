@@ -7,6 +7,7 @@ import type { SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
 import { LspDiagnostics } from "./lsp/diagnostics.ts";
 import { LspPool } from "./lsp/pool.ts";
 import { resolveLspRegistry } from "./lsp/registry.ts";
+import { LspStatusStore } from "./lsp/status.ts";
 import { ModelRuntime } from "./model-runtime.ts";
 import type { PermissionGateOptions } from "./permissions/gate.ts";
 import {
@@ -101,6 +102,13 @@ export interface AgentSessionServices {
 	lspDiagnostics: LspDiagnostics;
 	/** True when at least one LSP server resolved -- gates registering the `lsp` tool (LSP.5). */
 	lspConfigured: boolean;
+	/**
+	 * Chronological, bounded record of every server-root state transition observed by
+	 * `lspPool` for this services lifetime (LSP.2). Inspectable structured state -- not
+	 * wired to any user-facing surface by this plan (see `docs/plans/2026-08-18-lsp.md`,
+	 * Task LSP.2: this is not a `/doctor` task).
+	 */
+	lspStatus: LspStatusStore;
 	diagnostics: AgentSessionRuntimeDiagnostic[];
 	close(): Promise<void>;
 }
@@ -231,18 +239,63 @@ export async function createAgentSessionServices(
 	await modelRuntime.refresh({ allowNetwork: false });
 	diagnostics.push(...applyExtensionFlagValues(resourceLoader, options.extensionFlagValues));
 
-	let lspPool: LspPool;
+	// `lspStatus` is constructed unconditionally (and outside the try) so it always
+	// records real state transitions the pool experiences below, including the
+	// eager-start failure the catch block handles -- not just a snapshot taken at one
+	// fixed point in time.
+	const lspStatus = new LspStatusStore();
+	let lspPool: LspPool | undefined;
+	let registry: ReturnType<typeof resolveLspRegistry> | undefined;
 	let lspConfigured = false;
 	try {
-		const registry = resolveLspRegistry(settingsManager.getLspSettings(), { workspace: cwd });
-		lspPool = new LspPool(registry);
+		registry = resolveLspRegistry(settingsManager.getLspSettings(), { workspace: cwd });
+		lspPool = new LspPool(registry, {
+			onStatusChange: (status) =>
+				lspStatus.record({
+					serverId: status.serverId,
+					root: status.root,
+					state: status.state,
+					attempt: status.attempts,
+					...(status.reason === undefined ? {} : { reason: status.reason }),
+				}),
+		});
 		lspConfigured = registry.servers.length > 0;
+		// Per the spec's "Resolved configuration, ownership, and lifecycle": any
+		// configured entry that cannot resolve, spawn, or initialize its cwd-root
+		// process within its timeout is a startup misconfiguration -- fail fast here,
+		// following core/permissions/startup.ts's precedent, rather than let a broken
+		// server surface only when a tool call needs it mid-run.
 		if (lspConfigured) await lspPool.start();
 	} catch (error) {
-		diagnostics.push({
-			type: "error",
-			message: `LSP startup failed: ${error instanceof Error ? error.message : String(error)}`,
-		});
+		// Name the failing binary(ies), not just the raw client/registry error: the
+		// registry itself already does this for a resolution failure (missing/
+		// un-spawnable binary names the command and lookup path), but a `pool.start()`
+		// rejection surfaces only the first client's bare error (e.g. "initialize timed
+		// out"), with no server id attached. `registry.servers` (resolved commands) and
+		// `lspPool.status()` (which entries actually failed) are both in scope here, so
+		// build the richer message without changing `LspPoolStatus`'s shape or the
+		// pool's own error-propagation wire format.
+		const commandById = new Map(registry?.servers.map((server) => [server.id, server.command]) ?? []);
+		const failedEntries = (lspPool?.status() ?? []).filter(
+			(status) => status.state === "degraded" || status.state === "disabled",
+		);
+		const message =
+			failedEntries.length > 0
+				? failedEntries
+						.map(
+							(status) =>
+								`${status.serverId} (${commandById.get(status.serverId) ?? "?"}) at ${status.root}: ${status.reason ?? "unknown error"}`,
+						)
+						.join("; ")
+				: error instanceof Error
+					? error.message
+					: String(error);
+		diagnostics.push({ type: "error", message: `LSP startup failed: ${message}` });
+		// A pool that got partway through eager start may already have spawned and
+		// initialized sibling servers successfully; discarding it without disposing
+		// would orphan those child processes rather than tearing them down cleanly.
+		await lspPool?.dispose().catch(() => {});
+		lspConfigured = false;
 		lspPool = new LspPool({ workspace: cwd, servers: [], platform: process.platform });
 	}
 	const lspDiagnostics = new LspDiagnostics(lspPool);
@@ -256,6 +309,7 @@ export async function createAgentSessionServices(
 		lspPool,
 		lspDiagnostics,
 		lspConfigured,
+		lspStatus,
 		diagnostics,
 		close: async () => {
 			// Diagnostics first: it still needs live LSP clients to send didClose
