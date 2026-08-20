@@ -1,6 +1,6 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, delimiter, join } from "node:path";
+import { basename, delimiter, join, resolve } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { type LspSettings, resolveLspRegistry, selectLspServerForPath } from "../../src/core/lsp/registry.ts";
 
@@ -10,6 +10,21 @@ function temporaryDirectory(): string {
 	const directory = mkdtempSync(join(tmpdir(), "apex-lsp-registry-test-"));
 	temporaryDirectories.push(directory);
 	return directory;
+}
+
+/**
+ * Mirrors `registry.ts`'s own `canonical()`: the registry resolves every path it
+ * returns through `realpathSync`, so an expectation built from the raw mkdtemp path
+ * must go through the same resolution or it fails wherever the OS temp dir is itself
+ * a symlink (macOS's /var/folders -> /private/var/folders; Linux's bare /tmp is not,
+ * which is why this was invisible before a real macOS CI run existed).
+ */
+function canonical(path: string): string {
+	try {
+		return realpathSync(path);
+	} catch {
+		return resolve(path);
+	}
 }
 
 function executable(directory: string, name = process.platform === "win32" ? "server.CMD" : "server"): string {
@@ -43,7 +58,7 @@ describe("LSP registry", () => {
 			env: { PATH: [bin, "/unsearched"].join(delimiter), PATHEXT: ".COM;.EXE;.BAT;.CMD" },
 		});
 
-		expect(registry.servers[0]?.command).toBe(server);
+		expect(registry.servers[0]?.command).toBe(canonical(server));
 	});
 
 	test("rejects relative executable paths and ambiguous language matchers", () => {
@@ -79,7 +94,7 @@ describe("LSP registry", () => {
 
 		expect(selectLspServerForPath(registry, special)).toMatchObject({
 			languageId: "typescript",
-			root: join(workspace, "packages", "app"),
+			root: canonical(join(workspace, "packages", "app")),
 		});
 		expect(selectLspServerForPath(registry, declaration)).toMatchObject({ languageId: "typescript" });
 	});

@@ -93,10 +93,17 @@ export class LspDiagnostics {
 		try {
 			const connection = await this.pool.acquire(path);
 			if (!connection) return { status: "unavailable", reason: "no language server configured for path" };
+			// `connection.selection.path` is the registry's canonicalized form of `path`
+			// (symlinks resolved -- see `registry.ts`'s `selectLspServerForPath`). It must
+			// be the one URI-keying basis used everywhere below: `sync.synchronize()` opens
+			// the document under this canonical path, so a waiter keyed by the caller's raw
+			// `path` would never match the publish it's waiting for wherever the two forms
+			// differ (e.g. macOS's /tmp -> /private/tmp), timing out instead of resolving.
+			const canonicalPath = connection.selection.path;
 			this.subscribe(connection.client);
-			const nextVersion = this.peekNextVersion(path);
+			const nextVersion = this.peekNextVersion(canonicalPath);
 			const pending = this.waitFor(
-				this.uri(path),
+				this.uri(canonicalPath),
 				nextVersion,
 				connection.selection.server.diagnosticsTimeoutMs,
 				signal,
