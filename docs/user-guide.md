@@ -47,7 +47,9 @@ network access) goes through a permission gate before it runs. `--permission-mod
 controls the default posture (`default` asks for anything not already allowed;
 `plan` blocks mutating operations entirely; `acceptEdits`, `bypassPermissions`, and
 `dontAsk` loosen it in different ways). Non-interactive sessions (`--print`, `--mode
-json`, `--mode rpc`) require an explicit `--permission-mode`.
+json`, `--mode rpc`) require an explicit `--permission-mode`. In an interactive session,
+`/settings` > **Permission mode** changes it without restarting; the choice is saved to
+`~/.apex-code/agent/permissions.json` and applies to the next tool call.
 
 **Sandbox.** On Linux and macOS, tool execution runs inside an OS-level sandbox
 restricting filesystem writes and network access to what the permission layer has

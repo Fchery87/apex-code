@@ -257,6 +257,14 @@ Permission modes change the default interaction posture:
 - `bypassPermissions` is intentionally powerful and should be used only in a trusted,
   controlled environment.
 
+Set one for a single run with `--permission-mode <mode>`, or change it mid-session from
+`/settings` under **Permission mode**. The settings row saves to user scope
+(`~/.apex-code/agent/permissions.json`) and takes effect on the next tool call; selecting
+`bypassPermissions` asks you to confirm first. A mode set by `--permission-mode` or by a
+project's `.apex-code/permissions.json` outranks that write, and the row says so rather
+than appearing to save and doing nothing. Any mode other than `default` is named in the
+footer, so a session with no prompts is visibly a session in bypass.
+
 A permission mode is not a substitute for reviewing the requested task, the diff, or the
 commands that will run.
 

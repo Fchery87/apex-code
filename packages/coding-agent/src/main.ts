@@ -859,6 +859,7 @@ export async function main(args: string[], options?: MainOptions) {
 			customTools: sessionOptions.customTools,
 			permissionGate: {
 				store: permissionStore,
+				flagMode: parsed.permissionMode,
 				getMode: async () =>
 					resolveEffectiveMode(parsed.permissionMode, (await permissionStore.snapshot()).modesBySource),
 			},
