@@ -251,7 +251,12 @@ export async function createTestSession(options: TestSessionOptions = {}): Promi
 		streamFn: streamSimple,
 	});
 
-	const sessionManager = options.inMemory ? SessionManager.inMemory() : SessionManager.create(tempDir);
+	// Explicit sessionDir keeps session storage under tempDir, isolated from the
+	// real host ~/.apex-code/agent/sessions/ -- SessionManager.create's second
+	// parameter defaults to the real global session dir when omitted.
+	const sessionManager = options.inMemory
+		? SessionManager.inMemory()
+		: SessionManager.create(tempDir, join(tempDir, "sessions"));
 	const settingsManager = SettingsManager.create(tempDir, tempDir);
 
 	if (options.settingsOverrides) {
