@@ -2478,6 +2478,34 @@ export class DefaultPackageManager implements PackageManager {
 			userAgentsBaseDir,
 		);
 
+		// User skills mounted in from the host by the sandbox supervisor
+		// (core/sandbox/cli-launch.ts's resolveHostSkillPaths/buildSandboxedCliLaunch).
+		// Outside the sandbox these variables are never set, so this is a no-op. The
+		// two roots keep the discovery mode ("pi" root-.md-as-skill vs "agents"
+		// root-.md-ignored) their host counterparts above use, matching docs/skills.md.
+		const mountedAgentSkillsDir = process.env.APEX_CODE_SKILL_PATH_AGENT;
+		if (mountedAgentSkillsDir) {
+			const mountedAgentBaseDir = dirname(mountedAgentSkillsDir);
+			addResources(
+				"skills",
+				collectAutoSkillEntries(mountedAgentSkillsDir, "pi"),
+				{ ...userMetadata, baseDir: mountedAgentBaseDir },
+				userOverrides.skills,
+				mountedAgentBaseDir,
+			);
+		}
+		const mountedAgentsHomeSkillsDir = process.env.APEX_CODE_SKILL_PATH_AGENTS_HOME;
+		if (mountedAgentsHomeSkillsDir) {
+			const mountedAgentsHomeBaseDir = dirname(mountedAgentsHomeSkillsDir);
+			addResources(
+				"skills",
+				collectAutoSkillEntries(mountedAgentsHomeSkillsDir, "agents"),
+				{ ...userMetadata, baseDir: mountedAgentsHomeBaseDir },
+				userOverrides.skills,
+				mountedAgentsHomeBaseDir,
+			);
+		}
+
 		addResources(
 			"prompts",
 			collectAutoPromptEntries(userDirs.prompts),

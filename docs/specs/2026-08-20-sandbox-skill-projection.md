@@ -220,8 +220,8 @@ they are there.
 | Component | Change | File(s) |
 | --- | --- | --- |
 | Supervisor entry | Resolve `<hostAgentDir>/skills` and `<hostHome>/.agents/skills`; keep those that exist and pass the escape check; add to `readOnlyPaths`; pass as new `skillPaths` | `src/cli.ts` |
-| Launch contract | Accept `skillPaths`; set `APEX_CODE_SKILL_PATHS` after the allowlist spread so the supervisor's value always wins | `core/sandbox/cli-launch.ts` |
-| Child discovery | Read `APEX_CODE_SKILL_PATHS`; register each entry as a user-scope auto-discovery root beside `userDirs.skills` and `userAgentsSkillsDir` | `core/package-manager.ts` |
+| Launch contract | Accept a `HostSkillPaths` (`agentSkills`, `agentsHomeSkills`); set `APEX_CODE_SKILL_PATH_AGENT` / `APEX_CODE_SKILL_PATH_AGENTS_HOME` after the allowlist spread so the supervisor's value always wins | `core/sandbox/cli-launch.ts` |
+| Child discovery | Read both variables; register each present one as a user-scope auto-discovery root, in the same discovery mode ("pi" / "agents") its host counterpart uses | `core/package-manager.ts` |
 | Catalog projection | Emit alphabetically ordered skill **names only**, until `SKILL_CATALOG_PREFIX_BUDGET_TOKENS` is spent; then emit the omitted count and a pointer to `skill_search` | `core/skills.ts`, `core/system-prompt.ts` |
 | Skill search tool | New `skill_search(query?)` over the in-memory registry. No query returns names; a query returns matching names and descriptions | `core/tools/skill-search.ts`, `core/tools/index.ts` |
 | Command naming | Derive the slash-command token by slugging the skill name; keep the raw name for display; warn on divergence | `modes/interactive/interactive-mode.ts` |
@@ -249,7 +249,7 @@ environment and explicit user or maintainer inputs, never project files. Both ro
 derived in the unsandboxed parent from `getAgentDir()` and the host home. Neither is read
 from, influenced by, or located inside the workspace. The child environment is an
 explicit allowlist (`buildChildEnvironment`, `cli-launch.ts:112`), so
-`APEX_CODE_SKILL_PATHS` cannot be smuggled in from the invoking shell.
+`APEX_CODE_SKILL_PATH_AGENT` and `APEX_CODE_SKILL_PATH_AGENTS_HOME` cannot be smuggled in from the invoking shell.
 
 ## Deletion inventory
 
@@ -313,8 +313,9 @@ Every claim is measured, not asserted. The failing repro lands before the fix.
 5. **Escape refused.** A root whose realpath is the host home is refused with a startup
    diagnostic and is absent from the launch contract's `skillPaths`.
 6. **No-skills path unchanged.** With no host roots present, the launch contract contains
-   no `APEX_CODE_SKILL_PATHS` and no additional mounts, asserted against the launch
-   object rather than by running a session.
+   neither `APEX_CODE_SKILL_PATH_AGENT` nor `APEX_CODE_SKILL_PATH_AGENTS_HOME`, and no
+   additional mounts, asserted against the launch object rather than by running a
+   session.
 7. **Project scope unchanged.** Existing project-skill tests pass unmodified, including
    the trust gate.
 8. **Command name typeable.** A `SKILL.md` declaring `name: Poteto Mode` loads, warns, and
