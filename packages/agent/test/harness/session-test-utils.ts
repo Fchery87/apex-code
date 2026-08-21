@@ -12,9 +12,24 @@ export function createTempDir(): string {
 	return dir;
 }
 
-afterEach(() => {
+afterEach(async () => {
 	while (tempDirs.length > 0) {
 		const dir = tempDirs.pop()!;
-		if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+		if (!existsSync(dir)) continue;
+		let retries = 5;
+		while (retries > 0) {
+			try {
+				rmSync(dir, { recursive: true, force: true });
+				break;
+			} catch (err: any) {
+				if (err.code === "EBUSY" || err.code === "ENOTEMPTY" || err.code === "EPERM") {
+					retries--;
+					if (retries === 0) throw err;
+					await new Promise((resolve) => setTimeout(resolve, 100));
+				} else {
+					throw err;
+				}
+			}
+		}
 	}
 });

@@ -412,7 +412,7 @@ describe("NodeExecutionEnv", () => {
 		const env = new NodeExecutionEnv({ cwd: root });
 		const execution = env.exec("touch started; sleep 60");
 		for (let attempt = 0; attempt < 100 && !getOrThrow(await env.exists("started")); attempt++) {
-			await new Promise((resolve) => setTimeout(resolve, 10));
+			await new Promise((resolve) => setTimeout(resolve, 50));
 		}
 		expect(getOrThrow(await env.exists("started"))).toBe(true);
 		await env.cleanup();

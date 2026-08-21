@@ -10,13 +10,32 @@ describe("AuthStorage", () => {
 	const tempDir = join(tmpdir(), `pi-test-auth-storage-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 	const authJsonPath = join(tempDir, "auth.json");
 
-	beforeEach(() => {
-		if (existsSync(tempDir)) rmSync(tempDir, { recursive: true });
+	async function rmTempDir() {
+		if (!existsSync(tempDir)) return;
+		let retries = 5;
+		while (retries > 0) {
+			try {
+				rmSync(tempDir, { recursive: true, force: true });
+				break;
+			} catch (err: any) {
+				if (err.code === "EBUSY" || err.code === "ENOTEMPTY" || err.code === "EPERM") {
+					retries--;
+					if (retries === 0) throw err;
+					await new Promise((resolve) => setTimeout(resolve, 100));
+				} else {
+					throw err;
+				}
+			}
+		}
+	}
+
+	beforeEach(async () => {
+		await rmTempDir();
 		mkdirSync(tempDir, { recursive: true });
 	});
 
-	afterEach(() => {
-		if (existsSync(tempDir)) rmSync(tempDir, { recursive: true });
+	afterEach(async () => {
+		await rmTempDir();
 		vi.restoreAllMocks();
 	});
 
