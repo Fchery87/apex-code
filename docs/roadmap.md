@@ -364,9 +364,36 @@ completes a Phase 3 obligation: the discovered catalog costs 6,742 prefix tokens
 128 tokens of headroom, so the projection moves to name-only behind a token budget with
 descriptions resolved through a tool ([ADR 0021](adr/0021-skill-catalog-deferral.md)).
 Specced and planned as a Phase 2b / Phase 3 follow-up rather than a new phase:
-[spec](specs/2026-08-20-sandbox-skill-projection.md) ·
-[plan](plans/2026-08-20-sandbox-skill-projection.md). Phase 2b's **landed** state is
+[spec](specs/2026-08-20-sandbox-skill-projection.md). Phase 2b's **landed** state is
 unchanged and is not reopened by this.
+
+**That follow-up (SKILL.1-9) is now landed and the spec is marked `Complete`.** Nine
+commits, each independently green through the full pre-commit `check` pipeline:
+`02ebeb4c3` (failing repro) · `2c5079f5e` (SKILL.2, mount and resolve) · `c5a2ea5dc`
+(SKILL.3, child discovery, plus revising SKILL.2's wire format to two named
+environment variables once the "pi" vs "agents" discovery-mode split made one
+delimited list unable to say which root a lone survivor was) · `b8e741514` (SKILL.4,
+host-home escape refusal, plus real enforced-`bwrap` proof) · `cac7e49f8` (SKILL.5,
+command-token slugging so an invalid raw name is still invocable) · `768532e93`
+(SKILL.6, the budget-bounded name-only catalog, ADR 0021) · `70030a52b` (SKILL.7, the
+`skill_search` tool) · `f2dd9a385` (SKILL.8, the real-measurement budget guard) · a
+final closing commit for SKILL.9 (docs, this entry, plan deletion). Measured, not
+assumed: the no-skills static prefix floor moved from 2,372 to 2,393 tokens
+(`skill_search`'s own always-on cost), a populated skill library measures 2,987
+tokens regardless of size (200 and separately 2,000 synthetic skills, identical --
+direct proof the catalog is bounded by construction), and
+`ENFORCED_PRODUCTION_PREFIX_BUDGET` is raised to 3,150, the same ~5.5% proportional
+margin LSP.7 used. Full verification: `npm run build`, `npm run check`, and both
+workspace test suites clean (`agent`: 20 files / 398 passed / 1 skipped / 0 failed;
+`coding-agent`: 305 files / 2,579 passed / 57 skipped / 0 failed, confirmed on two
+independent full runs after one file's flake under parallel load was proven
+non-reproducible in isolation and ruled unrelated). **Not done:** the required
+three-OS CI run this repo's closure practice otherwise calls for was not executed as
+part of landing this locally-verified work; the macOS `sandbox-exec` path is written,
+gated `describe.skipIf`, and unexercised here. `docs/plans/2026-08-20-sandbox-skill-projection.md`
+is deleted now that this follow-up is landed (recoverable via
+`git show <commit>:docs/plans/2026-08-20-sandbox-skill-projection.md`); its durable
+content lives in this entry and in the spec's own closure amendment.
 
 ---
 
