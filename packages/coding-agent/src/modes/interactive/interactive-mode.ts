@@ -91,6 +91,7 @@ import {
 import { CredentialSynchronizationError } from "../../core/model-runtime.ts";
 import { aggregateUsagePerformance } from "../../core/observability/aggregate.ts";
 import { DefaultPackageManager } from "../../core/package-manager.ts";
+import type { PermissionMode } from "../../core/permissions/store.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
 import { type SessionEntry, SessionManager, sessionEntryToContextMessages } from "../../core/session-manager.ts";
@@ -138,7 +139,7 @@ import {
 } from "./components/oauth-selector.ts";
 import { ScopedModelsSelectorComponent } from "./components/scoped-models-selector.ts";
 import { SessionSelectorComponent } from "./components/session-selector.ts";
-import { SettingsSelectorComponent } from "./components/settings-selector.ts";
+import { PERMISSION_MODE_OVERRIDE_HINTS, SettingsSelectorComponent } from "./components/settings-selector.ts";
 import { SkillInvocationMessageComponent } from "./components/skill-invocation-message.ts";
 import { ApexSplashHeader } from "./components/splash-header.ts";
 import {
@@ -387,6 +388,8 @@ export function createInteractiveTuiReference(getTui: () => TUI): TUI {
 
 export class InteractiveMode {
 	private runtimeHost: AgentSessionRuntime;
+	/** Settled once the most recent /settings permission-mode write has hit disk. */
+	private pendingPermissionModeWrite: Promise<void> | undefined;
 	private renderer: TuiMainScreen | TuiAltScreen;
 	private ui: TUI;
 	private mainScreenRenderState: TuiMainScreenRenderState | undefined;
@@ -1877,6 +1880,7 @@ export class InteractiveMode {
 		this.applyFullscreenScrollbarSetting();
 		this.footer.setSession(this.session);
 		this.footer.setAutoCompactEnabled(this.session.autoCompactionEnabled);
+		this.refreshFooterPermissionMode();
 		this.footerDataProvider.setCwd(this.sessionManager.getCwd());
 		this.hideThinkingBlock = this.settingsManager.getHideThinkingBlock();
 		this.outputPad = this.settingsManager.getOutputPad();
@@ -2849,10 +2853,18 @@ export class InteractiveMode {
 			text = text.trim();
 			if (!text) return;
 
+			// A mode chosen in /settings is written asynchronously. Awaiting it here
+			// keeps the store authoritative before any tool call can read it, so a
+			// switch *out* of bypassPermissions can never be raced by the next turn.
+			if (this.pendingPermissionModeWrite) {
+				await this.pendingPermissionModeWrite;
+				this.pendingPermissionModeWrite = undefined;
+			}
+
 			// Handle commands
 			if (text === "/settings") {
-				this.showSettingsSelector();
 				this.editor.setText("");
+				await this.showSettingsSelector();
 				return;
 			}
 			if (text === "/scoped-models") {
@@ -4350,7 +4362,58 @@ export class InteractiveMode {
 		this.ui.requestRender();
 	}
 
-	private showSettingsSelector(): void {
+	/**
+	 * Resyncs the footer from the store. Called on every session swap, not just at
+	 * startup: `applyRuntimeSettings` also repoints the cwd, and cwd selects which
+	 * project-scope permission file applies, so the mode genuinely can differ
+	 * between two sessions in one process. A footer left showing the old value
+	 * would under-report bypassPermissions, which is the one direction that matters.
+	 */
+	private refreshFooterPermissionMode(): void {
+		void this.session.getPermissionMode().then((resolution) => {
+			this.footer.setPermissionMode(resolution?.mode ?? "default");
+			this.ui.requestRender();
+		});
+	}
+
+	/**
+	 * Writes the mode to user scope, then reports what is actually in force. The
+	 * write can be outranked by `--permission-mode` or a project file, and a
+	 * settings row that silently does nothing is worse than no row at all.
+	 */
+	private async applyPermissionMode(mode: PermissionMode): Promise<void> {
+		let resolution: Awaited<ReturnType<AgentSession["setPermissionMode"]>>;
+		try {
+			const write = this.session.setPermissionMode(mode);
+			this.pendingPermissionModeWrite = write.then(
+				() => {},
+				() => {},
+			);
+			resolution = await write;
+		} catch (error) {
+			// Never swallow this. A permission mode the user believes they set, and
+			// did not, is the one outcome worse than the prompt they were escaping.
+			const detail = error instanceof Error ? error.message : String(error);
+			this.chatContainer.addChild(
+				new Text(theme.fg("error", `Permission mode could not be saved: ${detail}`), 1, 0),
+			);
+			this.ui.requestRender();
+			return;
+		}
+		if (!resolution) return;
+
+		const outranked = resolution.mode !== mode;
+		const source = PERMISSION_MODE_OVERRIDE_HINTS[resolution.origin] ?? resolution.origin;
+		const line = outranked
+			? `Permission mode saved as ${mode}, but ${source} sets ${resolution.mode} for this session.`
+			: `Permission mode set to ${mode}.`;
+		this.chatContainer.addChild(new Text(theme.fg(outranked ? "warning" : "muted", line), 1, 0));
+		this.footer.setPermissionMode(resolution.mode);
+		this.ui.requestRender();
+	}
+
+	private async showSettingsSelector(): Promise<void> {
+		const permissionMode = await this.session.getPermissionMode();
 		this.showSelector((done) => {
 			let selector: SettingsSelectorComponent | undefined;
 			selector = new SettingsSelectorComponent(
@@ -4379,6 +4442,7 @@ export class InteractiveMode {
 					showHardwareCursor: this.settingsManager.getShowHardwareCursor(),
 					showCacheMissNotices: this.settingsManager.getShowCacheMissNotices(),
 					defaultProjectTrust: this.settingsManager.getDefaultProjectTrust(),
+					permissionMode,
 					editorPaddingX: this.settingsManager.getEditorPaddingX(),
 					outputPad: this.settingsManager.getOutputPad(),
 					autocompleteMaxVisible: this.settingsManager.getAutocompleteMaxVisible(),
@@ -4476,6 +4540,9 @@ export class InteractiveMode {
 					},
 					onDefaultProjectTrustChange: (defaultProjectTrust) => {
 						this.settingsManager.setDefaultProjectTrust(defaultProjectTrust);
+					},
+					onPermissionModeChange: (mode) => {
+						void this.applyPermissionMode(mode);
 					},
 					onDoubleEscapeActionChange: (action) => {
 						this.settingsManager.setDoubleEscapeAction(action);

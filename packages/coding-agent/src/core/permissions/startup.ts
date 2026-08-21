@@ -43,22 +43,42 @@ const MODE_SOURCE_ORDER: readonly ["flag", ...WritablePermissionSource[]] = [
 	"session",
 ];
 
+/** Where an effective mode came from. `"default"` means nothing set one. */
+export type PermissionModeOrigin = "flag" | WritablePermissionSource | "default";
+
+export interface EffectiveModeResolution {
+	mode: PermissionMode;
+	origin: PermissionModeOrigin;
+}
+
 /**
  * The `--permission-mode` flag outranks every persisted mode, including a project
  * rule a team committed — a deliberate per-run operator decision should not be
  * silently overridden by checked-in config (ADR 0004).
+ *
+ * Returns the origin alongside the mode so a caller that offers to *change* the
+ * mode can tell whether its write would actually take effect. A settings toggle
+ * writing `user` while `local` or the flag outranks it is a silent no-op, which is
+ * the one failure a UI here must not have.
  */
+export function resolveEffectiveModeWithOrigin(
+	flagMode: PermissionMode | undefined,
+	modesBySource: ReadonlyMap<WritablePermissionSource, PermissionMode>,
+): EffectiveModeResolution {
+	for (const source of MODE_SOURCE_ORDER) {
+		if (source === "flag") {
+			if (flagMode !== undefined) return { mode: flagMode, origin: "flag" };
+			continue;
+		}
+		const mode = modesBySource.get(source);
+		if (mode !== undefined) return { mode, origin: source };
+	}
+	return { mode: "default", origin: "default" };
+}
+
 export function resolveEffectiveMode(
 	flagMode: PermissionMode | undefined,
 	modesBySource: ReadonlyMap<WritablePermissionSource, PermissionMode>,
 ): PermissionMode {
-	for (const source of MODE_SOURCE_ORDER) {
-		if (source === "flag") {
-			if (flagMode !== undefined) return flagMode;
-			continue;
-		}
-		const mode = modesBySource.get(source);
-		if (mode !== undefined) return mode;
-	}
-	return "default";
+	return resolveEffectiveModeWithOrigin(flagMode, modesBySource).mode;
 }

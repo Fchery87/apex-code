@@ -101,6 +101,8 @@ import { ModelRegistry } from "./model-registry.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
 import { evaluateToolCall, type PermissionGateOptions } from "./permissions/gate.ts";
 import { createInteractiveResponder } from "./permissions/responder.ts";
+import { type EffectiveModeResolution, resolveEffectiveModeWithOrigin } from "./permissions/startup.ts";
+import type { PermissionMode } from "./permissions/store.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
 import type { BranchSummaryEntry, CompactionEntry, SessionEntry, SessionManager } from "./session-manager.ts";
@@ -1717,6 +1719,34 @@ export class AgentSession {
 			previousModel,
 			source,
 		});
+	}
+
+	/** True when this session runs behind a permission gate at all. */
+	get hasPermissionGate(): boolean {
+		return this._permissionGate !== undefined;
+	}
+
+	/**
+	 * The mode in force right now, and which source won. `getMode` in the gate
+	 * config re-reads the store on every decision, so a mode written here applies
+	 * to the next tool call with no restart.
+	 */
+	async getPermissionMode(): Promise<EffectiveModeResolution | undefined> {
+		if (!this._permissionGate) return undefined;
+		const snapshot = await this._permissionGate.store.snapshot();
+		return resolveEffectiveModeWithOrigin(this._permissionGate.flagMode, snapshot.modesBySource);
+	}
+
+	/**
+	 * Persist a permission mode to user scope (`~/.apex-code/agent/permissions.json`).
+	 * Returns the resolution that is actually in force afterwards, which is *not*
+	 * necessarily `mode`: `flag`, `local`, and `project` all outrank `user`, so the
+	 * caller has to be able to tell the user their choice was recorded but shadowed.
+	 */
+	async setPermissionMode(mode: PermissionMode): Promise<EffectiveModeResolution | undefined> {
+		if (!this._permissionGate) return undefined;
+		await this._permissionGate.store.apply({ type: "setMode", destination: "user", mode });
+		return this.getPermissionMode();
 	}
 
 	/**
