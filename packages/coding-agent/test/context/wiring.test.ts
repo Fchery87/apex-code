@@ -194,7 +194,7 @@ describe("context pipeline wiring (task 3.3)", () => {
 	});
 
 	it("never rewrites the on-disk session — eviction only rewrites the outbound copy (Phase 7 constraint)", async () => {
-		const sessionManager = SessionManager.create(tempDir);
+		const sessionManager = SessionManager.create(tempDir, join(tempDir, "sessions"));
 		const { session, faux } = await buildSession(sessionManager, tempDir);
 
 		await session.prompt("go");
