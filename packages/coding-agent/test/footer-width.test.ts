@@ -231,6 +231,26 @@ describe("FooterComponent width handling", () => {
 		expect(stripAnsi(footer.render(120)[1])).toContain("$0.000 (sub)");
 	});
 
+	it("names a non-default permission mode and stays silent on default", () => {
+		const session = createSession({ sessionName: "", provider: "anthropic" });
+		const footer = new FooterComponent(session, createFooterData(1));
+
+		expect(stripAnsi(footer.render(120)[1])).not.toContain("bypassPermissions");
+
+		footer.setPermissionMode("bypassPermissions");
+		expect(stripAnsi(footer.render(120)[1])).toContain("bypassPermissions");
+
+		footer.setPermissionMode("plan");
+		const planned = stripAnsi(footer.render(120)[1]);
+		expect(planned).toContain("plan");
+		expect(planned).not.toContain("bypassPermissions");
+
+		// Resetting must clear it. A session swap resyncs through this setter, and a
+		// footer that kept a stale "bypassPermissions" would under-report the mode.
+		footer.setPermissionMode("default");
+		expect(stripAnsi(footer.render(120)[1])).not.toContain("bypassPermissions");
+	});
+
 	it("does not mark generic OAuth sign-in as a subscription", () => {
 		const session = createSession({
 			sessionName: "",
