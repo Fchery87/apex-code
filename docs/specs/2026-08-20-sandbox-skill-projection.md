@@ -11,7 +11,7 @@
 | Field | Value |
 | --- | --- |
 | Author | Apex Code |
-| Status | `Draft` |
+| Status | `Complete` |
 | Created | `2026-08-20` |
 | Last updated | `2026-08-20` |
 | Roadmap phase | `none` — defect fix against Phase 2b's boundary, plus a Phase 3 context-engineering follow-through |
@@ -352,3 +352,67 @@ host-home path, and the mount stays inside ADR 0016's user-scope rule.
 One follow-up is created and deliberately excluded. Search ranking is substring and token
 matching in this change; whether skills need semantic ranking is a question with its own
 measurement, and it cannot be answered before skills are used at all.
+
+## Amendment (2026-08-20): closure — landed as SKILL.1-9, spec Complete
+
+All nine tasks landed; the full plan lives in the (now-deleted, per `AGENTS.md`'s plan
+lifecycle) `docs/plans/2026-08-20-sandbox-skill-projection.md`, task-by-task record
+preserved in `docs/roadmap.md`'s Phase 2b follow-up.
+
+**Two deviations from the design above, both driven by evidence found while
+implementing, not by preference:**
+
+1. **Wire format is two named variables, not one delimited list.** The original design
+   proposed a single `APEX_CODE_SKILL_PATHS`, platform-delimiter-joined. Building
+   SKILL.3 surfaced that `core/package-manager.ts` discovers `<agentDir>/skills` and
+   `<home>/.agents/skills` in different modes (root `.md` files count as skills in one,
+   are ignored in the other), and a flat 0-2-entry list cannot tell the child which root
+   a lone survivor was. Shipped as `APEX_CODE_SKILL_PATH_AGENT` /
+   `APEX_CODE_SKILL_PATH_AGENTS_HOME`, each independently present only when its root
+   exists and passes the escape check. Recorded in the plan's Order changes section at
+   the time; recorded here as the spec's own as-built state.
+2. **The catalog truncation algorithm needed a second pass.** The first cut checked each
+   candidate name against `header + names-so-far + this-name + footer`, but the
+   assembled output also appends the omitted-count comment line once truncation
+   happens, and that line's own cost was never reserved -- a 500-skill test caught the
+   assembled text exceeding its budget by 15 tokens. Fixed with a two-phase design: try
+   the full list first; only when it doesn't fit, reserve the comment line's worst-case
+   cost before deciding the cutoff. `formatSkillsForPrompt`'s tests now assert the
+   output's actual token length directly, not just presence of expected substrings, so
+   this exact class of regression is guarded rather than merely fixed once.
+
+**Verification, actually run (not merely planned):**
+
+- Failing repro first: `test/sandbox/skill-discovery.test.ts` proved zero skills
+  discovered under the child's real computed environment before any fix landed
+  (`02ebeb4c3`), inverted once SKILL.2/3 shipped.
+- Enforced Linux `bwrap`: real child reads a mounted skill's actual content back
+  through the writable workspace and is refused a write into it, both proven on this
+  dev host (`b8e741514`, `test/sandbox/skill-mount-enforcement.test.ts`). macOS
+  `sandbox-exec` cases are written and gated `describe.skipIf`, unexercised here --
+  the required three-OS CI run, not run as part of this session, is what exercises
+  them; this spec does not claim macOS verification beyond that gate compiling and
+  being wired correctly.
+- Prefix budget measured, not assumed, per this repo's own established practice
+  (`ENFORCED_PRODUCTION_PREFIX_BUDGET`'s history): no-skills floor 2,393 tokens (was
+  2,372; `skill_search`'s own always-on deferred-stub cost), any populated library
+  2,987 tokens, identical at 200 and 2,000 synthetic skills -- direct proof
+  `SKILL_CATALOG_PREFIX_BUDGET_TOKENS` bounds by construction, not by luck. Ceiling
+  raised to 3,150, a ~5.5% margin matching LSP.7's own proportional margin, not a new
+  policy (`f2dd9a385`).
+- Full verification suite run clean: `npm run build`, `npm run check`,
+  `npm run test:scripts`, the `agent` package (20 files / 398 passed / 1 skipped / 0
+  failed), and the `coding-agent` package (305 files / 2,579 passed / 57 skipped / 0
+  failed, confirmed on two independent full runs after one file's flake under
+  parallel load -- proven non-reproducible in isolation and absent on rerun -- was
+  investigated and ruled unrelated to this change).
+- Replay corpus byte-identical determinism covered by the existing, passing
+  `replay-runner.test.ts`; this change adds no nondeterministic content to the static
+  prefix (catalog order is alphabetical, not discovery order).
+
+**Not done, and not claimed done:** the required three-OS (Ubuntu/macOS/Windows) CI
+run this repo's own closure practice calls for (see the Phase 2b and LSP.7 roadmap
+entries) was not executed as part of landing this locally-verified work. The macOS
+`sandbox-exec` enforcement path and the whole Windows-unsupported posture (unchanged,
+per ADR 0005) are asserted by the code and by `describe.skipIf` gating, not by a run
+that actually exercised them on those platforms.

@@ -10,6 +10,7 @@ Apex Code implements the [Agent Skills standard](https://agentskills.io/specific
 
 - [Locations](#locations)
 - [How Skills Work](#how-skills-work)
+- [Finding a Skill: skill_search](#finding-a-skill-skill_search)
 - [Skill Commands](#skill-commands)
 - [Skill Structure](#skill-structure)
 - [Frontmatter](#frontmatter)
@@ -32,6 +33,14 @@ Apex Code loads skills from:
 - Packages: `skills/` directories or `pi.skills` entries in `package.json` (`pi` is Apex Code's retained package-manifest key)
 - Settings: `skills` array with files or directories
 - CLI: `--skill <path>` (repeatable, additive even with `--no-skills`)
+
+> **Sandbox note:** every session runs inside Apex Code's OS sandbox (see
+> [Security](security.md#os-sandbox-and-permissions)), which hides your home
+> directory from the child process by default. The two global roots above are
+> mounted back in, read-only, at their original host paths, so they work the same as
+> everywhere else. Project skills already work without a mount, since the workspace
+> itself is mounted read-write. Packages, settings, and `--skill` paths follow
+> whichever of these roots they resolve under.
 
 Discovery rules:
 - In `~/.apex-code/agent/skills/` and `.apex-code/skills/`, direct root `.md` files are discovered as individual skills
@@ -64,11 +73,43 @@ For project-level Claude Code skills, add to `.apex-code/settings.json`:
 ## How Skills Work
 
 1. At startup, Apex Code scans skill locations and extracts names and descriptions
-2. The system prompt includes available skills in XML format per the [specification](https://agentskills.io/integrate-skills)
-3. When a task matches, the agent uses `read` to load the full SKILL.md (models don't always do this; use prompting or `/skill:name` to force it)
-4. The agent follows the instructions, using relative paths to reference scripts and assets
+2. The system prompt lists available skill **names only**, alphabetically, up to a fixed
+   token budget — not the older per-skill XML block with description and location
+   inline. A library too large to list in full states how many names were left out and
+   points at `skill_search`
+3. When a name looks relevant, the agent calls `skill_search` to read that skill's
+   description before committing to it
+4. The agent uses `read` to load the full SKILL.md (models don't always do this on
+   their own; use prompting or `/skill:name` to force it)
+5. The agent follows the instructions, using relative paths to reference scripts and
+   assets
 
-This is progressive disclosure: only descriptions are always in context, full instructions load on-demand.
+This is progressive disclosure taken one step further than the base
+[specification](https://agentskills.io/integrate-skills): names are always in context,
+descriptions load on demand through `skill_search`, and full instructions load on
+demand through `read`. A large personal or team skill library costs a small, bounded
+amount of context regardless of how many skills it holds — installing more skills
+never grows the fixed cost every turn already pays.
+
+## Finding a Skill: skill_search
+
+`skill_search` answers two questions: what skills exist, and what does a specific one
+do.
+
+```
+skill_search()                 # every loaded skill name, alphabetically
+skill_search(query: "browser") # names and descriptions matching "browser"
+```
+
+Called with no `query`, it lists every loaded skill's name — useful when the prompt
+said "use skill X" but X isn't in the always-visible catalog because the library
+exceeded the budget. Called with a `query`, it matches case-insensitively against both
+name and description and returns the matches' descriptions, so the agent can decide
+whether a skill actually fits before spending a `read` on it. A query that matches
+nothing returns an empty list, not an error.
+
+The tool reads only the already-loaded skill registry — no filesystem or network
+access — so it carries no permission prompt and needs no confirmation.
 
 ## Skill Commands
 
@@ -80,6 +121,15 @@ Skills register as `/skill:name` commands:
 ```
 
 Arguments after the command are appended to the skill content as `User: <args>`.
+
+The command token is derived from the skill's `name`, lowercased with runs of
+anything other than `a-z0-9-` collapsed to a single hyphen. For a name that already
+follows the [Name Rules](#name-rules) below, the token is identical to the name. For a
+name the [Validation](#validation) section's leniency let through with spaces or
+capitals — `Poteto Mode`, say — the command becomes `/skill:poteto-mode`, not
+`/skill:Poteto Mode`, since a slash command cannot contain whitespace. The skill still
+loads under its original name for display and for the catalog; only the typed command
+differs.
 
 Toggle skill commands via `/settings` in interactive mode or in `settings.json`:
 
