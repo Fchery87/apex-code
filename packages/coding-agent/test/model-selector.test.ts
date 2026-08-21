@@ -6,6 +6,7 @@ import { ModelSelectorComponent } from "../src/modes/interactive/components/mode
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 import { createHarness, type Harness } from "./suite/harness.ts";
+import { selectorRowIds } from "./suite/selector-rows.ts";
 
 const ENTER = "\r";
 const ESCAPE = "\x1b";
@@ -96,9 +97,7 @@ describe("model selector", () => {
 		const rendered = render(selector);
 
 		expect(rendered).toContain("anthropic › select a model");
-		expect(rendered).toContain("claude-opus-5");
-		expect(rendered).toContain("claude-sonnet-5");
-		expect(rendered).not.toContain("gpt-5");
+		expect(selectorRowIds(rendered)).toEqual(["claude-opus-5", "claude-sonnet-5"]);
 	});
 
 	it("returns to the provider step on escape", async () => {
@@ -116,9 +115,8 @@ describe("model selector", () => {
 		const rendered = render(selector);
 
 		expect(rendered).toContain("All providers › select a model");
-		expect(rendered).toContain("gpt-5");
 		expect(rendered).toContain("[openai]");
-		expect(rendered).not.toContain("claude-opus-5");
+		expect(selectorRowIds(rendered)).toEqual(["gpt-5"]);
 	});
 
 	it("skips the provider step when only one provider is configured", async () => {

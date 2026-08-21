@@ -5,18 +5,10 @@ import { ModelSelectorComponent } from "../../../src/modes/interactive/component
 import { initTheme } from "../../../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../../../src/utils/ansi.ts";
 import { createHarness, type Harness } from "../harness.ts";
+import { selectedRowId } from "../selector-rows.ts";
 
 function createFakeTui(): TUI {
 	return { requestRender: () => {} } as unknown as TUI;
-}
-
-/** Return the model id of the highlighted (→) row in the rendered selector. */
-function selectedModelId(rendered: string): string | undefined {
-	const line = rendered.split("\n").find((l) => l.startsWith("→ "));
-	if (!line) return undefined;
-	const rest = line.replace(/^→\s*/, "");
-	const id = rest.split(" [")[0];
-	return id?.trim() || undefined;
 }
 
 describe("model selector filter resets selection to top", () => {
@@ -64,12 +56,12 @@ describe("model selector filter resets selection to top", () => {
 		});
 
 		// Current model (alpha-1) is sorted first, so selection starts on row 0.
-		expect(selectedModelId(stripAnsi(selector.render(120).join("\n")))).toBe("alpha-1");
+		expect(selectedRowId(stripAnsi(selector.render(120).join("\n")))).toBe("alpha-1");
 
 		// Move selection down two rows to alpha-3.
 		selector.handleInput("\x1b[B");
 		selector.handleInput("\x1b[B");
-		expect(selectedModelId(stripAnsi(selector.render(120).join("\n")))).toBe("alpha-3");
+		expect(selectedRowId(stripAnsi(selector.render(120).join("\n")))).toBe("alpha-3");
 
 		// Type a query that matches the three alpha models. The selection must
 		// move back to the top row (alpha-1), not stay clamped at index 2.
@@ -78,7 +70,7 @@ describe("model selector filter resets selection to top", () => {
 		}
 
 		const rendered = stripAnsi(selector.render(120).join("\n"));
-		expect(selectedModelId(rendered)).toBe("alpha-1");
+		expect(selectedRowId(rendered)).toBe("alpha-1");
 		// Sanity: the filter actually narrowed the list.
 		expect(rendered).not.toContain("beta-1");
 	});
@@ -115,7 +107,7 @@ describe("model selector filter resets selection to top", () => {
 		});
 
 		// Selection starts on the current model (alpha-1), which is row 2 here.
-		expect(selectedModelId(stripAnsi(selector.render(120).join("\n")))).toBe("alpha-1");
+		expect(selectedRowId(stripAnsi(selector.render(120).join("\n")))).toBe("alpha-1");
 
 		// Type a query matching all three scoped models. Selection must move to
 		// the top row (alpha-2), not stay clamped at index 2 (alpha-1).
@@ -123,6 +115,6 @@ describe("model selector filter resets selection to top", () => {
 			selector.handleInput(char);
 		}
 
-		expect(selectedModelId(stripAnsi(selector.render(120).join("\n")))).toBe("alpha-2");
+		expect(selectedRowId(stripAnsi(selector.render(120).join("\n")))).toBe("alpha-2");
 	});
 });
