@@ -191,6 +191,57 @@ describe("AgentSession prompt characterization", () => {
 		expect(expandedPrompt).toContain("explain this");
 	});
 
+	it("expands a skill via its slugged command token when the raw name isn't command-safe (SKILL.5)", async () => {
+		// docs/skills.md documents lenient loading: an invalid name still loads
+		// (validateName only warns). The raw name "Poteto Mode" contains a space, which
+		// the autocomplete matcher splits a slash command on, so the model-facing
+		// invocation surface has to be the slugged token "poteto-mode", not the raw name.
+		const tempDir = join(tmpdir(), `pi-skill-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		mkdirSync(tempDir, { recursive: true });
+		tempDirs.push(tempDir);
+		const skillPath = join(tempDir, "poteto-mode.md");
+		writeFileSync(skillPath, "# Poteto Mode\n\nUse this style.");
+
+		const resourceLoader = {
+			...createTestResourceLoader(),
+			getSkills: () => ({
+				skills: [
+					{
+						name: "Poteto Mode",
+						description: "Poteto's style",
+						filePath: skillPath,
+						disableModelInvocation: false,
+						baseDir: tempDir,
+						sourceInfo: createSyntheticSourceInfo(skillPath, {
+							source: "local",
+							scope: "project",
+							origin: "top-level",
+							baseDir: tempDir,
+						}),
+					},
+				],
+				diagnostics: [],
+			}),
+		};
+		const harness = await createHarness({ resourceLoader });
+		harnesses.push(harness);
+		let expandedPrompt = "";
+
+		harness.setResponses([
+			(context) => {
+				const user = context.messages.find((message) => message.role === "user");
+				expandedPrompt = user ? getMessageText(user) : "";
+				return fauxAssistantMessage("ok");
+			},
+		]);
+
+		await harness.session.prompt("/skill:poteto-mode go");
+
+		expect(expandedPrompt).toContain('<skill name="Poteto Mode" location="');
+		expect(expandedPrompt).toContain("Use this style.");
+		expect(expandedPrompt).toContain("go");
+	});
+
 	it("expands prompt templates before sending the prompt", async () => {
 		const template: PromptTemplate = {
 			name: "review",

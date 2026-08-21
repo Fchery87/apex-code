@@ -1,5 +1,5 @@
-import { mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
+import { join, sep } from "node:path";
 import type { HostToolBinary } from "../../utils/tools-manager.ts";
 import { SettingsManager } from "../settings-manager.ts";
 import { resolveDefaultAllowedHosts } from "./default-hosts.ts";
@@ -37,6 +37,99 @@ export function resolveSupervisorAllowedHosts(cwd: string, agentDir: string): re
 	const configured = network?.allowedHosts ?? [];
 	if (network?.allowDefaultHosts === false) return configured;
 	return [...new Set([...resolveDefaultAllowedHosts(), ...configured])];
+}
+
+/**
+ * The host's two user-scope skill roots, each present only when it exists on the
+ * host. Kept as two named slots rather than one list because
+ * `core/package-manager.ts` discovers them in different modes -- root `.md` files
+ * count as skills under `agentSkills` ("pi" mode) and are ignored under
+ * `agentsHomeSkills` ("agents" mode), per `docs/skills.md` -- and a flat list of 0-2
+ * paths cannot tell the child which root a lone survivor was.
+ */
+export interface HostSkillPaths {
+	/** Host `<agentDir>/skills`. */
+	readonly agentSkills?: string;
+	/** Host `<home>/.agents/skills`. */
+	readonly agentsHomeSkills?: string;
+}
+
+/** A candidate skill root that exists but was excluded, and why. */
+export interface HostSkillPathRefusal {
+	readonly root: keyof HostSkillPaths;
+	readonly path: string;
+	readonly reason: string;
+}
+
+export interface ResolvedHostSkillPaths {
+	readonly paths: HostSkillPaths;
+	readonly refusals: readonly HostSkillPathRefusal[];
+}
+
+/**
+ * True when `candidate` is the host home directory itself, or an ancestor of it.
+ * Both paths must already be resolved (`realpathSync`), so a symlink can't disguise
+ * either side. Mounting such a candidate read-only would re-expose the entire home
+ * tree the sandbox's `--tmpfs /home` (Linux) / `(deny file-read* USER_HOME)` (macOS)
+ * deliberately hides -- SSH keys, cloud credentials, other projects -- not just a
+ * skills subtree.
+ */
+function isHomeOrAncestorOfHome(candidate: string, home: string): boolean {
+	if (candidate === home) return true;
+	const prefix = candidate.endsWith(sep) ? candidate : candidate + sep;
+	return home.startsWith(prefix);
+}
+
+/** Resolve one candidate root: absent, refused (symlinked onto the host home), or usable. */
+function resolveHostSkillRoot(
+	root: keyof HostSkillPaths,
+	candidate: string,
+	homeDir: string,
+): { path?: string; refusal?: HostSkillPathRefusal } {
+	if (!existsSync(candidate)) return {};
+	let realCandidate: string;
+	let realHome: string;
+	try {
+		realCandidate = realpathSync(candidate);
+		realHome = realpathSync(homeDir);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		return { refusal: { root, path: candidate, reason: `could not resolve real path: ${message}` } };
+	}
+	if (isHomeOrAncestorOfHome(realCandidate, realHome)) {
+		return {
+			refusal: {
+				root,
+				path: candidate,
+				reason: "resolves to the host home directory or an ancestor of it",
+			},
+		};
+	}
+	return { path: candidate };
+}
+
+/**
+ * Resolve the host's user-scope skill directories, before the sandbox exists to hide
+ * them. Read only from the runtime environment and the host agent directory --
+ * never from project files -- matching ADR 0016's rule that supervisor policy is
+ * trust-first. Mirrors `core/package-manager.ts`'s own user-scope roots so the two
+ * sides agree on where a skill lives. A candidate that resolves (directly or via a
+ * symlink) onto the host home or an ancestor of it is refused rather than mounted --
+ * see `isHomeOrAncestorOfHome` -- and reported so the caller can surface a startup
+ * diagnostic instead of silently mounting or silently skipping it.
+ */
+export function resolveHostSkillPaths(agentDir: string, homeDir: string): ResolvedHostSkillPaths {
+	const agentSkills = resolveHostSkillRoot("agentSkills", join(agentDir, "skills"), homeDir);
+	const agentsHomeSkills = resolveHostSkillRoot("agentsHomeSkills", join(homeDir, ".agents", "skills"), homeDir);
+	return {
+		paths: {
+			...(agentSkills.path ? { agentSkills: agentSkills.path } : {}),
+			...(agentsHomeSkills.path ? { agentsHomeSkills: agentsHomeSkills.path } : {}),
+		},
+		refusals: [agentSkills.refusal, agentsHomeSkills.refusal].filter(
+			(refusal): refusal is HostSkillPathRefusal => refusal !== undefined,
+		),
+	};
 }
 
 const SAFE_CHILD_ENVIRONMENT_KEYS = new Set([
@@ -150,6 +243,14 @@ export function buildSandboxedCliLaunch(options: {
 	readOnlyPaths?: readonly string[];
 	authPath?: string;
 	toolBinaries?: readonly HostToolBinary[];
+	/**
+	 * Host user-scope skill directories, pre-filtered by the caller to those that
+	 * exist and pass the host-home escape check (SKILL.4). Mounted read-only at their
+	 * original host location -- Seatbelt cannot remap a path, so this must hold for
+	 * both backends -- and named to the child via `APEX_CODE_SKILL_PATH_*` so its
+	 * discovery can find them under the sandbox's own repointed `HOME`/agent dir.
+	 */
+	skillPaths?: HostSkillPaths;
 }): SandboxedCliLaunch {
 	const stateDirectory = join(options.workspace, ".apex-code", "sandbox-state");
 	const agentDirectory = join(options.workspace, ".apex-code", "sandbox-agent");
@@ -174,7 +275,9 @@ export function buildSandboxedCliLaunch(options: {
 	}
 	clearStaleToolMountpoints(toolsDirectory);
 	const childEnvironment = buildChildEnvironment(options.environment);
-	const readOnlyPaths = [...(options.readOnlyPaths ?? [])];
+	const { agentSkills, agentsHomeSkills } = options.skillPaths ?? {};
+	const skillMountPaths = [agentSkills, agentsHomeSkills].filter((path): path is string => path !== undefined);
+	const readOnlyPaths = [...(options.readOnlyPaths ?? []), ...skillMountPaths];
 	const readOnlyFiles = options.authPath ? [options.authPath] : [];
 	const readOnlyBinaries = (options.toolBinaries ?? []).map((binary) => ({
 		source: binary.path,
@@ -190,6 +293,11 @@ export function buildSandboxedCliLaunch(options: {
 		environment: {
 			...childEnvironment,
 			...(options.authPath ? { APEX_CODE_AUTH_PATH: options.authPath } : {}),
+			// After childEnvironment: these come only from the supervisor's own
+			// resolution, never from the invoking shell, so their value always wins over
+			// anything of the same name that childEnvironment's allowlist let through.
+			...(agentSkills ? { APEX_CODE_SKILL_PATH_AGENT: agentSkills } : {}),
+			...(agentsHomeSkills ? { APEX_CODE_SKILL_PATH_AGENTS_HOME: agentsHomeSkills } : {}),
 			APEX_CODE_CODING_AGENT_DIR: agentDirectory,
 			APEX_CODE_CODING_AGENT_SESSION_DIR: sessionDirectory,
 			HOME: stateDirectory,

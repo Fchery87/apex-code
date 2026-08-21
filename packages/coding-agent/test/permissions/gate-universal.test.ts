@@ -34,6 +34,7 @@ const REPRESENTATIVE_PARAMS: Record<ToolName, unknown> = {
 	bash: { command: "echo test" },
 	tool_schema: { name: "read" },
 	todo_write: { todos: [{ content: "write the spec", status: "pending" }] },
+	skill_search: { query: "browser" },
 	web_search: { query: "typescript generics" },
 	// Port 1 refuses instantly and locally -- no external network dependency in tests.
 	web_fetch: { url: "http://127.0.0.1:1/" },
