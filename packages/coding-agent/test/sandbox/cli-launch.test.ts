@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
 	buildSandboxedCliLaunch,
@@ -153,30 +153,49 @@ describe("sandbox CLI launch", () => {
 		expect(resolveSupervisorAllowedHosts(workspace(), agentDir)).toEqual(["only.example"]);
 	});
 
-	it("mounts host skill roots read-only and tells the child where they are (SKILL.2)", () => {
+	it("mounts host skill roots read-only and tells the child where each one is, by name (SKILL.2)", () => {
 		const cwd = workspace();
-		const userSkillsDir = join(workspace(), "agent-skills");
-		const agentsSkillsDir = join(workspace(), "agents-skills");
+		const agentSkillsDir = join(workspace(), "agent-skills");
+		const agentsHomeSkillsDir = join(workspace(), "agents-home-skills");
 
 		const launch = buildSandboxedCliLaunch({
 			workspace: cwd,
 			command: "/usr/bin/node",
 			args: [],
 			environment: {},
-			skillPaths: [userSkillsDir, agentsSkillsDir],
+			skillPaths: { agentSkills: agentSkillsDir, agentsHomeSkills: agentsHomeSkillsDir },
 		});
 
-		expect(launch.readOnlyPaths).toEqual(expect.arrayContaining([userSkillsDir, agentsSkillsDir]));
-		expect(launch.environment.APEX_CODE_SKILL_PATHS).toBe([userSkillsDir, agentsSkillsDir].join(delimiter));
+		expect(launch.readOnlyPaths).toEqual(expect.arrayContaining([agentSkillsDir, agentsHomeSkillsDir]));
+		expect(launch.environment.APEX_CODE_SKILL_PATH_AGENT).toBe(agentSkillsDir);
+		expect(launch.environment.APEX_CODE_SKILL_PATH_AGENTS_HOME).toBe(agentsHomeSkillsDir);
 	});
 
-	it("adds no skill mounts or env var when the host has no skill roots to offer (SKILL.2)", () => {
+	it("mounts only the one skill root that exists, still identified by name (SKILL.2)", () => {
+		const cwd = workspace();
+		const agentsHomeSkillsDir = join(workspace(), "agents-home-skills");
+
+		const launch = buildSandboxedCliLaunch({
+			workspace: cwd,
+			command: "/usr/bin/node",
+			args: [],
+			environment: {},
+			skillPaths: { agentsHomeSkills: agentsHomeSkillsDir },
+		});
+
+		expect(launch.readOnlyPaths).toEqual([agentsHomeSkillsDir]);
+		expect(launch.environment.APEX_CODE_SKILL_PATH_AGENT).toBeUndefined();
+		expect(launch.environment.APEX_CODE_SKILL_PATH_AGENTS_HOME).toBe(agentsHomeSkillsDir);
+	});
+
+	it("adds no skill mounts or env vars when the host has no skill roots to offer (SKILL.2)", () => {
 		const cwd = workspace();
 
 		const launch = buildSandboxedCliLaunch({ workspace: cwd, command: "/usr/bin/node", args: [], environment: {} });
 
 		expect(launch.readOnlyPaths).toEqual([]);
-		expect(launch.environment.APEX_CODE_SKILL_PATHS).toBeUndefined();
+		expect(launch.environment.APEX_CODE_SKILL_PATH_AGENT).toBeUndefined();
+		expect(launch.environment.APEX_CODE_SKILL_PATH_AGENTS_HOME).toBeUndefined();
 	});
 
 	it("keeps the supervisor's skill paths authoritative over anything an env var already carried (SKILL.2)", () => {
@@ -187,14 +206,14 @@ describe("sandbox CLI launch", () => {
 			workspace: cwd,
 			command: "/usr/bin/node",
 			args: [],
-			environment: { APEX_CODE_SKILL_PATHS: "/attacker/controlled/path" },
-			skillPaths: [trustedRoot],
+			environment: { APEX_CODE_SKILL_PATH_AGENT: "/attacker/controlled/path" },
+			skillPaths: { agentSkills: trustedRoot },
 		});
 
-		expect(launch.environment.APEX_CODE_SKILL_PATHS).toBe(trustedRoot);
+		expect(launch.environment.APEX_CODE_SKILL_PATH_AGENT).toBe(trustedRoot);
 	});
 
-	it("resolves only the host skill roots that actually exist (SKILL.2)", () => {
+	it("resolves only the host skill roots that actually exist, keyed by name (SKILL.2)", () => {
 		const agentDir = workspace();
 		const homeDir = workspace();
 		mkdirSync(join(agentDir, "skills"), { recursive: true });
@@ -202,7 +221,7 @@ describe("sandbox CLI launch", () => {
 
 		const resolved = resolveHostSkillPaths(agentDir, homeDir);
 
-		expect(resolved).toEqual([join(agentDir, "skills")]);
+		expect(resolved).toEqual({ agentSkills: join(agentDir, "skills") });
 	});
 
 	it("resolves both host skill roots when both exist (SKILL.2)", () => {
@@ -213,14 +232,17 @@ describe("sandbox CLI launch", () => {
 
 		const resolved = resolveHostSkillPaths(agentDir, homeDir);
 
-		expect(resolved).toEqual([join(agentDir, "skills"), join(homeDir, ".agents", "skills")]);
+		expect(resolved).toEqual({
+			agentSkills: join(agentDir, "skills"),
+			agentsHomeSkills: join(homeDir, ".agents", "skills"),
+		});
 	});
 
 	it("resolves no host skill roots when neither exists (SKILL.2)", () => {
 		const agentDir = workspace();
 		const homeDir = workspace();
 
-		expect(resolveHostSkillPaths(agentDir, homeDir)).toEqual([]);
+		expect(resolveHostSkillPaths(agentDir, homeDir)).toEqual({});
 	});
 
 	it("routes every agent-session shape through the child while exempting only non-session commands", () => {

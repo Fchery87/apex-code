@@ -1,5 +1,5 @@
 import type { HostToolBinary } from "../../utils/tools-manager.ts";
-import { buildSandboxedCliLaunch } from "./cli-launch.ts";
+import { buildSandboxedCliLaunch, type HostSkillPaths } from "./cli-launch.ts";
 import { createLinuxSandboxBackend } from "./linux-backend.ts";
 import { createMacosSandboxBackend } from "./macos-backend.ts";
 import { createSandboxPolicy } from "./policy.ts";
@@ -37,7 +37,7 @@ export async function launchSandboxedCli(options: {
 	readOnlyPaths?: readonly string[];
 	authPath?: string;
 	toolBinaries?: readonly HostToolBinary[];
-	skillPaths?: readonly string[];
+	skillPaths?: HostSkillPaths;
 	dependencies?: Partial<CliSandboxDependencies>;
 }): Promise<number> {
 	const dependencies = { ...defaultDependencies, ...options.dependencies };
