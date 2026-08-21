@@ -3,7 +3,7 @@
  */
 
 import { getDocsPath, getExamplesPath, getReadmePath } from "../config.ts";
-import { formatSkillsForPrompt, type Skill } from "./skills.ts";
+import { formatSkillsForPrompt, SKILL_CATALOG_PREFIX_BUDGET_TOKENS, type Skill } from "./skills.ts";
 
 export interface BuildSystemPromptOptions {
 	/** Custom system prompt (replaces default). */
@@ -63,7 +63,7 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 		// Append skills section (only if read tool is available)
 		const customPromptHasRead = !selectedTools || selectedTools.includes("read");
 		if (customPromptHasRead && skills.length > 0) {
-			prompt += formatSkillsForPrompt(skills);
+			prompt += formatSkillsForPrompt(skills, SKILL_CATALOG_PREFIX_BUDGET_TOKENS);
 		}
 
 		prompt += `\nCurrent working directory: ${promptCwd}`;
@@ -153,7 +153,7 @@ Apex Code documentation (read only when the user asks about Apex Code itself, it
 
 	// Append skills section (only if read tool is available)
 	if (hasRead && skills.length > 0) {
-		prompt += formatSkillsForPrompt(skills);
+		prompt += formatSkillsForPrompt(skills, SKILL_CATALOG_PREFIX_BUDGET_TOKENS);
 	}
 
 	prompt += `\nCurrent working directory: ${promptCwd}`;
