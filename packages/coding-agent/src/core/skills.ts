@@ -325,39 +325,103 @@ function loadSkillFromFile(
 }
 
 /**
- * Format skills for inclusion in a system prompt.
- * Uses XML format per Agent Skills standard.
- * See: https://agentskills.io/integrate-skills
- *
- * Skills with disableModelInvocation=true are excluded from the prompt
- * (they can only be invoked explicitly via /skill:name commands).
+ * Derive a `/skill:<token>` command token from a skill's frontmatter `name`, which
+ * `docs/skills.md` § Validation deliberately allows to contain characters a slash
+ * command cannot (spaces, capitals) -- lenient loading is a considered divergence
+ * from the Agent Skills standard, not a gap to close, so the skill still loads and
+ * only its command token changes here. Identity for an already command-safe name
+ * (`^[a-z0-9-]+$` with no leading/trailing/consecutive hyphen, matching
+ * `validateName`'s own rule), so this is a no-op for the common case.
  */
-export function formatSkillsForPrompt(skills: Skill[]): string {
-	const visibleSkills = skills.filter((s) => !s.disableModelInvocation);
+export function slugifySkillCommandName(name: string): string {
+	const slug = name
+		.toLowerCase()
+		.replace(/[^a-z0-9-]+/g, "-")
+		.replace(/-+/g, "-")
+		.replace(/^-|-$/g, "");
+	return slug || "skill";
+}
 
+/**
+ * Initial catalog budget (ADR 0021). Measured against a real 115-skill library: name
+ * and full description cost 6,742 tokens against 128 tokens of prefix headroom, so the
+ * catalog carries names only and stops at this budget rather than growing with the
+ * user's library size. SKILL.8 re-measures this against the enforced production
+ * prefix and finalizes it -- matching `ENFORCED_PRODUCTION_PREFIX_BUDGET`'s own
+ * precedent of "fixed by measurement, not assumed" -- so this starting value is not
+ * final.
+ */
+export const SKILL_CATALOG_PREFIX_BUDGET_TOKENS = 600;
+
+/** Same chars/4 heuristic `estimateTokens` uses for messages (compaction.ts), applied to plain text. */
+function estimateTextTokens(text: string): number {
+	return Math.ceil(text.length / 4);
+}
+
+/**
+ * Format a budget-bounded skill catalog for inclusion in a system prompt (ADR 0021).
+ *
+ * Carries names only, alphabetically ordered, added until `budgetTokens` is spent --
+ * unlike every other prefix contributor, the catalog is sized by the user's skill
+ * library rather than by the product, so a token budget bounds it rather than a
+ * fixed schema. Descriptions resolve on demand through the `skill_search` tool
+ * (`core/tools/skill-search.ts`, SKILL.7); content still loads through `read`,
+ * unchanged. Once one name fails to fit, every remaining name (in sorted order) is
+ * counted as omitted rather than skipping ahead to a shorter one that might fit --
+ * the catalog is always a clean prefix of the sorted list, not a best-fit selection.
+ *
+ * Skills with `disableModelInvocation=true` are excluded (invocable only via
+ * `/skill:<token>`, per `slugifySkillCommandName`).
+ */
+function omittedCommentLine(omittedCount: number): string {
+	return `  <!-- ${omittedCount} more skill${omittedCount === 1 ? "" : "s"} omitted for space; call skill_search to find them -->`;
+}
+
+export function formatSkillsForPrompt(
+	skills: Skill[],
+	budgetTokens: number = SKILL_CATALOG_PREFIX_BUDGET_TOKENS,
+): string {
+	const visibleSkills = skills.filter((s) => !s.disableModelInvocation);
 	if (visibleSkills.length === 0) {
 		return "";
 	}
 
-	const lines = [
-		"\n\nThe following skills provide specialized instructions for specific tasks.",
-		"Use the read tool to load a skill's file when the task matches its description.",
-		"When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.",
+	const sortedNames = visibleSkills.map((s) => s.name).sort((a, b) => a.localeCompare(b));
+	const header = [
+		"",
+		"",
+		"The following skill names are available. Each provides specialized instructions for a specific task.",
+		"Call skill_search with a name or a query to see a skill's description, then use the read tool to load its file when the task matches.",
 		"",
 		"<available_skills>",
-	];
+	].join("\n");
+	const footer = "</available_skills>";
+	const nameLines = sortedNames.map((name) => `  <name>${escapeXml(name)}</name>`);
 
-	for (const skill of visibleSkills) {
-		lines.push("  <skill>");
-		lines.push(`    <name>${escapeXml(skill.name)}</name>`);
-		lines.push(`    <description>${escapeXml(skill.description)}</description>`);
-		lines.push(`    <location>${escapeXml(skill.filePath)}</location>`);
-		lines.push("  </skill>");
+	const fullText = [header, ...nameLines, footer].join("\n");
+	if (estimateTextTokens(fullText) <= budgetTokens) {
+		return fullText;
 	}
 
-	lines.push("</available_skills>");
+	// The full catalog doesn't fit: at least one name will be omitted, so the
+	// returned text must also carry the omitted-count comment line, and that line's
+	// own cost has to be reserved up front. Checking each candidate only against
+	// header+names+footer (no comment line) would let the comment line's own cost
+	// push the final assembled text over budgetTokens once it's appended after the
+	// loop -- reserving worst-case (every name omitted, the widest possible count)
+	// keeps the reservation a safe upper bound regardless of the actual cutoff.
+	const availableForNames = budgetTokens - estimateTextTokens(omittedCommentLine(sortedNames.length));
 
-	return lines.join("\n");
+	const includedLines: string[] = [];
+	let cutoffIndex = 0;
+	for (; cutoffIndex < sortedNames.length; cutoffIndex++) {
+		const candidateText = [header, ...includedLines, nameLines[cutoffIndex], footer].join("\n");
+		if (estimateTextTokens(candidateText) > availableForNames) break;
+		includedLines.push(nameLines[cutoffIndex]);
+	}
+
+	const omittedCount = sortedNames.length - cutoffIndex;
+	return [header, ...includedLines, omittedCommentLine(omittedCount), footer].join("\n");
 }
 
 function escapeXml(str: string): string {

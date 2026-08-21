@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { projectToolSchemas } from "../../src/core/context/pipeline.ts";
+import { SKILL_CATALOG_PREFIX_BUDGET_TOKENS, type Skill } from "../../src/core/skills.ts";
+import { createSyntheticSourceInfo } from "../../src/core/source-info.ts";
 import { buildSystemPrompt } from "../../src/core/system-prompt.ts";
 import { createAllToolDefinitions } from "../../src/core/tools/index.ts";
 
 function productionPrefixTokens(options?: {
 	loadedSchemaNames?: ReadonlySet<string>;
 	toolOptions?: Parameters<typeof createAllToolDefinitions>[1];
+	skills?: Skill[];
 }): number {
 	const definitions = Object.values(createAllToolDefinitions("/workspace", options?.toolOptions));
 	const tools = projectToolSchemas(
@@ -23,12 +26,38 @@ function productionPrefixTokens(options?: {
 			),
 		),
 		promptGuidelines: definitions.flatMap((definition) => definition.promptGuidelines ?? []),
+		skills: options?.skills,
 	});
 	return Math.ceil(
 		`${systemPrompt}
 ${JSON.stringify(tools)}`.length / 4,
 	);
 }
+
+/**
+ * A skill name/description shape representative of a real installed library
+ * (`docs/specs/2026-08-20-sandbox-skill-projection.md`'s measurement: a real
+ * 115-skill library had 60 model-visible names with a 329-character median
+ * description). The description length doesn't affect the production prefix --
+ * SKILL.6's catalog carries names only -- but is included so this fixture would also
+ * be realistic input to `formatSkillsForPrompt` directly, not just through the
+ * production path this file measures.
+ */
+function syntheticSkill(index: number): Skill {
+	const name = `synthetic-skill-name-number-${String(index).padStart(3, "0")}`;
+	const filePath = `/home/user/.agents/skills/${name}/SKILL.md`;
+	return {
+		name,
+		description: `A representative skill description of realistic length for skill number ${index}, covering a specific task the model might match against this text when deciding whether to search for it.`,
+		filePath,
+		baseDir: `/home/user/.agents/skills/${name}`,
+		sourceInfo: createSyntheticSourceInfo(filePath, { source: "local", scope: "user" }),
+		disableModelInvocation: false,
+	};
+}
+
+/** More skills than any observed real library needs to stay bounded by SKILL_CATALOG_PREFIX_BUDGET_TOKENS regardless of size. */
+const LARGE_SKILL_LIBRARY: Skill[] = Array.from({ length: 200 }, (_, i) => syntheticSkill(i));
 
 /**
  * Fixed by measurement once the full Phase 4 registry landed (task 4.7), not
@@ -46,10 +75,23 @@ ${JSON.stringify(tools)}`.length / 4,
  * new deferred tool) added anything. With `lsp` registered and its description
  * trimmed to the bone, the measured prefix is 2,372. Per this file's own precedent --
  * fix the ceiling from a real measurement, don't assume one -- the budget is raised
- * to 2,500, a fresh ~5% anti-flake margin over the new measured floor. It does not
- * budge for the next tool the same way this one didn't.
+ * to 2,500, a fresh ~5% anti-flake margin over the new measured floor.
+ *
+ * Re-measured at SKILL.8 (`docs/plans/2026-08-20-sandbox-skill-projection.md`):
+ * `skill_search` (SKILL.7) is a new always-registered deferred tool, carrying the
+ * no-skills floor from 2,372 to 2,393. Loading a skill library -- any size, per
+ * `SKILL_CATALOG_PREFIX_BUDGET_TOKENS`'s whole point -- adds the bounded catalog
+ * (SKILL.6) on top: measured at 2,987 with a 200-skill and separately a 2,000-skill
+ * synthetic library (identical, confirming the bound holds regardless of library
+ * size), 594 of those 600 possible tokens actually spent. Unlike every prior
+ * revision of this budget, the worst case here is not "every tool active" but "every
+ * tool active AND a skill library loaded", because a user's skill count is not the
+ * product's to bound the same way tool count is. The budget is raised to 3,150, a
+ * ~5.5% margin over the 2,987 measured worst case -- the same proportional margin
+ * LSP.7 used, not a new policy. It does not budge for the next tool or the next
+ * skill the same way this one didn't.
  */
-const ENFORCED_PRODUCTION_PREFIX_BUDGET = 2_500;
+const ENFORCED_PRODUCTION_PREFIX_BUDGET = 3_150;
 
 function lspToolOptions() {
 	return { lsp: { operations: { request: async () => [] } } };
@@ -85,5 +127,34 @@ describe("production static prefix with lsp configured (LSP.7)", () => {
 		expect(productionPrefixTokens({ toolOptions: lspToolOptions() })).toBeLessThanOrEqual(
 			ENFORCED_PRODUCTION_PREFIX_BUDGET,
 		);
+	});
+});
+
+describe("production static prefix with skills loaded (SKILL.8)", () => {
+	it("stays under the enforced budget with no skills loaded (the shipped default for most sessions)", () => {
+		expect(productionPrefixTokens({ skills: [] })).toBeLessThanOrEqual(ENFORCED_PRODUCTION_PREFIX_BUDGET);
+	});
+
+	it("stays under the enforced budget with a large skill library loaded, because the catalog is bounded, not proportional to library size", () => {
+		expect(productionPrefixTokens({ skills: LARGE_SKILL_LIBRARY })).toBeLessThanOrEqual(
+			ENFORCED_PRODUCTION_PREFIX_BUDGET,
+		);
+	});
+
+	it("the skill catalog's own contribution never exceeds SKILL_CATALOG_PREFIX_BUDGET_TOKENS, for any library size", () => {
+		const withoutSkills = productionPrefixTokens({ skills: [] });
+		const withSkills = productionPrefixTokens({ skills: LARGE_SKILL_LIBRARY });
+		// A loose upper bound, not an exact difference: the catalog's own text is
+		// bounded by SKILL_CATALOG_PREFIX_BUDGET_TOKENS, but the two prompts differ by
+		// slightly more than that (the catalog's own header/footer overhead), and
+		// separately the whole assembled prefix is re-tokenized with Math.ceil, which
+		// can itself round up by a token independent of the catalog's real cost.
+		expect(withSkills - withoutSkills).toBeLessThanOrEqual(SKILL_CATALOG_PREFIX_BUDGET_TOKENS + 5);
+	});
+
+	it("a library much larger than the catalog budget still produces a bounded, correctly-labeled prefix", () => {
+		const hugeLibrary: Skill[] = Array.from({ length: 2000 }, (_, i) => syntheticSkill(i));
+		const tokens = productionPrefixTokens({ skills: hugeLibrary });
+		expect(tokens).toBeLessThanOrEqual(ENFORCED_PRODUCTION_PREFIX_BUDGET);
 	});
 });

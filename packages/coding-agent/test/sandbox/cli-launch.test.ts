@@ -1,10 +1,11 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
 	buildSandboxedCliLaunch,
 	requiresSandboxedChild,
+	resolveHostSkillPaths,
 	resolveSupervisorAllowedHosts,
 } from "../../src/core/sandbox/cli-launch.ts";
 
@@ -150,6 +151,145 @@ describe("sandbox CLI launch", () => {
 		);
 
 		expect(resolveSupervisorAllowedHosts(workspace(), agentDir)).toEqual(["only.example"]);
+	});
+
+	it("mounts host skill roots read-only and tells the child where each one is, by name (SKILL.2)", () => {
+		const cwd = workspace();
+		const agentSkillsDir = join(workspace(), "agent-skills");
+		const agentsHomeSkillsDir = join(workspace(), "agents-home-skills");
+
+		const launch = buildSandboxedCliLaunch({
+			workspace: cwd,
+			command: "/usr/bin/node",
+			args: [],
+			environment: {},
+			skillPaths: { agentSkills: agentSkillsDir, agentsHomeSkills: agentsHomeSkillsDir },
+		});
+
+		expect(launch.readOnlyPaths).toEqual(expect.arrayContaining([agentSkillsDir, agentsHomeSkillsDir]));
+		expect(launch.environment.APEX_CODE_SKILL_PATH_AGENT).toBe(agentSkillsDir);
+		expect(launch.environment.APEX_CODE_SKILL_PATH_AGENTS_HOME).toBe(agentsHomeSkillsDir);
+	});
+
+	it("mounts only the one skill root that exists, still identified by name (SKILL.2)", () => {
+		const cwd = workspace();
+		const agentsHomeSkillsDir = join(workspace(), "agents-home-skills");
+
+		const launch = buildSandboxedCliLaunch({
+			workspace: cwd,
+			command: "/usr/bin/node",
+			args: [],
+			environment: {},
+			skillPaths: { agentsHomeSkills: agentsHomeSkillsDir },
+		});
+
+		expect(launch.readOnlyPaths).toEqual([agentsHomeSkillsDir]);
+		expect(launch.environment.APEX_CODE_SKILL_PATH_AGENT).toBeUndefined();
+		expect(launch.environment.APEX_CODE_SKILL_PATH_AGENTS_HOME).toBe(agentsHomeSkillsDir);
+	});
+
+	it("adds no skill mounts or env vars when the host has no skill roots to offer (SKILL.2)", () => {
+		const cwd = workspace();
+
+		const launch = buildSandboxedCliLaunch({ workspace: cwd, command: "/usr/bin/node", args: [], environment: {} });
+
+		expect(launch.readOnlyPaths).toEqual([]);
+		expect(launch.environment.APEX_CODE_SKILL_PATH_AGENT).toBeUndefined();
+		expect(launch.environment.APEX_CODE_SKILL_PATH_AGENTS_HOME).toBeUndefined();
+	});
+
+	it("keeps the supervisor's skill paths authoritative over anything an env var already carried (SKILL.2)", () => {
+		const cwd = workspace();
+		const trustedRoot = join(workspace(), "trusted-skills");
+
+		const launch = buildSandboxedCliLaunch({
+			workspace: cwd,
+			command: "/usr/bin/node",
+			args: [],
+			environment: { APEX_CODE_SKILL_PATH_AGENT: "/attacker/controlled/path" },
+			skillPaths: { agentSkills: trustedRoot },
+		});
+
+		expect(launch.environment.APEX_CODE_SKILL_PATH_AGENT).toBe(trustedRoot);
+	});
+
+	it("resolves only the host skill roots that actually exist, keyed by name (SKILL.2)", () => {
+		const agentDir = workspace();
+		const homeDir = workspace();
+		mkdirSync(join(agentDir, "skills"), { recursive: true });
+		// No .agents/skills under homeDir -- this root is absent and must be omitted.
+
+		const resolved = resolveHostSkillPaths(agentDir, homeDir);
+
+		expect(resolved).toEqual({ paths: { agentSkills: join(agentDir, "skills") }, refusals: [] });
+	});
+
+	it("resolves both host skill roots when both exist (SKILL.2)", () => {
+		const agentDir = workspace();
+		const homeDir = workspace();
+		mkdirSync(join(agentDir, "skills"), { recursive: true });
+		mkdirSync(join(homeDir, ".agents", "skills"), { recursive: true });
+
+		const resolved = resolveHostSkillPaths(agentDir, homeDir);
+
+		expect(resolved).toEqual({
+			paths: {
+				agentSkills: join(agentDir, "skills"),
+				agentsHomeSkills: join(homeDir, ".agents", "skills"),
+			},
+			refusals: [],
+		});
+	});
+
+	it("resolves no host skill roots when neither exists (SKILL.2)", () => {
+		const agentDir = workspace();
+		const homeDir = workspace();
+
+		expect(resolveHostSkillPaths(agentDir, homeDir)).toEqual({ paths: {}, refusals: [] });
+	});
+
+	it("refuses a skill root symlinked directly at the host home (SKILL.4)", () => {
+		const agentDir = workspace();
+		const homeDir = workspace();
+		symlinkSync(homeDir, join(agentDir, "skills"));
+
+		const resolved = resolveHostSkillPaths(agentDir, homeDir);
+
+		expect(resolved.paths.agentSkills).toBeUndefined();
+		expect(resolved.refusals).toEqual([
+			expect.objectContaining({ root: "agentSkills", path: join(agentDir, "skills") }),
+		]);
+	});
+
+	it("refuses a skill root symlinked at an ancestor of the host home (SKILL.4)", () => {
+		const agentDir = workspace();
+		const homeParent = workspace();
+		const homeDir = join(homeParent, "home");
+		mkdirSync(homeDir, { recursive: true });
+		mkdirSync(join(homeDir, ".agents"), { recursive: true });
+		// Points above $HOME itself -- mounting this would re-expose every sibling of
+		// $HOME under homeParent, not just the intended skills subtree.
+		symlinkSync(homeParent, join(homeDir, ".agents", "skills"));
+
+		const resolved = resolveHostSkillPaths(agentDir, homeDir);
+
+		expect(resolved.paths.agentsHomeSkills).toBeUndefined();
+		expect(resolved.refusals).toEqual([
+			expect.objectContaining({ root: "agentsHomeSkills", path: join(homeDir, ".agents", "skills") }),
+		]);
+	});
+
+	it("accepts a skill root symlinked to an unrelated, safe directory (SKILL.4)", () => {
+		const agentDir = workspace();
+		const homeDir = workspace();
+		const realSkillsDir = workspace();
+		mkdirSync(join(homeDir, ".agents"), { recursive: true });
+		symlinkSync(realSkillsDir, join(homeDir, ".agents", "skills"));
+
+		const resolved = resolveHostSkillPaths(agentDir, homeDir);
+
+		expect(resolved.paths.agentsHomeSkills).toBe(join(homeDir, ".agents", "skills"));
+		expect(resolved.refusals).toEqual([]);
 	});
 
 	it("routes every agent-session shape through the child while exempting only non-session commands", () => {

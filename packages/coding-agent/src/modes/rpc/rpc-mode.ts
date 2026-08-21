@@ -25,6 +25,7 @@ import {
 	waitForRawStdoutBackpressure,
 	writeRawStdout,
 } from "../../core/output-guard.ts";
+import { slugifySkillCommandName } from "../../core/skills.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { type Theme, theme } from "../interactive/theme/theme.ts";
 import { toJsonEvent } from "../json-event.ts";
@@ -698,7 +699,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 
 				for (const skill of session.resourceLoader.getSkills().skills) {
 					commands.push({
-						name: `skill:${skill.name}`,
+						name: `skill:${slugifySkillCommandName(skill.name)}`,
 						description: skill.description,
 						source: "skill",
 						sourceInfo: skill.sourceInfo,

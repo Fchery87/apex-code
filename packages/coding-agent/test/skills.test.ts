@@ -2,7 +2,14 @@ import { homedir } from "os";
 import { join, resolve } from "path";
 import { describe, expect, it } from "vitest";
 import type { ResourceDiagnostic } from "../src/core/diagnostics.ts";
-import { formatSkillsForPrompt, loadSkills, loadSkillsFromDir, type Skill } from "../src/core/skills.ts";
+import {
+	formatSkillsForPrompt,
+	loadSkills,
+	loadSkillsFromDir,
+	SKILL_CATALOG_PREFIX_BUDGET_TOKENS,
+	type Skill,
+	slugifySkillCommandName,
+} from "../src/core/skills.ts";
 import { createSyntheticSourceInfo } from "../src/core/source-info.ts";
 
 const fixturesDir = resolve(__dirname, "fixtures/skills");
@@ -221,13 +228,13 @@ describe("skills", () => {
 		});
 	});
 
-	describe("formatSkillsForPrompt", () => {
+	describe("formatSkillsForPrompt (SKILL.6, name-only catalog per ADR 0021)", () => {
 		it("should return empty string for no skills", () => {
 			const result = formatSkillsForPrompt([]);
 			expect(result).toBe("");
 		});
 
-		it("should format skills as XML", () => {
+		it("should format skill names as XML, without description or location", () => {
 			const skills: Skill[] = [
 				createTestSkill({
 					name: "test-skill",
@@ -241,13 +248,14 @@ describe("skills", () => {
 
 			expect(result).toContain("<available_skills>");
 			expect(result).toContain("</available_skills>");
-			expect(result).toContain("<skill>");
 			expect(result).toContain("<name>test-skill</name>");
-			expect(result).toContain("<description>A test skill.</description>");
-			expect(result).toContain("<location>/path/to/skill/SKILL.md</location>");
+			expect(result).not.toContain("<description>");
+			expect(result).not.toContain("<location>");
+			expect(result).not.toContain("A test skill.");
+			expect(result).not.toContain("/path/to/skill/SKILL.md");
 		});
 
-		it("should include intro text before XML", () => {
+		it("should include intro text pointing at skill_search before the XML", () => {
 			const skills: Skill[] = [
 				createTestSkill({
 					name: "test-skill",
@@ -261,15 +269,15 @@ describe("skills", () => {
 			const xmlStart = result.indexOf("<available_skills>");
 			const introText = result.substring(0, xmlStart);
 
-			expect(introText).toContain("The following skills provide specialized instructions");
-			expect(introText).toContain("Use the read tool to load a skill's file");
+			expect(introText).toContain("skill_search");
+			expect(introText).toContain("use the read tool to load its file");
 		});
 
-		it("should escape XML special characters", () => {
+		it("should escape XML special characters in a skill name", () => {
 			const skills: Skill[] = [
 				createTestSkill({
-					name: "test-skill",
-					description: 'A skill with <special> & "characters".',
+					name: '<special> & "name"',
+					description: "irrelevant",
 					filePath: "/path/to/skill/SKILL.md",
 					baseDir: "/path/to/skill",
 				}),
@@ -279,33 +287,34 @@ describe("skills", () => {
 
 			expect(result).toContain("&lt;special&gt;");
 			expect(result).toContain("&amp;");
-			expect(result).toContain("&quot;characters&quot;");
+			expect(result).toContain("&quot;name&quot;");
 		});
 
-		it("should format multiple skills", () => {
+		it("should list multiple skill names alphabetically regardless of input order", () => {
 			const skills: Skill[] = [
-				createTestSkill({
-					name: "skill-one",
-					description: "First skill.",
-					filePath: "/path/one/SKILL.md",
-					baseDir: "/path/one",
-				}),
 				createTestSkill({
 					name: "skill-two",
 					description: "Second skill.",
 					filePath: "/path/two/SKILL.md",
 					baseDir: "/path/two",
 				}),
+				createTestSkill({
+					name: "skill-one",
+					description: "First skill.",
+					filePath: "/path/one/SKILL.md",
+					baseDir: "/path/one",
+				}),
 			];
 
 			const result = formatSkillsForPrompt(skills);
+			const oneIndex = result.indexOf("<name>skill-one</name>");
+			const twoIndex = result.indexOf("<name>skill-two</name>");
 
-			expect(result).toContain("<name>skill-one</name>");
-			expect(result).toContain("<name>skill-two</name>");
-			expect((result.match(/<skill>/g) || []).length).toBe(2);
+			expect(oneIndex).toBeGreaterThan(-1);
+			expect(twoIndex).toBeGreaterThan(oneIndex);
 		});
 
-		it("should exclude skills with disableModelInvocation from prompt", () => {
+		it("should exclude skills with disableModelInvocation from the catalog", () => {
 			const skills: Skill[] = [
 				createTestSkill({
 					name: "visible-skill",
@@ -326,7 +335,6 @@ describe("skills", () => {
 
 			expect(result).toContain("<name>visible-skill</name>");
 			expect(result).not.toContain("<name>hidden-skill</name>");
-			expect((result.match(/<skill>/g) || []).length).toBe(1);
 		});
 
 		it("should return empty string when all skills have disableModelInvocation", () => {
@@ -342,6 +350,117 @@ describe("skills", () => {
 
 			const result = formatSkillsForPrompt(skills);
 			expect(result).toBe("");
+		});
+
+		it("stops adding names once the budget is spent and reports how many were omitted", () => {
+			// Each name easily exceeds a tiny budget on its own, so with three skills
+			// and a budget too small even for the header, everything is omitted.
+			const skills: Skill[] = ["skill-alpha", "skill-beta", "skill-gamma"].map((name) =>
+				createTestSkill({
+					name,
+					description: "irrelevant",
+					filePath: `/p/${name}/SKILL.md`,
+					baseDir: `/p/${name}`,
+				}),
+			);
+
+			const result = formatSkillsForPrompt(skills, 1);
+
+			expect(result).not.toContain("<name>");
+			expect(result).toContain("3 more skills omitted for space; call skill_search to find them");
+		});
+
+		it("includes a clean alphabetical prefix, counts the rest as omitted, and never exceeds the budget once truncated", () => {
+			// Long names so a handful of them clearly costs more than the fixed
+			// omitted-count comment line -- with short names the comment line's own
+			// prose can outweigh a few extra <name> tags, which would let the "fit
+			// everything" branch win before truncation is ever exercised.
+			const names = Array.from(
+				{ length: 20 },
+				(_, i) => `very-long-skill-name-number-${String(i).padStart(2, "0")}`,
+			);
+			const skills: Skill[] = names.map((name) =>
+				createTestSkill({
+					name,
+					description: "irrelevant",
+					filePath: `/p/${name}/SKILL.md`,
+					baseDir: `/p/${name}`,
+				}),
+			);
+			const fullBudget = Math.ceil(formatSkillsForPrompt(skills, 1_000_000).length / 4);
+			// Comfortably above the fixed header+comment overhead (leaving room for
+			// several names), but well under the full list's cost.
+			const partialBudget = Math.round(fullBudget * 0.6);
+
+			const result = formatSkillsForPrompt(skills, partialBudget);
+
+			const includedNames = [...result.matchAll(/<name>(.+?)<\/name>/g)].map((match) => match[1]);
+			expect(includedNames.length).toBeGreaterThan(0);
+			expect(includedNames.length).toBeLessThan(names.length);
+			const sortedNames = [...names].sort((a, b) => a.localeCompare(b));
+			expect(includedNames).toEqual(sortedNames.slice(0, includedNames.length));
+			const omittedCount = names.length - includedNames.length;
+			expect(result).toContain(
+				`${omittedCount} more skill${omittedCount === 1 ? "" : "s"} omitted for space; call skill_search to find them`,
+			);
+			// The regression this guards: the omitted-count comment line's own cost
+			// must be reserved, or the truncated output (names + that comment line)
+			// can itself exceed the budget it was supposed to respect.
+			expect(Math.ceil(result.length / 4)).toBeLessThanOrEqual(partialBudget);
+		});
+
+		it("stays bounded for a 500-skill library regardless of the default production budget", () => {
+			const skills: Skill[] = Array.from({ length: 500 }, (_, i) =>
+				createTestSkill({
+					name: `skill-${String(i).padStart(4, "0")}`,
+					description: "irrelevant",
+					filePath: `/p/${i}/SKILL.md`,
+					baseDir: `/p/${i}`,
+				}),
+			);
+
+			const result = formatSkillsForPrompt(skills);
+
+			expect(Math.ceil(result.length / 4)).toBeLessThanOrEqual(SKILL_CATALOG_PREFIX_BUDGET_TOKENS);
+			expect(result).toContain("more skills omitted for space; call skill_search to find them");
+		});
+
+		it("never includes a description or location, even under a generous budget", () => {
+			const skills: Skill[] = [
+				createTestSkill({
+					name: "test-skill",
+					description: "A description that must not leak into the prefix.",
+					filePath: "/must/not/leak/SKILL.md",
+					baseDir: "/must/not/leak",
+				}),
+			];
+
+			const result = formatSkillsForPrompt(skills, 100_000);
+
+			expect(result).not.toContain("A description that must not leak into the prefix.");
+			expect(result).not.toContain("/must/not/leak/SKILL.md");
+		});
+	});
+
+	describe("slugifySkillCommandName (SKILL.5)", () => {
+		it("leaves an already-valid command-safe name unchanged", () => {
+			expect(slugifySkillCommandName("agent-browser")).toBe("agent-browser");
+		});
+
+		it("lowercases and hyphenates a name with spaces and capitals", () => {
+			expect(slugifySkillCommandName("Poteto Mode")).toBe("poteto-mode");
+		});
+
+		it("collapses a run of invalid characters into a single hyphen", () => {
+			expect(slugifySkillCommandName("Foo!!  Bar??")).toBe("foo-bar");
+		});
+
+		it("trims leading and trailing hyphens produced by leading/trailing invalid characters", () => {
+			expect(slugifySkillCommandName("__Foo Bar__")).toBe("foo-bar");
+		});
+
+		it("falls back to a stable non-empty token for a name with no valid characters at all", () => {
+			expect(slugifySkillCommandName("!!!")).toBe("skill");
 		});
 	});
 
