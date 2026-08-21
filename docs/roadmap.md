@@ -351,6 +351,23 @@ lives in this section and in the spec/ADR amendments. Windows remains unsupporte
 per ADR 0005. Apple Events/Launch Services denial and code-signing behavior for a
 distributed macOS binary remain open, out of Phase 2b's stated scope.
 
+**Follow-up (2026-08-20 — the boundary silently disabled the skills subsystem.)** Phase
+2b's whole-CLI launch hides host-home and repoints `HOME` and the agent directory into
+the workspace. The inherited skills subsystem computes its user-scope discovery roots
+from exactly those two values, so every sandboxed session loads **zero** user skills,
+with no diagnostic and with `packages/coding-agent/docs/skills.md` still documenting the
+feature as working. Measured against a real 115-skill library: 115 skills on the host,
+0 under the child's computed environment. This is not a Phase 2b regression in the
+boundary — the boundary did what ADR 0005 says — it is a subsystem that was never
+adapted to it, and no Phase since had scope that would pick it up. Repairing it also
+completes a Phase 3 obligation: the discovered catalog costs 6,742 prefix tokens against
+128 tokens of headroom, so the projection moves to name-only behind a token budget with
+descriptions resolved through a tool ([ADR 0021](adr/0021-skill-catalog-deferral.md)).
+Specced and planned as a Phase 2b / Phase 3 follow-up rather than a new phase:
+[spec](specs/2026-08-20-sandbox-skill-projection.md) ·
+[plan](plans/2026-08-20-sandbox-skill-projection.md). Phase 2b's **landed** state is
+unchanged and is not reopened by this.
+
 ---
 
 ## Phase 3 — Context engineering
