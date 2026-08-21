@@ -14,6 +14,8 @@ import {
 } from "@earendil-works/pi-tui";
 import type { ThinkingLevel } from "apex-code-agent-core";
 import { formatHttpIdleTimeoutMs, HTTP_IDLE_TIMEOUT_CHOICES } from "../../../core/http-dispatcher.ts";
+import type { PermissionModeOrigin } from "../../../core/permissions/startup.ts";
+import { PERMISSION_MODES, type PermissionMode } from "../../../core/permissions/store.ts";
 import type {
 	DefaultProjectTrust,
 	MermaidRenderingMode,
@@ -55,6 +57,46 @@ const DEFAULT_PROJECT_TRUST_BY_LABEL = new Map(
 	Object.entries(DEFAULT_PROJECT_TRUST_LABELS).map(([value, label]) => [label, value as DefaultProjectTrust]),
 );
 
+const PERMISSION_MODE_DESCRIPTIONS: Record<PermissionMode, string> = {
+	default: "Ask for anything policy does not already allow",
+	plan: "Block file writes, commands, and delegation while you investigate",
+	acceptEdits: "Auto-allow plain file edits; still ask for commands and network",
+	dontAsk: "Never prompt; deny anything not already permitted",
+	bypassPermissions: "Allow every tool call without asking",
+};
+
+/**
+ * What outranks a user-scope write, phrased for someone deciding whether to bother.
+ * `user` and `default` are absent because neither shadows anything this menu writes.
+ */
+export const PERMISSION_MODE_OVERRIDE_HINTS: Partial<Record<PermissionModeOrigin, string>> = {
+	flag: "--permission-mode on the command line",
+	local: ".apex-code/permissions.local.json in this project",
+	project: ".apex-code/permissions.json in this project",
+	command: "a command-scoped override in this session",
+	session: "a session-scoped override",
+};
+
+/** Empty when the session has no permission gate, so the row simply does not exist. */
+function permissionModeItems(current: SettingsConfig["permissionMode"], callbacks: SettingsCallbacks): SettingItem[] {
+	if (!current) return [];
+	return [
+		{
+			id: "permission-mode",
+			label: "Permission mode",
+			description: PERMISSION_MODE_DESCRIPTIONS[current.mode],
+			currentValue: current.mode,
+			submenu: (currentValue, done) =>
+				new PermissionModeSubmenu(
+					currentValue as PermissionMode,
+					current.origin,
+					(mode) => callbacks.onPermissionModeChange(mode),
+					done,
+				),
+		},
+	];
+}
+
 export interface SettingsConfig {
 	autoCompact: boolean;
 	showImages: boolean;
@@ -84,6 +126,8 @@ export interface SettingsConfig {
 	autocompleteMaxVisible: number;
 	quietStartup: boolean;
 	defaultProjectTrust: DefaultProjectTrust;
+	/** Absent when the session runs without a permission gate; the row is then hidden. */
+	permissionMode?: { mode: PermissionMode; origin: PermissionModeOrigin };
 	clearOnShrink: boolean;
 	showTerminalProgress: boolean;
 	tuiMode: TuiMode;
@@ -118,6 +162,7 @@ export interface SettingsCallbacks {
 	onAutocompleteMaxVisibleChange: (maxVisible: number) => void;
 	onQuietStartupChange: (enabled: boolean) => void;
 	onDefaultProjectTrustChange: (defaultProjectTrust: DefaultProjectTrust) => void;
+	onPermissionModeChange: (mode: PermissionMode) => void;
 	onClearOnShrinkChange: (enabled: boolean) => void;
 	onShowTerminalProgressChange: (enabled: boolean) => void;
 	onTuiModeChange: (mode: TuiMode) => void;
@@ -232,6 +277,99 @@ class SelectSubmenu extends Container {
 
 	handleInput(data: string): void {
 		this.selectList.handleInput(data);
+	}
+}
+
+/**
+ * Permission mode picker, mode list then a confirm step for `bypassPermissions`.
+ * The confirm exists because the mode list is arrow-cyclable like every other
+ * settings row, so "allow every tool call" is otherwise one stray keypress away.
+ */
+class PermissionModeSubmenu extends Container {
+	private inputComponent: Component | undefined;
+	private readonly current: PermissionMode;
+	private readonly origin: PermissionModeOrigin;
+	private readonly onSelect: (mode: PermissionMode) => void;
+	private readonly onDone: (selectedValue?: string) => void;
+
+	constructor(
+		current: PermissionMode,
+		origin: PermissionModeOrigin,
+		onSelect: (mode: PermissionMode) => void,
+		onDone: (selectedValue?: string) => void,
+	) {
+		super();
+		this.current = current;
+		this.origin = origin;
+		this.onSelect = onSelect;
+		this.onDone = onDone;
+		this.showModeList();
+	}
+
+	handleInput(data: string): void {
+		this.inputComponent?.handleInput?.(data);
+	}
+
+	private setContent(component: Component): void {
+		this.clear();
+		this.addChild(component);
+		this.inputComponent = component;
+	}
+
+	private description(): string {
+		const overridden =
+			this.origin !== "user" && this.origin !== "default"
+				? ` Currently set by ${PERMISSION_MODE_OVERRIDE_HINTS[this.origin]}.`
+				: "";
+		return `Saved to user scope and applied to the next tool call.${overridden}`;
+	}
+
+	private showModeList(): void {
+		this.setContent(
+			new SelectSubmenu(
+				"Permission mode",
+				this.description(),
+				PERMISSION_MODES.map((mode) => ({
+					value: mode,
+					label: mode,
+					description: PERMISSION_MODE_DESCRIPTIONS[mode],
+				})),
+				this.current,
+				(value) => {
+					const mode = value as PermissionMode;
+					if (mode === "bypassPermissions") {
+						this.showBypassConfirm();
+						return;
+					}
+					this.onSelect(mode);
+					this.onDone(mode);
+				},
+				() => this.onDone(),
+			),
+		);
+	}
+
+	private showBypassConfirm(): void {
+		this.setContent(
+			new SelectSubmenu(
+				"Bypass all permission checks?",
+				"Every tool call runs without asking, in every project, until you change this back. The OS sandbox still confines writes to the workspace and network egress to the allowlist.",
+				[
+					{ value: "no", label: `No, keep ${this.current}`, description: "Return to the mode list" },
+					{ value: "yes", label: "Yes, bypass", description: "Allow every tool call without asking" },
+				],
+				"no",
+				(value) => {
+					if (value !== "yes") {
+						this.showModeList();
+						return;
+					}
+					this.onSelect("bypassPermissions");
+					this.onDone("bypassPermissions");
+				},
+				() => this.showModeList(),
+			),
+		);
 	}
 }
 
@@ -578,6 +716,7 @@ export class SettingsSelectorComponent extends Container {
 				currentValue: DEFAULT_PROJECT_TRUST_LABELS[config.defaultProjectTrust],
 				values: Object.values(DEFAULT_PROJECT_TRUST_LABELS),
 			},
+			...permissionModeItems(config.permissionMode, callbacks),
 			{
 				id: "double-escape-action",
 				label: "Double-escape action",

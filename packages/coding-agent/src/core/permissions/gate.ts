@@ -23,6 +23,13 @@ export interface PermissionGateOptions {
 	getContract: (toolName: string) => ToolContract | undefined;
 	store: PermissionRuleStore;
 	getMode: () => PermissionMode | Promise<PermissionMode>;
+	/**
+	 * The `--permission-mode` value, when one was passed. Not used to decide
+	 * anything here — `getMode` already folds it in. It is carried so a UI that
+	 * offers to change the mode can tell the user their write is outranked
+	 * (permissions/startup.ts, resolveEffectiveModeWithOrigin).
+	 */
+	flagMode?: PermissionMode;
 	/** Absent in a non-interactive session: an `ask` resolution then fails closed (deny). */
 	responder?: PermissionResponder;
 	/** Resolves a responder at call time because the interactive UI binds after session construction. */
