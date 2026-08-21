@@ -1,5 +1,7 @@
 # Changelog
 
+## [Unreleased]
+
 ## [0.0.1-alpha.6] - 2026-08-21
 
 ## [0.0.1-alpha.5] - 2026-08-20
