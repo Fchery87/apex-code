@@ -1,15 +1,15 @@
 {
 	"name": "apex-code",
-	"version": "0.0.1-alpha.5",
+	"version": "0.0.1-alpha.6",
 	"lockfileVersion": 3,
 	"requires": true,
 	"packages": {
 		"": {
 			"name": "apex-code",
-			"version": "0.0.1-alpha.5",
+			"version": "0.0.1-alpha.6",
 			"license": "MIT",
 			"dependencies": {
-				"apex-code-agent-core": "0.0.1-alpha.5",
+				"apex-code-agent-core": "0.0.1-alpha.6",
 				"@earendil-works/pi-ai": "^0.84.1",
 				"@earendil-works/pi-client": "^0.84.1",
 				"@earendil-works/pi-protocol": "^0.84.1",
@@ -998,8 +998,8 @@
 			}
 		},
 		"node_modules/apex-code-agent-core": {
-			"version": "0.0.1-alpha.5",
-			"resolved": "https://registry.npmjs.org/apex-code-agent-core/-/apex-code-agent-core-0.0.1-alpha.5.tgz",
+			"version": "0.0.1-alpha.6",
+			"resolved": "https://registry.npmjs.org/apex-code-agent-core/-/apex-code-agent-core-0.0.1-alpha.6.tgz",
 			"license": "MIT",
 			"dependencies": {
 				"@earendil-works/pi-ai": "^0.84.1",

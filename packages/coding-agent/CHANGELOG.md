@@ -1,6 +1,6 @@
 # Apex Code changelog
 
-## [Unreleased]
+## [0.0.1-alpha.6] - 2026-08-21
 
 - Fixed skills being invisible in every sandboxed session. The OS sandbox hides the host
   home directory and repoints `HOME` and the agent directory into the workspace, so the two
