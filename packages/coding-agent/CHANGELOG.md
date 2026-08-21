@@ -1,5 +1,7 @@
 # Apex Code changelog
 
+## [Unreleased]
+
 ## [0.0.1-alpha.7] - 2026-08-21
 
 - The permission mode is now switchable from `/settings` instead of only at launch through
