@@ -38,6 +38,7 @@ vi.mock("child_process", () => ({
 }));
 
 import { FooterDataProvider } from "../src/core/footer-data-provider.ts";
+import { FS_WATCH_RETRY_DELAY_MS } from "../src/utils/fs-watch.ts";
 
 type WorktreeFixture = {
 	worktreeDir: string;
@@ -77,11 +78,26 @@ function createReftableWorktree(tempDir: string): WorktreeFixture {
 	return { worktreeDir, reftableDir };
 }
 
-async function waitFor(condition: () => boolean, timeoutMs = 3000): Promise<void> {
+/**
+ * Budget derived from the implementation rather than guessed, because the old
+ * fixed 3000ms was *below* one of the delays the code under test can legitimately
+ * take. A failed watch establish is retried after FS_WATCH_RETRY_DELAY_MS (5000),
+ * and only then does the 500ms WATCH_DEBOUNCE_MS run before execFile is called, so
+ * a single retry guaranteed a timeout no matter how fast the machine was. macOS
+ * made that visible first: fs.watch there is FSEvents-backed, whose delivery
+ * latency under a loaded CI runner is what pushed the establish into a retry.
+ *
+ * The remaining margin absorbs the debounce, the async refresh, and poll
+ * granularity. Well under the 30s vitest testTimeout even for the one case that
+ * awaits twice in sequence.
+ */
+const WATCH_WAIT_TIMEOUT_MS = FS_WATCH_RETRY_DELAY_MS + 3000;
+
+async function waitFor(condition: () => boolean, timeoutMs = WATCH_WAIT_TIMEOUT_MS): Promise<void> {
 	const startedAt = Date.now();
 	while (!condition()) {
 		if (Date.now() - startedAt > timeoutMs) {
-			throw new Error("Timed out waiting for condition");
+			throw new Error(`Timed out waiting for condition after ${timeoutMs}ms`);
 		}
 		await new Promise((resolve) => setTimeout(resolve, 10));
 	}
