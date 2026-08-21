@@ -37,6 +37,7 @@ export async function launchSandboxedCli(options: {
 	readOnlyPaths?: readonly string[];
 	authPath?: string;
 	toolBinaries?: readonly HostToolBinary[];
+	skillPaths?: readonly string[];
 	dependencies?: Partial<CliSandboxDependencies>;
 }): Promise<number> {
 	const dependencies = { ...defaultDependencies, ...options.dependencies };
@@ -57,6 +58,7 @@ export async function launchSandboxedCli(options: {
 		readOnlyPaths: options.readOnlyPaths,
 		authPath: options.authPath,
 		toolBinaries: options.toolBinaries,
+		skillPaths: options.skillPaths,
 	});
 	try {
 		return await supervisor.launch(launch);
