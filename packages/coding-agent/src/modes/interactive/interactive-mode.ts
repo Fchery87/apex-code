@@ -96,6 +96,7 @@ import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../cor
 import { type SessionEntry, SessionManager, sessionEntryToContextMessages } from "../../core/session-manager.ts";
 import { formatShareUnavailableMessage, publishSessionShare } from "../../core/session-share.ts";
 import type { TuiMode } from "../../core/settings-manager.ts";
+import { slugifySkillCommandName } from "../../core/skills.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
 import type { TruncationResult } from "../../core/tools/truncate.ts";
@@ -711,7 +712,7 @@ export class InteractiveMode {
 		const skillCommandList: SlashCommand[] = [];
 		if (this.settingsManager.getEnableSkillCommands()) {
 			for (const skill of this.session.resourceLoader.getSkills().skills) {
-				const commandName = `skill:${skill.name}`;
+				const commandName = `skill:${slugifySkillCommandName(skill.name)}`;
 				this.skillCommands.set(commandName, skill.filePath);
 				skillCommandList.push({
 					name: commandName,
