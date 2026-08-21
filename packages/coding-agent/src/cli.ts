@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 /** The public CLI either supervises a sandbox child or starts an ordinary runtime. */
 import { fileURLToPath } from "node:url";
 import { APP_NAME, getAgentDir, getPackageDir } from "./config.ts";
 import { setApexEnvironment } from "./core/environment.ts";
 import { configureHttpDispatcher } from "./core/http-dispatcher.ts";
-import { requiresSandboxedChild, resolveSupervisorAllowedHosts } from "./core/sandbox/cli-launch.ts";
+import {
+	requiresSandboxedChild,
+	resolveHostSkillPaths,
+	resolveSupervisorAllowedHosts,
+} from "./core/sandbox/cli-launch.ts";
 import { launchSandboxedCli } from "./core/sandbox/cli-supervisor.ts";
 import { prepareHostToolBinaries } from "./utils/tools-manager.ts";
 
@@ -33,6 +38,10 @@ async function run(): Promise<void> {
 		// whose stdout carries machine-readable output; the child still reports a genuinely
 		// missing tool through its own startup path.
 		const toolBinaries = await prepareHostToolBinaries(true);
+		// Resolved here, where the host home is still reachable -- exactly like the
+		// tool binaries above and unlike anything sourced from project files, which
+		// ADR 0016 forbids as supervisor input before trust is established.
+		const skillPaths = resolveHostSkillPaths(getAgentDir(), process.env.HOME || homedir());
 
 		process.exitCode = await launchSandboxedCli({
 			command: process.execPath,
@@ -48,6 +57,7 @@ async function run(): Promise<void> {
 			authPath: existsSync(authPath) ? authPath : undefined,
 			readOnlyPaths: [getPackageDir(), dirname(getPackageDir())],
 			toolBinaries,
+			skillPaths,
 		});
 		return;
 	}

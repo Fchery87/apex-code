@@ -1,6 +1,6 @@
 # Skills reach the model (Phase 2b / Phase 3 follow-up)
 
-**Status:** Active — SKILL.1 in progress (failing repro written, red confirmed)
+**Status:** Active — SKILL.2 finished, SKILL.3 next (SKILL.1's repro stays red until then, as planned)
 
 This plan implements `docs/specs/2026-08-20-sandbox-skill-projection.md` and the catalog
 decision settled in `docs/adr/0021-skill-catalog-deferral.md`. It carries no new roadmap
@@ -25,8 +25,8 @@ that produced the original 2,150-token figure the LSP work later found stale.
 
 | Task | State | Commit | Verification |
 | --- | --- | --- | --- |
-| SKILL.1 Failing repro | In progress — red confirmed, awaiting commit | — | Red: discovery under the child's real computed environment (`buildSandboxedCliLaunch`'s `HOME` and `APEX_CODE_CODING_AGENT_DIR`) finds zero skills with a skill present in both host roots. No sandbox required, runs on every platform. |
-| SKILL.2 Supervisor resolves and mounts the roots | Not started | — | Red: launch contract omits `skillPaths`/`APEX_CODE_SKILL_PATHS` when roots are absent; includes both when present. Green: `cli.ts` resolves `<hostAgentDir>/skills` and `<hostHome>/.agents/skills`, adds existing ones to `readOnlyPaths`, passes `skillPaths`; `cli-launch.ts` sets the variable after the allowlist spread. |
+| SKILL.1 Failing repro | Done — red confirmed, stays red until SKILL.3 | `02ebeb4c3` | Red: discovery under the child's real computed environment (`buildSandboxedCliLaunch`'s `HOME` and `APEX_CODE_CODING_AGENT_DIR`) finds zero skills with a skill present in both host roots. No sandbox required, runs on every platform. |
+| SKILL.2 Supervisor resolves and mounts the roots | Done | — (uncommitted) | Red: `resolveHostSkillPaths` omits a root that does not exist; launch contract omits `skillPaths`/`APEX_CODE_SKILL_PATHS` when roots are absent, includes both when present, and the supervisor's value wins over anything of the same name already in `options.environment`. Green: `cli.ts` resolves `<hostAgentDir>/skills` and `<hostHome>/.agents/skills` via the new `resolveHostSkillPaths`, passes `skillPaths` through `launchSandboxedCli`; `cli-launch.ts`'s `buildSandboxedCliLaunch` merges them into `readOnlyPaths` and sets `APEX_CODE_SKILL_PATHS` after the allowlist spread. Escape refusal for a symlinked root is SKILL.4, not this task. |
 | SKILL.3 Child discovery honours the variable | Not started | — | Red: SKILL.1's repro, inverted in this commit. Green: `package-manager.ts` registers each `APEX_CODE_SKILL_PATHS` entry as a user-scope auto root beside `userDirs.skills`. Project-scope tests unchanged. |
 | SKILL.4 Escape refusal and enforced backend proof | Not started | — | Red: a root whose realpath is the host home, and a root symlinked to `$HOME`, are both refused with a startup diagnostic and absent from `skillPaths`. Green: real `bwrap` child on Linux and real `sandbox-exec` child on macOS discover a mounted skill; a write into a mounted root fails and lands in `SandboxViolationStore`. |
 | SKILL.5 Command-name slugging | Not started | — | Red: a skill named `Poteto Mode` registers a command containing whitespace that the autocomplete matcher cannot resolve. Green: slugged token, raw name retained for display, divergence warned. Skill still loads — leniency preserved per `docs/skills.md` § Validation. **Value milestone: the defect is closed.** |

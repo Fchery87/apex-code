@@ -1,5 +1,5 @@
-import { mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import { delimiter, join } from "node:path";
 import type { HostToolBinary } from "../../utils/tools-manager.ts";
 import { SettingsManager } from "../settings-manager.ts";
 import { resolveDefaultAllowedHosts } from "./default-hosts.ts";
@@ -37,6 +37,19 @@ export function resolveSupervisorAllowedHosts(cwd: string, agentDir: string): re
 	const configured = network?.allowedHosts ?? [];
 	if (network?.allowDefaultHosts === false) return configured;
 	return [...new Set([...resolveDefaultAllowedHosts(), ...configured])];
+}
+
+/**
+ * Resolve the host's user-scope skill directories, before the sandbox exists to hide
+ * them. Read only from the runtime environment and the host agent directory --
+ * never from project files -- matching ADR 0016's rule that supervisor policy is
+ * trust-first. Mirrors `core/package-manager.ts`'s own user-scope roots
+ * (`<agentDir>/skills`, `<home>/.agents/skills`) so the two sides agree on where a
+ * skill lives; the host-home escape check for a symlinked root lands in SKILL.4.
+ */
+export function resolveHostSkillPaths(agentDir: string, homeDir: string): string[] {
+	const candidates = [join(agentDir, "skills"), join(homeDir, ".agents", "skills")];
+	return candidates.filter((candidate) => existsSync(candidate));
 }
 
 const SAFE_CHILD_ENVIRONMENT_KEYS = new Set([
@@ -150,6 +163,14 @@ export function buildSandboxedCliLaunch(options: {
 	readOnlyPaths?: readonly string[];
 	authPath?: string;
 	toolBinaries?: readonly HostToolBinary[];
+	/**
+	 * Host user-scope skill directories, pre-filtered by the caller to those that
+	 * exist and pass the host-home escape check (SKILL.4). Mounted read-only at their
+	 * original host location -- Seatbelt cannot remap a path, so this must hold for
+	 * both backends -- and named to the child via `APEX_CODE_SKILL_PATHS` so its
+	 * discovery can find them under the sandbox's own repointed `HOME`/agent dir.
+	 */
+	skillPaths?: readonly string[];
 }): SandboxedCliLaunch {
 	const stateDirectory = join(options.workspace, ".apex-code", "sandbox-state");
 	const agentDirectory = join(options.workspace, ".apex-code", "sandbox-agent");
@@ -174,7 +195,8 @@ export function buildSandboxedCliLaunch(options: {
 	}
 	clearStaleToolMountpoints(toolsDirectory);
 	const childEnvironment = buildChildEnvironment(options.environment);
-	const readOnlyPaths = [...(options.readOnlyPaths ?? [])];
+	const skillPaths = options.skillPaths ?? [];
+	const readOnlyPaths = [...(options.readOnlyPaths ?? []), ...skillPaths];
 	const readOnlyFiles = options.authPath ? [options.authPath] : [];
 	const readOnlyBinaries = (options.toolBinaries ?? []).map((binary) => ({
 		source: binary.path,
@@ -190,6 +212,10 @@ export function buildSandboxedCliLaunch(options: {
 		environment: {
 			...childEnvironment,
 			...(options.authPath ? { APEX_CODE_AUTH_PATH: options.authPath } : {}),
+			// After childEnvironment: skillPaths comes only from the supervisor's own
+			// resolution, never from the invoking shell, so its value always wins over
+			// anything of the same name that childEnvironment's allowlist let through.
+			...(skillPaths.length > 0 ? { APEX_CODE_SKILL_PATHS: skillPaths.join(delimiter) } : {}),
 			APEX_CODE_CODING_AGENT_DIR: agentDirectory,
 			APEX_CODE_CODING_AGENT_SESSION_DIR: sessionDirectory,
 			HOME: stateDirectory,
