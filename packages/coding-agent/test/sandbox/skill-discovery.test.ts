@@ -101,7 +101,7 @@ describe("user-scope skill discovery across the sandbox boundary", () => {
 		// it unless the supervisor resolves and threads the roots through, as cli.ts does.
 		const { agentDir, homeDir } = hostLayout();
 		const workspace = scratch("apex-skill-ws-");
-		const skillPaths = resolveHostSkillPaths(agentDir, homeDir);
+		const { paths: skillPaths } = resolveHostSkillPaths(agentDir, homeDir);
 		const launch = buildSandboxedCliLaunch({
 			workspace,
 			command: process.execPath,
@@ -136,7 +136,7 @@ describe("user-scope skill discovery across the sandbox boundary", () => {
 		writeFileSync(join(agentsHomeSkillsDir, "root-flat-skill.md"), rootMdContent);
 
 		const workspace = scratch("apex-skill-ws-");
-		const skillPaths = resolveHostSkillPaths(agentDir, homeDir);
+		const { paths: skillPaths } = resolveHostSkillPaths(agentDir, homeDir);
 		const launch = buildSandboxedCliLaunch({
 			workspace,
 			command: process.execPath,

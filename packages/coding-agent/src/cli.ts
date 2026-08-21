@@ -41,7 +41,13 @@ async function run(): Promise<void> {
 		// Resolved here, where the host home is still reachable -- exactly like the
 		// tool binaries above and unlike anything sourced from project files, which
 		// ADR 0016 forbids as supervisor input before trust is established.
-		const skillPaths = resolveHostSkillPaths(getAgentDir(), process.env.HOME || homedir());
+		const { paths: skillPaths, refusals: skillPathRefusals } = resolveHostSkillPaths(
+			getAgentDir(),
+			process.env.HOME || homedir(),
+		);
+		for (const refusal of skillPathRefusals) {
+			process.stderr.write(`Warning: not mounting skill directory ${refusal.path}: ${refusal.reason}\n`);
+		}
 
 		process.exitCode = await launchSandboxedCli({
 			command: process.execPath,
