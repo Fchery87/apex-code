@@ -20,6 +20,14 @@
   data rather than the product. A new `skill_search` tool resolves a skill's description on
   demand; `read` still loads its full content, unchanged. A library too large to list in full
   states how many names were left out and points at `skill_search`.
+- `/model` now picks in two steps: a provider first, then that provider's models. The single
+  flat list mixed every model from every configured provider into one scroll, so choosing one
+  meant reading past dozens of rows belonging to providers you weren't after. The provider
+  screen shows each provider's model count and marks the one the session is on. Escape steps
+  back to the provider list; ctrl+c still closes outright. Two cases skip the provider step,
+  where it would cost a keystroke and decide nothing: a single configured provider, and
+  `/model <search>`, which still opens straight onto matches drawn from every provider. Fuzzy
+  search, the all/scoped tab, and the background catalog refresh are unchanged.
 
 ## [0.0.1-alpha.5] - 2026-08-20
 
