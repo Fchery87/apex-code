@@ -6,6 +6,7 @@ import { ScopedModelsSelectorComponent } from "../../../src/modes/interactive/co
 import { initTheme } from "../../../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../../../src/utils/ansi.ts";
 import { createHarness, type Harness } from "../harness.ts";
+import { selectorRowIds } from "../selector-rows.ts";
 
 function createFakeTui(): TUI {
 	return {
@@ -87,17 +88,11 @@ describe("issue #3217 scoped model ordering", () => {
 
 		await vi.waitFor(() => {
 			const rendered = stripAnsi(selector.render(120).join("\n"));
-			expect(rendered).toContain(`[${modelOne.provider}]`);
+			expect(rendered).toContain(modelOne.id);
 			expect(rendered).toContain("Model catalogs refreshed.");
 		});
 
-		const renderedLines = stripAnsi(selector.render(120).join("\n"))
-			.split("\n")
-			.filter((line) => line.includes(`[${modelOne.provider}]`));
-		const orderedIds = renderedLines.slice(0, 3).map((line) => {
-			const [modelId] = line.trim().replace(/^→\s*/, "").split(" [");
-			return modelId?.trim() ?? "";
-		});
+		const orderedIds = selectorRowIds(stripAnsi(selector.render(120).join("\n"))).slice(0, 3);
 
 		expect(orderedIds).toEqual([modelTwo.id, modelOne.id, modelThree.id]);
 	});
