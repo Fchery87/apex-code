@@ -3,6 +3,7 @@ import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/p
 import type { AgentSession } from "../../../core/agent-session.ts";
 import { areExperimentalFeaturesEnabled } from "../../../core/experimental.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
+import type { PermissionMode } from "../../../core/permissions/store.ts";
 import { addUsageToTotals, createUsageTotals } from "../../../core/usage-totals.ts";
 import { theme } from "../theme/theme.ts";
 
@@ -62,6 +63,7 @@ export function formatCwdForFooter(cwd: string, home: string | undefined): strin
  */
 export class FooterComponent implements Component {
 	private autoCompactEnabled = true;
+	private permissionMode: PermissionMode = "default";
 	private session: AgentSession;
 	private footerData: ReadonlyFooterDataProvider;
 	private accessibilitySettings: FooterAccessibilitySettings;
@@ -82,6 +84,10 @@ export class FooterComponent implements Component {
 
 	setAutoCompactEnabled(enabled: boolean): void {
 		this.autoCompactEnabled = enabled;
+	}
+
+	setPermissionMode(mode: PermissionMode): void {
+		this.permissionMode = mode;
 	}
 
 	/**
@@ -200,6 +206,16 @@ export class FooterComponent implements Component {
 		statsParts.push(contextPercentStr);
 		if (areExperimentalFeaturesEnabled()) {
 			statsParts.push(`${theme.fg("dim", bulletSymbol)} ${theme.bold(theme.fg("warning", "xp"))}`);
+		}
+
+		// Any non-default permission posture is named in the footer, because the two
+		// that matter most are invisible otherwise: in bypassPermissions nothing
+		// prompts, and in plan every mutation is refused. Both look like the agent
+		// behaving oddly rather than a mode being on. Text carries the signal and
+		// color is the second channel only (WCAG 1.4.1), as with context pressure.
+		if (this.permissionMode !== "default") {
+			const modeColor = this.permissionMode === "bypassPermissions" ? "error" : "warning";
+			statsParts.unshift(theme.fg(modeColor, this.permissionMode));
 		}
 
 		let statsLeft = statsParts.join(" ");

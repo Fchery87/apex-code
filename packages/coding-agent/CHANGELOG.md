@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+- The permission mode is now switchable from `/settings` instead of only at launch through
+  `--permission-mode`. Every mode already existed and worked; there was simply no way to
+  reach one from a running session, so `bypassPermissions` in particular was documented but
+  effectively unreachable for anyone who had already started typing. The row writes to user
+  scope (`~/.apex-code/agent/permissions.json`) and applies to the next tool call, because
+  the gate re-reads the store on every decision. Choosing `bypassPermissions` takes a
+  confirm step first, since the row is arrow-cyclable like every other setting and
+  "allow every tool call" should not be one stray keypress away. `--permission-mode`,
+  `.apex-code/permissions.json`, and `permissions.local.json` all still outrank a user-scope
+  write, so when one of them is in force the setting reports what actually applies rather
+  than appearing to save and doing nothing. Any mode other than `default` is now named in
+  the footer: `bypassPermissions` and `plan` both look like the agent misbehaving rather
+  than a mode being on. Shift+Tab still cycles the thinking level and is unchanged.
+
 ## [0.0.1-alpha.6] - 2026-08-21
 
 - Fixed skills being invisible in every sandboxed session. The OS sandbox hides the host

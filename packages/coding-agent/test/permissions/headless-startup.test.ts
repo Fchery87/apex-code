@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { parseArgs } from "../../src/cli/args.ts";
-import { resolveEffectiveMode, resolvePermissionModeForStartup } from "../../src/core/permissions/startup.ts";
+import {
+	resolveEffectiveMode,
+	resolveEffectiveModeWithOrigin,
+	resolvePermissionModeForStartup,
+} from "../../src/core/permissions/startup.ts";
 
 describe("parseArgs --permission-mode", () => {
 	it("parses a valid mode", () => {
@@ -88,5 +92,70 @@ describe("resolveEffectiveMode", () => {
 			["local", "plan"],
 		] as const);
 		expect(resolveEffectiveMode(undefined, modes)).toBe("plan");
+	});
+});
+
+/**
+ * The settings UI writes to `user` scope and has to be able to say "saved, but
+ * something else is in force". That is only possible if resolution reports which
+ * source won, so these pin the origin rather than just the mode.
+ */
+describe("resolveEffectiveModeWithOrigin", () => {
+	it("reports the default origin when nothing set a mode", () => {
+		expect(resolveEffectiveModeWithOrigin(undefined, new Map())).toEqual({ mode: "default", origin: "default" });
+	});
+
+	it("reports user as the origin for a mode a settings write persisted", () => {
+		expect(resolveEffectiveModeWithOrigin(undefined, new Map([["user", "bypassPermissions"]]))).toEqual({
+			mode: "bypassPermissions",
+			origin: "user",
+		});
+	});
+
+	it("reports the flag as the origin when it shadows a user-scope write", () => {
+		expect(resolveEffectiveModeWithOrigin("plan", new Map([["user", "bypassPermissions"]]))).toEqual({
+			mode: "plan",
+			origin: "flag",
+		});
+	});
+
+	it.each(["local", "project"] as const)("reports %s as the origin when it shadows a user-scope write", (source) => {
+		expect(
+			resolveEffectiveModeWithOrigin(
+				undefined,
+				new Map([
+					[source, "plan"],
+					["user", "bypassPermissions"],
+				]),
+			),
+		).toEqual({
+			mode: "plan",
+			origin: source,
+		});
+	});
+
+	it("agrees with resolveEffectiveMode across every source", () => {
+		const cases: Parameters<typeof resolveEffectiveModeWithOrigin>[] = [
+			[undefined, new Map()],
+			[undefined, new Map([["session", "plan"]])],
+			[
+				undefined,
+				new Map([
+					["command", "dontAsk"],
+					["session", "plan"],
+				]),
+			],
+			[
+				undefined,
+				new Map([
+					["user", "acceptEdits"],
+					["command", "dontAsk"],
+				]),
+			],
+			["bypassPermissions", new Map([["local", "plan"]])],
+		];
+		for (const [flagMode, modes] of cases) {
+			expect(resolveEffectiveModeWithOrigin(flagMode, modes).mode).toBe(resolveEffectiveMode(flagMode, modes));
+		}
 	});
 });
