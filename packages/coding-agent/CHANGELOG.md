@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+- Fixed skills being invisible in every sandboxed session. The OS sandbox hides the host
+  home directory and repoints `HOME` and the agent directory into the workspace, so the two
+  directories skills discover from (`~/.apex-code/agent/skills`, `~/.agents/skills`) resolved
+  to empty workspace paths — no user-scope skill ever loaded, silently, since the sandbox
+  landed. Both roots are now mounted back in, read-only, at their original host paths, the
+  same mechanism already used for the host-owned credential file. A root that resolves —
+  directly or through a symlink — onto the host home directory or an ancestor of it is refused
+  rather than mounted, since mounting it would re-expose the whole home tree the sandbox
+  deliberately hides. A skill whose name isn't a valid slash-command token (spaces, capitals —
+  loading stays lenient, per the Agent Skills standard's own allowance) is now invocable
+  through a derived command token instead of never resolving.
+- The system prompt now lists skill names only, alphabetically, bounded by a fixed token
+  budget, instead of each skill's full description and file location inline. A real
+  115-skill library cost 6,742 prefix tokens under the old shape against a 128-token margin
+  — unaffordable at any size, since it's the one prefix contributor sized by the user's own
+  data rather than the product. A new `skill_search` tool resolves a skill's description on
+  demand; `read` still loads its full content, unchanged. A library too large to list in full
+  states how many names were left out and points at `skill_search`.
+
 ## [0.0.1-alpha.5] - 2026-08-20
 
 - `edit` and `write` now capture bounded language-server diagnostic evidence after a
