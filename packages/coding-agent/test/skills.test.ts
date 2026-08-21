@@ -2,7 +2,13 @@ import { homedir } from "os";
 import { join, resolve } from "path";
 import { describe, expect, it } from "vitest";
 import type { ResourceDiagnostic } from "../src/core/diagnostics.ts";
-import { formatSkillsForPrompt, loadSkills, loadSkillsFromDir, type Skill } from "../src/core/skills.ts";
+import {
+	formatSkillsForPrompt,
+	loadSkills,
+	loadSkillsFromDir,
+	type Skill,
+	slugifySkillCommandName,
+} from "../src/core/skills.ts";
 import { createSyntheticSourceInfo } from "../src/core/source-info.ts";
 
 const fixturesDir = resolve(__dirname, "fixtures/skills");
@@ -342,6 +348,28 @@ describe("skills", () => {
 
 			const result = formatSkillsForPrompt(skills);
 			expect(result).toBe("");
+		});
+	});
+
+	describe("slugifySkillCommandName (SKILL.5)", () => {
+		it("leaves an already-valid command-safe name unchanged", () => {
+			expect(slugifySkillCommandName("agent-browser")).toBe("agent-browser");
+		});
+
+		it("lowercases and hyphenates a name with spaces and capitals", () => {
+			expect(slugifySkillCommandName("Poteto Mode")).toBe("poteto-mode");
+		});
+
+		it("collapses a run of invalid characters into a single hyphen", () => {
+			expect(slugifySkillCommandName("Foo!!  Bar??")).toBe("foo-bar");
+		});
+
+		it("trims leading and trailing hyphens produced by leading/trailing invalid characters", () => {
+			expect(slugifySkillCommandName("__Foo Bar__")).toBe("foo-bar");
+		});
+
+		it("falls back to a stable non-empty token for a name with no valid characters at all", () => {
+			expect(slugifySkillCommandName("!!!")).toBe("skill");
 		});
 	});
 

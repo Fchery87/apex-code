@@ -111,6 +111,7 @@ import {
 	TODO_CUSTOM_ENTRY_TYPE,
 } from "./session-manager.ts";
 import type { SettingsManager } from "./settings-manager.ts";
+import { slugifySkillCommandName } from "./skills.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.ts";
@@ -1442,10 +1443,17 @@ export class AgentSession {
 		if (!text.startsWith("/skill:")) return text;
 
 		const spaceIndex = text.indexOf(" ");
-		const skillName = spaceIndex === -1 ? text.slice(7) : text.slice(7, spaceIndex);
+		const commandToken = spaceIndex === -1 ? text.slice(7) : text.slice(7, spaceIndex);
 		const args = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1).trim();
 
-		const skill = this.resourceLoader.getSkills().skills.find((s) => s.name === skillName);
+		// Matched against the slugged command token (SKILL.5), not the raw frontmatter
+		// name -- identity for an already command-safe name, so an exactly-typed raw
+		// name still matches too. A skill whose name contains a space or other
+		// slash-command-breaking character (docs/skills.md's lenient loading allows
+		// this) is only reachable through its slugged token.
+		const skill = this.resourceLoader
+			.getSkills()
+			.skills.find((s) => slugifySkillCommandName(s.name) === commandToken);
 		if (!skill) return text; // Unknown skill, pass through
 
 		try {
@@ -2485,7 +2493,7 @@ export class AgentSession {
 			}));
 
 			const skills: SlashCommandInfo[] = this._resourceLoader.getSkills().skills.map((skill) => ({
-				name: `skill:${skill.name}`,
+				name: `skill:${slugifySkillCommandName(skill.name)}`,
 				description: skill.description,
 				source: "skill",
 				sourceInfo: skill.sourceInfo,

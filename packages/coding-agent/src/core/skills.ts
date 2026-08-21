@@ -325,6 +325,24 @@ function loadSkillFromFile(
 }
 
 /**
+ * Derive a `/skill:<token>` command token from a skill's frontmatter `name`, which
+ * `docs/skills.md` § Validation deliberately allows to contain characters a slash
+ * command cannot (spaces, capitals) -- lenient loading is a considered divergence
+ * from the Agent Skills standard, not a gap to close, so the skill still loads and
+ * only its command token changes here. Identity for an already command-safe name
+ * (`^[a-z0-9-]+$` with no leading/trailing/consecutive hyphen, matching
+ * `validateName`'s own rule), so this is a no-op for the common case.
+ */
+export function slugifySkillCommandName(name: string): string {
+	const slug = name
+		.toLowerCase()
+		.replace(/[^a-z0-9-]+/g, "-")
+		.replace(/-+/g, "-")
+		.replace(/^-|-$/g, "");
+	return slug || "skill";
+}
+
+/**
  * Format skills for inclusion in a system prompt.
  * Uses XML format per Agent Skills standard.
  * See: https://agentskills.io/integrate-skills
