@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -221,7 +221,7 @@ describe("sandbox CLI launch", () => {
 
 		const resolved = resolveHostSkillPaths(agentDir, homeDir);
 
-		expect(resolved).toEqual({ agentSkills: join(agentDir, "skills") });
+		expect(resolved).toEqual({ paths: { agentSkills: join(agentDir, "skills") }, refusals: [] });
 	});
 
 	it("resolves both host skill roots when both exist (SKILL.2)", () => {
@@ -233,8 +233,11 @@ describe("sandbox CLI launch", () => {
 		const resolved = resolveHostSkillPaths(agentDir, homeDir);
 
 		expect(resolved).toEqual({
-			agentSkills: join(agentDir, "skills"),
-			agentsHomeSkills: join(homeDir, ".agents", "skills"),
+			paths: {
+				agentSkills: join(agentDir, "skills"),
+				agentsHomeSkills: join(homeDir, ".agents", "skills"),
+			},
+			refusals: [],
 		});
 	});
 
@@ -242,7 +245,51 @@ describe("sandbox CLI launch", () => {
 		const agentDir = workspace();
 		const homeDir = workspace();
 
-		expect(resolveHostSkillPaths(agentDir, homeDir)).toEqual({});
+		expect(resolveHostSkillPaths(agentDir, homeDir)).toEqual({ paths: {}, refusals: [] });
+	});
+
+	it("refuses a skill root symlinked directly at the host home (SKILL.4)", () => {
+		const agentDir = workspace();
+		const homeDir = workspace();
+		symlinkSync(homeDir, join(agentDir, "skills"));
+
+		const resolved = resolveHostSkillPaths(agentDir, homeDir);
+
+		expect(resolved.paths.agentSkills).toBeUndefined();
+		expect(resolved.refusals).toEqual([
+			expect.objectContaining({ root: "agentSkills", path: join(agentDir, "skills") }),
+		]);
+	});
+
+	it("refuses a skill root symlinked at an ancestor of the host home (SKILL.4)", () => {
+		const agentDir = workspace();
+		const homeParent = workspace();
+		const homeDir = join(homeParent, "home");
+		mkdirSync(homeDir, { recursive: true });
+		mkdirSync(join(homeDir, ".agents"), { recursive: true });
+		// Points above $HOME itself -- mounting this would re-expose every sibling of
+		// $HOME under homeParent, not just the intended skills subtree.
+		symlinkSync(homeParent, join(homeDir, ".agents", "skills"));
+
+		const resolved = resolveHostSkillPaths(agentDir, homeDir);
+
+		expect(resolved.paths.agentsHomeSkills).toBeUndefined();
+		expect(resolved.refusals).toEqual([
+			expect.objectContaining({ root: "agentsHomeSkills", path: join(homeDir, ".agents", "skills") }),
+		]);
+	});
+
+	it("accepts a skill root symlinked to an unrelated, safe directory (SKILL.4)", () => {
+		const agentDir = workspace();
+		const homeDir = workspace();
+		const realSkillsDir = workspace();
+		mkdirSync(join(homeDir, ".agents"), { recursive: true });
+		symlinkSync(realSkillsDir, join(homeDir, ".agents", "skills"));
+
+		const resolved = resolveHostSkillPaths(agentDir, homeDir);
+
+		expect(resolved.paths.agentsHomeSkills).toBe(join(homeDir, ".agents", "skills"));
+		expect(resolved.refusals).toEqual([]);
 	});
 
 	it("routes every agent-session shape through the child while exempting only non-session commands", () => {

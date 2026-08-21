@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
+import { join, sep } from "node:path";
 import type { HostToolBinary } from "../../utils/tools-manager.ts";
 import { SettingsManager } from "../settings-manager.ts";
 import { resolveDefaultAllowedHosts } from "./default-hosts.ts";
@@ -54,20 +54,81 @@ export interface HostSkillPaths {
 	readonly agentsHomeSkills?: string;
 }
 
+/** A candidate skill root that exists but was excluded, and why. */
+export interface HostSkillPathRefusal {
+	readonly root: keyof HostSkillPaths;
+	readonly path: string;
+	readonly reason: string;
+}
+
+export interface ResolvedHostSkillPaths {
+	readonly paths: HostSkillPaths;
+	readonly refusals: readonly HostSkillPathRefusal[];
+}
+
+/**
+ * True when `candidate` is the host home directory itself, or an ancestor of it.
+ * Both paths must already be resolved (`realpathSync`), so a symlink can't disguise
+ * either side. Mounting such a candidate read-only would re-expose the entire home
+ * tree the sandbox's `--tmpfs /home` (Linux) / `(deny file-read* USER_HOME)` (macOS)
+ * deliberately hides -- SSH keys, cloud credentials, other projects -- not just a
+ * skills subtree.
+ */
+function isHomeOrAncestorOfHome(candidate: string, home: string): boolean {
+	if (candidate === home) return true;
+	const prefix = candidate.endsWith(sep) ? candidate : candidate + sep;
+	return home.startsWith(prefix);
+}
+
+/** Resolve one candidate root: absent, refused (symlinked onto the host home), or usable. */
+function resolveHostSkillRoot(
+	root: keyof HostSkillPaths,
+	candidate: string,
+	homeDir: string,
+): { path?: string; refusal?: HostSkillPathRefusal } {
+	if (!existsSync(candidate)) return {};
+	let realCandidate: string;
+	let realHome: string;
+	try {
+		realCandidate = realpathSync(candidate);
+		realHome = realpathSync(homeDir);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		return { refusal: { root, path: candidate, reason: `could not resolve real path: ${message}` } };
+	}
+	if (isHomeOrAncestorOfHome(realCandidate, realHome)) {
+		return {
+			refusal: {
+				root,
+				path: candidate,
+				reason: "resolves to the host home directory or an ancestor of it",
+			},
+		};
+	}
+	return { path: candidate };
+}
+
 /**
  * Resolve the host's user-scope skill directories, before the sandbox exists to hide
  * them. Read only from the runtime environment and the host agent directory --
  * never from project files -- matching ADR 0016's rule that supervisor policy is
  * trust-first. Mirrors `core/package-manager.ts`'s own user-scope roots so the two
- * sides agree on where a skill lives; the host-home escape check for a symlinked
- * root lands in SKILL.4.
+ * sides agree on where a skill lives. A candidate that resolves (directly or via a
+ * symlink) onto the host home or an ancestor of it is refused rather than mounted --
+ * see `isHomeOrAncestorOfHome` -- and reported so the caller can surface a startup
+ * diagnostic instead of silently mounting or silently skipping it.
  */
-export function resolveHostSkillPaths(agentDir: string, homeDir: string): HostSkillPaths {
-	const agentSkills = join(agentDir, "skills");
-	const agentsHomeSkills = join(homeDir, ".agents", "skills");
+export function resolveHostSkillPaths(agentDir: string, homeDir: string): ResolvedHostSkillPaths {
+	const agentSkills = resolveHostSkillRoot("agentSkills", join(agentDir, "skills"), homeDir);
+	const agentsHomeSkills = resolveHostSkillRoot("agentsHomeSkills", join(homeDir, ".agents", "skills"), homeDir);
 	return {
-		agentSkills: existsSync(agentSkills) ? agentSkills : undefined,
-		agentsHomeSkills: existsSync(agentsHomeSkills) ? agentsHomeSkills : undefined,
+		paths: {
+			...(agentSkills.path ? { agentSkills: agentSkills.path } : {}),
+			...(agentsHomeSkills.path ? { agentsHomeSkills: agentsHomeSkills.path } : {}),
+		},
+		refusals: [agentSkills.refusal, agentsHomeSkills.refusal].filter(
+			(refusal): refusal is HostSkillPathRefusal => refusal !== undefined,
+		),
 	};
 }
 
