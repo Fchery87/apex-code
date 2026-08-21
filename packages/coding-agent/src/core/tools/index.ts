@@ -150,6 +150,7 @@ import { createLsTool, createLsToolDefinition, type LsToolOptions } from "./ls.t
 import { createLspTool, createLspToolDefinition, type LspToolOptions } from "./lsp.ts";
 import { createPlanPresentTool, createPlanPresentToolDefinition } from "./plan-present.ts";
 import { createReadTool, createReadToolDefinition, type ReadToolOptions } from "./read.ts";
+import { createSkillSearchTool, createSkillSearchToolDefinition, type SkillSearchResolver } from "./skill-search.ts";
 import { createTestTool, createTestToolDefinition, type TestToolOptions } from "./test.ts";
 import { createTodoWriteTool, createTodoWriteToolDefinition, type TodoWriteStore } from "./todo-write.ts";
 import { createToolSchemaTool, createToolSchemaToolDefinition, type ToolSchemaResolver } from "./tool-schema.ts";
@@ -174,7 +175,8 @@ export type ToolName =
 	| "ask_user"
 	| "plan_present"
 	| "delegate"
-	| "test";
+	| "test"
+	| "skill_search";
 export const allToolNames: Set<ToolName> = new Set([
 	"read",
 	"bash",
@@ -185,6 +187,7 @@ export const allToolNames: Set<ToolName> = new Set([
 	"ls",
 	"tool_schema",
 	"todo_write",
+	"skill_search",
 	"web_search",
 	"web_fetch",
 	"ask_user",
@@ -203,6 +206,7 @@ export interface ToolsOptions {
 	ls?: LsToolOptions;
 	tool_schema?: { resolver?: ToolSchemaResolver };
 	todo_write?: { store?: TodoWriteStore };
+	skill_search?: { resolver?: SkillSearchResolver };
 	web_search?: WebSearchToolOptions;
 	web_fetch?: WebFetchToolOptions;
 	delegate?: { runtime?: DelegationRuntimeOptions };
@@ -258,6 +262,8 @@ export function createToolDefinition(toolName: ToolName, cwd: string, options?: 
 			return createToolSchemaToolDefinition(options?.tool_schema?.resolver ?? emptyToolSchemaResolver);
 		case "todo_write":
 			return createTodoWriteToolDefinition(options?.todo_write?.store ?? noopTodoWriteStore);
+		case "skill_search":
+			return createSkillSearchToolDefinition(options?.skill_search?.resolver ?? emptySkillSearchResolver);
 		case "web_search":
 			return createWebSearchToolDefinition(options?.web_search);
 		case "web_fetch":
@@ -295,6 +301,8 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 			return createToolSchemaTool(options?.tool_schema?.resolver ?? emptyToolSchemaResolver);
 		case "todo_write":
 			return createTodoWriteTool(options?.todo_write?.store ?? noopTodoWriteStore);
+		case "skill_search":
+			return createSkillSearchTool(options?.skill_search?.resolver ?? emptySkillSearchResolver);
 		case "web_search":
 			return createWebSearchTool(options?.web_search);
 		case "web_fetch":
@@ -335,6 +343,11 @@ const emptyToolSchemaResolver: ToolSchemaResolver = {
 	markLoaded: () => {},
 };
 
+/** Default when no session supplies one (mirrors emptyToolSchemaResolver above): no skills known, so every search returns empty rather than throwing. */
+const emptySkillSearchResolver: SkillSearchResolver = {
+	getSkills: () => [],
+};
+
 export function createAllToolDefinitions(
 	cwd: string,
 	options?: ToolsOptions,
@@ -356,6 +369,7 @@ export function createAllToolDefinitions(
 		...definitions,
 		tool_schema: createToolSchemaToolDefinition(resolver),
 		todo_write: createTodoWriteToolDefinition(options?.todo_write?.store ?? noopTodoWriteStore),
+		skill_search: createSkillSearchToolDefinition(options?.skill_search?.resolver ?? emptySkillSearchResolver),
 		web_search: createWebSearchToolDefinition(options?.web_search),
 		web_fetch: createWebFetchToolDefinition(options?.web_fetch),
 		ask_user: createAskUserToolDefinition(),
@@ -402,6 +416,7 @@ export function createAllTools(cwd: string, options?: ToolsOptions): Record<Tool
 		ls: createLsTool(cwd, options?.ls),
 		tool_schema: createToolSchemaTool(resolver),
 		todo_write: createTodoWriteTool(options?.todo_write?.store ?? noopTodoWriteStore),
+		skill_search: createSkillSearchTool(options?.skill_search?.resolver ?? emptySkillSearchResolver),
 		web_search: createWebSearchTool(options?.web_search),
 		web_fetch: createWebFetchTool(options?.web_fetch),
 		ask_user: createAskUserTool(),

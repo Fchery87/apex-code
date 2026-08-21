@@ -120,6 +120,7 @@ import type { ApexToolDefinition, EvidenceSink } from "./tools/contract.ts";
 import type { DiagnosticsOperations } from "./tools/diagnostics.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
 import type { LspOperations } from "./tools/lsp.ts";
+import { createSkillSearchToolDefinition } from "./tools/skill-search.ts";
 import { createTodoWriteToolDefinition } from "./tools/todo-write.ts";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
 import { createToolSchemaToolDefinition } from "./tools/tool-schema.ts";
@@ -2737,6 +2738,12 @@ export class AgentSession {
 			write: (todos) => {
 				this.sessionManager.appendCustomEntry(TODO_CUSTOM_ENTRY_TYPE, todos);
 			},
+		}) as ToolDefinition<any, any>;
+		// Reads the resource loader live on every call (not a snapshot taken here), so
+		// a project-trust change or a settings reload that alters the loaded skill set
+		// is reflected on the next search without rebuilding the tool registry.
+		baseToolDefinitions.skill_search = createSkillSearchToolDefinition({
+			getSkills: () => this.resourceLoader.getSkills().skills,
 		}) as ToolDefinition<any, any>;
 
 		this._baseToolDefinitions = new Map(
