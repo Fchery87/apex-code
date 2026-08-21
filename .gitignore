@@ -72,3 +72,4 @@ auth.json
 # Test / coverage
 .vitest/
 *.heapsnapshot
+test-providers.js
