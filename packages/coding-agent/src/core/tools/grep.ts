@@ -47,6 +47,8 @@ const DEFAULT_LIMIT = 100;
 
 export interface GrepToolDetails {
 	truncation?: TruncationResult;
+	/** Matches ripgrep found before the limit was applied. Present only when truncated. */
+	totalMatches?: number;
 	matchLimitReached?: number;
 	linesTruncated?: boolean;
 }
@@ -240,19 +242,18 @@ export function createGrepToolDefinition(
 						const rl = createInterface({ input: child.stdout });
 						let stderr = "";
 						let matchCount = 0;
+						let totalMatches = 0;
 						let matchLimitReached = false;
 						let linesTruncated = false;
 						let aborted = false;
-						let killedDueToLimit = false;
 						const outputLines: string[] = [];
 
 						const cleanup = () => {
 							rl.close();
 							signal?.removeEventListener("abort", onAbort);
 						};
-						const stopChild = (dueToLimit = false) => {
+						const stopChild = () => {
 							if (!child.killed) {
-								killedDueToLimit = dueToLimit;
 								child.kill();
 							}
 						};
@@ -287,25 +288,40 @@ export function createGrepToolDefinition(
 
 						// Collect matches during streaming, then format them after rg exits.
 						const matches: Array<{ filePath: string; lineNumber: number; lineText?: string }> = [];
+						// Once the limit is hit we stop collecting but let ripgrep run to the end,
+						// because its closing `summary` event carries the true match count and
+						// nothing else can produce one -- an exact total requires a full scan. The
+						// tail of an rg scan is far cheaper than the extra model round trip an
+						// agent spends re-running with a bigger limit to learn what it missed.
+						// Lines past the limit skip `JSON.parse` unless they are that summary.
 						rl.on("line", (line) => {
-							if (!line.trim() || matchCount >= effectiveLimit) return;
+							if (!line.trim()) return;
+							const collecting = matchCount < effectiveLimit;
+							if (!collecting && !line.includes('"type":"summary"')) return;
 							let event: any;
 							try {
 								event = JSON.parse(line);
 							} catch {
 								return;
 							}
+							if (event.type === "summary") {
+								const summarized = event.data?.stats?.matches;
+								if (typeof summarized === "number") totalMatches = summarized;
+								return;
+							}
 							if (event.type === "match") {
+								// Belt and braces. File content cannot currently spoof the substring
+								// gate above, because ripgrep escapes quotes inside JSON strings, but
+								// that is ripgrep's encoding guarantee rather than this function's.
+								// Re-asserting the cap keeps the row limit true of this code alone.
+								if (!collecting) return;
 								matchCount++;
 								const filePath = event.data?.path?.text;
 								const lineNumber = event.data?.line_number;
 								const lineText = event.data?.lines?.text;
 								if (filePath && typeof lineNumber === "number")
 									matches.push({ filePath, lineNumber, lineText });
-								if (matchCount >= effectiveLimit) {
-									matchLimitReached = true;
-									stopChild(true);
-								}
+								if (matchCount >= effectiveLimit) matchLimitReached = true;
 							}
 						});
 
@@ -319,7 +335,7 @@ export function createGrepToolDefinition(
 								settle(() => reject(new Error("Operation aborted")));
 								return;
 							}
-							if (!killedDueToLimit && code !== 0 && code !== 1) {
+							if (code !== 0 && code !== 1) {
 								const errorMsg = stderr.trim() || `ripgrep exited with code ${code}`;
 								settle(() => reject(new Error(errorMsg)));
 								return;
@@ -356,10 +372,17 @@ export function createGrepToolDefinition(
 							// Build actionable notices for truncation and match limits.
 							const notices: string[] = [];
 							if (matchLimitReached) {
+								// `summary.stats.matches` counts every match ripgrep found, which is
+								// what the agent needs to judge whether the truncated list is
+								// representative. It falls back to the shown count only if ripgrep
+								// exited without a summary, which would make "N of N" the honest
+								// answer rather than an invented larger number.
+								const total = Math.max(totalMatches, matchCount);
 								notices.push(
-									`${effectiveLimit} matches limit reached. Use limit=${effectiveLimit * 2} for more, or refine pattern`,
+									`${matchCount} of ${total} total matches shown. Use limit=${effectiveLimit * 2} for more, or refine pattern`,
 								);
 								details.matchLimitReached = effectiveLimit;
+								details.totalMatches = total;
 							}
 							if (truncation.truncated) {
 								notices.push(`${formatSize(DEFAULT_MAX_BYTES)} limit reached`);

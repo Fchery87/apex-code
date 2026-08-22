@@ -809,7 +809,7 @@ describe("Coding Agent Tools", () => {
 			expect(output).toContain("context.txt-1- before");
 			expect(output).toContain("context.txt:2: match one");
 			expect(output).toContain("context.txt-3- after");
-			expect(output).toContain("[1 matches limit reached. Use limit=2 for more, or refine pattern]");
+			expect(output).toContain("[1 of 2 total matches shown. Use limit=2 for more, or refine pattern]");
 			// Ensure second match is not present
 			expect(output).not.toContain("match two");
 		});
@@ -829,6 +829,51 @@ describe("Coding Agent Tools", () => {
 
 			expect(getTextOutput(result)).toContain("No matches found");
 			expect(existsSync(marker)).toBe(false);
+		});
+
+		it("reports the true total when the match limit truncates the list", async () => {
+			const testFile = join(testDir, "totals.txt");
+			writeFileSync(testFile, Array.from({ length: 9 }, (_, i) => `needle ${i}`).join("\n"));
+
+			const result = await grepTool.execute("test-call-grep-total", {
+				pattern: "needle",
+				path: testFile,
+				limit: 2,
+			});
+
+			// The count the agent needs is "how many are there", not "where did we stop".
+			expect(getTextOutput(result)).toContain("2 of 9 total matches shown");
+		});
+
+		it("keeps the row cap when file content mimics ripgrep's own event protocol", async () => {
+			const testFile = join(testDir, "summary-lookalike.txt");
+			// Past the limit, lines are skipped by a substring test for the summary event
+			// rather than parsed. Content shaped like that event must not change the count.
+			const line = 'needle {"type":"summary"}';
+			writeFileSync(testFile, Array.from({ length: 6 }, () => line).join("\n"));
+
+			const result = await grepTool.execute("test-call-grep-lookalike", {
+				pattern: "needle",
+				path: testFile,
+				limit: 2,
+			});
+
+			const output = getTextOutput(result);
+			expect(output).toContain("2 of 6 total matches shown");
+			expect(output.split("\n").filter((row) => row.includes("summary-lookalike.txt:"))).toHaveLength(2);
+		});
+
+		it("omits the total when nothing was truncated", async () => {
+			const testFile = join(testDir, "no-truncation.txt");
+			writeFileSync(testFile, "needle one\nneedle two\n");
+
+			const result = await grepTool.execute("test-call-grep-no-total", {
+				pattern: "needle",
+				path: testFile,
+				limit: 50,
+			});
+
+			expect(getTextOutput(result)).not.toContain("total matches shown");
 		});
 	});
 
@@ -897,6 +942,16 @@ describe("Coding Agent Tools", () => {
 
 			expect(output).toContain(".hidden-file");
 			expect(output).toContain(".hidden-dir/");
+		});
+
+		it("reports the true total when the entry limit truncates the listing", async () => {
+			const dir = join(testDir, "many");
+			mkdirSync(dir);
+			for (let index = 0; index < 7; index++) writeFileSync(join(dir, `entry-${index}.txt`), "x");
+
+			const result = await lsTool.execute("test-call-ls-total", { path: dir, limit: 3 });
+
+			expect(getTextOutput(result)).toContain("3 of 7 total entries shown");
 		});
 	});
 });
