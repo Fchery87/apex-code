@@ -96,6 +96,7 @@ export interface CreateAgentSessionOptions {
 	diagnosticsOperations?: AgentSessionConfig["diagnosticsOperations"];
 	/** Optional `lsp` navigation tool transport (LSP.5); registers and activates `lsp` when present. */
 	lspOperations?: AgentSessionConfig["lspOperations"];
+	webSearchOperations?: AgentSessionConfig["webSearchOperations"];
 	/**
 	 * Delegation entry point (roadmap Phase 5, ADR 0008). When set, `delegate`
 	 * executes real child sessions through `resolveAgent`, with the child's
@@ -509,6 +510,10 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					// lifetimes" -- delegated children are the one sharing exception).
 					diagnosticsOperations: options.diagnosticsOperations,
 					lspOperations: options.lspOperations,
+					// Shared for the same reason as the LSP pool: the backend was resolved
+					// once (possibly by running a shell command for the key) and a child
+					// that re-resolved nothing would hold a `web_search` that only throws.
+					webSearchOperations: options.webSearchOperations,
 					// Forwarded so a child that itself holds `delegate` can delegate again
 					// (bounded by the depth guard above, read fresh from its own session
 					// header on its next createAgentSession call) -- otherwise recursion
@@ -551,6 +556,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		evidenceSink: options.evidenceSink,
 		diagnosticsOperations: options.diagnosticsOperations,
 		lspOperations: options.lspOperations,
+		webSearchOperations: options.webSearchOperations,
 	});
 	parentSessionRef.current = session;
 	const extensionsResult = resourceLoader.getExtensions();
