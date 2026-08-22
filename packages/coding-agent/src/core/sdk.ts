@@ -286,9 +286,15 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		thinkingLevel = clampThinkingLevel(model, thinkingLevel) as ThinkingLevel;
 	}
 
-	const defaultActiveToolNames: string[] = options.lspOperations
-		? (["read", "bash", "edit", "write", "lsp"] satisfies (ToolName | "lsp")[])
-		: (["read", "bash", "edit", "write"] satisfies ToolName[]);
+	// `web_search` and `lsp` join the core four only when configured. Both stay
+	// registered either way, so an explicit `--tools` selection still reaches them and an
+	// unconfigured call still explains itself. Activating an unconfigured tool would put a
+	// name in the prompt that can only ever fail.
+	const defaultActiveToolNames: string[] = [
+		...(["read", "bash", "edit", "write"] satisfies ToolName[]),
+		...(options.lspOperations ? ["lsp"] : []),
+		...(options.webSearchOperations ? (["web_search"] satisfies ToolName[]) : []),
+	];
 	const allowedToolNames = options.tools ?? (options.noTools === "all" ? [] : undefined);
 	const excludedToolNames = options.excludeTools;
 	const excludedToolNameSet = excludedToolNames ? new Set(excludedToolNames) : undefined;

@@ -1,0 +1,6 @@
+{
+  "lastChangelogVersion": "0.0.1-alpha.7",
+  "theme": "dark",
+  "defaultProvider": "deepseek",
+  "defaultModel": "deepseek-v4-flash"
+}
