@@ -6,18 +6,13 @@
   but no search vendor was ever wired in, so the model would pick it when a search would help
   and get an error telling it to pass a TypeScript SDK option — advice aimed at an embedder,
   not at the person who asked the agent to look something up. An Exa backend now ships behind
-  the same `WebSearchOperations` seam that was already there. Set `EXA_API_KEY` in the
-  environment and it works with no further configuration, or add a key from `/settings` →
-  Web search API key, which stores it in `auth.json` next to your provider credentials and
-  never in `settings.json`. A saved key beats an environment variable, so typing one in
-  overrides a stale export, and `webSearch.apiKey` in settings outranks both when you want to
-  point at a secret manager (`!op read ...`) or a different variable. The credential is
-  resolved per search rather than at session start, so a key added mid-session takes effect
-  immediately instead of appearing to save and doing nothing until restart. The backend's
-  host is added to the sandbox network allowlist automatically once a credential exists, so
-  `network.allowedHosts` needs no entry for it, and nothing is opened for anyone who never
-  sets a key. When no key resolves the tool still fails loudly rather than returning zero
-  results, and the message now names the environment variable and the settings row.
+  the same `WebSearchOperations` seam that was already there. Set `EXA_API_KEY` and it works
+  with no further configuration; `webSearch.apiKey` in settings points at a different variable
+  or a secret manager (`!op read ...`) when you want one. The credential is resolved per search
+  rather than at session start, so it never goes stale mid-session. The backend's host is added
+  to the sandbox network allowlist automatically once a credential exists, so
+  `network.allowedHosts` needs no entry for it, and nothing is opened for anyone who never sets
+  a key. When no key resolves the tool still fails loudly rather than returning zero results.
 
 - `grep` and `ls` now report how many results exist, not just where they stopped. Truncated
   output said `200 matches limit reached`, which tells an agent it hit a wall but not whether

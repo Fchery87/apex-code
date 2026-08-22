@@ -90,6 +90,38 @@ Set `APEX_CODE_SKIP_VERSION_CHECK=1` to disable the Apex Code version update che
 }
 ```
 
+### Web search
+
+The `web_search` tool is registered in every session but has no backend until a
+credential resolves. Setting `EXA_API_KEY` in your environment is enough; the settings
+below only matter if you want to override a default.
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `webSearch.provider` | string | `"exa"` | Search backend. `"exa"` is the only value today. |
+| `webSearch.apiKey` | string | `"$EXA_API_KEY"` | Where to read the key from. Supports `$VAR`, `${VAR}`, and `!command`, exactly like a provider key. Never put a literal key here. |
+| `webSearch.numResults` | number | `10` | Results requested per search (1-100). |
+| `webSearch.snippetMaxCharacters` | number | `800` | Per-result snippet budget. Higher costs context on every search. |
+| `webSearch.endpoint` | string | `https://api.exa.ai/search` | Override for an API-compatible endpoint. |
+
+```json
+{
+  "webSearch": {
+    "apiKey": "!op read op://private/exa/api-key",
+    "numResults": 5
+  }
+}
+```
+
+A credential stored under `exa` in `auth.json` is also used, and takes precedence over
+the environment variable. Note that nothing writes it for you today: every interactive
+session runs inside the OS sandbox, which mounts the credential file read-only, so
+`auth.json` can only be edited outside a running session. `EXA_API_KEY` is the
+supported path.
+
+The backend's host is added to the sandbox network allowlist automatically once a
+credential is configured, so `network.allowedHosts` needs no entry for it.
+
 ### Warnings
 
 | Setting | Type | Default | Description |
