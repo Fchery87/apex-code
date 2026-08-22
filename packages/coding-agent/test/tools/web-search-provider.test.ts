@@ -10,6 +10,7 @@ import {
 	resolveWebSearchHost,
 	resolveWebSearchOperations,
 	unconfiguredWebSearchMessage,
+	webSearchSettingsError,
 } from "../../src/core/web-search-provider.ts";
 
 // `resolveConfigValue` falls back to the real `process.env` when the supplied env
@@ -174,5 +175,35 @@ describe("web_search deferred resolution", () => {
 		expect(message).toContain("/settings");
 		// The old text told a user to pass a TypeScript option.
 		expect(message).not.toContain("WebSearchToolOptions");
+	});
+});
+
+describe("web_search literal key refusal", () => {
+	it("refuses a literal key in settings, because project settings are versioned and shared", () => {
+		const settings = { provider: "exa", apiKey: "exa-literal-secret" } as const;
+		const message = webSearchSettingsError(settings);
+		expect(message).toMatch(/must be a reference/i);
+		expect(message).toContain("$EXA_API_KEY");
+		// The offending value must not be echoed into a message that reaches a transcript.
+		expect(message).not.toContain("exa-literal-secret");
+	});
+
+	it("accepts every reference form", () => {
+		expect(webSearchSettingsError({ provider: "exa", apiKey: "$EXA_API_KEY" })).toBeUndefined();
+		expect(webSearchSettingsError({ provider: "exa", apiKey: `\${SOME_VAR}` })).toBeUndefined();
+		expect(webSearchSettingsError({ provider: "exa", apiKey: "!op read op://x/y" })).toBeUndefined();
+		expect(webSearchSettingsError(undefined)).toBeUndefined();
+	});
+
+	it("does not use a literal key even if one is configured", () => {
+		const settings = { provider: "exa", apiKey: "exa-literal-secret" } as const;
+		// Falls through to the environment rather than silently honouring the literal.
+		expect(resolveWebSearchOperations(settings, {})).toBeUndefined();
+		expect(resolveWebSearchHost(settings, {})).toBeUndefined();
+	});
+
+	it("reports the refusal to the model instead of failing as merely unconfigured", async () => {
+		const operations = createDeferredWebSearchOperations(() => ({ provider: "exa", apiKey: "exa-literal-secret" }));
+		await expect(operations.search("anything")).rejects.toThrow(/must be a reference/i);
 	});
 });

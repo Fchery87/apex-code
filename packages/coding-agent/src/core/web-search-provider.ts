@@ -1,5 +1,10 @@
 import { readStoredCredential } from "./auth-storage.ts";
-import { isConfigValueConfigured, resolveConfigValue } from "./resolve-config-value.ts";
+import {
+	getConfigValueEnvVarNames,
+	isCommandConfigValue,
+	isConfigValueConfigured,
+	resolveConfigValue,
+} from "./resolve-config-value.ts";
 import type { WebSearchSettings } from "./settings-manager.ts";
 import type { WebSearchOperations } from "./tools/web-search.ts";
 import { createExaWebSearchOperations, EXA_SEARCH_HOST } from "./tools/web-search-exa.ts";
@@ -72,6 +77,30 @@ function storedApiKeyReference(settings: WebSearchSettings | undefined, authPath
 }
 
 /**
+ * Reject a literal secret configured in settings.
+ *
+ * `webSearch.apiKey` is read from project settings as well as global ones, and this
+ * repository deliberately does not gitignore `<project>/.apex-code/` -- that directory
+ * is meant to be versioned and shared with a team. A literal key written there would be
+ * committed and handed to everyone who clones the repository.
+ *
+ * A reference (`$VAR`, `${VAR}`, `!command`) names where the secret lives without
+ * containing it, so it is safe to commit. AGENTS.md already states that no credential
+ * belongs in a file the settings loader writes; this makes that rule enforced rather
+ * than documented. `auth.json` still accepts literals, because holding secrets outside
+ * the repository is what the credential store is for.
+ */
+export function webSearchSettingsError(settings?: WebSearchSettings): string | undefined {
+	const configured = settings?.apiKey?.trim();
+	if (!configured) return undefined;
+	if (isCommandConfigValue(configured)) return undefined;
+	if (getConfigValueEnvVarNames(configured).length > 0) return undefined;
+	// The value itself is never echoed: this message reaches the model, and from there a
+	// transcript. Naming the setting is enough to act on.
+	return `webSearch.apiKey must be a reference, not a literal key, because project settings are versioned and shared. Use "$EXA_API_KEY", "\${YOUR_VAR}", or "!your-command", and keep the secret in your environment or credential store.`;
+}
+
+/**
  * Pick one reference, then resolve it once.
  *
  * Order is explicit configuration, then saved credential, then ambient environment.
@@ -80,11 +109,10 @@ function storedApiKeyReference(settings: WebSearchSettings | undefined, authPath
  * a direct instruction that should beat both.
  */
 function apiKeyReferenceFor(settings: WebSearchSettings | undefined, authPath?: string): string {
-	return (
-		settings?.apiKey?.trim() ||
-		storedApiKeyReference(settings, authPath) ||
-		definitionFor(settings).defaultApiKeyReference
-	);
+	// A refused literal falls through rather than being honoured, so a committed key is
+	// inert instead of quietly working for whoever cloned the repository.
+	const configured = webSearchSettingsError(settings) ? undefined : settings?.apiKey?.trim();
+	return configured || storedApiKeyReference(settings, authPath) || definitionFor(settings).defaultApiKeyReference;
 }
 
 /**
@@ -144,6 +172,10 @@ export function createDeferredWebSearchOperations(
 	return {
 		async search(query, signal) {
 			const settings = readSettings();
+			// Reported ahead of the unconfigured message: "no key" and "your key is in the
+			// wrong place" need different fixes.
+			const settingsError = webSearchSettingsError(settings);
+			if (settingsError) throw new Error(settingsError);
 			const operations = resolveWebSearchOperations(settings, undefined, authPath);
 			if (!operations) throw new Error(unconfiguredWebSearchMessage(settings));
 			return operations.search(query, signal);
