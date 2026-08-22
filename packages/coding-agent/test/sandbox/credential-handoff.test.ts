@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createLinuxSandboxBackend } from "../../src/core/sandbox/linux-backend.ts";
+import { createMacosSandboxBackend } from "../../src/core/sandbox/macos-backend.ts";
 
 const cliPath = resolve(__dirname, "../../src/cli.ts");
 const extensionPath = resolve(__dirname, "fixtures/credential-boundary-extension.ts");
@@ -19,8 +20,11 @@ function temporaryDirectory(prefix: string): string {
 	return directory;
 }
 
-function canEnforceLinuxSandbox(): boolean {
-	return process.platform === "linux" && createLinuxSandboxBackend().status.kind === "enforced";
+function canEnforceSandbox(): boolean {
+	// The handoff is a property of whichever backend enforces on this platform, so the
+	// live proof runs on macOS CI as well as Linux -- the spec requires both.
+	const backend = process.platform === "darwin" ? createMacosSandboxBackend() : createLinuxSandboxBackend();
+	return backend.status.kind === "enforced";
 }
 
 async function runCli(options: { args: readonly string[]; cwd: string; environment?: NodeJS.ProcessEnv }) {
@@ -46,14 +50,17 @@ async function runCli(options: { args: readonly string[]; cwd: string; environme
 	return { code, stdout, stderr };
 }
 
-describe.skipIf(!canEnforceLinuxSandbox())("live-agent credential handoff", () => {
-	it("reads the host-owned credential file read-only through a real sandboxed CLI turn", async () => {
+describe.skipIf(!canEnforceSandbox())("live-agent credential handoff", () => {
+	// One real sandboxed CLI turn: ~19s alone, longer under the parallel load of the
+	// full sandbox directory. The 30s default measured the machine, not the boundary.
+	it("reads read-only, refuses direct writes, and writes literals through the channel", async () => {
 		const workspace = temporaryDirectory("apex-sandbox-credential-workspace-");
 		const hostAgentDir = temporaryDirectory("apex-sandbox-credential-agent-");
 		mkdirSync(hostAgentDir, { recursive: true });
+		const originalCredential = { type: "api_key", key: "host-owned-secret" };
 		writeFileSync(
 			join(hostAgentDir, "auth.json"),
-			JSON.stringify({ "credential-boundary-test": { type: "api_key", key: "host-owned-secret" } }),
+			JSON.stringify({ "credential-boundary-test": originalCredential }),
 			{
 				mode: 0o600,
 			},
@@ -78,14 +85,39 @@ describe.skipIf(!canEnforceLinuxSandbox())("live-agent credential handoff", () =
 		});
 
 		expect(result.code, `stdout:\n${result.stdout}\n\nstderr:\n${result.stderr}`).toBe(0);
-		const outcome = JSON.parse(readFileSync(resultPath, "utf8")) as { readValue: string; writeOutcome: string };
-		expect(outcome.readValue).toBe(
-			JSON.stringify({ "credential-boundary-test": { type: "api_key", key: "host-owned-secret" } }),
-		);
+		const outcome = JSON.parse(readFileSync(resultPath, "utf8")) as {
+			readValue: string;
+			writeOutcome: string;
+			literalWrite: string;
+			literalWriteDetail?: string;
+			commandWrite: string;
+		};
+
+		// The read path is unchanged: the host-projected file, verbatim.
+		expect(outcome.readValue).toBe(JSON.stringify({ "credential-boundary-test": originalCredential }));
+
+		// The mount stays read-only: a direct filesystem write is still refused, and
+		// the channel is the only way out.
 		expect(outcome.writeOutcome).toBe("rejected");
-		// The host's own copy is unaffected by the sandboxed child's rejected write attempt.
-		expect(readFileSync(join(hostAgentDir, "auth.json"), "utf8")).toBe(
-			JSON.stringify({ "credential-boundary-test": { type: "api_key", key: "host-owned-secret" } }),
-		);
-	});
+
+		// A literal credential written through the channel lands in the host file.
+		expect(outcome.literalWrite, outcome.literalWriteDetail).toBe("succeeded");
+		const hostFile = JSON.parse(readFileSync(join(hostAgentDir, "auth.json"), "utf8")) as Record<
+			string,
+			{ type?: string; key?: string }
+		>;
+		expect(hostFile["credential-boundary-test"]).toEqual({ type: "api_key", key: "written-through-channel" });
+		expect(JSON.stringify(hostFile)).not.toContain("tampered-from-sandbox");
+
+		// The content constraint holds through the real channel: a `!command` value is
+		// refused and never reaches the host file.
+		expect(outcome.commandWrite).toBe("rejected");
+		expect(hostFile["credential-boundary-command-test"]).toBeUndefined();
+
+		// Both the accepted write and the refusal are audited in the violation tail
+		// the supervisor prints on exit.
+		expect(result.stderr).toContain("credential-write credential-boundary-test");
+		expect(result.stderr).toContain("credential-write credential-boundary-command-test");
+		expect(result.stderr).toContain("Refused");
+	}, 180_000);
 });

@@ -395,6 +395,14 @@ is deleted now that this follow-up is landed (recoverable via
 `git show <commit>:docs/plans/2026-08-20-sandbox-skill-projection.md`); its durable
 content lives in this entry and in the spec's own closure amendment.
 
+**Follow-up in flight — post-PR-#33 review items, 2026-08-22.** Three review leftovers
+from the `web_search` merge are being worked as a plan rather than a phase:
+supervisor-mediated credential writes (spec already written; this entry's ADR 0015 gains
+the amendment), the `settings-manager` share of supervisor launch cost, and the smaller
+`7209` breadth / snippet-trim items. Tracked in
+[docs/plans/2026-08-22-pr33-followups.md](plans/2026-08-22-pr33-followups.md); Phase 2b's
+**landed** state is unchanged and is not reopened by this.
+
 ---
 
 ## Phase 3 — Context engineering

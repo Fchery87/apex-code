@@ -303,3 +303,40 @@ describe("sandbox CLI launch", () => {
 		expect(requiresSandboxedChild(["config"])).toBe(false);
 	});
 });
+
+describe("sandbox CLI launch credential channel", () => {
+	it("advertises the channel socket to the child only when the supervisor opened one", () => {
+		const cwd = workspace();
+		const withChannel = buildSandboxedCliLaunch({
+			workspace: cwd,
+			command: "/usr/bin/node",
+			args: ["cli.js"],
+			environment: { PATH: "/usr/bin:/bin" },
+			credentialChannel: { hostSocketPath: "/tmp/apex-cred.sock", childSocketPath: "/home/apex-cred.sock" },
+		});
+		expect(withChannel.environment.APEX_CREDENTIAL_PROXY_PATH).toBe("/home/apex-cred.sock");
+
+		const withoutChannel = buildSandboxedCliLaunch({
+			workspace: cwd,
+			command: "/usr/bin/node",
+			args: ["cli.js"],
+			environment: { PATH: "/usr/bin:/bin" },
+		});
+		expect(withoutChannel.environment.APEX_CREDENTIAL_PROXY_PATH).toBeUndefined();
+	});
+
+	it("lets the supervisor's resolution win over anything the invoking shell exported", () => {
+		const cwd = workspace();
+		const launch = buildSandboxedCliLaunch({
+			workspace: cwd,
+			command: "/usr/bin/node",
+			args: ["cli.js"],
+			// APEX_CREDENTIAL_PROXY_PATH is not in the child env allowlist, but the
+			// same rule as APEX_CODE_AUTH_PATH applies: the supervisor's channel is
+			// its own resolution and must never be spoofable from outside.
+			environment: { PATH: "/usr/bin:/bin", APEX_CREDENTIAL_PROXY_PATH: "/tmp/attacker.sock" },
+			credentialChannel: { hostSocketPath: "/tmp/apex-cred.sock", childSocketPath: "/home/apex-cred.sock" },
+		});
+		expect(launch.environment.APEX_CREDENTIAL_PROXY_PATH).toBe("/home/apex-cred.sock");
+	});
+});

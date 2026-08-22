@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Author | `fchery87` |
-| Status | `Draft` |
+| Status | `Implemented` |
 | Created | `2026-08-22` |
 | Last updated | `2026-08-22` |
 | Roadmap phase | `none — follow-up to Phase 2b (OS sandbox)` |

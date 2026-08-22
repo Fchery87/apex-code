@@ -15,6 +15,17 @@ export interface SandboxLaunch {
 	 * look; the backend just places the file there without write access.
 	 */
 	readonly readOnlyBinaries?: readonly { readonly source: string; readonly destination: string }[];
+	/**
+	 * The supervisor-owned credential write channel, when one was opened for this
+	 * launch. `hostSocketPath` is where the supervisor's writer listens; the backend
+	 * projects it to `childSocketPath`, which is also what the child is told through
+	 * `APEX_CREDENTIAL_PROXY_PATH`. Absent means the session has no credential write
+	 * path at all -- the mount stays read-only with no exception.
+	 */
+	readonly credentialChannel?: {
+		readonly hostSocketPath: string;
+		readonly childSocketPath: string;
+	};
 }
 
 /** A platform adapter. Its sole job is to launch a normal Apex child inside an OS boundary. */

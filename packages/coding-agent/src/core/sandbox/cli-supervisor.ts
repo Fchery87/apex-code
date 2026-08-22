@@ -3,7 +3,8 @@ import { buildSandboxedCliLaunch, type HostSkillPaths } from "./cli-launch.ts";
 import { createLinuxSandboxBackend } from "./linux-backend.ts";
 import { createMacosSandboxBackend } from "./macos-backend.ts";
 import { createSandboxPolicy } from "./policy.ts";
-import { createSandboxSupervisor, type SandboxBackend } from "./supervisor.ts";
+import { createCredentialProxy, resolveCredentialChannelPaths } from "./rpc/credential-proxy.ts";
+import { createSandboxSupervisor, type SandboxBackend, type SandboxLaunch } from "./supervisor.ts";
 import { SandboxViolationStore } from "./violations.ts";
 
 export interface CliSandboxDependencies {
@@ -48,6 +49,25 @@ export async function launchSandboxedCli(options: {
 	}
 	const violationStore = new SandboxViolationStore();
 	const backend = dependencies.createBackend({ violationStore });
+
+	// The credential write channel (spec: 2026-08-22-supervisor-mediated-credential-
+	// writes) exists only when there is a host credential file to write and a backend
+	// that can actually contain the child. Its paths are resolved exactly once: they
+	// are random per launch, so a second resolution anywhere else would name a socket
+	// nobody listens on. The channel then travels to the backends and the launch
+	// environment through the launch contract, keeping it the single exception to the
+	// read-only credential mount (ADR 0015, amended).
+	let credentialProxy: Awaited<ReturnType<typeof createCredentialProxy>> | undefined;
+	let credentialChannel: SandboxLaunch["credentialChannel"];
+	if (options.authPath && backend.status.kind === "enforced") {
+		const paths = resolveCredentialChannelPaths();
+		credentialChannel = paths;
+		credentialProxy = await createCredentialProxy({
+			authPath: options.authPath,
+			violationStore,
+			socketPath: paths.hostSocketPath,
+		});
+	}
 	const supervisor = createSandboxSupervisor({ backend, policy: policyResult.policy });
 	const launch = buildSandboxedCliLaunch({
 		workspace: policyResult.policy.workspace,
@@ -59,6 +79,7 @@ export async function launchSandboxedCli(options: {
 		authPath: options.authPath,
 		toolBinaries: options.toolBinaries,
 		skillPaths: options.skillPaths,
+		credentialChannel,
 	});
 	try {
 		return await supervisor.launch(launch);
@@ -73,5 +94,6 @@ export async function launchSandboxedCli(options: {
 			);
 		}
 		await supervisor.close();
+		await credentialProxy?.close();
 	}
 }

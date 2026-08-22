@@ -2,7 +2,7 @@ import type { ChildProcess, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createMacosSandboxBackend } from "../../src/core/sandbox/macos-backend.ts";
 import { createSandboxSupervisor } from "../../src/core/sandbox/supervisor.ts";
@@ -256,5 +256,69 @@ describe("macOS violation attribution", () => {
 		// network-proxy.ts already keeps for traffic that goes through the proxy.
 		const violations = await launchWith(1, "");
 		expect(violations.list()).toEqual([]);
+	});
+});
+
+// The credential channel's Seatbelt projection, driven through the injected-spawn seam
+// so it is covered on any platform. The machine that wrote this has no macOS host; a
+// real sandbox-exec run happens in the live credential-handoff test on macOS CI.
+describe("macOS credential channel projection", () => {
+	function launchWithChannel(credentialChannel: { hostSocketPath: string; childSocketPath: string } | undefined) {
+		const cwd = workspace();
+		let spawnArguments: readonly string[] = [];
+		let spawnEnvironment: NodeJS.ProcessEnv | undefined;
+		const spawnChild = ((command: string, args: readonly string[], options?: { env?: NodeJS.ProcessEnv }) => {
+			spawnArguments = [command, ...args];
+			spawnEnvironment = options?.env;
+			const fake = new EventEmitter() as unknown as ChildProcess;
+			const stderrStream = new EventEmitter() as unknown as NonNullable<ChildProcess["stderr"]>;
+			(stderrStream as unknown as { setEncoding: (encoding: string) => void }).setEncoding = () => {};
+			(fake as { stderr: unknown }).stderr = stderrStream;
+			setImmediate(() => fake.emit("exit", 0));
+			return fake;
+		}) as unknown as typeof spawn;
+		const backend = createMacosSandboxBackend({ platform: "darwin", commandExists: () => true, spawnChild });
+		return backend
+			.launch({
+				command: "/bin/sh",
+				args: ["-c", "true"],
+				policy: { workspace: cwd, allowedHosts: [] },
+				// As on Linux, the launch builder advertises the channel; this backend
+				// must carry it through to sandbox-exec's environment untouched.
+				environment: credentialChannel ? { APEX_CREDENTIAL_PROXY_PATH: credentialChannel.childSocketPath } : {},
+				credentialChannel,
+			})
+			.then(async (code) => {
+				await backend.close();
+				return { code, cwd, spawnArguments, spawnEnvironment };
+			});
+	}
+
+	it("allows outbound to exactly the channel socket and names it in the child environment", async () => {
+		const hostDirectory = mkdtempSync(join(tmpdir(), "apex-cred-seatbelt-"));
+		temporaryDirectories.push(hostDirectory);
+		const hostSocketPath = join(hostDirectory, "channel.sock");
+		const { code, cwd, spawnArguments, spawnEnvironment } = await launchWithChannel({
+			hostSocketPath,
+			childSocketPath: hostSocketPath,
+		});
+
+		expect(code).toBe(0);
+		const profile = readFileSync(join(cwd, ".apex-code", "sandbox-state", "profile.sb"), "utf8");
+		// Seatbelt matches canonical paths; on macOS tmpdir() is a symlink (/var ->
+		// /private/var), so the literal is the resolved form of the same socket.
+		const canonical = join(realpathSync(dirname(hostSocketPath)), basename(hostSocketPath));
+		expect(profile).toContain(`(allow network-outbound (remote unix-socket (literal "${canonical}")))`);
+		expect(spawnEnvironment?.APEX_CREDENTIAL_PROXY_PATH).toBe(hostSocketPath);
+		expect(spawnArguments[0]).toBe("sandbox-exec");
+	});
+
+	it("adds no unix-socket rule and no environment when no channel exists", async () => {
+		const { code, cwd, spawnEnvironment } = await launchWithChannel(undefined);
+
+		expect(code).toBe(0);
+		const profile = readFileSync(join(cwd, ".apex-code", "sandbox-state", "profile.sb"), "utf8");
+		expect(profile).not.toContain("unix-socket");
+		expect(spawnEnvironment?.APEX_CREDENTIAL_PROXY_PATH).toBeUndefined();
 	});
 });

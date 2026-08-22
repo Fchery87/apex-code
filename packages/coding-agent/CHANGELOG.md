@@ -15,6 +15,20 @@
   to a custom-prompt session that registers the full tool set, and the enforced static-prefix
   budget was re-measured accordingly.
 
+- `/login` now works inside a sandboxed session. Every interactive session runs under the
+  OS sandbox, which mounts `auth.json` read-only -- correct for keeping the agent from
+  tampering with credentials, but it also meant the documented way to store a provider key
+  failed with a raw `EACCES` pointing at a file the user could plainly write from their own
+  shell. Credential writes now travel a supervisor-owned unix socket instead: the child asks,
+  the supervisor writes, and only literal secrets are accepted. A value that would resolve
+  as a `!command` or `$VAR` reference is refused and the refusal says why, because such a
+  value written through this channel would be a sandbox escape (the host executes it on the
+  next resolve). Reads are unchanged on both sides of the boundary, the read-only mount
+  stays, and every write -- accepted or refused -- appears in the sandbox violation tail
+  the supervisor prints on exit. Linux is verified by a live sandboxed turn in the suite;
+  macOS is verified at the profile level, with the same live gate now running on macOS CI
+  rather than Linux only.
+
 - `web_search` now has a backend. The tool has been registered in every session since Phase 4
   but no search vendor was ever wired in, so the model would pick it when a search would help
   and get an error telling it to pass a TypeScript SDK option — advice aimed at an embedder,

@@ -10,6 +10,7 @@ import {
 	rmSync,
 	writeFileSync,
 } from "node:fs";
+import * as net from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -252,3 +253,59 @@ describe.skipIf(process.platform !== "linux")("Linux sandbox crash cleanup", () 
 		expect(leaked).toBe(false);
 	});
 });
+
+describe.skipIf(!canEnforceLinuxSandboxForChannel())("Linux credential channel projection", () => {
+	it("binds the channel socket into the child and names it in the environment", async () => {
+		const cwd = workspace();
+		const hostDirectory = mkdtempSync(join(tmpdir(), "apex-cred-bind-"));
+		temporaryDirectories.push(hostDirectory);
+		const hostSocketPath = join(hostDirectory, "channel.sock");
+		// The backend binds whatever path it is given; the supervisor's proxy is what
+		// listens on it. A real listening socket proves both the mount and the
+		// child-visible path, and stands in for the proxy exactly the way it will
+		// exist in production: created by the supervisor before launch.
+		const listener = net.createServer(() => {});
+		await new Promise<void>((resolve) => listener.listen(hostSocketPath, resolve));
+
+		const backend = createLinuxSandboxBackend();
+		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+
+		try {
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: ["-c", 'test -S "$APEX_CREDENTIAL_PROXY_PATH"'],
+					// The launch builder (cli-launch.ts) advertises the channel to the
+					// child; the backend's job under test is the bind that makes that
+					// path a real socket inside the sandbox.
+					environment: { APEX_CREDENTIAL_PROXY_PATH: "/home/channel.sock" },
+					credentialChannel: { hostSocketPath, childSocketPath: "/home/channel.sock" },
+				}),
+			).resolves.toBe(0);
+		} finally {
+			await supervisor.close();
+			await new Promise<void>((resolve) => listener.close(() => resolve()));
+		}
+	});
+
+	it("adds no channel environment when the supervisor opened no channel", async () => {
+		const cwd = workspace();
+		const backend = createLinuxSandboxBackend();
+		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+
+		try {
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: ["-c", 'test -z "$APEX_CREDENTIAL_PROXY_PATH"'],
+				}),
+			).resolves.toBe(0);
+		} finally {
+			await supervisor.close();
+		}
+	});
+});
+
+function canEnforceLinuxSandboxForChannel(): boolean {
+	return process.platform === "linux" && createLinuxSandboxBackend().status.kind === "enforced";
+}
