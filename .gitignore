@@ -54,6 +54,14 @@ collect.sh
 # more. The user's global state lives at `~/.apex-code/`, outside any repo.
 .apex-code/hf-sessions/
 .apex-code/hf-sessions-backup/
+# Runtime state written when Apex Code runs inside its own repo. The OS sandbox
+# repoints the agent directory into the workspace, so a session leaves its state
+# database, downloaded tool binaries, transcripts, and relay script here. None of it
+# is shared configuration, and transcripts in particular carry whatever the session
+# touched -- including credentials read from the environment.
+.apex-code/sandbox-agent/
+.apex-code/sandbox-sessions/
+.apex-code/sandbox-state/
 .apex-code_config/
 apex-code-*.html
 
