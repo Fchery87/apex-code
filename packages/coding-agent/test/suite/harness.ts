@@ -94,6 +94,48 @@ export interface Harness {
 	cleanup: () => void;
 }
 
+/**
+ * Provider credentials that the model registry reads straight from the environment.
+ *
+ * A suite harness registers exactly one faux provider and every assertion about the
+ * model surface assumes that is the only configured one. A developer with real
+ * credentials exported breaks that assumption without touching the repo: the registry
+ * counts their provider as configured too, and anything that renders or counts
+ * providers behaves differently on their machine than in CI. `7209` failed exactly
+ * this way, opening the model selector on a provider-selection step because a
+ * `GEMINI_API_KEY` in the shell made `google` a second configured provider.
+ *
+ * Matching a suffix rather than listing every variable: the goal is that no ambient
+ * credential reaches a suite test, and a new provider's key should be covered the day
+ * it is added rather than the day someone remembers this list.
+ */
+const AMBIENT_CREDENTIAL_SUFFIXES = ["_API_KEY", "_AUTH_TOKEN", "_OAUTH_TOKEN", "_BASE_URL"];
+const AMBIENT_CREDENTIAL_NAMES = [
+	"AWS_ACCESS_KEY_ID",
+	"AWS_BEARER_TOKEN_BEDROCK",
+	"AWS_PROFILE",
+	"AWS_REGION",
+	"AWS_SECRET_ACCESS_KEY",
+	"CLOUDFLARE_ACCOUNT_ID",
+	"CLOUDFLARE_GATEWAY_ID",
+];
+
+/** Remove ambient provider credentials, returning a restore function for `cleanup`. */
+function isolateAmbientCredentials(): () => void {
+	const saved = new Map<string, string>();
+	for (const [name, value] of Object.entries(process.env)) {
+		if (value === undefined) continue;
+		const ambient =
+			AMBIENT_CREDENTIAL_NAMES.includes(name) || AMBIENT_CREDENTIAL_SUFFIXES.some((suffix) => name.endsWith(suffix));
+		if (!ambient) continue;
+		saved.set(name, value);
+		delete process.env[name];
+	}
+	return () => {
+		for (const [name, value] of saved) process.env[name] = value;
+	};
+}
+
 function createTempDir(): string {
 	const tempDir = join(tmpdir(), `pi-suite-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 	mkdirSync(tempDir, { recursive: true });
@@ -101,6 +143,7 @@ function createTempDir(): string {
 }
 
 export async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
+	const restoreAmbientCredentials = isolateAmbientCredentials();
 	const tempDir = createTempDir();
 	const fauxProvider: FauxProviderRegistration = registerFauxProvider({
 		models: options.models,
@@ -218,6 +261,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 		},
 		tempDir,
 		cleanup() {
+			restoreAmbientCredentials();
 			session.dispose();
 			fauxProvider.unregister();
 			if (existsSync(tempDir)) {
