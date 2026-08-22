@@ -53,8 +53,8 @@ function definitionFor(settings: WebSearchSettings | undefined): WebSearchProvid
 	return WEB_SEARCH_PROVIDERS[settings?.provider ?? DEFAULT_WEB_SEARCH_PROVIDER];
 }
 
-/** `auth.json` key the settings panel reads and writes for the selected backend. */
-export function webSearchCredentialId(settings?: WebSearchSettings): string {
+/** `auth.json` key holding a stored credential for the selected backend. */
+function webSearchCredentialId(settings?: WebSearchSettings): string {
 	return definitionFor(settings).credentialId;
 }
 
