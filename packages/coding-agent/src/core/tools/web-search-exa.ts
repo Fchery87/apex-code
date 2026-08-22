@@ -61,7 +61,13 @@ function hostOf(endpoint: string): string {
 function toSnippet(text: string | null | undefined, maxCharacters: number): string {
 	if (!text) return "";
 	const collapsed = text.replace(/\s+/g, " ").trim();
-	return collapsed.length > maxCharacters ? collapsed.slice(0, maxCharacters) : collapsed;
+	if (collapsed.length <= maxCharacters) return collapsed;
+	const capped = collapsed.slice(0, maxCharacters);
+	// End on a whole word when one fits: a snippet cut mid-word ("specificatio")
+	// reads as corruption rather than truncation. A cap that lands inside the first
+	// word has no boundary to retreat to, so the hard cut stands.
+	const boundary = capped.lastIndexOf(" ");
+	return boundary > 0 ? capped.slice(0, boundary) : capped;
 }
 
 /**

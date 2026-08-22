@@ -15,6 +15,21 @@
   to a custom-prompt session that registers the full tool set, and the enforced static-prefix
   budget was re-measured accordingly.
 
+- `web_search` snippets now end on a whole word. The truncation budget cut at an exact
+  character count, so a long highlight could end "specificatio" -- which reads as
+  corruption rather than as a limit. The trim now backs up to the last word boundary
+  inside the budget; a snippet whose first word alone exceeds the budget still cuts
+  hard, because an intact fragment beats an empty one.
+
+- The suite harness now scrubs every provider credential variable the registry reads,
+  not only the `*_API_KEY`-shaped ones. Regression `7209` broke on a `GEMINI_API_KEY`,
+  and the fix matched credential-shaped suffixes -- but `HF_TOKEN`,
+  `COPILOT_GITHUB_TOKEN`, the Bedrock container/web-identity variables, and the Vertex
+  ADC trio reach the registry through names no suffix covers, so a developer exporting
+  any of them still broke the faux-only assumption the suite is built on. The names and
+  suffixes together now cover every source `getEnvApiKey` consults, and a test pins
+  that coverage so a new provider's variable is caught the day it matters.
+
 - Starting a sandboxed session no longer pays for a lock library and an HTTP stack it
   never uses. The supervisor loads `settings-manager` on every launch to resolve the
   network allowlist before the child exists, and that module statically imported
