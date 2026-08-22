@@ -15,6 +15,18 @@
   to a custom-prompt session that registers the full tool set, and the enforced static-prefix
   budget was re-measured accordingly.
 
+- Starting a sandboxed session no longer pays for a lock library and an HTTP stack it
+  never uses. The supervisor loads `settings-manager` on every launch to resolve the
+  network allowlist before the child exists, and that module statically imported
+  `proper-lockfile` (write-path only) and `http-dispatcher` (which loads `undici`) for
+  two small timeout definitions. Measured with the committed
+  `scripts/measure-supervisor-imports.mjs --dist`, A/B on one machine: the
+  settings-manager import fell from 1969ms to 577ms and the whole supervisor import path
+  from 2729ms to 812ms under load-23 (calmer runs: ~197ms to ~110ms). The lock library
+  is now required on first settings write, keeping `withLock` synchronous, and the
+  idle-timeout default/parser moved to a leaf module the dispatcher re-exports -- one
+  definition, but loading a settings file no longer costs an HTTP stack.
+
 - `/login` now works inside a sandboxed session. Every interactive session runs under the
   OS sandbox, which mounts `auth.json` read-only -- correct for keeping the agent from
   tampering with credentials, but it also meant the documented way to store a provider key
