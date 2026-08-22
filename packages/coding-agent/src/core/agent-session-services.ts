@@ -21,7 +21,7 @@ import type { SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
 import type { LspOperations } from "./tools/lsp.ts";
 import { SqliteUsagePerformanceStore } from "./usage-performance-store.ts";
-import { createDeferredWebSearchOperations } from "./web-search-provider.ts";
+import { createDeferredWebSearchOperations, resolveWebSearchOperations } from "./web-search-provider.ts";
 
 /** Filename of the shared durable-state database within an agent directory (roadmap Phase 8). */
 const DURABLE_STATE_DATABASE_FILENAME = "state.sqlite";
@@ -356,8 +356,13 @@ export async function createAgentSessionFromServices(
 	// Read per call rather than captured here. The tool registry is built once at
 	// session construction, so a key saved from the settings panel mid-session would
 	// otherwise not take effect until restart.
+	// Two different questions. Whether a credential resolves *now* decides whether the
+	// tool is active, because activation happens once at construction. Resolution then
+	// stays deferred so a key changed mid-session is picked up without a restart.
 	const settingsManager = options.services.settingsManager;
-	const webSearchOperations = createDeferredWebSearchOperations(() => settingsManager.getWebSearchSettings());
+	const webSearchOperations = resolveWebSearchOperations(settingsManager.getWebSearchSettings())
+		? createDeferredWebSearchOperations(() => settingsManager.getWebSearchSettings())
+		: undefined;
 
 	return createAgentSession({
 		cwd: options.services.cwd,
