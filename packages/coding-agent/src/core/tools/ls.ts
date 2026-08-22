@@ -29,6 +29,8 @@ const DEFAULT_LIMIT = 500;
 
 export interface LsToolDetails {
 	truncation?: TruncationResult;
+	/** Entries in the directory before the limit was applied. Present only when truncated. */
+	totalEntries?: number;
 	entryLimitReached?: number;
 }
 
@@ -203,8 +205,14 @@ export function createLsToolDefinition(
 						// Build actionable notices for truncation and entry limits.
 						const notices: string[] = [];
 						if (entryLimitReached) {
-							notices.push(`${effectiveLimit} entries limit reached. Use limit=${effectiveLimit * 2} for more`);
+							// The whole listing was read before capping, so the total is already in
+							// hand. Reporting it is what lets the agent decide whether it has seen
+							// everything instead of spending a second call to find out.
+							notices.push(
+								`${results.length} of ${entries.length} total entries shown. Use limit=${effectiveLimit * 2} for more`,
+							);
 							details.entryLimitReached = effectiveLimit;
+							details.totalEntries = entries.length;
 						}
 						if (truncation.truncated) {
 							notices.push(`${formatSize(DEFAULT_MAX_BYTES)} limit reached`);

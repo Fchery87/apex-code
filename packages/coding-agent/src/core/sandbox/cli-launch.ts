@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } fr
 import { join, sep } from "node:path";
 import type { HostToolBinary } from "../../utils/tools-manager.ts";
 import { SettingsManager } from "../settings-manager.ts";
+import { resolveWebSearchHost } from "../web-search-provider.ts";
 import { resolveDefaultAllowedHosts } from "./default-hosts.ts";
 import type { SandboxLaunch } from "./supervisor.ts";
 
@@ -33,10 +34,16 @@ export interface SandboxedCliLaunch extends SandboxLaunch {
  * `allowDefaultHosts: false` restores the strict behaviour for anyone who wants it.
  */
 export function resolveSupervisorAllowedHosts(cwd: string, agentDir: string): readonly string[] | undefined {
-	const network = SettingsManager.create(cwd, agentDir, { projectTrusted: false }).getNetworkSettings();
+	const settings = SettingsManager.create(cwd, agentDir, { projectTrusted: false });
+	const network = settings.getNetworkSettings();
 	const configured = network?.allowedHosts ?? [];
 	if (network?.allowDefaultHosts === false) return configured;
-	return [...new Set([...resolveDefaultAllowedHosts(), ...configured])];
+	// The configured `web_search` backend's host, added only when a credential for it
+	// is present. Without this the tool would be configured and still unreachable,
+	// which reads as a broken search rather than a missing allowlist entry. Nothing is
+	// opened for a user who never set the key.
+	const webSearchHost = resolveWebSearchHost(settings.getWebSearchSettings());
+	return [...new Set([...resolveDefaultAllowedHosts(), ...configured, ...(webSearchHost ? [webSearchHost] : [])])];
 }
 
 /**
@@ -202,10 +209,17 @@ const SAFE_PROVIDER_CREDENTIAL_KEYS = new Set([
 	"AWS_REGION",
 ]);
 
+// Credentials for tools rather than model providers. Separate from the provider set
+// above so the provider list stays a mirror of the documented provider reference.
+const SAFE_TOOL_CREDENTIAL_KEYS = new Set(["EXA_API_KEY"]);
+
 function buildChildEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 	return Object.fromEntries(
 		Object.entries(environment).filter(
-			([key]) => SAFE_CHILD_ENVIRONMENT_KEYS.has(key) || SAFE_PROVIDER_CREDENTIAL_KEYS.has(key),
+			([key]) =>
+				SAFE_CHILD_ENVIRONMENT_KEYS.has(key) ||
+				SAFE_PROVIDER_CREDENTIAL_KEYS.has(key) ||
+				SAFE_TOOL_CREDENTIAL_KEYS.has(key),
 		),
 	);
 }

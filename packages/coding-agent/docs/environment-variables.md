@@ -22,6 +22,7 @@ subprocess metadata. Provider API-key variables remain documented in
 | `APEX_CODE_SHARE_VIEWER_URL` | Optional base URL for preview links after `/share`; unset returns the GitHub Gist URL only |
 | `VISUAL`, `EDITOR` | External editor fallback |
 | `HTTP_PROXY`, `HTTPS_PROXY` | Proxy outbound HTTP requests |
+| `EXA_API_KEY` | Key for the `web_search` tool's Exa backend; unset leaves `web_search` unconfigured |
 
 The CLI and RPC entry points set `APEX_CODE_CODING_AGENT=true`. Commands run through
 the built-in bash tool receive `APEX_CODE_SESSION_ID`, `APEX_CODE_SESSION_FILE`,

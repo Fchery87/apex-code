@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+- `web_search` now has a backend. The tool has been registered in every session since Phase 4
+  but no search vendor was ever wired in, so the model would pick it when a search would help
+  and get an error telling it to pass a TypeScript SDK option — advice aimed at an embedder,
+  not at the person who asked the agent to look something up. An Exa backend now ships behind
+  the same `WebSearchOperations` seam that was already there. Set `EXA_API_KEY` and it works
+  with no further configuration; `webSearch.apiKey` in settings points at a different variable
+  or a secret manager (`!op read ...`) when you want one. The credential is resolved per search
+  rather than at session start, so it never goes stale mid-session. The backend's host is added
+  to the sandbox network allowlist automatically once a credential exists, so
+  `network.allowedHosts` needs no entry for it, and nothing is opened for anyone who never sets
+  a key. When no key resolves the tool still fails loudly rather than returning zero results.
+
+- `grep` and `ls` now report how many results exist, not just where they stopped. Truncated
+  output said `200 matches limit reached`, which tells an agent it hit a wall but not whether
+  it saw 200 of 204 or 200 of 20,000 — so the usual next move was another call with a bigger
+  limit purely to find out. Both now say `200 of 847 total matches shown`, and the follow-up
+  call is only spent when it is actually worth spending. `ls` had the number in hand already.
+  `grep` gets it from ripgrep's own closing summary, which means the search now runs to
+  completion instead of being killed at the limit; the tail of an rg scan is far cheaper than
+  the model round trip it replaces. `find` is unchanged, because `fd` caps at the source and
+  an exact total there would mean a second full traversal.
+
 ## [0.0.1-alpha.7] - 2026-08-21
 
 - The permission mode is now switchable from `/settings` instead of only at launch through

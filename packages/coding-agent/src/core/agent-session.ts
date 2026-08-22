@@ -126,6 +126,7 @@ import { createSkillSearchToolDefinition } from "./tools/skill-search.ts";
 import { createTodoWriteToolDefinition } from "./tools/todo-write.ts";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
 import { createToolSchemaToolDefinition } from "./tools/tool-schema.ts";
+import type { WebSearchOperations } from "./tools/web-search.ts";
 import { addUsageToTotals, createUsageTotals } from "./usage-totals.ts";
 
 // ============================================================================
@@ -267,6 +268,12 @@ export interface AgentSessionConfig {
 	 * `baseToolsOverride` is set.
 	 */
 	lspOperations?: LspOperations;
+	/**
+	 * Optional `web_search` backend. Absent leaves the tool on its unconfigured
+	 * operations, which throw a model-readable "not configured" error rather than
+	 * returning zero results. Ignored when `baseToolsOverride` is set.
+	 */
+	webSearchOperations?: WebSearchOperations;
 }
 
 export interface ExtensionBindings {
@@ -399,6 +406,7 @@ export class AgentSession {
 	private _evidenceSink?: EvidenceSink;
 	private _diagnosticsOperations?: DiagnosticsOperations;
 	private _lspOperations?: LspOperations;
+	private _webSearchOperations?: WebSearchOperations;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionMode: ExtensionMode = "print";
 	private _extensionCommandContextActions?: ExtensionCommandContextActions;
@@ -440,6 +448,7 @@ export class AgentSession {
 		this._evidenceSink = config.evidenceSink ?? new SessionEvidenceSink(this.sessionManager);
 		this._diagnosticsOperations = config.diagnosticsOperations;
 		this._lspOperations = config.lspOperations;
+		this._webSearchOperations = config.webSearchOperations;
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, extensions, auto-compaction, retry logic)
@@ -2753,6 +2762,7 @@ export class AgentSession {
 					edit: { diagnosticsOperations: this._diagnosticsOperations },
 					write: { diagnosticsOperations: this._diagnosticsOperations },
 					...(this._lspOperations ? { lsp: { operations: this._lspOperations } } : {}),
+					...(this._webSearchOperations ? { web_search: { operations: this._webSearchOperations } } : {}),
 				});
 		baseToolDefinitions.tool_schema = createToolSchemaToolDefinition({
 			getTool: (name) => {

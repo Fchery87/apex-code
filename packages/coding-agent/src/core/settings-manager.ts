@@ -99,6 +99,22 @@ export interface NetworkSettings {
 	allowDefaultHosts?: boolean;
 }
 
+/**
+ * Backend for the `web_search` tool. Unset leaves the tool registered but
+ * unconfigured, which is what it has been since Phase 4 shipped it.
+ *
+ * `apiKey` is a config-value reference (`"$EXA_API_KEY"`, or `"!op read ..."`),
+ * resolved by `resolveConfigValue` exactly like a model provider's key. A literal
+ * key must never be written here: settings are a file this loader writes back.
+ */
+export interface WebSearchSettings {
+	provider?: "exa";
+	apiKey?: string; // default: the provider's own env var, e.g. "$EXA_API_KEY"
+	numResults?: number;
+	snippetMaxCharacters?: number;
+	endpoint?: string; // override for an API-compatible endpoint
+}
+
 export interface Settings {
 	lastChangelogVersion?: string;
 	defaultProvider?: string;
@@ -152,6 +168,7 @@ export interface Settings {
 	delegationMaxDepth?: number; // Max delegation recursion depth (roadmap Phase 5, task 5.3). default: 2, hard-capped at DELEGATION_MAX_DEPTH_HARD_CAP
 	observability?: ObservabilitySettings;
 	lsp?: LspSettings;
+	webSearch?: WebSearchSettings;
 }
 
 /**
@@ -843,6 +860,10 @@ export class SettingsManager {
 
 	getLspSettings(): LspSettings | undefined {
 		return this.settings.lsp === undefined ? undefined : structuredClone(this.settings.lsp);
+	}
+
+	getWebSearchSettings(): WebSearchSettings | undefined {
+		return this.settings.webSearch === undefined ? undefined : structuredClone(this.settings.webSearch);
 	}
 
 	getBranchSummarySkipPrompt(): boolean {
