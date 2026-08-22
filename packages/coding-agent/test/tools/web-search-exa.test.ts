@@ -86,7 +86,12 @@ describe("Exa web search request shape", () => {
 
 		expect(endpoint.requests[0]?.body).toMatchObject({
 			numResults: 3,
-			contents: { text: { maxCharacters: 250 } },
+			contents: {
+				// Highlights are query-relevant excerpts; text is the fallback when a page
+				// yields none.
+				highlights: { query: "anything", maxCharacters: 250 },
+				text: { maxCharacters: 250 },
+			},
 		});
 	});
 });
@@ -188,5 +193,73 @@ describe("Exa web search failures", () => {
 
 	it("refuses to construct without an API key rather than sending an unauthenticated request", () => {
 		expect(() => createExaWebSearchOperations({ apiKey: "  " })).toThrow(/api key/i);
+	});
+});
+
+describe("Exa web search snippet source", () => {
+	it("prefers query-relevant highlights over the top of the page", async () => {
+		endpoint = await startStubEndpoint(() => ({
+			status: 200,
+			body: {
+				results: [
+					{
+						title: "Doc",
+						url: "https://example.com/doc",
+						// What `contents.text` returns: navigation chrome first.
+						text: "Skip to content Subscribe to RSS Back to all posts. The actual answer is here.",
+						highlights: ["The actual answer is here."],
+					},
+				],
+			},
+		}));
+		const operations = createExaWebSearchOperations({ apiKey: "k", endpoint: endpoint.url });
+
+		const [result] = await operations.search("what is the answer");
+
+		expect(result?.snippet).toBe("The actual answer is here.");
+		expect(result?.snippet).not.toContain("Skip to content");
+	});
+
+	it("joins multiple highlights so the gaps between passages are visible", async () => {
+		endpoint = await startStubEndpoint(() => ({
+			status: 200,
+			body: {
+				results: [{ title: "T", url: "https://example.com/t", highlights: ["First passage.", "Second passage."] }],
+			},
+		}));
+		const operations = createExaWebSearchOperations({ apiKey: "k", endpoint: endpoint.url });
+
+		const [result] = await operations.search("q");
+
+		expect(result?.snippet).toBe("First passage. … Second passage.");
+	});
+
+	it("falls back to page text when a result yields no highlights", async () => {
+		endpoint = await startStubEndpoint(() => ({
+			status: 200,
+			body: { results: [{ title: "T", url: "https://example.com/t", text: "Body text.", highlights: [] }] },
+		}));
+		const operations = createExaWebSearchOperations({ apiKey: "k", endpoint: endpoint.url });
+
+		const [result] = await operations.search("q");
+
+		expect(result?.snippet).toBe("Body text.");
+	});
+
+	it("still truncates and collapses whitespace in a highlight", async () => {
+		endpoint = await startStubEndpoint(() => ({
+			status: 200,
+			body: { results: [{ title: "T", url: "https://example.com/t", highlights: [`a\n\n  b${"c".repeat(400)}`] }] },
+		}));
+		const operations = createExaWebSearchOperations({
+			apiKey: "k",
+			endpoint: endpoint.url,
+			snippetMaxCharacters: 20,
+		});
+
+		const [result] = await operations.search("q");
+
+		expect(result?.snippet.length).toBeLessThanOrEqual(20);
+		expect(result?.snippet).not.toContain("\n");
 	});
 });

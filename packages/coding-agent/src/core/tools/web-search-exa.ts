@@ -26,11 +26,15 @@ export interface ExaWebSearchOptions {
 	snippetMaxCharacters?: number;
 }
 
+/** Separator between highlights, which are non-contiguous passages rather than prose. */
+const HIGHLIGHT_SEPARATOR = " … ";
+
 /** The subset of Exa's `/search` response this adapter reads. */
 interface ExaSearchResult {
 	title?: string | null;
 	url?: string | null;
 	text?: string | null;
+	highlights?: string[] | null;
 }
 
 interface ExaSearchResponse {
@@ -50,14 +54,29 @@ function hostOf(endpoint: string): string {
 }
 
 /**
- * Page text arrives with the source document's line structure intact. Collapsing it
- * to a single line costs nothing in meaning and keeps a ten-result list readable as
- * a list rather than ten wrapped blocks.
+ * Text arrives with the source document's line structure intact. Collapsing it to a
+ * single line costs nothing in meaning and keeps a ten-result list readable as a list
+ * rather than ten wrapped blocks.
  */
 function toSnippet(text: string | null | undefined, maxCharacters: number): string {
 	if (!text) return "";
 	const collapsed = text.replace(/\s+/g, " ").trim();
 	return collapsed.length > maxCharacters ? collapsed.slice(0, maxCharacters) : collapsed;
+}
+
+/**
+ * Prefer highlights, fall back to page text.
+ *
+ * `contents.text` returns the top of the document, which on a real page is navigation
+ * chrome and a repeat of the title before any content. Highlights are the passages Exa
+ * judged relevant to the query, so they are both shorter and more useful. Text remains
+ * the fallback because a page can yield no highlights, and an empty snippet is worse
+ * than a boilerplate one.
+ */
+function snippetFor(result: ExaSearchResult, maxCharacters: number): string {
+	const highlights = (result.highlights ?? []).map((highlight) => highlight?.trim()).filter(Boolean);
+	if (highlights.length > 0) return toSnippet(highlights.join(HIGHLIGHT_SEPARATOR), maxCharacters);
+	return toSnippet(result.text, maxCharacters);
 }
 
 function toWebSearchResults(payload: ExaSearchResponse, maxCharacters: number): WebSearchResult[] {
@@ -66,7 +85,7 @@ function toWebSearchResults(payload: ExaSearchResponse, maxCharacters: number): 
 		const url = result?.url?.trim();
 		// A result the model cannot cite or fetch is worse than one fewer result.
 		if (!url) continue;
-		results.push({ title: result.title?.trim() || url, url, snippet: toSnippet(result.text, maxCharacters) });
+		results.push({ title: result.title?.trim() || url, url, snippet: snippetFor(result, maxCharacters) });
 	}
 	return results;
 }
@@ -100,7 +119,13 @@ export function createExaWebSearchOperations(options: ExaWebSearchOptions): WebS
 					body: JSON.stringify({
 						query,
 						numResults,
-						contents: { text: { maxCharacters: snippetMaxCharacters } },
+						contents: {
+							// `query` steers which passages Exa picks. The deprecated
+							// `numSentences` and `highlightsPerUrl` options are deliberately
+							// unused; the latter is documented as ignored.
+							highlights: { query, maxCharacters: snippetMaxCharacters },
+							text: { maxCharacters: snippetMaxCharacters },
+						},
 					}),
 					signal,
 				});

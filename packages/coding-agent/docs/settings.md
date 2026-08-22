@@ -101,7 +101,7 @@ below only matter if you want to override a default.
 | `webSearch.provider` | string | `"exa"` | Search backend. `"exa"` is the only value today. |
 | `webSearch.apiKey` | string | `"$EXA_API_KEY"` | Where to read the key from. Must be a reference: `$VAR`, `${VAR}`, or `!command`. A literal key is refused, because `<project>/.apex-code/settings.json` is versioned and shared with your team. |
 | `webSearch.numResults` | number | `10` | Results requested per search (1-100). |
-| `webSearch.snippetMaxCharacters` | number | `800` | Per-result snippet budget. Higher costs context on every search. |
+| `webSearch.snippetMaxCharacters` | number | `800` | Per-result snippet budget. Snippets come from query-relevant highlights, falling back to page text. Higher costs context on every search. |
 | `webSearch.endpoint` | string | `https://api.exa.ai/search` | Override for an API-compatible endpoint. |
 
 ```json
