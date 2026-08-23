@@ -25,7 +25,9 @@ afterEach(async () => {
 	for (const directory of directories.splice(0)) rmSync(directory, { force: true, recursive: true });
 });
 
-describe("agent session services credential channel wiring", () => {
+// Windows has no unix domain socket at a filesystem path; net.listen() there needs a
+// named pipe, so the channel and every test that binds it are POSIX-only (ADR 0005).
+describe.skipIf(process.platform === "win32")("agent session services credential channel wiring", () => {
 	it("routes a runtime login through the advertised channel store", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apex-channel-runtime-"));
 		directories.push(cwd);

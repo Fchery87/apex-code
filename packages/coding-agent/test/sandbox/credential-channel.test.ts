@@ -66,7 +66,9 @@ function request(socketPath: string, payload: unknown): Promise<ChannelResult> {
 	});
 }
 
-describe("createCredentialProxy", () => {
+// Windows has no unix domain socket at a filesystem path; net.listen() there needs a
+// named pipe, so the channel and every test that binds it are POSIX-only (ADR 0005).
+describe.skipIf(process.platform === "win32")("createCredentialProxy", () => {
 	it("writes a literal credential to the host credential file and audits the write", async () => {
 		const directory = scratch();
 		const authPath = authFile(directory);
@@ -199,7 +201,7 @@ describe("createCredentialProxy", () => {
 	});
 });
 
-describe("SandboxAuthStorage", () => {
+describe.skipIf(process.platform === "win32")("SandboxAuthStorage", () => {
 	it("writes through the channel while reads stay on the local read-only file", async () => {
 		const directory = scratch();
 		const authPath = authFile(directory, { "test-provider": { type: "api_key", key: "current" } });
