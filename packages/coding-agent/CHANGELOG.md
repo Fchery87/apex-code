@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+- A custom system prompt no longer throws away what the active tools contribute. Setting one,
+  with `--system-prompt` or a discovered `SYSTEM.md`, replaced the entire prompt: not only the
+  Apex-authored prose it is meant to replace, but also the Available tools list and every
+  guideline the registered tools and extensions add. A session started that way sent the model
+  a bare handful of lines, so guidance like preferring `grep` over `bash` for searching simply
+  never arrived, and the model had no prose inventory of its own tools. The replay harness had
+  been computing both and passing them alongside the custom prompt since it was written, which
+  is how the drop surfaced. A custom prompt now replaces the Apex-authored prose only. Tool
+  snippets, tool guidelines, project context, skills, and the working directory are all still
+  delivered, because none of them are the prompt's text to override. This adds about 237 tokens
+  to a custom-prompt session that registers the full tool set, and the enforced static-prefix
+  budget was re-measured accordingly.
+
 - `web_search` now has a backend. The tool has been registered in every session since Phase 4
   but no search vendor was ever wired in, so the model would pick it when a search would help
   and get an error telling it to pass a TypeScript SDK option — advice aimed at an embedder,
