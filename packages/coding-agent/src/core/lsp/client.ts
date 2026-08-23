@@ -173,6 +173,11 @@ export class LspClient {
 
 	notify(method: string, params?: unknown): void {
 		if (this.failure) throw this.failure;
+		const exitFailure = this.childExitFailure();
+		if (exitFailure) {
+			this.fail(exitFailure);
+			throw exitFailure;
+		}
 		if (this.state !== "ready") throw new Error("Language server is not ready.");
 		void this.enqueueWrite({ jsonrpc: "2.0", method, ...(params === undefined ? {} : { params }) }).catch((error) => {
 			this.fail(normalizeError(error));
@@ -211,7 +216,9 @@ export class LspClient {
 		this.stdout = child.stdout;
 		this.stdout.on("data", (chunk: Buffer | string) => this.onData(chunk));
 		child.stderr?.on("data", (chunk: Buffer | string) => this.captureStderr(chunk));
-		child.stdin.on("error", (error) => this.fail(error));
+		child.stdin.on("error", (error) => {
+			void this.writeFailure(error).then((failure) => this.fail(failure));
+		});
 		child.once("error", (error) => this.fail(error));
 		child.once("exit", (code, signal) => {
 			if (this.state !== "closing" && this.state !== "closed") {
@@ -298,6 +305,11 @@ export class LspClient {
 		allowClosing = false,
 	): Promise<unknown> {
 		if (this.failure && !allowClosing) return Promise.reject(this.failure);
+		const exitFailure = this.childExitFailure();
+		if (exitFailure && !allowClosing) {
+			this.fail(exitFailure);
+			return Promise.reject(exitFailure);
+		}
 		if ((!allowClosing && (this.state === "closing" || this.state === "closed")) || this.state === "failed") {
 			return Promise.reject(this.failure ?? new Error("Language server client is disposed."));
 		}
@@ -364,7 +376,7 @@ export class LspClient {
 			};
 			const onError = (error: Error) => {
 				cleanup();
-				reject(error);
+				void this.writeFailure(error).then(reject);
 			};
 			const onDrain = () => {
 				waitingForDrain = false;
@@ -515,6 +527,19 @@ export class LspClient {
 	private rejectPending(error: Error): void {
 		for (const request of this.pending.values()) request.reject(error);
 		this.pending.clear();
+	}
+
+	private childExitFailure(): Error | undefined {
+		const child = this.child;
+		if (!child || (child.exitCode === null && child.signalCode === null)) return undefined;
+		return new Error(`Language server exited before shutdown (code=${child.exitCode} signal=${child.signalCode}).`);
+	}
+
+	private async writeFailure(error: Error): Promise<Error> {
+		const exitFailure = this.childExitFailure();
+		if (exitFailure || (error as NodeJS.ErrnoException).code !== "EPIPE" || !this.child) return exitFailure ?? error;
+		await Promise.race([new Promise<void>((resolve) => this.child?.once("exit", () => resolve())), delay(1_000)]);
+		return this.childExitFailure() ?? error;
 	}
 
 	private fail(error: Error): void {

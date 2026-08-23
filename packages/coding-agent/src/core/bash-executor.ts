@@ -10,6 +10,7 @@ import { randomBytes } from "node:crypto";
 import { createWriteStream, type WriteStream } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { finished } from "node:stream/promises";
 import { stripAnsi } from "../utils/ansi.ts";
 import { sanitizeBinaryOutput } from "../utils/shell.ts";
 import type { BashOperations } from "./tools/bash.ts";
@@ -104,6 +105,12 @@ export async function executeBashWithOperations(
 		}
 	};
 
+	const closeTempFile = async () => {
+		if (!tempFileStream) return;
+		tempFileStream.end();
+		await finished(tempFileStream);
+	};
+
 	try {
 		const result = await operations.exec(command, cwd, {
 			onData,
@@ -115,9 +122,7 @@ export async function executeBashWithOperations(
 		if (truncationResult.truncated) {
 			ensureTempFile();
 		}
-		if (tempFileStream) {
-			tempFileStream.end();
-		}
+		await closeTempFile();
 		const cancelled = options?.signal?.aborted ?? false;
 
 		return {
@@ -135,9 +140,7 @@ export async function executeBashWithOperations(
 			if (truncationResult.truncated) {
 				ensureTempFile();
 			}
-			if (tempFileStream) {
-				tempFileStream.end();
-			}
+			await closeTempFile();
 			return {
 				output: truncationResult.truncated ? truncationResult.content : fullOutput,
 				exitCode: undefined,
@@ -147,9 +150,7 @@ export async function executeBashWithOperations(
 			};
 		}
 
-		if (tempFileStream) {
-			tempFileStream.end();
-		}
+		await closeTempFile();
 
 		throw err;
 	}

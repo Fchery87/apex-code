@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Author | `Apex Code` |
-| Status | `Active` |
+| Status | `Complete` |
 | Created | `2026-08-23` |
 | Last updated | `2026-08-23` |
 | Roadmap phase | `none — product-surface follow-up after Phase 12` |
@@ -25,7 +25,7 @@ Apex Code will make tool work and operating state easier to scan in the terminal
 
 No roadmap phase owns this refinement. All numbered phases are landed, so this is recorded as a product-surface follow-up rather than reopening a completed phase.
 
-## Current state
+## Prior state
 
 `ToolExecutionComponent` composes extension or built-in call/result renderers inside a background box. It tracks partial arguments, execution start, partial results, final results, errors, image rendering, and global expansion. The lifecycle is mostly implicit in background color. Several built-in renderers add their own expansion hint, so disclosure copy varies and can repeat.
 
@@ -57,19 +57,19 @@ The remaining interaction details are fragmented. Long errors can take over the 
 
 ## Goals
 
-- [ ] Every ordinary tool row names one lifecycle state in text: `queued`, `running`, `done`, or `error`; symbols and color are secondary channels.
-- [ ] Completed tool rows are visually quiet. Running, warning, error, and permission states retain emphasis.
-- [ ] Collapsed results expose a compact summary and at most one expansion hint per tool component.
-- [ ] Tool rows stay within width at narrow and wide terminal sizes and retain extension renderer compatibility, images, and self-rendered shells.
-- [ ] Default compact footer output is one responsive tray row. Permission mode and context pressure survive before model, thinking, tokens, cache, cost, provider, CWD, branch, and session details.
-- [ ] `tokenUsageDisplay: "full"` remains an explicit detailed usage view, and `off` still hides token and cost data without hiding model/context safety state.
-- [ ] Long tool errors are bounded while collapsed and fully visible after expansion.
-- [ ] Running work exposes a stable elapsed label without decorative animation.
-- [ ] Delegated work has a compact parent-level summary that does not duplicate child transcripts.
-- [ ] Contextual hints appear only on relevant first-use events and never replace safety state.
-- [ ] Composer polish remains Apex-owned and works through the public `pi-tui` API. Unsupported filled-background behavior is not simulated unsafely.
-- [ ] A common configuration entry point makes existing provider, model, MCP, and settings controls findable without replacing their established commands.
-- [ ] ASCII symbols, color-blind mode, authentication/model errors, sandbox state, and extension statuses remain compatible and visible.
+- [x] Every ordinary tool row names one lifecycle state in text: `queued`, `running`, `done`, or `error`; symbols and color are secondary channels.
+- [x] Completed tool rows are visually quiet. Running, warning, error, and permission states retain emphasis.
+- [x] Collapsed results expose a compact summary and at most one expansion hint per tool component.
+- [x] Tool rows stay within width at narrow and wide terminal sizes and retain extension renderer compatibility, images, and self-rendered shells.
+- [x] Default compact footer output is one responsive tray row. Permission mode and context pressure survive before model, thinking, tokens, cache, cost, provider, CWD, branch, and session details.
+- [x] `tokenUsageDisplay: "full"` remains an explicit detailed usage view, and `off` still hides token and cost data without hiding model/context safety state.
+- [x] Long tool errors are bounded while collapsed and fully visible after expansion.
+- [x] Running work exposes a stable elapsed label without decorative animation.
+- [x] Delegated work has a compact parent-level summary that does not duplicate child transcripts.
+- [x] Contextual hints appear only on relevant first-use events and never replace safety state.
+- [x] Composer polish remains Apex-owned and works through the public `pi-tui` API. Unsupported filled-background behavior is not simulated unsafely.
+- [x] A common configuration entry point makes existing provider, model, MCP, and settings controls findable without replacing their established commands.
+- [x] ASCII symbols, color-blind mode, authentication/model errors, sandbox state, and extension statuses remain compatible and visible.
 
 ## Non-goals
 

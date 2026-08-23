@@ -903,11 +903,10 @@ build, check, and the full root test suite from the asserted spaced checkout in
 [CI run 31940072123](https://github.com/Fchery87/apex-code/actions/runs/31940072123).
 See the [spec](specs/2026-08-16-complete-apex-product-surface.md) for the durable outcome.
 
-**Product-surface follow-up (2026-08-23).** Terminal interaction polish is active without
+**Product-surface follow-up (2026-08-23).** Terminal interaction polish is complete without
 reopening Phase 10: explicit tool lifecycle cards, a responsive safety-first status tray,
 bounded disclosure, delegation summaries, contextual hints, composer refinement, and a
-common configuration index. See the [spec](specs/2026-08-23-terminal-interaction-polish.md)
-and [live plan](plans/2026-08-23-terminal-interaction-polish.md).
+common configuration index. See the durable [spec](specs/2026-08-23-terminal-interaction-polish.md).
 
 ---
 
