@@ -1,5 +1,5 @@
 import { join, resolve } from "node:path";
-import { Text, type TUI } from "@earendil-works/pi-tui";
+import { Text, type TUI, visibleWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { beforeAll, describe, expect, test } from "vitest";
 import { getReadmePath } from "../src/config.ts";
@@ -33,6 +33,90 @@ function createFakeTui(): TUI {
 describe("ToolExecutionComponent parity", () => {
 	beforeAll(() => {
 		initTheme("dark");
+	});
+
+	test("names queued, running, done, and error lifecycle states in text", () => {
+		const component = new ToolExecutionComponent(
+			"custom_tool",
+			"tool-lifecycle",
+			{ target: "notes.txt" },
+			{},
+			createBaseToolDefinition(),
+			createFakeTui(),
+			process.cwd(),
+		);
+
+		expect(stripAnsi(component.render(120).join("\n"))).toContain("queued");
+
+		component.markExecutionStarted();
+		expect(stripAnsi(component.render(120).join("\n"))).toContain("running");
+
+		component.updateResult({ content: [{ type: "text", text: "done" }], details: {}, isError: false }, false);
+		const done = stripAnsi(component.render(120).join("\n"));
+		expect(done).toContain("done");
+		expect(done).not.toContain("running");
+
+		component.updateResult({ content: [{ type: "text", text: "failed" }], details: {}, isError: true }, false);
+		const error = stripAnsi(component.render(120).join("\n"));
+		expect(error).toContain("error");
+		expect(error).not.toContain("done ·");
+	});
+
+	test("uses ASCII lifecycle markers when requested", () => {
+		const component = new ToolExecutionComponent(
+			"custom_tool",
+			"tool-ascii-lifecycle",
+			{},
+			{ symbolPreset: "ascii" },
+			createBaseToolDefinition(),
+			createFakeTui(),
+			process.cwd(),
+		);
+		component.markExecutionStarted();
+
+		const rendered = stripAnsi(component.render(120).join("\n"));
+		expect(rendered).toContain("[~] running");
+		for (const char of rendered) {
+			expect(char.codePointAt(0)).toBeLessThanOrEqual(0x7f);
+		}
+	});
+
+	test("renders one component-owned disclosure hint when a result is collapsed", () => {
+		const component = new ToolExecutionComponent(
+			"read",
+			"tool-one-hint",
+			{ path: "notes.txt" },
+			{},
+			createReadToolDefinition(process.cwd()),
+			createFakeTui(),
+			process.cwd(),
+		);
+		component.updateResult({ content: [{ type: "text", text: "hidden" }], isError: false }, false);
+
+		const collapsed = stripAnsi(component.render(120).join("\n"));
+		expect(collapsed.match(/to expand/g)).toHaveLength(1);
+
+		component.setExpanded(true);
+		expect(stripAnsi(component.render(120).join("\n"))).not.toContain("to expand");
+	});
+
+	test("keeps lifecycle cards within the requested width", () => {
+		const component = new ToolExecutionComponent(
+			"custom_tool_with_a_long_name",
+			"tool-narrow-card",
+			{ value: "x".repeat(200) },
+			{},
+			createBaseToolDefinition("custom_tool_with_a_long_name"),
+			createFakeTui(),
+			process.cwd(),
+		);
+		component.markExecutionStarted();
+
+		for (const width of [1, 2, 8, 16, 32, 80]) {
+			for (const line of component.render(width)) {
+				expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+			}
+		}
 	});
 
 	test("stacks custom call and result renderers like the old implementation", () => {
@@ -185,8 +269,8 @@ describe("ToolExecutionComponent parity", () => {
 
 		const rendered = stripAnsi(component.render(200).join("\n"));
 		expect(rendered.match(/Full output:/g)?.length ?? 0).toBe(1);
-		expect(rendered).toMatch(/line-4000[^\n]*\n[^\S\n]*\n \[Full output:/);
-		expect(rendered).not.toMatch(/line-4000[^\n]*\n[^\S\n]*\n[^\S\n]*\n \[Full output:/);
+		expect(rendered).toMatch(/line-4000[^\n]*\n[^\S\n]*\n[^\S\n]*\[Full output:/);
+		expect(rendered).not.toMatch(/line-4000[^\n]*\n[^\S\n]*\n[^\S\n]*\n[^\S\n]*\[Full output:/);
 		expect(rendered).toContain("Truncated: showing 2000 of 4000 lines");
 		expect(rendered).not.toContain("[Showing lines 2001-4000 of 4000. Full output:");
 	});

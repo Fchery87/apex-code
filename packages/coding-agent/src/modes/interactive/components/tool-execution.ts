@@ -5,10 +5,13 @@ import { createAllToolDefinitions, type ToolName } from "../../../core/tools/ind
 import { getTextOutput as getRenderedTextOutput } from "../../../core/tools/render-utils.ts";
 import { convertToPng } from "../../../utils/image-convert.ts";
 import { theme } from "../theme/theme.ts";
+import { keyHint } from "./keybinding-hints.ts";
+import { type ToolLifecycle, ToolStatusLineComponent, type ToolSymbolPreset } from "./tool-panel.ts";
 
 export interface ToolExecutionOptions {
 	showImages?: boolean;
 	imageWidthCells?: number;
+	symbolPreset?: ToolSymbolPreset;
 }
 
 export class ToolExecutionComponent extends Container {
@@ -32,7 +35,10 @@ export class ToolExecutionComponent extends Container {
 	private ui: TUI;
 	private cwd: string;
 	private executionStarted = false;
+	private executionStartedAt?: number;
+	private executionEndedAt?: number;
 	private argsComplete = false;
+	private symbolPreset: ToolSymbolPreset;
 	private result?: {
 		content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
 		isError: boolean;
@@ -58,6 +64,7 @@ export class ToolExecutionComponent extends Container {
 		this.builtInToolDefinition = createAllToolDefinitions(cwd)[toolName as ToolName];
 		this.showImages = options.showImages ?? true;
 		this.imageWidthCells = options.imageWidthCells ?? 60;
+		this.symbolPreset = options.symbolPreset ?? "unicode";
 		this.ui = ui;
 		this.cwd = cwd;
 
@@ -152,6 +159,7 @@ export class ToolExecutionComponent extends Container {
 
 	markExecutionStarted(): void {
 		this.executionStarted = true;
+		this.executionStartedAt ??= Date.now();
 		this.updateDisplay();
 		this.ui.requestRender();
 	}
@@ -172,6 +180,7 @@ export class ToolExecutionComponent extends Container {
 	): void {
 		this.result = result;
 		this.isPartial = isPartial;
+		if (!isPartial) this.executionEndedAt ??= Date.now();
 		this.updateDisplay();
 		this.maybeConvertImagesForKitty();
 	}
@@ -219,36 +228,54 @@ export class ToolExecutionComponent extends Container {
 		this.updateDisplay();
 	}
 
+	private getLifecycle(): ToolLifecycle {
+		if (this.result && !this.isPartial) return this.result.isError ? "error" : "done";
+		return this.executionStarted ? "running" : "queued";
+	}
+
+	private getDurationMs(): number | undefined {
+		if (this.executionStartedAt === undefined) return undefined;
+		return (this.executionEndedAt ?? Date.now()) - this.executionStartedAt;
+	}
+
+	private renderWithStatus(component: Component, width: number): string[] {
+		return new ToolStatusLineComponent(component, {
+			lifecycle: this.getLifecycle(),
+			symbolPreset: this.symbolPreset,
+			durationMs: this.getDurationMs(),
+		}).render(width);
+	}
+
+	private renderDisclosureHint(width: number): string[] {
+		if (this.expanded || !this.result || this.isPartial || width <= 0) return [];
+		const hint = keyHint("app.tools.expand", "to expand");
+		return new Text(hint, 0, 0).render(width);
+	}
+
 	override render(width: number): string[] {
-		if (this.hideComponent) {
-			return [];
+		if (this.hideComponent || width <= 0) return [];
+
+		const shell = this.hasRendererDefinition()
+			? this.getRenderShell() === "self"
+				? this.selfRenderContainer
+				: this.contentBox
+			: this.contentText;
+		const contentLines = this.renderWithStatus(shell, width);
+		if (contentLines.length === 0 && this.imageComponents.length === 0) return [];
+
+		const lines: string[] = [];
+		if (contentLines.length > 0) {
+			lines.push("");
+			lines.push(...contentLines);
+			lines.push(...this.renderDisclosureHint(width));
 		}
-
-		if (this.hasRendererDefinition() && this.getRenderShell() === "self") {
-			const contentLines = this.selfRenderContainer.render(width);
-			if (contentLines.length === 0 && this.imageComponents.length === 0) {
-				return [];
-			}
-
-			const lines: string[] = [];
-			if (contentLines.length > 0) {
-				lines.push("");
-				lines.push(...contentLines);
-			}
-			for (let i = 0; i < this.imageComponents.length; i++) {
-				const spacer = this.imageSpacers[i];
-				if (spacer) {
-					lines.push(...spacer.render(width));
-				}
-				const imageComponent = this.imageComponents[i];
-				if (imageComponent) {
-					lines.push(...imageComponent.render(width));
-				}
-			}
-			return lines;
+		for (let i = 0; i < this.imageComponents.length; i++) {
+			const spacer = this.imageSpacers[i];
+			if (spacer) lines.push(...spacer.render(width));
+			const imageComponent = this.imageComponents[i];
+			if (imageComponent) lines.push(...imageComponent.render(width));
 		}
-
-		return super.render(width);
+		return lines;
 	}
 
 	private updateDisplay(): void {
@@ -256,7 +283,7 @@ export class ToolExecutionComponent extends Container {
 			? (text: string) => theme.bg("toolPendingBg", text)
 			: this.result?.isError
 				? (text: string) => theme.bg("toolErrorBg", text)
-				: (text: string) => theme.bg("toolSuccessBg", text);
+				: undefined;
 
 		let hasContent = false;
 		this.hideComponent = false;

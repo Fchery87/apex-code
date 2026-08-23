@@ -218,6 +218,98 @@ export class FooterComponent implements Component {
 			statsParts.unshift(theme.fg(modeColor, this.permissionMode));
 		}
 
+		if (tokenUsageDisplay !== "full") {
+			const separator = theme.fg("dim", symbolPreset === "ascii" ? " - " : " · ");
+			const compactPermissionNames: Record<Exclude<PermissionMode, "default">, string> = {
+				plan: "plan",
+				acceptEdits: "accept",
+				bypassPermissions: "bypass",
+				dontAsk: "dontAsk",
+			};
+			const permissionColor = this.permissionMode === "bypassPermissions" ? "error" : "warning";
+			const permissionFull =
+				this.permissionMode === "default" ? undefined : theme.fg(permissionColor, this.permissionMode);
+			const permissionCompact =
+				this.permissionMode === "default"
+					? undefined
+					: theme.fg(permissionColor, compactPermissionNames[this.permissionMode]);
+			const compactPercent = contextPercent === "?" ? "?" : contextPercentValue.toFixed(0);
+			const compactPressure = contextPercentValue > 90 ? "!!" : contextPercentValue > 70 ? "!" : "";
+			const contextColor =
+				contextPercentValue > 90
+					? colorBlindMode
+						? "accent"
+						: "error"
+					: contextPercentValue > 70
+						? "warning"
+						: "dim";
+			const contextFull = theme.fg(contextColor, `context ${contextPercent}%${pressureMarker}`);
+			const contextCompact = theme.fg(contextColor, `ctx ${compactPercent}%${compactPressure}`);
+
+			const joinSegments = (segments: string[]): string => segments.join(separator);
+			const fits = (segments: string[]): boolean => visibleWidth(joinSegments(segments)) <= width;
+			let left: string[] = permissionFull ? [permissionFull] : [];
+			let right = contextFull;
+
+			if (!fits([...left, right])) {
+				left = permissionCompact ? [permissionCompact] : [];
+				right = contextCompact;
+			}
+
+			if (!fits([...left, right])) {
+				const safetyOnly = left[0] ?? right;
+				const line =
+					visibleWidth(safetyOnly) <= width ? safetyOnly : truncateToWidth(safetyOnly, Math.max(0, width), "");
+				return width > 0 ? [line] : [];
+			}
+
+			const optional: string[] = [];
+			optional.push(theme.fg("dim", state.model?.id || "no-model"));
+			if (state.model?.reasoning && state.thinkingLevel && state.thinkingLevel !== "off") {
+				optional.push(theme.fg("dim", state.thinkingLevel));
+			}
+			if (tokenUsageDisplay !== "off" && (usageTotals.input || usageTotals.output)) {
+				optional.push(
+					theme.fg(
+						"dim",
+						`${upSymbol}${formatTokens(usageTotals.input)} ${downSymbol}${formatTokens(usageTotals.output)}`,
+					),
+				);
+			}
+			if (
+				tokenUsageDisplay !== "off" &&
+				(usageTotals.cacheRead > 0 || usageTotals.cacheWrite > 0) &&
+				latestCacheHitRate !== undefined
+			) {
+				optional.push(theme.fg("dim", `CH${latestCacheHitRate.toFixed(1)}%`));
+			}
+			if (tokenUsageDisplay !== "off" && (usageTotals.cost || usingSubscription)) {
+				optional.push(theme.fg("dim", `$${usageTotals.cost.toFixed(3)}${usingSubscription ? " (sub)" : ""}`));
+			}
+			if (this.footerData.getAvailableProviderCount() > 1 && state.model) {
+				optional.push(theme.fg("dim", state.model.provider));
+			}
+			if (areExperimentalFeaturesEnabled()) optional.push(theme.fg("warning", "xp"));
+			optional.push(theme.fg("dim", pwd));
+
+			for (const segment of optional) {
+				if (fits([...left, segment, right])) left.push(segment);
+			}
+
+			const leftText = joinSegments(left);
+			const padding = " ".repeat(Math.max(1, width - visibleWidth(leftText) - visibleWidth(right)));
+			const tray = leftText ? `${leftText}${padding}${right}` : right;
+			const lines = [tray];
+			const extensionStatuses = this.footerData.getExtensionStatuses();
+			if (extensionStatuses.size > 0) {
+				const sortedStatuses = Array.from(extensionStatuses.entries())
+					.sort(([a], [b]) => a.localeCompare(b))
+					.map(([, text]) => sanitizeStatusText(text));
+				lines.push(truncateToWidth(sortedStatuses.join(" "), width, theme.fg("dim", "...")));
+			}
+			return lines;
+		}
+
 		let statsLeft = statsParts.join(" ");
 
 		// Add model name on the right side, plus thinking level if model supports it

@@ -25,6 +25,8 @@ function createSession(options: {
 	compactionUsage?: AssistantUsage;
 	toolUsage?: AssistantUsage;
 	usingSubscription?: boolean;
+	percent?: number;
+	cwd?: string;
 }): AgentSession {
 	const usage = options.usage;
 	const entries: Array<Record<string, unknown>> = [];
@@ -76,9 +78,9 @@ function createSession(options: {
 		sessionManager: {
 			getEntries: () => entries,
 			getSessionName: () => options.sessionName,
-			getCwd: () => "/tmp/project",
+			getCwd: () => options.cwd ?? "/tmp/project",
 		},
-		getContextUsage: () => ({ contextWindow: 200_000, percent: 12.3 }),
+		getContextUsage: () => ({ contextWindow: 200_000, percent: options.percent ?? 12.3 }),
 		modelRuntime: {
 			isUsingSubscription: () => options.usingSubscription ?? false,
 		},
@@ -115,6 +117,61 @@ describe("formatCwdForFooter", () => {
 describe("FooterComponent width handling", () => {
 	beforeAll(() => {
 		initTheme(undefined, false);
+	});
+
+	it("renders compact mode as one responsive tray row", () => {
+		const session = createSession({
+			sessionName: "session",
+			usage: {
+				input: 12_345,
+				output: 6_789,
+				cacheRead: 1_000,
+				cacheWrite: 500,
+				cost: { total: 1.234 },
+			},
+		});
+		const footer = new FooterComponent(session, createFooterData(2));
+
+		const lines = footer.render(120);
+		expect(lines).toHaveLength(1);
+		const tray = stripAnsi(lines[0]);
+		expect(tray).toContain("test-model");
+		expect(tray).toContain("context 12.3%");
+	});
+
+	it("drops routine metadata before permission and context state", () => {
+		const session = createSession({
+			sessionName: "a very long session name",
+			modelId: "a-very-long-model-name",
+			provider: "a-very-long-provider-name",
+			percent: 95,
+			usage: {
+				input: 12_345,
+				output: 6_789,
+				cacheRead: 1_000,
+				cacheWrite: 500,
+				cost: { total: 1.234 },
+			},
+		});
+		const footer = new FooterComponent(session, createFooterData(2));
+		footer.setPermissionMode("bypassPermissions");
+
+		const tray = stripAnsi(footer.render(42)[0]);
+		expect(tray).toContain("bypassPermissions");
+		expect(tray).toContain("context 95.0%!!");
+		expect(tray).not.toContain("CH");
+		expect(tray).not.toContain("$1.234");
+	});
+
+	it("uses compact safety labels at very narrow widths without clipping them mid-segment", () => {
+		const session = createSession({ sessionName: "", percent: 95 });
+		const footer = new FooterComponent(session, createFooterData(1));
+		footer.setPermissionMode("bypassPermissions");
+
+		const tray = stripAnsi(footer.render(24)[0]);
+		expect(tray).toContain("bypass");
+		expect(tray).toContain("ctx 95%!!");
+		expect(tray).not.toContain("...");
 	});
 
 	it("keeps all lines within width for wide session names", () => {
@@ -186,7 +243,7 @@ describe("FooterComponent width handling", () => {
 		});
 		const footer = new FooterComponent(session, createFooterData(1));
 
-		const statsLine = stripAnsi(footer.render(120)[1]);
+		const statsLine = stripAnsi(footer.render(120).join("\n"));
 		expect(statsLine).toContain("$1.250");
 	});
 
@@ -203,7 +260,7 @@ describe("FooterComponent width handling", () => {
 		});
 		const footer = new FooterComponent(session, createFooterData(1));
 
-		const statsLine = stripAnsi(footer.render(120)[1]);
+		const statsLine = stripAnsi(footer.render(120).join("\n"));
 		expect(statsLine).toContain("CH25.0%");
 	});
 
@@ -221,34 +278,34 @@ describe("FooterComponent width handling", () => {
 		});
 		const footer = new FooterComponent(session, createFooterData(1));
 
-		expect(stripAnsi(footer.render(120)[1])).toContain("$1.234 (sub)");
+		expect(stripAnsi(footer.render(120).join("\n"))).toContain("$1.234 (sub)");
 	});
 
 	it("marks explicitly identified subscription auth", () => {
 		const session = createSession({ sessionName: "", provider: "anthropic", usingSubscription: true });
 		const footer = new FooterComponent(session, createFooterData(1));
 
-		expect(stripAnsi(footer.render(120)[1])).toContain("$0.000 (sub)");
+		expect(stripAnsi(footer.render(120).join("\n"))).toContain("$0.000 (sub)");
 	});
 
 	it("names a non-default permission mode and stays silent on default", () => {
 		const session = createSession({ sessionName: "", provider: "anthropic" });
 		const footer = new FooterComponent(session, createFooterData(1));
 
-		expect(stripAnsi(footer.render(120)[1])).not.toContain("bypassPermissions");
+		expect(stripAnsi(footer.render(120).join("\n"))).not.toContain("bypassPermissions");
 
 		footer.setPermissionMode("bypassPermissions");
-		expect(stripAnsi(footer.render(120)[1])).toContain("bypassPermissions");
+		expect(stripAnsi(footer.render(120).join("\n"))).toContain("bypassPermissions");
 
 		footer.setPermissionMode("plan");
-		const planned = stripAnsi(footer.render(120)[1]);
+		const planned = stripAnsi(footer.render(120).join("\n"));
 		expect(planned).toContain("plan");
 		expect(planned).not.toContain("bypassPermissions");
 
 		// Resetting must clear it. A session swap resyncs through this setter, and a
 		// footer that kept a stale "bypassPermissions" would under-report the mode.
 		footer.setPermissionMode("default");
-		expect(stripAnsi(footer.render(120)[1])).not.toContain("bypassPermissions");
+		expect(stripAnsi(footer.render(120).join("\n"))).not.toContain("bypassPermissions");
 	});
 
 	it("does not mark generic OAuth sign-in as a subscription", () => {
@@ -264,7 +321,7 @@ describe("FooterComponent width handling", () => {
 			},
 		});
 		const footer = new FooterComponent(session, createFooterData(1));
-		const stats = stripAnsi(footer.render(120)[1]);
+		const stats = stripAnsi(footer.render(120).join("\n"));
 
 		expect(stats).toContain("$1.234");
 		expect(stats).not.toContain("(sub)");
