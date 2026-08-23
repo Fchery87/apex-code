@@ -1,7 +1,7 @@
 import { join, resolve } from "node:path";
 import { Text, type TUI, visibleWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { beforeAll, describe, expect, test } from "vitest";
+import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { getReadmePath } from "../src/config.ts";
 import type { ToolDefinition } from "../src/core/extensions/types.ts";
 import { type BashOperations, createBashToolDefinition } from "../src/core/tools/bash.ts";
@@ -33,6 +33,10 @@ function createFakeTui(): TUI {
 describe("ToolExecutionComponent parity", () => {
 	beforeAll(() => {
 		initTheme("dark");
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
 	test("names queued, running, done, and error lifecycle states in text", () => {
@@ -79,6 +83,31 @@ describe("ToolExecutionComponent parity", () => {
 		for (const char of rendered) {
 			expect(char.codePointAt(0)).toBeLessThanOrEqual(0x7f);
 		}
+	});
+
+	test("refreshes running elapsed time and stops after a final result", () => {
+		vi.useFakeTimers();
+		const requestRender = vi.fn();
+		const component = new ToolExecutionComponent(
+			"custom_tool",
+			"tool-elapsed-time",
+			{},
+			{},
+			createBaseToolDefinition(),
+			{ requestRender } as unknown as TUI,
+			process.cwd(),
+		);
+
+		component.markExecutionStarted();
+		requestRender.mockClear();
+		vi.advanceTimersByTime(1000);
+		expect(requestRender).toHaveBeenCalledTimes(1);
+		expect(stripAnsi(component.render(120).join("\n"))).toContain("1.0s");
+
+		component.updateResult({ content: [{ type: "text", text: "done" }], details: {}, isError: false }, false);
+		requestRender.mockClear();
+		vi.advanceTimersByTime(1000);
+		expect(requestRender).not.toHaveBeenCalled();
 	});
 
 	test("renders one component-owned disclosure hint when a result is collapsed", () => {
@@ -618,4 +647,54 @@ describe("ToolExecutionComponent parity", () => {
 			expect(collapsed.indexOf(":120-329")).toBeLessThan(collapsed.indexOf("to expand"));
 		});
 	}
+
+	test("bounds collapsed errors to a small line budget and shows omitted count", () => {
+		const component = new ToolExecutionComponent(
+			"custom_tool",
+			"tool-collapsed-error",
+			{ target: "broken.ts" },
+			{},
+			undefined,
+			createFakeTui(),
+			process.cwd(),
+		);
+
+		const longError =
+			"Error: something failed\n" +
+			Array.from({ length: 20 })
+				.map((_, i) => `  at line ${i}`)
+				.join("\n");
+		component.updateResult({ content: [{ type: "text", text: longError }], details: {}, isError: true }, false);
+		const collapsed = stripAnsi(component.render(120).join("\n"));
+
+		expect(collapsed).toContain("Error: something failed");
+		expect(collapsed.split("\n").length).toBeLessThanOrEqual(7);
+		expect(collapsed).toMatch(/\d+ more lines omitted/);
+		expect(collapsed).toContain("to expand");
+
+		component.updateResult({ content: [{ type: "text", text: longError }], details: {}, isError: true }, true);
+		const expanded = stripAnsi(component.render(120).join("\n"));
+		expect(expanded).toContain("at line 19");
+		expect(expanded).not.toContain("more lines omitted");
+		expect(expanded).not.toContain("to expand");
+	});
+
+	test("short errors are not truncated when collapsed", () => {
+		const component = new ToolExecutionComponent(
+			"custom_tool",
+			"tool-short-error",
+			{ target: "ok.ts" },
+			{},
+			undefined,
+			createFakeTui(),
+			process.cwd(),
+		);
+		const shortError = "Error: small failure\n  at index.ts:1";
+		component.updateResult({ content: [{ type: "text", text: shortError }], details: {}, isError: true }, false);
+		const collapsed = stripAnsi(component.render(120).join("\n"));
+		expect(collapsed).toContain("Error: small failure");
+		expect(collapsed).toContain("at index.ts:1");
+		expect(collapsed).not.toContain("omitted");
+		expect(collapsed).toContain("to expand");
+	});
 });

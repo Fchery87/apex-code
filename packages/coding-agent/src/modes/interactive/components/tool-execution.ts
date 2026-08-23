@@ -8,6 +8,8 @@ import { theme } from "../theme/theme.ts";
 import { keyHint } from "./keybinding-hints.ts";
 import { type ToolLifecycle, ToolStatusLineComponent, type ToolSymbolPreset } from "./tool-panel.ts";
 
+const COLLAPSED_ERROR_VISUAL_LINE_LIMIT = 3;
+
 export interface ToolExecutionOptions {
 	showImages?: boolean;
 	imageWidthCells?: number;
@@ -37,6 +39,7 @@ export class ToolExecutionComponent extends Container {
 	private executionStarted = false;
 	private executionStartedAt?: number;
 	private executionEndedAt?: number;
+	private elapsedTimer?: ReturnType<typeof setInterval>;
 	private argsComplete = false;
 	private symbolPreset: ToolSymbolPreset;
 	private result?: {
@@ -160,6 +163,7 @@ export class ToolExecutionComponent extends Container {
 	markExecutionStarted(): void {
 		this.executionStarted = true;
 		this.executionStartedAt ??= Date.now();
+		this.startElapsedTimer();
 		this.updateDisplay();
 		this.ui.requestRender();
 	}
@@ -180,9 +184,27 @@ export class ToolExecutionComponent extends Container {
 	): void {
 		this.result = result;
 		this.isPartial = isPartial;
-		if (!isPartial) this.executionEndedAt ??= Date.now();
+		if (!isPartial) {
+			this.executionEndedAt ??= Date.now();
+			this.stopElapsedTimer();
+		}
 		this.updateDisplay();
 		this.maybeConvertImagesForKitty();
+	}
+
+	dispose(): void {
+		this.stopElapsedTimer();
+	}
+
+	private startElapsedTimer(): void {
+		if (this.elapsedTimer) return;
+		this.elapsedTimer = setInterval(() => this.ui.requestRender(), 1000);
+	}
+
+	private stopElapsedTimer(): void {
+		if (!this.elapsedTimer) return;
+		clearInterval(this.elapsedTimer);
+		this.elapsedTimer = undefined;
 	}
 
 	private maybeConvertImagesForKitty(): void {
@@ -252,6 +274,18 @@ export class ToolExecutionComponent extends Container {
 		return new Text(hint, 0, 0).render(width);
 	}
 
+	private renderCollapsedError(contentLines: string[], width: number): string[] {
+		const errorText = this.getTextOutput();
+		if (!errorText || contentLines.length === 0) return contentLines;
+
+		const errorLines = new Text(theme.fg("toolOutput", errorText), 0, 0).render(width);
+		const previewLines = errorLines.slice(0, COLLAPSED_ERROR_VISUAL_LINE_LIMIT);
+		const omittedLines = errorLines.length - previewLines.length;
+		if (omittedLines === 0) return [...contentLines.slice(0, 1), ...previewLines];
+
+		return [...contentLines.slice(0, 1), ...previewLines, theme.fg("muted", `${omittedLines} more lines omitted`)];
+	}
+
 	override render(width: number): string[] {
 		if (this.hideComponent || width <= 0) return [];
 
@@ -261,12 +295,16 @@ export class ToolExecutionComponent extends Container {
 				: this.contentBox
 			: this.contentText;
 		const contentLines = this.renderWithStatus(shell, width);
-		if (contentLines.length === 0 && this.imageComponents.length === 0) return [];
+		const visibleContentLines =
+			this.result?.isError && !this.isPartial && !this.expanded
+				? this.renderCollapsedError(contentLines, width)
+				: contentLines;
+		if (visibleContentLines.length === 0 && this.imageComponents.length === 0) return [];
 
 		const lines: string[] = [];
-		if (contentLines.length > 0) {
+		if (visibleContentLines.length > 0) {
 			lines.push("");
-			lines.push(...contentLines);
+			lines.push(...visibleContentLines);
 			lines.push(...this.renderDisclosureHint(width));
 		}
 		for (let i = 0; i < this.imageComponents.length; i++) {

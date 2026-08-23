@@ -1,6 +1,8 @@
+import { Text } from "@earendil-works/pi-tui";
 import type { AgentToolResult } from "apex-code-agent-core";
 import { minimatch } from "minimatch";
 import { type Static, Type } from "typebox";
+import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import type { DelegationRuntimeOptions } from "../delegation/runtime.ts";
 import { retrieveDelegationResult, runDelegation } from "../delegation/runtime.ts";
 import type { ApexToolDefinition, EvidenceRecord } from "./contract.ts";
@@ -27,6 +29,20 @@ export interface DelegateDetails {
 	task: string;
 	output: string;
 	handle?: string;
+}
+
+function formatDelegateCall(input: DelegateInput, theme: Theme): string {
+	if ("handle" in input) {
+		return `${theme.fg("toolTitle", theme.bold("delegate"))} ${theme.fg("accent", input.agentType)} · retrieve`;
+	}
+	const task = input.task.replace(/\s+/g, " ").trim();
+	return `${theme.fg("toolTitle", theme.bold("delegate"))} ${theme.fg("accent", input.agentType)} · ${theme.fg("toolOutput", task)}`;
+}
+
+function formatDelegateResult(details: DelegateDetails, expanded: boolean, theme: Theme): string {
+	if (expanded) return theme.fg("toolOutput", details.output);
+	const lineCount = details.output ? details.output.split("\n").length : 0;
+	return `${theme.fg("accent", details.agentType)} · ${lineCount} ${lineCount === 1 ? "line" : "lines"}`;
 }
 
 /**
@@ -77,6 +93,16 @@ export function createDelegateToolDefinition(
 					handle: result.handleId,
 				},
 			};
+		},
+		renderCall(input, theme, context) {
+			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+			text.setText(formatDelegateCall(input, theme));
+			return text;
+		},
+		renderResult(result, options, theme, context) {
+			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+			text.setText(formatDelegateResult(result.details, options.expanded, theme));
+			return text;
 		},
 	};
 }

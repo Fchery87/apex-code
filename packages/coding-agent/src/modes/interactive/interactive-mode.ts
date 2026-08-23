@@ -1942,8 +1942,13 @@ export class InteractiveMode {
 		this.compactionQueuedMessages = [];
 		this.streamingComponent = undefined;
 		this.streamingMessage = undefined;
-		this.pendingTools.clear();
+		this.clearPendingTools();
 		this.renderInitialMessages();
+	}
+
+	private clearPendingTools(): void {
+		for (const component of this.pendingTools.values()) component.dispose();
+		this.pendingTools.clear();
 	}
 
 	/**
@@ -3060,7 +3065,7 @@ export class InteractiveMode {
 
 		switch (event.type) {
 			case "agent_start":
-				this.pendingTools.clear();
+				this.clearPendingTools();
 				if (this.settingsManager.getShowTerminalProgress()) {
 					this.ui.terminal.setProgress(true);
 				}
@@ -3191,7 +3196,7 @@ export class InteractiveMode {
 								isError: true,
 							});
 						}
-						this.pendingTools.clear();
+						this.clearPendingTools();
 					} else {
 						// Args are now complete - trigger diff computation for edit tools
 						for (const [, component] of this.pendingTools.entries()) {
@@ -3263,7 +3268,7 @@ export class InteractiveMode {
 					this.streamingComponent = undefined;
 					this.streamingMessage = undefined;
 				}
-				this.pendingTools.clear();
+				this.clearPendingTools();
 
 				this.ui.requestRender();
 				break;
@@ -3550,7 +3555,7 @@ export class InteractiveMode {
 		items: readonly RenderSessionItem[],
 		options: { updateFooter?: boolean; populateHistory?: boolean } = {},
 	): void {
-		this.pendingTools.clear();
+		this.clearPendingTools();
 		const renderedPendingTools = new Map<string, ToolExecutionComponent>();
 		// Cache-miss notices are not persisted; re-derive them from the full entry
 		// list and re-inject them after the assistant messages that paid for them.

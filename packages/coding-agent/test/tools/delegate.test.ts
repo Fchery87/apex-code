@@ -1,7 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { Text } from "@earendil-works/pi-tui";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { DelegationRuntimeOptions } from "../../src/core/delegation/runtime.ts";
 import type { Capability } from "../../src/core/tools/contract.ts";
 import { createDelegateTool, createDelegateToolDefinition } from "../../src/core/tools/delegate.ts";
+import { initTheme, theme } from "../../src/modes/interactive/theme/theme.ts";
+import { stripAnsi } from "../../src/utils/ansi.ts";
 
 /** A runtime fixture that never resolves any agent -- enough to exercise the contract shape without a real child. */
 function inertRuntime(overrides: Partial<DelegationRuntimeOptions> = {}): DelegationRuntimeOptions {
@@ -18,7 +21,39 @@ function inertRuntime(overrides: Partial<DelegationRuntimeOptions> = {}): Delega
 	};
 }
 
+beforeAll(() => {
+	initTheme("dark");
+});
+
 describe("delegate contract (task 4.6: entry point only)", () => {
+	it("renders a compact parent summary without child output while collapsed", () => {
+		const definition = createDelegateToolDefinition(inertRuntime());
+		const call = definition.renderCall?.(
+			{ agentType: "explore", task: "inspect the project configuration" },
+			theme,
+			{} as never,
+		);
+		const result = definition.renderResult?.(
+			{
+				content: [{ type: "text", text: "child transcript\nwith private detail" }],
+				details: {
+					agentType: "explore",
+					task: "inspect the project configuration",
+					output: "child transcript\nwith private detail",
+				},
+			},
+			{ expanded: false, isPartial: false },
+			theme,
+			{} as never,
+		);
+
+		expect(call).toBeInstanceOf(Text);
+		expect(result).toBeInstanceOf(Text);
+		expect(stripAnsi(call?.render(120).join("\n") ?? "")).toContain("explore");
+		const collapsed = stripAnsi(result?.render(120).join("\n") ?? "");
+		expect(collapsed).toContain("2 lines");
+		expect(collapsed).not.toContain("child transcript");
+	});
 	it("declares the delegate capability, ask default, deferred schema, and workflow evidence", () => {
 		const definition = createDelegateToolDefinition(inertRuntime());
 		expect([...definition.contract.capabilities]).toEqual(["delegate"]);
