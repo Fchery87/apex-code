@@ -3,7 +3,7 @@
  * Displays a list of string options with keyboard navigation.
  */
 
-import { Container, getKeybindings, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
+import { Container, fuzzyFilter, getKeybindings, Input, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
 import { theme } from "../theme/theme.ts";
 import { CountdownTimer } from "./countdown-timer.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
@@ -13,10 +13,12 @@ export interface ExtensionSelectorOptions {
 	tui?: TUI;
 	timeout?: number;
 	onToggleToolsExpanded?: () => void;
+	enableSearch?: boolean;
 }
 
 export class ExtensionSelectorComponent extends Container {
 	private options: string[];
+	private filteredOptions: string[];
 	private selectedIndex = 0;
 	private listContainer: Container;
 	private onSelectCallback: (option: string) => void;
@@ -25,6 +27,7 @@ export class ExtensionSelectorComponent extends Container {
 	private baseTitle: string;
 	private countdown: CountdownTimer | undefined;
 	private onToggleToolsExpanded: (() => void) | undefined;
+	private searchInput: Input | undefined;
 
 	constructor(
 		title: string,
@@ -36,6 +39,7 @@ export class ExtensionSelectorComponent extends Container {
 		super();
 
 		this.options = options;
+		this.filteredOptions = options;
 		this.onSelectCallback = onSelect;
 		this.onCancelCallback = onCancel;
 		this.onToggleToolsExpanded = opts?.onToggleToolsExpanded;
@@ -47,6 +51,11 @@ export class ExtensionSelectorComponent extends Container {
 		this.titleText = new Text(theme.fg("accent", theme.bold(title)), 1, 0);
 		this.addChild(this.titleText);
 		this.addChild(new Spacer(1));
+		if (opts?.enableSearch) {
+			this.searchInput = new Input();
+			this.addChild(this.searchInput);
+			this.addChild(new Spacer(1));
+		}
 
 		if (opts?.timeout && opts.timeout > 0 && opts.tui) {
 			this.countdown = new CountdownTimer(
@@ -79,13 +88,20 @@ export class ExtensionSelectorComponent extends Container {
 
 	private updateList(): void {
 		this.listContainer.clear();
-		for (let i = 0; i < this.options.length; i++) {
+		for (let i = 0; i < this.filteredOptions.length; i++) {
 			const isSelected = i === this.selectedIndex;
 			const text = isSelected
-				? theme.fg("accent", "→ ") + theme.fg("accent", this.options[i])
-				: `  ${theme.fg("text", this.options[i])}`;
+				? theme.fg("accent", "→ ") + theme.fg("accent", this.filteredOptions[i])
+				: `  ${theme.fg("text", this.filteredOptions[i])}`;
 			this.listContainer.addChild(new Text(text, 1, 0));
 		}
+	}
+
+	private filterOptions(): void {
+		const query = this.searchInput?.getValue() ?? "";
+		this.filteredOptions = query ? fuzzyFilter(this.options, query, (option) => option) : this.options;
+		this.selectedIndex = 0;
+		this.updateList();
 	}
 
 	handleInput(keyData: string): void {
@@ -96,13 +112,16 @@ export class ExtensionSelectorComponent extends Container {
 			this.selectedIndex = Math.max(0, this.selectedIndex - 1);
 			this.updateList();
 		} else if (kb.matches(keyData, "tui.select.down") || keyData === "j") {
-			this.selectedIndex = Math.min(this.options.length - 1, this.selectedIndex + 1);
+			this.selectedIndex = Math.min(this.filteredOptions.length - 1, this.selectedIndex + 1);
 			this.updateList();
 		} else if (kb.matches(keyData, "tui.select.confirm") || keyData === "\n") {
-			const selected = this.options[this.selectedIndex];
+			const selected = this.filteredOptions[this.selectedIndex];
 			if (selected) this.onSelectCallback(selected);
 		} else if (kb.matches(keyData, "tui.select.cancel")) {
 			this.onCancelCallback();
+		} else if (this.searchInput) {
+			this.searchInput.handleInput(keyData);
+			this.filterOptions();
 		}
 	}
 

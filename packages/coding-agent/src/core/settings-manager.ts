@@ -135,6 +135,7 @@ export interface WebSearchSettings {
 
 export interface Settings {
 	lastChangelogVersion?: string;
+	firstUseHints?: string[];
 	defaultProvider?: string;
 	defaultModel?: string;
 	defaultThinkingLevel?: ThinkingLevel;
@@ -743,6 +744,16 @@ export class SettingsManager {
 	setLastChangelogVersion(version: string): void {
 		this.globalSettings.lastChangelogVersion = version;
 		this.markModified("lastChangelogVersion");
+		this.save();
+	}
+
+	getFirstUseHints(): string[] {
+		return [...(this.settings.firstUseHints ?? [])];
+	}
+
+	setFirstUseHints(hints: readonly string[]): void {
+		this.globalSettings.firstUseHints = [...new Set(hints)];
+		this.markModified("firstUseHints");
 		this.save();
 	}
 

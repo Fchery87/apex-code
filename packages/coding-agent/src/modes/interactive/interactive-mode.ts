@@ -127,6 +127,7 @@ import { EarendilAnnouncementComponent } from "./components/earendil-announcemen
 import { ExtensionEditorComponent } from "./components/extension-editor.ts";
 import { ExtensionInputComponent } from "./components/extension-input.ts";
 import { ExtensionSelectorComponent } from "./components/extension-selector.ts";
+import { type FirstUseHintId, FirstUseHints } from "./components/first-use-hints.ts";
 import { FooterComponent, formatTokens } from "./components/footer.ts";
 import { formatKeyText, keyDisplayText, keyHint, keyText, rawKeyHint } from "./components/keybinding-hints.ts";
 import { LoginDialogComponent } from "./components/login-dialog.ts";
@@ -464,6 +465,7 @@ export class InteractiveMode {
 
 	// Track if editor is in bash mode (text starts with !)
 	private isBashMode = false;
+	private firstUseHints: FirstUseHints | undefined;
 
 	// Track current bash execution component
 	private bashComponent: BashExecutionComponent | undefined = undefined;
@@ -529,6 +531,14 @@ export class InteractiveMode {
 	}
 	private get settingsManager() {
 		return this.session.settingsManager;
+	}
+
+	private offerFirstUseHint(id: FirstUseHintId): void {
+		this.firstUseHints ??= new FirstUseHints(this.settingsManager.getFirstUseHints());
+		const hint = this.firstUseHints.offer(id);
+		if (!hint) return;
+		this.settingsManager.setFirstUseHints(this.firstUseHints.getSeen());
+		this.chatContainer.addChild(new Text(theme.fg("dim", hint), this.outputPad, 0));
 	}
 
 	constructor(runtimeHost: AgentSessionRuntime, options: InteractiveModeOptions = {}) {
@@ -2388,6 +2398,7 @@ export class InteractiveMode {
 		title: string,
 		options: string[],
 		opts?: ExtensionUIDialogOptions,
+		enableSearch = false,
 	): Promise<string | undefined> {
 		return new Promise((resolve) => {
 			if (opts?.signal?.aborted) {
@@ -2414,7 +2425,12 @@ export class InteractiveMode {
 					this.hideExtensionSelector();
 					resolve(undefined);
 				},
-				{ tui: this.ui, timeout: opts?.timeout, onToggleToolsExpanded: () => this.toggleToolOutputExpansion() },
+				{
+					tui: this.ui,
+					timeout: opts?.timeout,
+					onToggleToolsExpanded: () => this.toggleToolOutputExpansion(),
+					enableSearch,
+				},
 			);
 
 			this.disposeActiveSelector();
@@ -2435,6 +2451,46 @@ export class InteractiveMode {
 		this.extensionSelector = undefined;
 		this.ui.setFocus(this.editor);
 		this.ui.requestRender();
+	}
+
+	private async showConfigurationIndex(): Promise<void> {
+		const choice = await this.showExtensionSelector(
+			"Configuration",
+			[
+				"Settings",
+				"Model",
+				"Model cycling",
+				"Provider login",
+				"Provider logout",
+				"Project trust",
+				"Resources, extensions, and MCP adapters",
+			],
+			undefined,
+			true,
+		);
+		switch (choice) {
+			case "Settings":
+				await this.showSettingsSelector();
+				break;
+			case "Model":
+				this.showModelSelector();
+				break;
+			case "Model cycling":
+				await this.showModelsSelector();
+				break;
+			case "Provider login":
+				await this.handleLoginCommand();
+				break;
+			case "Provider logout":
+				this.showOAuthSelector("logout");
+				break;
+			case "Project trust":
+				this.showTrustSelector();
+				break;
+			case "Resources, extensions, and MCP adapters":
+				this.showStatus("Run apex-code config to manage resources, extensions, and MCP adapters.");
+				break;
+		}
 	}
 
 	/**
@@ -2803,6 +2859,7 @@ export class InteractiveMode {
 			const wasBashMode = this.isBashMode;
 			this.isBashMode = text.trimStart().startsWith("!");
 			if (wasBashMode !== this.isBashMode) {
+				if (this.isBashMode) this.offerFirstUseHint("bash");
 				this.updateEditorBorderColor();
 			}
 		};
@@ -2867,6 +2924,11 @@ export class InteractiveMode {
 			}
 
 			// Handle commands
+			if (text === "/config") {
+				this.editor.setText("");
+				await this.showConfigurationIndex();
+				return;
+			}
 			if (text === "/settings") {
 				this.editor.setText("");
 				await this.showSettingsSelector();
@@ -3132,6 +3194,7 @@ export class InteractiveMode {
 					this.streamingMessage = event.message;
 					this.chatContainer.addChild(this.streamingComponent);
 					this.streamingComponent.updateContent(this.streamingMessage, true);
+					this.updateEditorBorderColor();
 					this.ui.requestRender();
 				}
 				break;
@@ -3159,6 +3222,7 @@ export class InteractiveMode {
 								component.setExpanded(this.toolOutputExpanded);
 								this.chatContainer.addChild(component);
 								this.pendingTools.set(content.id, component);
+								this.offerFirstUseHint("tool-expand");
 							} else {
 								const component = this.pendingTools.get(content.id);
 								if (component) {
@@ -3207,6 +3271,7 @@ export class InteractiveMode {
 					this.streamingComponent = undefined;
 					this.streamingMessage = undefined;
 					this.footer.invalidate();
+					this.updateEditorBorderColor();
 				}
 				this.ui.requestRender();
 				break;
@@ -3960,6 +4025,7 @@ export class InteractiveMode {
 			this.editor.addToHistory?.(text);
 			this.editor.setText("");
 			await this.session.prompt(text, { streamingBehavior: "followUp" });
+			this.offerFirstUseHint("queue");
 			this.updatePendingMessagesDisplay();
 			this.ui.requestRender();
 		}
@@ -3980,6 +4046,7 @@ export class InteractiveMode {
 	}
 
 	private updateEditorBorderColor(): void {
+		this.defaultEditor.setModeLabel(this.isBashMode ? "bash" : this.session.isStreaming ? "busy" : undefined);
 		if (this.isBashMode) {
 			this.editor.borderColor = theme.getBashModeBorderColor();
 		} else {
@@ -4042,6 +4109,7 @@ export class InteractiveMode {
 	}
 
 	private toggleThinkingBlockVisibility(): void {
+		this.offerFirstUseHint("thinking");
 		this.hideThinkingBlock = !this.hideThinkingBlock;
 		this.settingsManager.setHideThinkingBlock(this.hideThinkingBlock);
 

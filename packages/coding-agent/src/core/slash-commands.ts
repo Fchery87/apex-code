@@ -17,6 +17,7 @@ export interface BuiltinSlashCommand {
 }
 
 export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
+	{ name: "config", description: "Open the configuration index" },
 	{ name: "settings", description: "Open settings menu" },
 	{ name: "model", description: "Pick a provider, then a model", argumentHint: "<provider/model>" },
 	{ name: "scoped-models", description: "Enable/disable models for Ctrl+P cycling" },

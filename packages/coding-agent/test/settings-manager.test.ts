@@ -25,6 +25,14 @@ describe("SettingsManager", () => {
 		}
 	});
 
+	it("persists the first-use hint ledger across sessions", async () => {
+		const manager = SettingsManager.create(projectDir, agentDir);
+		manager.setFirstUseHints(["queue", "bash", "queue"]);
+		await manager.flush();
+
+		expect(SettingsManager.create(projectDir, agentDir).getFirstUseHints()).toEqual(["queue", "bash"]);
+	});
+
 	describe("preserves externally added settings", () => {
 		it("should preserve enabledModels when changing thinking level", async () => {
 			// Create initial settings file

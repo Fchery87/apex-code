@@ -66,6 +66,16 @@ describe("CustomEditor chrome", () => {
 	});
 
 	describe("prompt prefix", () => {
+		it("adds a text label for bash mode without overflowing the dock", () => {
+			const editor = makeEditor();
+			editor.setModeLabel("bash");
+			for (const width of [120, 40]) {
+				const lines = editor.render(width);
+				expect(plain(lines[1])).toContain("bash");
+				for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+			}
+		});
+
 		it("marks only the first input line, indenting continuations", () => {
 			const editor = makeEditor();
 			editor.setText("first line here\nsecond line here");

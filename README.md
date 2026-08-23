@@ -155,6 +155,7 @@ Useful first-session commands include:
 
 ```text
 /help       Show interactive commands
+/config     Search common settings, model, provider, trust, and resource controls
 /model      Browse and select an available model
 /login      Configure provider credentials
 /session    Inspect the current session and usage
@@ -162,6 +163,10 @@ Useful first-session commands include:
 /export     Export the session locally to HTML
 /share      Confirm and publish a session as a secret GitHub Gist
 ```
+
+`/config` keeps the existing commands and selectors canonical. Its resource, extension,
+and MCP-adapter entry opens the existing package-resource manager through
+`apex-code config`, rather than duplicating that configuration surface in a session.
 
 Start in a cautious mode when you are learning the tool or reviewing an unfamiliar
 repository:

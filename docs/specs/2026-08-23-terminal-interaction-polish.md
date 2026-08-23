@@ -41,6 +41,20 @@ The footer shows useful facts but treats them as peers. Narrow terminals clip by
 
 The remaining interaction details are fragmented. Long errors can take over the transcript. A running operation does not always give a compact elapsed label. Delegation output lacks a stable parent-level summary. Hints are concentrated at startup rather than shown when a feature first becomes relevant. Configuration is spread across commands with no common index.
 
+## Implemented behavior
+
+- Tool execution cards now retain their explicit lifecycle state while collapsed errors
+  show at most three visual lines; expansion remains the route to complete output.
+- Running cards refresh a stable elapsed label, and delegate results use a compact
+  parent-level summary until expanded.
+- First-use hints are emitted only from live tool, queue, thinking, and bash interactions.
+  The compact `firstUseHints` settings ledger prevents repeat hints across sessions.
+- `CustomEditor` supplies text-only `bash` and `busy` labels, preserving the inherited
+  editor's width and cursor behavior instead of simulating unsupported background fills.
+- `/config` opens a searchable index for existing settings, model, provider, and trust
+  handlers. Resources, extensions, and MCP adapters deliberately hand off to the exact
+  `apex-code config` command, which already owns scope and project-trust handling.
+
 ## Goals
 
 - [ ] Every ordinary tool row names one lifecycle state in text: `queued`, `running`, `done`, or `error`; symbols and color are secondary channels.

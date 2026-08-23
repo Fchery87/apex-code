@@ -150,6 +150,7 @@ export class CustomEditor extends Editor {
 	private readonly placeholderColor: (text: string) => string;
 	private readonly commandColor: ((text: string) => string) | undefined;
 	private readonly placeholder: string | undefined;
+	private modeLabel = "";
 	public actionHandlers: Map<AppKeybinding, () => void> = new Map();
 
 	// Special handlers that can be dynamically replaced
@@ -170,7 +171,8 @@ export class CustomEditor extends Editor {
 	}
 
 	override render(width: number): string[] {
-		const prefixWidth = visibleWidth(this.promptPrefix);
+		const promptPrefix = this.modeLabel ? `[${this.modeLabel}] ${this.promptPrefix}` : this.promptPrefix;
+		const prefixWidth = visibleWidth(promptPrefix);
 		// Reserve the prefix out of the width handed to the base Editor, so its
 		// wrapping, scrolling and cursor column all account for the space the
 		// prefix occupies. Bail out entirely when the terminal cannot spare it.
@@ -181,7 +183,7 @@ export class CustomEditor extends Editor {
 		const inner = this.withCommandColor(this.withPlaceholder(super.render(width - prefixWidth)));
 		const borderPad = this.borderColor(BORDER_CHAR.repeat(prefixWidth));
 		const blank = " ".repeat(prefixWidth);
-		const styledPrefix = this.promptColor(this.promptPrefix);
+		const styledPrefix = this.promptColor(promptPrefix);
 
 		// Structure is: top border, content lines, bottom border, then optional
 		// autocomplete rows. Counting borders tells the three regions apart
@@ -203,6 +205,11 @@ export class CustomEditor extends Editor {
 			}
 			return blank + line;
 		});
+	}
+
+	setModeLabel(label: string | undefined): void {
+		this.modeLabel = label ?? "";
+		this.invalidate();
 	}
 
 	private isBorderLine(line: string): boolean {

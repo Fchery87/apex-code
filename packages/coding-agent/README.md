@@ -36,6 +36,11 @@ Configure a model provider interactively with `/login <provider>`, or use
 `apex-code auth check --provider <provider>` to verify credentials. Run
 `apex-code --help` for flags and `apex-code --mode rpc` for process integration.
 
+Inside a session, `/config` is a searchable index for settings, models, provider
+authentication, and project trust. Resource, extension, and MCP-adapter changes remain
+in the dedicated `apex-code config` manager so their scope and trust behavior stay
+explicit.
+
 Sessions, settings, credentials, extensions, prompts, and other state live under
 `~/.apex-code/agent/` by default. Project-local resources live under `.apex-code/`.
 

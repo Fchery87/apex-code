@@ -71,6 +71,30 @@ type ExtensionFixture = {
 	sourceInfo?: SourceInfo;
 };
 
+describe("InteractiveMode.offerFirstUseHint", () => {
+	test("emits and persists each hint only once", () => {
+		initTheme("dark");
+		const settingsManager = {
+			getFirstUseHints: vi.fn(() => []),
+			setFirstUseHints: vi.fn(),
+		};
+		const fakeThis: any = Object.assign(Object.create(InteractiveMode.prototype), {
+			runtimeHost: { session: { settingsManager } },
+			firstUseHints: undefined,
+			chatContainer: new Container(),
+			outputPad: 0,
+		});
+
+		(InteractiveMode as any).prototype.offerFirstUseHint.call(fakeThis, "queue");
+		(InteractiveMode as any).prototype.offerFirstUseHint.call(fakeThis, "queue");
+
+		expect(settingsManager.setFirstUseHints).toHaveBeenCalledTimes(1);
+		expect(settingsManager.setFirstUseHints).toHaveBeenCalledWith(["queue"]);
+		expect(fakeThis.chatContainer.children).toHaveLength(1);
+		expect(renderLastLine(fakeThis.chatContainer)).toContain("Queued messages run after the current turn.");
+	});
+});
+
 describe("InteractiveMode.showStatus", () => {
 	beforeAll(() => {
 		// showStatus uses the global theme instance
