@@ -906,7 +906,8 @@ See the [spec](specs/2026-08-16-complete-apex-product-surface.md) for the durabl
 **Product-surface follow-up (2026-08-23).** Terminal interaction polish is complete without
 reopening Phase 10: explicit tool lifecycle cards, a responsive safety-first status tray,
 bounded disclosure, delegation summaries, contextual hints, composer refinement, and a
-common configuration index. See the durable [spec](specs/2026-08-23-terminal-interaction-polish.md).
+common configuration index. Implemented in `ec752d593`, `ed465e209`, `74b3ccd68`, and
+`697746b94`; see the durable [spec](specs/2026-08-23-terminal-interaction-polish.md).
 
 ---
 

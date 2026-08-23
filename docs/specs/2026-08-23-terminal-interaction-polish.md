@@ -43,6 +43,8 @@ The remaining interaction details are fragmented. Long errors can take over the 
 
 ## Implemented behavior
 
+Implementation commits: `ec752d593`, `ed465e209`, `74b3ccd68`, and `697746b94`.
+
 - Tool execution cards now retain their explicit lifecycle state while collapsed errors
   show at most three visual lines; expansion remains the route to complete output.
 - Running cards refresh a stable elapsed label, and delegate results use a compact
