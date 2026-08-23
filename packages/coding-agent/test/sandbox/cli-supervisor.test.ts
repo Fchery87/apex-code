@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -95,6 +95,88 @@ describe("CLI sandbox supervisor", () => {
 		releaseBackend?.();
 		await launched;
 		expect(existsSync(leasePath)).toBe(false);
+	});
+
+	it("creates a private canonical auth file before launching a fresh sandbox", async () => {
+		const cwd = workspace();
+		const authPath = join(cwd, "host-agent", "auth.json");
+		const enforcing = backend({ kind: "enforced" });
+
+		const code = await launchSandboxedCli({
+			command: "/usr/bin/node",
+			args: ["child-entry.js", "--print", "hello"],
+			environment: {},
+			workspace: cwd,
+			authPath,
+			dependencies: { createBackend: () => enforcing },
+		});
+
+		expect(code).toBe(0);
+		expect(JSON.parse(readFileSync(authPath, "utf8"))).toEqual({});
+		expect(statSync(authPath).mode & 0o777).toBe(0o600);
+		expect(enforcing.launches[0]?.readOnlyFiles).toEqual([authPath]);
+		expect(enforcing.launches[0]?.credentialChannel).toBeDefined();
+	});
+
+	it("removes the private credential endpoint when launch fails after proxy creation", async () => {
+		const cwd = workspace();
+		const authPath = join(cwd, "host-agent", "auth.json");
+		let socketPath: string | undefined;
+		const enforcing = backend({ kind: "enforced" });
+		enforcing.launch = async (launch) => {
+			socketPath = launch.credentialChannel?.hostSocketPath;
+			throw new Error("synthetic launch failure");
+		};
+
+		const code = await launchSandboxedCli({
+			command: "/usr/bin/node",
+			args: ["child-entry.js", "--print", "hello"],
+			environment: {},
+			workspace: cwd,
+			authPath,
+			dependencies: { createBackend: () => enforcing },
+		});
+
+		expect(code).toBe(1);
+		expect(socketPath).toBeTypeOf("string");
+		expect(existsSync(dirname(socketPath!))).toBe(false);
+	});
+
+	it("closes the credential endpoint even when backend cleanup rejects", async () => {
+		const cwd = workspace();
+		const authPath = join(cwd, "host-agent", "auth.json");
+		let socketPath: string | undefined;
+		const enforcing = backend({ kind: "enforced" });
+		enforcing.launch = async (launch) => {
+			socketPath = launch.credentialChannel?.hostSocketPath;
+			return 0;
+		};
+		enforcing.close = async () => {
+			throw new Error("synthetic backend cleanup failure");
+		};
+		let stderr = "";
+
+		const code = await launchSandboxedCli({
+			command: "/usr/bin/node",
+			args: ["child-entry.js", "--print", "hello"],
+			environment: {},
+			workspace: cwd,
+			authPath,
+			dependencies: {
+				createBackend: () => enforcing,
+				stderr: {
+					write(message) {
+						stderr += message;
+						return true;
+					},
+				},
+			},
+		});
+
+		expect(code).toBe(0);
+		expect(socketPath).toBeTypeOf("string");
+		expect(existsSync(dirname(socketPath!))).toBe(false);
+		expect(stderr).toContain("sandbox cleanup did not complete cleanly");
 	});
 
 	it("fails closed and does not start a child when enforcement is unavailable", async () => {

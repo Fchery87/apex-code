@@ -7,20 +7,21 @@
 | Author | `fchery87` |
 | Status | `Complete` |
 | Created | `2026-08-22` |
-| Last updated | `2026-08-22` |
+| Last updated | `2026-08-23` |
 | Roadmap phase | `none — follow-up to Phase 2b (OS sandbox)` |
 | Tracking issue/PR | `https://github.com/Fchery87/apex-code/pull/33` |
 | Compatibility posture | Preserves compatibility. No credential written today stops working, no settings key changes, and every existing read path is untouched. The change is purely additive: a write that fails today begins to succeed. The one deliberate incompatibility is that a credential written *through the new channel* may not contain a config-value reference (see "The escape vector"), which no existing caller does, because no existing caller can write at all from a session. |
 
 ## Executive summary
 
-No credential can be written from a running Apex Code session. Every interactive session
-runs inside the OS sandbox, which bind-mounts `auth.json` read-only, so `/login` and the
-`/settings` web-search key row both fail with a raw `EACCES` naming a path the user can
-see is writable from their own shell. This spec proposes a supervisor-mediated write
-channel modelled on the existing sandbox network proxy, and settles the security question
-that channel raises: the `bash` tool runs inside the child, so anything the child can
-reach, a model-driven command can also reach.
+Apex Code keeps canonical credentials host-owned while every interactive session runs
+inside the OS sandbox. The child reads a read-only `auth.json` projection and performs
+credential mutations through a narrow supervisor-owned Unix socket. The supervisor holds
+the host file lock while the child executes the `CredentialStore.modify` callback, rejects
+non-literal values and malformed protocol input, and records accepted writes and refusals.
+This lets `/login` work on both fresh and existing installations without making the host
+credential file writable inside the sandbox. The shipped surface is `/login`; the proposed
+`/settings` web-search key row was removed before implementation.
 
 ## Context and motivation
 
@@ -99,7 +100,7 @@ channel adds is integrity, and with it the reference-execution vector above.
 
 ## Goals
 
-- `/login` and the `/settings` credential row succeed inside a normal sandboxed session.
+- `/login` succeeds inside a normal sandboxed session, including on a fresh install.
 - A credential written through the channel cannot cause host command execution.
 - Every write is auditable, and refusals are visible in the same place sandbox violations
   already surface.
@@ -163,13 +164,14 @@ every normal session.
 
 ## Deletion inventory
 
-- Nothing. This change is purely additive: it makes a write that fails today begin to
-  succeed, and removes no existing path. `ReadOnlyAuthStorage` stays, since
-  `--no-refresh` still needs it, and every credential read path is untouched.
-- One thing this change *enables* a later removal of, without doing it here: once writes
-  succeed, any caller that reports a sandbox-refused write can drop its explanatory
-  message. No such caller exists at the time of writing -- the `/settings` credential row
-  that had one was removed rather than shipped against a write path that does not exist.
+- The original one-shot child-read/host-replace protocol is obsolete. The repaired channel
+  replaces it with a serialized `modify` handshake under the host credential lock.
+- The original conditional channel setup is obsolete. The host now creates a missing
+  canonical `auth.json` before an enforcing launch instead of letting first-run writes
+  fall back to workspace sandbox state.
+- `ReadOnlyAuthStorage` remains. Its default `--no-refresh` mode still does not execute
+  command-backed keys; sandbox projected reads opt into the ordinary resolved-read behavior.
+- The removed `/settings` web-search credential row remains outside the completed scope.
 
 ## Risks
 
@@ -198,9 +200,9 @@ every normal session.
 ## Rollout
 
 Single change, no flag. The channel is either present and constrained or absent; a
-half-enabled credential writer is worse than either. `/login` and the `/settings` row both
-switch to it in the same change, because leaving one on the failing path would preserve
-exactly the inconsistency this spec exists to remove.
+half-enabled credential writer is worse than either. `/login` is the shipping credential
+surface. The one-line `/settings` credential row discussed during design was removed before
+this work landed and is not part of the completed scope.
 
 ## Closure amendment (2026-08-22)
 
@@ -224,8 +226,54 @@ run:
   advertised routes `/login` through it (audit entry present), and builds the ordinary
   host store otherwise.
 
-**Not verified here:** a live macOS `sandbox-exec` run. The live gate now runs on macOS CI
-wherever `createMacosSandboxBackend()` reports enforced, but these commits have not been
-pushed, so that proof is pending the next CI run. The one-line `/settings` credential row
-named in the Rollout section was removed before this spec was implemented and is not
-restored by it; `/login` is the shipping surface.
+**Historical verification status for the 2026-08-22 landing:** a live macOS
+`sandbox-exec` run was pending until the commits reached macOS CI. The one-line `/settings`
+credential row was removed before implementation and is not restored; `/login` is the
+shipping surface.
+
+
+## Repair amendment (2026-08-23)
+
+A post-merge review found that the first protocol did not fully satisfy this spec or the
+`CredentialStore` contract. The implementation was repaired on current `main` with these
+constraints:
+
+- A missing canonical `auth.json` is created by the host as `0600` before launch. Fresh
+  sessions now receive the same read-only projection and write channel as existing users;
+  credentials never fall back to workspace sandbox state.
+- `modify` is a serialized handshake. The supervisor holds the host file lock, sends the
+  current raw credential to the child callback, validates the proposed result, commits it,
+  and returns the post-write value. Concurrent refreshes therefore cannot both derive from
+  the same rotated OAuth token.
+- Existing host-authored command and environment references still resolve on sandbox reads.
+  The `--no-refresh` read-only store retains its separate rule that command credentials are
+  not executed.
+- The supervisor validates JSON roots and credential shapes at the socket boundary. Frames
+  are byte-bounded before decoding, connections are bounded and timed out, active sockets
+  are destroyed during cleanup, and rejected secret material is never copied into audit
+  messages.
+- Each endpoint lives in a supervisor-created `0700` directory with a `0600` socket. All
+  startup paths after channel creation share one cleanup boundary, and a later supervisor
+  reclaims same-user endpoint directories whose encoded owner PID is no longer alive.
+
+Verification run for the uncommitted repair on 2026-08-23:
+
+- `npm run check` passed, including Biome, documentation lifecycle, dependency/import
+  checks, TypeScript, generated lock checks, and browser smoke.
+- The expanded auth/sandbox slice passed: 12 files, 132 tests passed, 6 platform-specific
+  tests skipped.
+- The live sandbox handoff passed both an absent-file first mutation and the existing-file
+  read-only/refusal/write flow on the enforcing Linux backend.
+- The first unrestricted full `npm test` run completed 2701 tests with four
+  load-sensitive failures outside credential assertions. All four passed when rerun
+  individually. The complete coding-agent suite then passed with bounded concurrency:
+  314 files, 2709 tests passed, 57 skipped. Live macOS enforcement remains a CI-only
+  verification item.
+
+No repair commit SHA is recorded yet because the repair is intentionally uncommitted during
+validation. This section must be updated with the real commit before the change is marked
+landed.
+
+The protocol's unavoidable commit-point rule is explicit: if the host commits a credential
+and the final reply is lost, the child reports an uncertain failure and does not retry the
+mutation automatically. Retrying a rotated OAuth credential could corrupt the newer value.

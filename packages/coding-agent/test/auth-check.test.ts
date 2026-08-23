@@ -109,6 +109,14 @@ describe("auth check command", () => {
 		});
 	});
 
+	test("does not execute command-backed credentials in the no-refresh store", async () => {
+		const authPath = join(tempDir, "auth.json");
+		writeFileSync(authPath, JSON.stringify({ openai: { type: "api_key", key: "!printf should-not-run" } }), "utf-8");
+		const store = new ReadOnlyAuthStorage(authPath);
+
+		expect(await store.read("openai")).toEqual({ type: "api_key", key: "!printf should-not-run" });
+	});
+
 	test("does not treat an unresolved stored environment reference as configured", async () => {
 		const authPath = join(tempDir, "auth.json");
 		writeFileSync(authPath, JSON.stringify({ openai: { type: "api_key", key: "$MISSING_AUTH_CHECK_KEY" } }), "utf-8");

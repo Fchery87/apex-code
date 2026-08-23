@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- Sandboxed credential writes now preserve the credential store's cross-process mutation
+  contract. The original channel read a credential in the child and later replaced it on
+  the host, so concurrent OAuth refreshes could derive from the same token and overwrite
+  each other. The supervisor now holds the host lock while the child callback decides the
+  mutation. First-run `/login` also creates and writes the canonical host `auth.json`
+  instead of silently saving under workspace sandbox state. The protocol validates roots
+  and credential shapes, uses byte and connection limits, keeps its socket in a private
+  directory, cleans up active clients and dead-supervisor socket artifacts, and never
+  includes a rejected secret in audit text.
+
 - A custom system prompt no longer throws away what the active tools contribute. Setting one,
   with `--system-prompt` or a discovered `SYSTEM.md`, replaced the entire prompt: not only the
   Apex-authored prose it is meant to replace, but also the Available tools list and every

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -28,11 +28,11 @@ afterEach(async () => {
 // Windows has no unix domain socket at a filesystem path; net.listen() there needs a
 // named pipe, so the channel and every test that binds it are POSIX-only (ADR 0005).
 describe.skipIf(process.platform === "win32")("agent session services credential channel wiring", () => {
-	it("routes a runtime login through the advertised channel store", async () => {
+	it("routes a first runtime login through the advertised channel into a missing host auth file", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apex-channel-runtime-"));
 		directories.push(cwd);
 		const authPath = join(cwd, "auth.json");
-		writeFileSync(authPath, "{}", { mode: 0o600 });
+		expect(existsSync(authPath)).toBe(false);
 		const socketPath = join(cwd, "channel.sock");
 		const violations = new SandboxViolationStore();
 		const proxy = await createCredentialProxy({ authPath, violationStore: violations, socketPath });

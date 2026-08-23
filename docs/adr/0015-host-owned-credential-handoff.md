@@ -55,6 +55,10 @@ What keeps the amendment inside this ADR's posture:
 - Reads are untouched on both sides of the boundary; the child keeps reading the
   read-only projection.
 - Every accepted write and every refusal is audited in the supervisor's violation tail.
-- The channel exists only when a host credential file exists and an enforcing backend
-  launched the child, and it is carried on the launch contract like the rest of the
-  handoff.
+- On an enforcing backend, the host creates a missing canonical credential file as `0600`
+  before launch, then carries the read-only projection and channel on the launch contract.
+- The supervisor holds the host credential lock across the child's `modify` callback, so
+  OAuth refresh and login retain `CredentialStore`'s cross-process serialization contract.
+- The socket lives in a supervisor-owned `0700` directory, validates and byte-bounds every
+  protocol frame, redacts credential values from refusals, and closes active clients during
+  teardown.

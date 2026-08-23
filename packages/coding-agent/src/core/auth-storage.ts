@@ -203,10 +203,12 @@ export class FileAuthStorageBackend implements AuthStorageBackend {
 
 export class ReadOnlyAuthStorage implements CredentialStore {
 	private readonly authPath: string;
+	private readonly resolveCommands: boolean;
 	private data: AuthStorageData | undefined;
 
-	constructor(authPath: string = getAuthPath()) {
+	constructor(authPath: string = getAuthPath(), options: { resolveCommands?: boolean } = {}) {
 		this.authPath = normalizePath(authPath);
+		this.resolveCommands = options.resolveCommands ?? false;
 	}
 
 	private load(): AuthStorageData {
@@ -261,7 +263,11 @@ export class ReadOnlyAuthStorage implements CredentialStore {
 		const credential = this.load()[providerId];
 		options?.signal?.throwIfAborted();
 		if (!credential) return undefined;
-		if (credential.type !== "api_key" || !credential.key || isCommandConfigValue(credential.key)) {
+		if (
+			credential.type !== "api_key" ||
+			credential.key === undefined ||
+			(!this.resolveCommands && isCommandConfigValue(credential.key))
+		) {
 			return structuredClone(credential);
 		}
 		return { ...credential, key: resolveConfigValue(credential.key, credential.env) };

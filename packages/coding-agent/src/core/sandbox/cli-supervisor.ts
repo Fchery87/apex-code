@@ -53,53 +53,51 @@ export async function launchSandboxedCli(options: {
 	const violationStore = new SandboxViolationStore();
 	const backend = dependencies.createBackend({ violationStore });
 
-	// The credential write channel (spec: 2026-08-22-supervisor-mediated-credential-
-	// writes) exists only when there is a host credential file to write and a backend
-	// that can actually contain the child. Its paths are resolved exactly once: they
-	// are random per launch, so a second resolution anywhere else would name a socket
-	// nobody listens on. The channel then travels to the backends and the launch
-	// environment through the launch contract, keeping it the single exception to the
-	// read-only credential mount (ADR 0015, amended).
-	let credentialProxy: Awaited<ReturnType<typeof createCredentialProxy>> | undefined;
-	let credentialChannel: SandboxLaunch["credentialChannel"];
-	if (options.authPath && backend.status.kind === "enforced") {
-		const paths = resolveCredentialChannelPaths();
-		credentialChannel = paths;
-		credentialProxy = await createCredentialProxy({
-			authPath: options.authPath,
-			violationStore,
-			socketPath: paths.hostSocketPath,
-		});
-	}
 	const supervisor = createSandboxSupervisor({ backend, policy: policyResult.policy });
-	const parsed = parseArgs(options.args);
-	const wantsPersistentSession = !parsed.noSession && !parsed.help && parsed.listModels === undefined;
-	const sessionDirectory = getSandboxSessionDirectory(policyResult.policy.workspace);
-	if (wantsPersistentSession && !parsed.allowConcurrent) {
-		const liveSessions = readLiveSessionLeases(sessionDirectory, policyResult.policy.workspace);
-		if (liveSessions.length > 0) {
-			reportConcurrentSessionRefusal(liveSessions, policyResult.policy.workspace);
-			await supervisor.close();
-			await credentialProxy?.close();
-			return 1;
-		}
-	}
-	const lease = wantsPersistentSession
-		? acquireSessionLease(sessionDirectory, policyResult.policy.workspace, `supervisor-${process.pid}`)
-		: undefined;
-	const launch = buildSandboxedCliLaunch({
-		workspace: policyResult.policy.workspace,
-		command: options.command,
-		args: options.args,
-		environment: options.environment,
-		allowedHosts: options.allowedHosts,
-		readOnlyPaths: options.readOnlyPaths,
-		authPath: options.authPath,
-		toolBinaries: options.toolBinaries,
-		skillPaths: options.skillPaths,
-		credentialChannel,
-	});
+	let credentialProxy: Awaited<ReturnType<typeof createCredentialProxy>> | undefined;
+	let lease: ReturnType<typeof acquireSessionLease> | undefined;
 	try {
+		const parsed = parseArgs(options.args);
+		const wantsPersistentSession = !parsed.noSession && !parsed.help && parsed.listModels === undefined;
+		const sessionDirectory = getSandboxSessionDirectory(policyResult.policy.workspace);
+		if (wantsPersistentSession && !parsed.allowConcurrent) {
+			const liveSessions = readLiveSessionLeases(sessionDirectory, policyResult.policy.workspace);
+			if (liveSessions.length > 0) {
+				reportConcurrentSessionRefusal(liveSessions, policyResult.policy.workspace);
+				return 1;
+			}
+		}
+		lease = wantsPersistentSession
+			? acquireSessionLease(sessionDirectory, policyResult.policy.workspace, `supervisor-${process.pid}`)
+			: undefined;
+
+		// Open the host-owned credential channel only after startup checks that can
+		// return early. AuthStorage creates a missing canonical file as 0600, so a
+		// first-run credential writes get the same channel and read-only projection as later runs.
+		let credentialChannel: SandboxLaunch["credentialChannel"];
+		if (options.authPath && backend.status.kind === "enforced") {
+			const paths = resolveCredentialChannelPaths();
+			credentialProxy = await createCredentialProxy({
+				authPath: options.authPath,
+				violationStore,
+				socketPath: paths.hostSocketPath,
+				cleanupDirectory: paths.hostSocketDirectory,
+			});
+			credentialChannel = paths;
+		}
+
+		const launch = buildSandboxedCliLaunch({
+			workspace: policyResult.policy.workspace,
+			command: options.command,
+			args: options.args,
+			environment: options.environment,
+			allowedHosts: options.allowedHosts,
+			readOnlyPaths: options.readOnlyPaths,
+			authPath: options.authPath,
+			toolBinaries: options.toolBinaries,
+			skillPaths: options.skillPaths,
+			credentialChannel,
+		});
 		return await supervisor.launch(launch);
 	} catch (error: unknown) {
 		const message = error instanceof Error ? error.message : "Failed to start OS sandbox.";
@@ -107,12 +105,16 @@ export async function launchSandboxedCli(options: {
 		return 1;
 	} finally {
 		lease?.release();
+		const cleanupResults = await Promise.allSettled([supervisor.close(), credentialProxy?.close()]);
 		for (const violation of violationStore.list()) {
 			dependencies.stderr.write(
 				`Sandbox violation (${violation.kind}): ${violation.command} — ${violation.detail}\n`,
 			);
 		}
-		await supervisor.close();
-		await credentialProxy?.close();
+		for (const result of cleanupResults) {
+			if (result.status === "rejected") {
+				dependencies.stderr.write("Warning: sandbox cleanup did not complete cleanly.\n");
+			}
+		}
 	}
 }

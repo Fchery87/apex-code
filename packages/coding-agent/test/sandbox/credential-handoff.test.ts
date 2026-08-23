@@ -51,6 +51,31 @@ async function runCli(options: { args: readonly string[]; cwd: string; environme
 }
 
 describe.skipIf(!canEnforceSandbox())("live-agent credential handoff", () => {
+	it("creates and writes the canonical host credential file on the first sandbox credential mutation", async () => {
+		const workspace = temporaryDirectory("apex-sandbox-fresh-credential-workspace-");
+		const hostAgentDir = temporaryDirectory("apex-sandbox-fresh-credential-agent-");
+		const result = await runCli({
+			args: [
+				"--print",
+				"run the credential boundary test",
+				"--extension",
+				extensionPath,
+				"--model",
+				"credential-boundary-test/scripted",
+				"--permission-mode",
+				"bypassPermissions",
+			],
+			cwd: workspace,
+			environment: { APEX_CODE_CODING_AGENT_DIR: hostAgentDir },
+		});
+
+		expect(result.code, `stdout:\n${result.stdout}\n\nstderr:\n${result.stderr}`).toBe(0);
+		const hostAuthPath = join(hostAgentDir, "auth.json");
+		expect(JSON.parse(readFileSync(hostAuthPath, "utf8"))).toMatchObject({
+			"credential-boundary-test": { type: "api_key", key: "written-through-channel" },
+		});
+	}, 180_000);
+
 	// One real sandboxed CLI turn: ~19s alone, longer under the parallel load of the
 	// full sandbox directory. The 30s default measured the machine, not the boundary.
 	it("reads read-only, refuses direct writes, and writes literals through the channel", async () => {

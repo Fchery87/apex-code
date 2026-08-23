@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 /** The public CLI either supervises a sandbox child or starts an ordinary runtime. */
@@ -60,7 +59,7 @@ async function run(): Promise<void> {
 			environment: process.env,
 			workspace: process.cwd(),
 			allowedHosts,
-			authPath: existsSync(authPath) ? authPath : undefined,
+			authPath,
 			readOnlyPaths: [getPackageDir(), dirname(getPackageDir())],
 			toolBinaries,
 			skillPaths,
