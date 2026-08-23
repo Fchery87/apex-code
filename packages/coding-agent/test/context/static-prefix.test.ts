@@ -90,8 +90,21 @@ const LARGE_SKILL_LIBRARY: Skill[] = Array.from({ length: 200 }, (_, i) => synth
  * ~5.5% margin over the 2,987 measured worst case -- the same proportional margin
  * LSP.7 used, not a new policy. It does not budge for the next tool or the next
  * skill the same way this one didn't.
+ *
+ * Re-measured when a custom system prompt stopped discarding tool contributions:
+ * `buildSystemPrompt`'s `customPrompt` branch returned before it read `toolSnippets`
+ * or `promptGuidelines`, so this measurement -- which passes both, exactly as
+ * `testing/replay/runner.ts` does -- was calibrated against a prefix the production
+ * path never actually had the option of shipping. Restoring them carries the
+ * skill-library floor from 2,987 to 3,261: 98 tokens of one-line tool snippets and
+ * 177 of tool-contributed guidelines. Both the 200-skill and 2,000-skill libraries
+ * measure 3,261, so the catalog bound still holds. The budget is raised to 3,450, a
+ * ~5.5% margin over the new measured worst case, the same proportional margin
+ * SKILL.8 and LSP.7 used. The guidelines are the half that matters: the tool JSON
+ * schemas already carry names and descriptions, but nothing else carries
+ * "prefer grep over bash" to the model.
  */
-const ENFORCED_PRODUCTION_PREFIX_BUDGET = 3_150;
+const ENFORCED_PRODUCTION_PREFIX_BUDGET = 3_450;
 
 function lspToolOptions() {
 	return { lsp: { operations: { request: async () => [] } } };

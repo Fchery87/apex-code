@@ -112,4 +112,57 @@ describe("buildSystemPrompt", () => {
 			expect(prompt.match(/- Use dynamic_tool for summaries\./g)).toHaveLength(1);
 		});
 	});
+	describe("custom prompt", () => {
+		test("includes tool guidelines contributed by active tools", () => {
+			const prompt = buildSystemPrompt({
+				customPrompt: "You are a specialized agent.",
+				selectedTools: ["read", "dynamic_tool"],
+				promptGuidelines: ["Use dynamic_tool for project summaries."],
+				contextFiles: [],
+				skills: [],
+				cwd: process.cwd(),
+			});
+
+			expect(prompt).toContain("- Use dynamic_tool for project summaries.");
+		});
+
+		test("includes the available tools list", () => {
+			const prompt = buildSystemPrompt({
+				customPrompt: "You are a specialized agent.",
+				selectedTools: ["read"],
+				toolSnippets: { read: "Read file contents" },
+				contextFiles: [],
+				skills: [],
+				cwd: process.cwd(),
+			});
+
+			expect(prompt).toContain("- read: Read file contents");
+		});
+
+		test("omits the guidelines section when no tool contributes one", () => {
+			const prompt = buildSystemPrompt({
+				customPrompt: "You are a specialized agent.",
+				selectedTools: ["read"],
+				toolSnippets: { read: "Read file contents" },
+				contextFiles: [],
+				skills: [],
+				cwd: process.cwd(),
+			});
+
+			expect(prompt).not.toContain("Guidelines:");
+		});
+
+		test("replaces the Apex-authored prose instead of appending to it", () => {
+			const prompt = buildSystemPrompt({
+				customPrompt: "You are a specialized agent.",
+				contextFiles: [],
+				skills: [],
+				cwd: process.cwd(),
+			});
+
+			expect(prompt).not.toContain("Be concise in your responses");
+			expect(prompt).not.toContain("Apex Code documentation");
+			expect(prompt).toContain("You are a specialized agent.");
+		});
+	});
 });
