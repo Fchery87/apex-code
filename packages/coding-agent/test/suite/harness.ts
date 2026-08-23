@@ -108,16 +108,31 @@ export interface Harness {
  * Matching a suffix rather than listing every variable: the goal is that no ambient
  * credential reaches a suite test, and a new provider's key should be covered the day
  * it is added rather than the day someone remembers this list.
+ *
+ * The suffixes and the explicit names together cover every source
+ * `getEnvApiKey` (`packages/ai/src/env-api-keys.ts`) consults: `_TOKEN` absorbs the
+ * `*_AUTH_TOKEN`/`*_OAUTH_TOKEN` shapes as well as `HF_TOKEN` and
+ * `COPILOT_GITHUB_TOKEN`, while the Bedrock container/web-identity variables and the
+ * Vertex ADC trio are full names because their shapes share no suffix. When upstream
+ * adds a provider credential variable that fits neither, it belongs in this list --
+ * `test/suite/harness-credential-isolation.test.ts` pins the current coverage.
  */
-const AMBIENT_CREDENTIAL_SUFFIXES = ["_API_KEY", "_AUTH_TOKEN", "_OAUTH_TOKEN", "_BASE_URL"];
+const AMBIENT_CREDENTIAL_SUFFIXES = ["_API_KEY", "_TOKEN", "_BASE_URL"];
 const AMBIENT_CREDENTIAL_NAMES = [
 	"AWS_ACCESS_KEY_ID",
 	"AWS_BEARER_TOKEN_BEDROCK",
+	"AWS_CONTAINER_CREDENTIALS_FULL_URI",
+	"AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
 	"AWS_PROFILE",
 	"AWS_REGION",
 	"AWS_SECRET_ACCESS_KEY",
+	"AWS_WEB_IDENTITY_TOKEN_FILE",
 	"CLOUDFLARE_ACCOUNT_ID",
 	"CLOUDFLARE_GATEWAY_ID",
+	"COPILOT_GITHUB_TOKEN",
+	"GOOGLE_APPLICATION_CREDENTIALS",
+	"GOOGLE_CLOUD_LOCATION",
+	"GOOGLE_CLOUD_PROJECT",
 ];
 
 /** Remove ambient provider credentials, returning a restore function for `cleanup`. */

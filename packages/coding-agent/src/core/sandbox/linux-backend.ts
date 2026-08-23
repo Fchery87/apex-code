@@ -199,6 +199,12 @@ server.on("error", (err) => {
 						"--bind",
 						hostSocketPath,
 						childSocketPath,
+						// The credential channel socket: same writable-under-/home constraint
+						// and same position as the network socket above. Its child-side path
+						// is what `APEX_CREDENTIAL_PROXY_PATH` names in the launch environment.
+						...(launch.credentialChannel
+							? ["--bind", launch.credentialChannel.hostSocketPath, launch.credentialChannel.childSocketPath]
+							: []),
 						...readOnlyMounts,
 						...readOnlyFileMounts,
 						"--bind",

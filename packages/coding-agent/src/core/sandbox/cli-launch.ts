@@ -265,6 +265,8 @@ export function buildSandboxedCliLaunch(options: {
 	 * discovery can find them under the sandbox's own repointed `HOME`/agent dir.
 	 */
 	skillPaths?: HostSkillPaths;
+	/** The supervisor-owned credential write channel, when one was opened. */
+	credentialChannel?: SandboxLaunch["credentialChannel"];
 }): SandboxedCliLaunch {
 	const stateDirectory = join(options.workspace, ".apex-code", "sandbox-state");
 	const agentDirectory = join(options.workspace, ".apex-code", "sandbox-agent");
@@ -304,9 +306,15 @@ export function buildSandboxedCliLaunch(options: {
 		readOnlyPaths,
 		readOnlyFiles,
 		readOnlyBinaries,
+		// Travels on the launch contract so the platform backend projects the socket;
+		// the environment entry above is what tells the child where to find it.
+		...(options.credentialChannel ? { credentialChannel: options.credentialChannel } : {}),
 		environment: {
 			...childEnvironment,
 			...(options.authPath ? { APEX_CODE_AUTH_PATH: options.authPath } : {}),
+			...(options.credentialChannel
+				? { APEX_CREDENTIAL_PROXY_PATH: options.credentialChannel.childSocketPath }
+				: {}),
 			// After childEnvironment: these come only from the supervisor's own
 			// resolution, never from the invoking shell, so their value always wins over
 			// anything of the same name that childEnvironment's allowlist let through.

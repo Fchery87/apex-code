@@ -1,14 +1,32 @@
+import { createRequire } from "node:module";
 import type { Transport } from "@earendil-works/pi-ai";
 import type { TuiMode as RendererTuiMode, ScrollViewScrollbar } from "@earendil-works/pi-tui";
 import type { ThinkingLevel } from "apex-code-agent-core";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
-import lockfile from "proper-lockfile";
 import { CONFIG_DIR_NAME, getAgentDir } from "../config.ts";
 import { normalizePath, resolvePath } from "../utils/paths.ts";
 import { getApexEnvironment } from "./environment.ts";
-import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-dispatcher.ts";
+import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-idle-timeout.ts";
 import type { LspSettings } from "./lsp/registry.ts";
+
+/**
+ * `proper-lockfile` is required lazily, not imported: the supervisor loads this module
+ * on every launch just to read settings, and a static import puts the lock library
+ * (measured: the single largest share of the settings-manager import cost) on the
+ * pre-child critical path where it is never used -- the supervisor only reads. The
+ * sync `require` keeps `withLock`'s synchronous interface; the write path pays the
+ * load once, on first write.
+ */
+const requireFromHere = createRequire(import.meta.url);
+type ProperLockfile = typeof import("proper-lockfile");
+let lockfileModule: ProperLockfile | undefined;
+function lockfile(): ProperLockfile {
+	if (!lockfileModule) {
+		lockfileModule = requireFromHere("proper-lockfile") as ProperLockfile;
+	}
+	return lockfileModule;
+}
 
 export interface CompactionSettings {
 	enabled?: boolean; // default: true
@@ -264,7 +282,7 @@ export class FileSettingsStorage implements SettingsStorage {
 
 		for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 			try {
-				return lockfile.lockSync(path, { realpath: false });
+				return lockfile().lockSync(path, { realpath: false });
 			} catch (error) {
 				const code =
 					typeof error === "object" && error !== null && "code" in error

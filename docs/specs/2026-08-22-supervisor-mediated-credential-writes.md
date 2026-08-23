@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Author | `fchery87` |
-| Status | `Draft` |
+| Status | `Complete` |
 | Created | `2026-08-22` |
 | Last updated | `2026-08-22` |
 | Roadmap phase | `none — follow-up to Phase 2b (OS sandbox)` |
@@ -201,3 +201,31 @@ Single change, no flag. The channel is either present and constrained or absent;
 half-enabled credential writer is worse than either. `/login` and the `/settings` row both
 switch to it in the same change, because leaving one on the failing path would preserve
 exactly the inconsistency this spec exists to remove.
+
+## Closure amendment (2026-08-22)
+
+Landed as `4016794c3` (channel + wiring + tests) with docs in the same commit: ADR 0015's
+dated amendment, this spec's status, and the changelog entry. Verification, as actually
+run:
+
+- Protocol unit tests over a real unix socket in a scratch directory: literal write,
+  `!command` refusal, `$VAR` and `${VAR}` refusals (including nested OAuth fields),
+  delete, invalid frames, accepted-write audit entries.
+- Launch-contract tests on both backends: Linux bind under `/home` proven by a real
+  `bwrap` child finding the socket at `APEX_CREDENTIAL_PROXY_PATH`; macOS Seatbelt
+  `(allow network-outbound (remote unix-socket (literal ...)))` proven at the profile
+  level with the canonicalized path.
+- A live sandboxed CLI turn (`credential-handoff.test.ts`), now gated on any enforcing
+  platform rather than Linux only: direct filesystem write still refused by the mount; a
+  literal written through the channel reaches the host `auth.json`; a `!command` value is
+  refused and never lands; both the accepted write and the refusal appear in the violation
+  tail the supervisor prints.
+- Runtime wiring proven without a sandbox: a session built while the channel is
+  advertised routes `/login` through it (audit entry present), and builds the ordinary
+  host store otherwise.
+
+**Not verified here:** a live macOS `sandbox-exec` run. The live gate now runs on macOS CI
+wherever `createMacosSandboxBackend()` reports enforced, but these commits have not been
+pushed, so that proof is pending the next CI run. The one-line `/settings` credential row
+named in the Rollout section was removed before this spec was implemented and is not
+restored by it; `/login` is the shipping surface.

@@ -395,6 +395,36 @@ is deleted now that this follow-up is landed (recoverable via
 `git show <commit>:docs/plans/2026-08-20-sandbox-skill-projection.md`); its durable
 content lives in this entry and in the spec's own closure amendment.
 
+**Post-PR-#33 review follow-ups landed, 2026-08-22.** Three review leftovers from the
+`web_search` merge, worked as a plan rather than a phase:
+
+- **Supervisor-mediated credential writes** (`4016794c3`), implementing
+  [spec](specs/2026-08-22-supervisor-mediated-credential-writes.md): `/login` works inside
+  a sandboxed session through a supervisor-owned unix socket that refuses `!command` and
+  `$VAR` values, audits every accepted write and refusal, and leaves every read path and
+  the read-only mount untouched. ADR 0015 carries the dated amendment. Linux is verified
+  by a live sandboxed CLI turn; macOS is verified at the Seatbelt-profile level, with the
+  live gate (now platform-general) awaiting its first CI run on push.
+- **Supervisor launch cost** (`93e0138ba`): `settings-manager` no longer statically
+  imports `proper-lockfile` or `undici` on the pre-child path. Measured A/B with
+  `scripts/measure-supervisor-imports.mjs --dist` on one loaded machine: the module fell
+  1968.8 ms → 576.8 ms and the whole supervisor import path 2728.9 ms → 812.1 ms.
+- **Review small items** (`e798d83a5`): the suite harness now scrubs every provider
+  credential variable `getEnvApiKey` reads (closing the `7209` breadth gap for
+  `HF_TOKEN`, `COPILOT_GITHUB_TOKEN`, the Bedrock container vars, and the Vertex ADC
+  trio, with a pinning test), and `web_search` snippets trim to a word boundary. The
+  `.gitignore` carve-out was verified complete as landed in `33c6f99cd` — nothing to
+  change.
+
+Full-suite status, stated as run: two root `npm test` runs — one under load ~23 (20
+timeout failures across 8 CLI-spawning files, all passing in isolation), one calm (a
+single `bash`-tool output-persistence flake, passing in isolation) — with every
+changed-seam suite green and none of the flakes intersecting the changed files; the same
+load-flake signature this machine produced before these changes.
+`docs/plans/2026-08-22-pr33-followups.md` is deleted now that the work is landed
+(recoverable via `git show <commit>:docs/plans/2026-08-22-pr33-followups.md`); Phase 2b's
+**landed** state is unchanged.
+
 ---
 
 ## Phase 3 — Context engineering

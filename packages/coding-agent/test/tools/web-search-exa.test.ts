@@ -220,6 +220,34 @@ describe("Exa web search snippet source", () => {
 		expect(result?.snippet).not.toContain("Skip to content");
 	});
 
+	it("truncates at a word boundary instead of ending mid-word", async () => {
+		endpoint = await startStubEndpoint(() => ({
+			status: 200,
+			body: {
+				results: [
+					{
+						title: "MCP",
+						url: "https://example.com/mcp",
+						// 48 characters; a 30-character budget would cut inside "specificatio".
+						text: "The next generation specification release",
+						highlights: ["The next generation specification release"],
+					},
+				],
+			},
+		}));
+		const operations = createExaWebSearchOperations({
+			apiKey: "k",
+			endpoint: endpoint.url,
+			snippetMaxCharacters: 30,
+		});
+
+		const [result] = await operations.search("q");
+
+		// "The next generation specification" is 33 characters; the boundary trim gives
+		// back the whole words that fit rather than "The next generation specificatio".
+		expect(result?.snippet).toBe("The next generation");
+	});
+
 	it("joins multiple highlights so the gaps between passages are visible", async () => {
 		endpoint = await startStubEndpoint(() => ({
 			status: 200,

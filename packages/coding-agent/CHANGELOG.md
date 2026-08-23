@@ -15,6 +15,47 @@
   to a custom-prompt session that registers the full tool set, and the enforced static-prefix
   budget was re-measured accordingly.
 
+- `web_search` snippets now end on a whole word. The truncation budget cut at an exact
+  character count, so a long highlight could end "specificatio" -- which reads as
+  corruption rather than as a limit. The trim now backs up to the last word boundary
+  inside the budget; a snippet whose first word alone exceeds the budget still cuts
+  hard, because an intact fragment beats an empty one.
+
+- The suite harness now scrubs every provider credential variable the registry reads,
+  not only the `*_API_KEY`-shaped ones. Regression `7209` broke on a `GEMINI_API_KEY`,
+  and the fix matched credential-shaped suffixes -- but `HF_TOKEN`,
+  `COPILOT_GITHUB_TOKEN`, the Bedrock container/web-identity variables, and the Vertex
+  ADC trio reach the registry through names no suffix covers, so a developer exporting
+  any of them still broke the faux-only assumption the suite is built on. The names and
+  suffixes together now cover every source `getEnvApiKey` consults, and a test pins
+  that coverage so a new provider's variable is caught the day it matters.
+
+- Starting a sandboxed session no longer pays for a lock library and an HTTP stack it
+  never uses. The supervisor loads `settings-manager` on every launch to resolve the
+  network allowlist before the child exists, and that module statically imported
+  `proper-lockfile` (write-path only) and `http-dispatcher` (which loads `undici`) for
+  two small timeout definitions. Measured with the committed
+  `scripts/measure-supervisor-imports.mjs --dist`, A/B on one machine: the
+  settings-manager import fell from 1969ms to 577ms and the whole supervisor import path
+  from 2729ms to 812ms under load-23 (calmer runs: ~197ms to ~110ms). The lock library
+  is now required on first settings write, keeping `withLock` synchronous, and the
+  idle-timeout default/parser moved to a leaf module the dispatcher re-exports -- one
+  definition, but loading a settings file no longer costs an HTTP stack.
+
+- `/login` now works inside a sandboxed session. Every interactive session runs under the
+  OS sandbox, which mounts `auth.json` read-only -- correct for keeping the agent from
+  tampering with credentials, but it also meant the documented way to store a provider key
+  failed with a raw `EACCES` pointing at a file the user could plainly write from their own
+  shell. Credential writes now travel a supervisor-owned unix socket instead: the child asks,
+  the supervisor writes, and only literal secrets are accepted. A value that would resolve
+  as a `!command` or `$VAR` reference is refused and the refusal says why, because such a
+  value written through this channel would be a sandbox escape (the host executes it on the
+  next resolve). Reads are unchanged on both sides of the boundary, the read-only mount
+  stays, and every write -- accepted or refused -- appears in the sandbox violation tail
+  the supervisor prints on exit. Linux is verified by a live sandboxed turn in the suite;
+  macOS is verified at the profile level, with the same live gate now running on macOS CI
+  rather than Linux only.
+
 - `web_search` now has a backend. The tool has been registered in every session since Phase 4
   but no search vendor was ever wired in, so the model would pick it when a search would help
   and get an error telling it to pass a TypeScript SDK option — advice aimed at an embedder,

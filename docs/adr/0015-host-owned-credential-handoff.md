@@ -38,3 +38,23 @@ settings, caches, and tools and allows accidental disclosure across the sandbox 
 
 **Pass all of `process.env`.** Rejected because ambient variables can contain credentials,
 proxy authority, or host-specific paths unrelated to the requested provider.
+
+## Amendment (2026-08-22): a constrained supervisor-mediated write channel
+
+"The child cannot update credentials" is amended: a sandboxed child can now *request* a
+credential write through a supervisor-owned unix socket, specified in
+`docs/specs/2026-08-22-supervisor-mediated-credential-writes.md` and implemented in
+`core/sandbox/rpc/`. Everything else this ADR settles is unchanged, and the read-only
+mount stays exactly as decided -- the channel is the one exception to it, not a loosening.
+
+What keeps the amendment inside this ADR's posture:
+
+- Only literal secrets pass. Values `resolveConfigValue` would treat as `!command` or
+  `$VAR`/`${VAR}` references are refused before anything reaches the host file, so the
+  channel cannot arrange host-side command execution.
+- Reads are untouched on both sides of the boundary; the child keeps reading the
+  read-only projection.
+- Every accepted write and every refusal is audited in the supervisor's violation tail.
+- The channel exists only when a host credential file exists and an enforcing backend
+  launched the child, and it is carried on the launch contract like the rest of the
+  handoff.

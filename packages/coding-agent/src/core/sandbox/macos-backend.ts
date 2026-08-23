@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { createSandboxNetworkProxy, type SandboxNetworkProxy } from "./network-proxy.ts";
 import type { SandboxBackend, SandboxLaunch } from "./supervisor.ts";
 import type { SandboxViolationStore } from "./violations.ts";
@@ -55,6 +55,21 @@ function readOnlyDirectories(paths: readonly string[]): string[] {
 		}
 	});
 	return [...new Set(canonical)];
+}
+
+/**
+ * Canonicalize a channel socket path for a Seatbelt literal. Only the directory can be
+ * resolved -- the socket file need not exist yet when the profile is written -- and the
+ * same symlink rule as `readOnlyDirectories` applies: Seatbelt matches the canonical
+ * path, so an unresolved one silently never matches.
+ */
+function canonicalSocketPath(path: string): string {
+	const directory = dirname(resolve(path));
+	try {
+		return join(realpathSync(directory), basename(path));
+	} catch {
+		return join(directory, basename(path));
+	}
 }
 
 /** Seatbelt refuses through the blocked call's own errno text, not a wrapper message. */
@@ -131,6 +146,12 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 			});
 			const proxyPort = proxy.port as number;
 
+			// Seatbelt cannot remap a path, so the child connects to the channel socket at
+			// its host path, and the profile allows outbound to exactly that one socket.
+			const credentialChannelSocket = launch.credentialChannel
+				? canonicalSocketPath(launch.credentialChannel.hostSocketPath)
+				: undefined;
+
 			const readOnlyDirs = readOnlyDirectories([process.execPath, launch.command, ...(launch.readOnlyPaths ?? [])]);
 			const readOnlyFiles = (launch.readOnlyFiles ?? []).map((path) => {
 				try {
@@ -172,6 +193,9 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 				'(allow file-write* (subpath (param "WORKSPACE")))',
 				"(deny network*)",
 				'(allow network-outbound (remote ip (param "PROXY_ADDR")))',
+				...(credentialChannelSocket
+					? [`(allow network-outbound (remote unix-socket (literal "${credentialChannelSocket}")))`]
+					: []),
 			];
 			const profilePath = join(stateDirectory, "profile.sb");
 			writeFileSync(profilePath, profileLines.join("\n"));

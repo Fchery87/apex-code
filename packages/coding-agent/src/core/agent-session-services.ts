@@ -16,6 +16,7 @@ import {
 	type ResourceLoader,
 	type ResourceLoaderReloadOptions,
 } from "./resource-loader.ts";
+import { createSandboxCredentialStore } from "./sandbox/rpc/credential-client.ts";
 import { type CreateAgentSessionOptions, type CreateAgentSessionResult, createAgentSession } from "./sdk.ts";
 import type { SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
@@ -195,10 +196,17 @@ export async function createAgentSessionServices(
 		? { endpoint: otlpEndpoint, headers: settingsManager.getObservabilitySettings().otlpHeaders }
 		: undefined;
 
+	// Inside a sandboxed session the supervisor advertises a credential write channel
+	// (spec: 2026-08-22-supervisor-mediated-credential-writes). Reads are unchanged --
+	// still the read-only projection of the host credential file -- while writes and
+	// deletes travel the supervisor-owned socket instead of failing on the read-only
+	// mount. Outside a sandbox this resolves to undefined and the default store applies.
+	const sandboxCredentialStore = createSandboxCredentialStore();
 	const modelRuntime =
 		options.modelRuntime ??
 		(await ModelRuntime.create({
 			authPath: process.env.APEX_CODE_AUTH_PATH ?? (options.agentDir ? join(agentDir, "auth.json") : getAuthPath()),
+			credentials: sandboxCredentialStore,
 			modelsPath: join(agentDir, "models.json"),
 			signal: options.modelRuntimeSignal,
 			usagePerformanceStore,
