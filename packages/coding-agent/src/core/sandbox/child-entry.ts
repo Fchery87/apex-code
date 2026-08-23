@@ -13,4 +13,4 @@ configureHttpDispatcher();
 // request to the sandbox allowlist accurate rather than a guess about whose proxy replied.
 installSandboxNetworkRefusalMessages();
 
-await main(process.argv.slice(2));
+await main(process.argv.slice(2), { sessionLeaseOwner: "supervisor" });

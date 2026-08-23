@@ -25,6 +25,7 @@ export interface Args {
 	mode?: Mode;
 	name?: string;
 	noSession?: boolean;
+	allowConcurrent?: boolean;
 	session?: string;
 	sessionId?: string;
 	fork?: string;
@@ -67,7 +68,7 @@ export function isValidThinkingLevel(level: string): level is ThinkingLevel {
 	return VALID_THINKING_LEVELS.includes(level as ThinkingLevel);
 }
 
-export function parseArgs(args: string[]): Args {
+export function parseArgs(args: readonly string[]): Args {
 	const result: Args = {
 		messages: [],
 		fileArgs: [],
@@ -110,6 +111,8 @@ export function parseArgs(args: string[]): Args {
 			}
 		} else if (arg === "--no-session") {
 			result.noSession = true;
+		} else if (arg === "--allow-concurrent") {
+			result.allowConcurrent = true;
 		} else if (arg === "--session" && i + 1 < args.length) {
 			result.session = args[++i];
 		} else if (arg === "--session-id" && i + 1 < args.length) {
@@ -287,6 +290,7 @@ ${chalk.bold("Options:")}
   --system-prompt <text>         System prompt (default: coding assistant prompt)
   --append-system-prompt <text>  Append text or file contents to the system prompt (can be used multiple times)
   --mode <mode>                  Output mode: text (default), json, or rpc
+  --allow-concurrent             Start even if another session holds this directory
   --print, -p                    Non-interactive mode: process prompt and exit
   --permission-mode <mode>       default, plan, acceptEdits, bypassPermissions, or dontAsk.
                                   Required for non-interactive sessions (--print, json, or rpc mode).

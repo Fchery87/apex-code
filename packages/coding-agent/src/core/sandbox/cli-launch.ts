@@ -25,6 +25,10 @@ export interface SandboxedCliLaunch extends SandboxLaunch {
 	readonly environment: NodeJS.ProcessEnv;
 }
 
+export function getSandboxSessionDirectory(workspace: string): string {
+	return join(workspace, ".apex-code", "sandbox-sessions");
+}
+
 /**
  * Read supervisor policy only from global settings; project settings are untrusted here.
  *
@@ -270,7 +274,7 @@ export function buildSandboxedCliLaunch(options: {
 }): SandboxedCliLaunch {
 	const stateDirectory = join(options.workspace, ".apex-code", "sandbox-state");
 	const agentDirectory = join(options.workspace, ".apex-code", "sandbox-agent");
-	const sessionDirectory = join(options.workspace, ".apex-code", "sandbox-sessions");
+	const sessionDirectory = getSandboxSessionDirectory(options.workspace);
 	// Mirrors getBinDir() as the child will compute it from APEX_CODE_CODING_AGENT_DIR,
 	// so a projected tool lands exactly where the child's own lookup already checks.
 	const toolsDirectory = join(agentDirectory, "bin");

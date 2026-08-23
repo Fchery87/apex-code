@@ -1,7 +1,7 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { launchSandboxedCli } from "../../src/core/sandbox/cli-supervisor.ts";
 import { createLinuxSandboxBackend } from "../../src/core/sandbox/linux-backend.ts";
 import { createMacosSandboxBackend } from "../../src/core/sandbox/macos-backend.ts";
@@ -66,6 +66,35 @@ describe("CLI sandbox supervisor", () => {
 			args: ["child-entry.js", "--print", "hello"],
 		});
 		expect(enforcing.closed).toBe(true);
+	});
+
+	it("holds the session lease with the host supervisor pid while the sandbox child runs", async () => {
+		const cwd = workspace();
+		const leasePath = join(cwd, ".apex-code", "sandbox-sessions", "leases", `${process.pid}.json`);
+		let releaseBackend: (() => void) | undefined;
+		const enforcing = backend({ kind: "enforced" });
+		enforcing.launch = async (launch) => {
+			enforcing.launches.push(launch);
+			await new Promise<void>((resolvePromise) => {
+				releaseBackend = resolvePromise;
+			});
+			return 0;
+		};
+
+		const launched = launchSandboxedCli({
+			command: "/usr/bin/node",
+			args: ["child-entry.js", "--mode", "rpc"],
+			environment: {},
+			workspace: cwd,
+			dependencies: { createBackend: () => enforcing },
+		});
+		await vi.waitFor(() => expect(existsSync(leasePath)).toBe(true));
+
+		expect(JSON.parse(readFileSync(leasePath, "utf8"))).toMatchObject({ pid: process.pid, cwd });
+
+		releaseBackend?.();
+		await launched;
+		expect(existsSync(leasePath)).toBe(false);
 	});
 
 	it("fails closed and does not start a child when enforcement is unavailable", async () => {

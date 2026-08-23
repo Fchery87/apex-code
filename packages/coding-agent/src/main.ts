@@ -25,6 +25,7 @@ import {
 	printAuthCommandHelp,
 	validateAuthCommandArgs,
 } from "./cli/auth-command.ts";
+import { reportConcurrentSessionRefusal } from "./cli/concurrent-session.ts";
 import { runCostCommand } from "./cli/cost-command.ts";
 import { resolveCredentialForPrint } from "./cli/credential-print.ts";
 import { processFileArguments } from "./cli/file-processor.ts";
@@ -59,7 +60,8 @@ import {
 	MissingSessionCwdError,
 	type SessionCwdIssue,
 } from "./core/session-cwd.ts";
-import { assertValidSessionId, SessionManager } from "./core/session-manager.ts";
+import { acquireSessionLease, readLiveSessionLeases } from "./core/session-lease.ts";
+import { assertValidSessionId, getDefaultSessionDirPath, SessionManager } from "./core/session-manager.ts";
 import { SettingsManager } from "./core/settings-manager.ts";
 import { printTimings, resetTimings, time } from "./core/timings.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "./core/trust-manager.ts";
@@ -568,6 +570,7 @@ async function promptForMissingSessionCwd(
 
 export interface MainOptions {
 	extensionFactories?: InlineExtension[];
+	sessionLeaseOwner?: "main" | "supervisor";
 }
 
 export async function main(args: string[], options?: MainOptions) {
@@ -695,7 +698,21 @@ export async function main(args: string[], options?: MainOptions) {
 		(parsed.sessionDir ? normalizePath(parsed.sessionDir) : undefined) ??
 		(envSessionDir ? expandTildePath(envSessionDir) : undefined) ??
 		startupSettingsManager.getSessionDir();
+	const wantsPersistentSession = !parsed.noSession && !parsed.help && parsed.listModels === undefined;
+	const mainOwnsSessionLease = options?.sessionLeaseOwner !== "supervisor";
+	if (mainOwnsSessionLease && wantsPersistentSession && !parsed.allowConcurrent) {
+		const liveSessions = readLiveSessionLeases(sessionDir ?? getDefaultSessionDirPath(cwd), cwd);
+		if (liveSessions.length > 0) {
+			reportConcurrentSessionRefusal(liveSessions, cwd);
+			process.exit(1);
+		}
+	}
+
 	let sessionManager = await createSessionManager(parsed, cwd, sessionDir, startupSettingsManager);
+	if (mainOwnsSessionLease && wantsPersistentSession) {
+		const lease = acquireSessionLease(sessionManager.getSessionDir(), cwd, sessionManager.getSessionId());
+		process.once("exit", () => lease.release());
+	}
 	const missingSessionCwdIssue = getMissingSessionCwdIssue(sessionManager, cwd);
 	if (missingSessionCwdIssue) {
 		if (appMode === "interactive") {

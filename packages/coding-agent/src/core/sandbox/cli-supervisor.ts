@@ -1,5 +1,8 @@
+import { parseArgs } from "../../cli/args.ts";
+import { reportConcurrentSessionRefusal } from "../../cli/concurrent-session.ts";
 import type { HostToolBinary } from "../../utils/tools-manager.ts";
-import { buildSandboxedCliLaunch, type HostSkillPaths } from "./cli-launch.ts";
+import { acquireSessionLease, readLiveSessionLeases } from "../session-lease.ts";
+import { buildSandboxedCliLaunch, getSandboxSessionDirectory, type HostSkillPaths } from "./cli-launch.ts";
 import { createLinuxSandboxBackend } from "./linux-backend.ts";
 import { createMacosSandboxBackend } from "./macos-backend.ts";
 import { createSandboxPolicy } from "./policy.ts";
@@ -69,6 +72,21 @@ export async function launchSandboxedCli(options: {
 		});
 	}
 	const supervisor = createSandboxSupervisor({ backend, policy: policyResult.policy });
+	const parsed = parseArgs(options.args);
+	const wantsPersistentSession = !parsed.noSession && !parsed.help && parsed.listModels === undefined;
+	const sessionDirectory = getSandboxSessionDirectory(policyResult.policy.workspace);
+	if (wantsPersistentSession && !parsed.allowConcurrent) {
+		const liveSessions = readLiveSessionLeases(sessionDirectory, policyResult.policy.workspace);
+		if (liveSessions.length > 0) {
+			reportConcurrentSessionRefusal(liveSessions, policyResult.policy.workspace);
+			await supervisor.close();
+			await credentialProxy?.close();
+			return 1;
+		}
+	}
+	const lease = wantsPersistentSession
+		? acquireSessionLease(sessionDirectory, policyResult.policy.workspace, `supervisor-${process.pid}`)
+		: undefined;
 	const launch = buildSandboxedCliLaunch({
 		workspace: policyResult.policy.workspace,
 		command: options.command,
@@ -88,6 +106,7 @@ export async function launchSandboxedCli(options: {
 		dependencies.stderr.write(`Error: ${message}\n`);
 		return 1;
 	} finally {
+		lease?.release();
 		for (const violation of violationStore.list()) {
 			dependencies.stderr.write(
 				`Sandbox violation (${violation.kind}): ${violation.command} — ${violation.detail}\n`,
