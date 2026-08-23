@@ -15,7 +15,13 @@ function plain(line: string): string {
 	return stripAnsi(line.split(CURSOR_MARKER).join(""));
 }
 
-function makeEditor(options?: { placeholder?: string; promptPrefix?: string; focused?: boolean; paddingX?: number }) {
+function makeEditor(options?: {
+	placeholder?: string;
+	promptPrefix?: string;
+	focused?: boolean;
+	paddingX?: number;
+	surface?: boolean;
+}) {
 	const tui = { terminal: { rows: 40, cols: 80 }, requestRender() {}, invalidate() {} };
 	const editor = new CustomEditor(tui as never, getEditorTheme(), new KeybindingsManager(), {
 		paddingX: options?.paddingX ?? 0,
@@ -24,12 +30,17 @@ function makeEditor(options?: { placeholder?: string; promptPrefix?: string; foc
 		placeholder: options?.placeholder ?? PLACEHOLDER,
 		placeholderColor: (text) => theme.fg("dim", text),
 		commandColor: (text) => theme.fg("accent", text),
+		surfaceColor: options?.surface ? (text: string) => theme.bg("userMessageBg", text) : undefined,
 	});
 	editor.focused = options?.focused ?? true;
 	return editor;
 }
 
 const CURSOR_LEFT = `${ESC}[D`;
+
+function userMessageBgOpen(): string {
+	return theme.bg("userMessageBg", "x").replace(`x${ESC}[49m`, "");
+}
 
 /** Drive the caret leftwards through real key handling. */
 function moveLeft(editor: CustomEditor, times: number): void {
@@ -62,6 +73,32 @@ describe("CustomEditor chrome", () => {
 			for (const line of editor.render(74)) {
 				expect(visibleWidth(line)).toBe(74);
 			}
+		});
+	});
+
+	describe("composer surface", () => {
+		it("pads and fills only the editor block", () => {
+			const lines = makeEditor({ surface: true, focused: false }).render(60);
+
+			expect(lines).toHaveLength(5);
+			for (const line of lines) {
+				expect(visibleWidth(line)).toBe(60);
+				expect(line).toContain(userMessageBgOpen());
+			}
+			expect(plain(lines[0])).toBe(" ".repeat(60));
+			expect(plain(lines[1])).toBe(` ${"─".repeat(58)} `);
+			expect(plain(lines[2])).toContain("> ");
+			expect(plain(lines[2])).toContain(PLACEHOLDER);
+			expect(plain(lines[3])).toBe(` ${"─".repeat(58)} `);
+			expect(plain(lines[4])).toBe(" ".repeat(60));
+		});
+
+		it("keeps the cursor marker and restores the surface after the cursor cell", () => {
+			const line = makeEditor({ surface: true }).render(60)[2];
+
+			expect(line).toContain(CURSOR_MARKER);
+			const cursorCellEnd = line.indexOf(`${ESC}[7m ${ESC}[0m`) + `${ESC}[7m ${ESC}[0m`.length;
+			expect(line.slice(cursorCellEnd)).toContain(userMessageBgOpen());
 		});
 	});
 

@@ -96,6 +96,12 @@ capable and measurably worse.
 | 11 | Remove unowned hosted-service defaults | **landed** — 5 of 5 tasks · `bfa746d0c` (required three-OS CI run 31945192886) | [spec](specs/2026-08-16-remove-unowned-hosted-service-defaults.md) | — |
 | 12 | Production graduation and release integrity | **landed** — 15 of 15 tasks · `eb6df850d` (corrected `apex-code@0.0.1-alpha.2` published and verified, release.yml run 32030755704) | [spec](specs/2026-08-16-production-graduation-and-release-integrity.md) | — |
 
+## Product-surface follow-ups
+
+| Follow-up | State | Spec | Plan |
+| --- | --- | --- | --- |
+| Composer dock surface | **active** — restores the filled prompt surface omitted from terminal-interaction-polish completion | [spec](specs/2026-08-23-composer-dock-surface.md) | [plan](plans/2026-08-23-composer-dock-surface.md) |
+
 ---
 
 ## Phase 0 — Fork foundation

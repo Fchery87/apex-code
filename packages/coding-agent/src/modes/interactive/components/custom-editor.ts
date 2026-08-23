@@ -21,6 +21,8 @@ export interface CustomEditorOptions extends EditorOptions {
 	placeholderColor?: (text: string) => string;
 	/** Styles a leading `/command` token. Defaults to leaving it unstyled. */
 	commandColor?: (text: string) => string;
+	/** Applies the filled prompt surface around the editor block. */
+	surfaceColor?: (text: string) => string;
 }
 
 /** Box-drawing horizontal rule: the character the base Editor draws borders from. */
@@ -51,6 +53,11 @@ const COMMAND_TOKEN = /^(\s*)(\/\S+)/;
  * scanning in {@link colorVisibleRange}.
  */
 const CONTROL_SEQUENCE = /\x1b\[[0-9;]*[A-Za-z]|\x1b_[^\x07]*\x07/y;
+
+/** The reverse-video cursor cell emitted by the inherited editor. */
+const INVERTED_CURSOR_CELL = /\x1b\[7m[\s\S]\x1b\[(?:0|27)m/y;
+
+const SURFACE_PADDING = 1;
 
 /**
  * ============================ ANSI measuring hazards ============================
@@ -149,6 +156,7 @@ export class CustomEditor extends Editor {
 	private readonly promptColor: (text: string) => string;
 	private readonly placeholderColor: (text: string) => string;
 	private readonly commandColor: ((text: string) => string) | undefined;
+	private readonly surfaceColor: ((text: string) => string) | undefined;
 	private readonly placeholder: string | undefined;
 	private modeLabel = "";
 	public actionHandlers: Map<AppKeybinding, () => void> = new Map();
@@ -168,9 +176,17 @@ export class CustomEditor extends Editor {
 		this.placeholder = options?.placeholder;
 		this.placeholderColor = options?.placeholderColor ?? ((text) => text);
 		this.commandColor = options?.commandColor;
+		this.surfaceColor = options?.surfaceColor;
 	}
 
 	override render(width: number): string[] {
+		const canRenderSurface = this.surfaceColor !== undefined && width > SURFACE_PADDING * 2 + 4;
+		const editorWidth = canRenderSurface ? width - SURFACE_PADDING * 2 : width;
+		const lines = this.renderEditor(editorWidth);
+		return canRenderSurface ? this.withSurface(lines, width) : lines;
+	}
+
+	private renderEditor(width: number): string[] {
 		const promptPrefix = this.modeLabel ? `[${this.modeLabel}] ${this.promptPrefix}` : this.promptPrefix;
 		const prefixWidth = visibleWidth(promptPrefix);
 		// Reserve the prefix out of the width handed to the base Editor, so its
@@ -205,6 +221,73 @@ export class CustomEditor extends Editor {
 			}
 			return blank + line;
 		});
+	}
+
+	private withSurface(lines: string[], width: number): string[] {
+		const surfaceColor = this.surfaceColor;
+		if (!surfaceColor) return lines;
+
+		const result = [this.surfaceLine(" ".repeat(width), surfaceColor)];
+		const editorBlockLineCount = this.editorBlockLineCount(lines);
+		for (const [index, line] of lines.entries()) {
+			if (index < editorBlockLineCount) {
+				result.push(
+					this.surfaceLine(`${" ".repeat(SURFACE_PADDING)}${line}${" ".repeat(SURFACE_PADDING)}`, surfaceColor),
+				);
+			} else {
+				result.push(line);
+			}
+		}
+		result.splice(1 + editorBlockLineCount, 0, this.surfaceLine(" ".repeat(width), surfaceColor));
+		return result;
+	}
+
+	private editorBlockLineCount(lines: string[]): number {
+		let borders = 0;
+		for (let index = 0; index < lines.length; index++) {
+			if (this.isBorderLine(lines[index])) borders++;
+			if (borders === 2) return index + 1;
+		}
+		return lines.length;
+	}
+
+	private surfaceLine(line: string, surfaceColor: (text: string) => string): string {
+		let output = "";
+		let visibleText = "";
+		let index = 0;
+
+		const flush = () => {
+			if (visibleText) {
+				output += surfaceColor(visibleText);
+				visibleText = "";
+			}
+		};
+
+		while (index < line.length) {
+			INVERTED_CURSOR_CELL.lastIndex = index;
+			const cursorCell = INVERTED_CURSOR_CELL.exec(line);
+			if (cursorCell) {
+				flush();
+				output += cursorCell[0];
+				index = INVERTED_CURSOR_CELL.lastIndex;
+				continue;
+			}
+
+			CONTROL_SEQUENCE.lastIndex = index;
+			const control = CONTROL_SEQUENCE.exec(line);
+			if (control) {
+				flush();
+				output += control[0];
+				index = CONTROL_SEQUENCE.lastIndex;
+				continue;
+			}
+
+			visibleText += line[index];
+			index += 1;
+		}
+
+		flush();
+		return output;
 	}
 
 	setModeLabel(label: string | undefined): void {

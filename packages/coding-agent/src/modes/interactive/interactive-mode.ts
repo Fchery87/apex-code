@@ -584,6 +584,7 @@ export class InteractiveMode {
 			placeholder: "Ask anything, / for commands, ! for bash",
 			placeholderColor: (text) => theme.fg("dim", text),
 			commandColor: (text) => theme.fg("accent", text),
+			surfaceColor: (text) => theme.bg("userMessageBg", text),
 		});
 		this.editor = this.defaultEditor;
 		this.editorContainer = new Container();
