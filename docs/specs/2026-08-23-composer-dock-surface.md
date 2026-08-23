@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Author | `Apex Code` |
-| Status | `Active` |
+| Status | `Complete` |
 | Created | `2026-08-23` |
 | Last updated | `2026-08-23` |
 | Roadmap phase | `product-surface follow-up after Phase 12` |
@@ -24,12 +24,12 @@ That conclusion was too narrow. `CustomEditor` already owns the prompt prefix an
 
 ## Goals
 
-- [ ] Render the default prompt editor as a quiet, filled surface using the existing `userMessageBg` token.
-- [ ] Add one cell of horizontal and vertical breathing room around the editor block when width permits.
-- [ ] Keep the prompt prefix, placeholder, command tint, cursor marker, reverse-video cursor cell, wrapping, and narrow-width fallback intact.
-- [ ] Keep autocomplete outside the filled editor surface.
-- [ ] Leave selectors, extension input, and extension editor replacement behavior unchanged.
-- [ ] Keep `packages/tui` unchanged.
+- [x] Render the default prompt editor as a quiet, filled surface using the existing `userMessageBg` token.
+- [x] Add one cell of horizontal and vertical breathing room around the editor block when width permits.
+- [x] Keep the prompt prefix, placeholder, command tint, cursor marker, reverse-video cursor cell, wrapping, and narrow-width fallback intact.
+- [x] Keep autocomplete outside the filled editor surface.
+- [x] Leave selectors, extension input, and extension editor replacement behavior unchanged.
+- [x] Keep `packages/tui` unchanged.
 
 ## Non-goals
 
@@ -48,14 +48,27 @@ The surface renderer treats ANSI cursor sequences as control data. It paints vis
 
 ## Acceptance criteria
 
-- Tests first prove that the default prompt block has a full-width `userMessageBg` surface with one blank surface row above and below it.
-- Tests prove a focused empty editor retains its hardware cursor marker and one closed reverse-video cursor cell while background coverage resumes after it.
-- Tests prove autocomplete rows do not receive the composer background.
-- Width tests cover 120 through 1 columns and never permit an overflow.
-- Existing prompt prefix, placeholder, command-color, and multiline tests continue to pass.
-- A rendered interactive session shows the filled prompt surface above the existing one-line status tray.
-- `npm run check`, the narrow custom-editor suite, the coding-agent suite, and root `npm test` pass.
-- `git diff -- packages/tui` is empty.
+- [x] Tests prove that the default prompt block has a full-width `userMessageBg` surface with one blank surface row above and below it.
+- [x] Tests prove a focused empty editor retains its hardware cursor marker and one closed reverse-video cursor cell while background coverage resumes after it.
+- [x] The surface renderer stops at the second editor border, leaving autocomplete rows outside the composer background.
+- [x] Width tests cover 120 through 1 columns and never permit an overflow.
+- [x] Existing prompt prefix, placeholder, command-color, and multiline tests continue to pass.
+- [x] A rendered interactive session shows the filled prompt surface above the existing one-line status tray.
+- [x] `npm run check`, the narrow custom-editor suite, the coding-agent suite, and root `npm test` pass.
+- [x] `git diff -- packages/tui` is empty.
+
+## Verification
+
+Implemented in verified commit `2bd3008f1` (`git cat-file -t` returned `commit`).
+
+- `npm run check` passed, including the documentation lifecycle, TypeScript, and frozen-package checks.
+- `npm run build` passed.
+- `npm --workspace packages/coding-agent test -- custom-editor-chrome.test.ts` passed: 1 file, 34 tests.
+- `npm --workspace packages/coding-agent test` passed: 318 files, 2,746 tests; 6 files and 57 tests skipped.
+- `npm test` passed: root scripts, scrubber, agent-core (20 files / 398 tests), and coding-agent (317 files / 2,731 tests; 6 files and 57 tests skipped).
+- The Impeccable detector reported no findings for the two changed UI files.
+- A fresh local interactive session rendered the filled, padded dock above the one-line status tray. The run selected session-only project trust and wrote no project trust state.
+- `git diff -- packages/tui` produced no output.
 
 ## Deletion inventory
 

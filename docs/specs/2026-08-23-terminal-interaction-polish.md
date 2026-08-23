@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Author | `Apex Code` |
-| Status | `Complete with corrective follow-up` |
+| Status | `Complete` |
 | Created | `2026-08-23` |
 | Last updated | `2026-08-23` |
 | Roadmap phase | `none — product-surface follow-up after Phase 12` |
@@ -51,10 +51,9 @@ Implementation commits: `ec752d593`, `ed465e209`, `74b3ccd68`, and `697746b94`.
   parent-level summary until expanded.
 - First-use hints are emitted only from live tool, queue, thinking, and bash interactions.
   The compact `firstUseHints` settings ledger prevents repeat hints across sessions.
-- `CustomEditor` supplies text-only `bash` and `busy` labels. The original implementation
-  did not add the agreed filled editor surface. The corrective
-  [`composer dock surface` spec](2026-08-23-composer-dock-surface.md) owns that missing
-  requirement and its verification.
+- `CustomEditor` supplies text-only `bash` and `busy` labels. The formerly omitted filled
+  editor surface is complete and verified by the
+  [`composer dock surface` spec](2026-08-23-composer-dock-surface.md).
 - `/config` opens a searchable index for existing settings, model, provider, and trust
   handlers. Resources, extensions, and MCP adapters deliberately hand off to the exact
   `apex-code config` command, which already owns scope and project-trust handling.
