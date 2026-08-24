@@ -26,6 +26,16 @@ type InputContext = {
 type InteractiveModePrivate = {
 	setupEditorSubmitHandler(this: SubmitContext): void;
 	getUserInput(this: InputContext): Promise<string>;
+	refreshFooterPermissionMode(this: PermissionModeContext): Promise<void>;
+};
+
+type PermissionModeContext = {
+	footer: { setPermissionMode: (mode: string) => void };
+	isInitialized: boolean;
+	session: {
+		getPermissionMode: () => Promise<{ mode: string } | undefined>;
+	};
+	ui: { requestRender: () => void };
 };
 
 const interactiveModePrototype = InteractiveMode.prototype as unknown as InteractiveModePrivate;
@@ -68,5 +78,37 @@ describe("InteractiveMode startup input", () => {
 		await expect(interactiveModePrototype.getUserInput.call(context)).resolves.toBe("queued prompt");
 		expect(context.onInputCallback).toBeUndefined();
 		expect(context.pendingUserInputs).toEqual([]);
+	});
+
+	it("waits until the effective permission mode is reflected in the footer", async () => {
+		let resolvePermissionMode: ((resolution: { mode: string }) => void) | undefined;
+		const context: PermissionModeContext = {
+			footer: { setPermissionMode: vi.fn() },
+			isInitialized: false,
+			session: {
+				getPermissionMode: vi.fn(
+					() =>
+						new Promise<{ mode: string }>((resolve) => {
+							resolvePermissionMode = resolve;
+						}),
+				),
+			},
+			ui: { requestRender: vi.fn() },
+		};
+
+		const refresh = interactiveModePrototype.refreshFooterPermissionMode.call(context);
+		expect(refresh).toBeInstanceOf(Promise);
+		expect(context.footer.setPermissionMode).not.toHaveBeenCalled();
+
+		resolvePermissionMode?.({ mode: "bypassPermissions" });
+		await refresh;
+
+		expect(context.footer.setPermissionMode).toHaveBeenCalledWith("bypassPermissions");
+		expect(context.ui.requestRender).not.toHaveBeenCalled();
+
+		context.isInitialized = true;
+		vi.mocked(context.session.getPermissionMode).mockResolvedValue({ mode: "bypassPermissions" });
+		await interactiveModePrototype.refreshFooterPermissionMode.call(context);
+		expect(context.ui.requestRender).toHaveBeenCalledOnce();
 	});
 });

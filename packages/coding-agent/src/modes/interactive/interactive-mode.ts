@@ -871,6 +871,10 @@ export class InteractiveMode {
 		const [fdPath] = await Promise.all([ensureTool("fd"), ensureTool("rg")]);
 		this.fdPath = fdPath;
 
+		// Resolve the effective mode before mounting or focusing components. Both
+		// operations can schedule a frame even before the renderer is started.
+		await this.refreshFooterPermissionMode();
+
 		if (this.session.scopedModels.length > 0 && (this.options.verbose || !this.settingsManager.getQuietStartup())) {
 			const modelList = this.session.scopedModels
 				.map((sm) => {
@@ -1891,7 +1895,7 @@ export class InteractiveMode {
 		this.applyFullscreenScrollbarSetting();
 		this.footer.setSession(this.session);
 		this.footer.setAutoCompactEnabled(this.session.autoCompactionEnabled);
-		this.refreshFooterPermissionMode();
+		void this.refreshFooterPermissionMode();
 		this.footerDataProvider.setCwd(this.sessionManager.getCwd());
 		this.hideThinkingBlock = this.settingsManager.getHideThinkingBlock();
 		this.outputPad = this.settingsManager.getOutputPad();
@@ -4443,11 +4447,12 @@ export class InteractiveMode {
 	 * between two sessions in one process. A footer left showing the old value
 	 * would under-report bypassPermissions, which is the one direction that matters.
 	 */
-	private refreshFooterPermissionMode(): void {
-		void this.session.getPermissionMode().then((resolution) => {
-			this.footer.setPermissionMode(resolution?.mode ?? "default");
+	private async refreshFooterPermissionMode(): Promise<void> {
+		const resolution = await this.session.getPermissionMode();
+		this.footer.setPermissionMode(resolution?.mode ?? "default");
+		if (this.isInitialized) {
 			this.ui.requestRender();
-		});
+		}
 	}
 
 	/**
