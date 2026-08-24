@@ -1,5 +1,11 @@
+import { Container } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
+
+vi.mock("../src/utils/tools-manager.ts", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../src/utils/tools-manager.ts")>()),
+	ensureTool: vi.fn(async (name: string) => name),
+}));
 
 type SubmitContext = {
 	defaultEditor: { onSubmit?: (text: string) => void };
@@ -59,6 +65,54 @@ function createSubmitContext(): SubmitContext {
 }
 
 describe("InteractiveMode startup input", () => {
+	it("applies the effective permission mode before mounting or starting the first frame", async () => {
+		const events: string[] = [];
+		let visibleMode = "unset";
+		const firstFrame = new Error("first frame");
+		const component = new Container();
+		const context = Object.assign(Object.create(InteractiveMode.prototype), {
+			isInitialized: false,
+			registerSignalHandlers: vi.fn(),
+			getChangelogForDisplay: vi.fn(() => undefined),
+			runtimeHost: {
+				session: {
+					scopedModels: [],
+					getPermissionMode: vi.fn(async () => ({ mode: "bypassPermissions" })),
+					settingsManager: { getFullscreenScrollbar: vi.fn(() => false) },
+				},
+			},
+			footer: {
+				setPermissionMode: vi.fn((mode: string) => {
+					visibleMode = mode;
+					events.push(`permission:${mode}`);
+				}),
+			},
+			renderWidgets: vi.fn(),
+			documentContainer: component,
+			pendingMessagesContainer: component,
+			statusContainer: component,
+			widgetContainerAbove: component,
+			editorContainer: component,
+			widgetContainerBelow: component,
+			footerContainer: component,
+			renderer: {},
+			mountInteractiveTui: vi.fn(() => events.push(`mount:${visibleMode}`)),
+			ui: {
+				setFocus: vi.fn(),
+				start: vi.fn(() => {
+					events.push(`start:${visibleMode}`);
+					throw firstFrame;
+				}),
+			},
+			editor: component,
+			setupKeyHandlers: vi.fn(),
+			setupEditorSubmitHandler: vi.fn(),
+		});
+
+		await expect(InteractiveMode.prototype.init.call(context as never)).rejects.toBe(firstFrame);
+		expect(events).toEqual(["permission:bypassPermissions", "mount:bypassPermissions", "start:bypassPermissions"]);
+	});
+
 	it("queues a normal prompt submitted before the input callback is installed", async () => {
 		const context = createSubmitContext();
 		interactiveModePrototype.setupEditorSubmitHandler.call(context);

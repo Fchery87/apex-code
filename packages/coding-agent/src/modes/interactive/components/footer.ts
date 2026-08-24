@@ -319,7 +319,9 @@ export class FooterComponent implements Component {
 
 		// If statsLeft is too wide, truncate it
 		if (statsLeftWidth > width) {
-			statsLeft = truncateToWidth(statsLeft, width, "...");
+			// Permission mode is the first segment and must remain textual at every
+			// positive width. An ellipsis suffix can consume the entire narrow line.
+			statsLeft = truncateToWidth(statsLeft, width, "");
 			statsLeftWidth = visibleWidth(statsLeft);
 		}
 

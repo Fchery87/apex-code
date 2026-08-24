@@ -33,7 +33,7 @@
 
 ## PGT.3 — Enforce the Prime-like safety tray hierarchy
 
-1. Add failing boundary cases to `packages/coding-agent/test/footer-width.test.ts` and `packages/coding-agent/test/footer-accessibility.test.ts` proving that every non-default permission mode is the first surviving datum at all widths, `bypassPermissions` is never displaced, default mode yields the narrow tray to context, textual pressure markers remain, and every row is width-safe.
+1. Add failing boundary cases to `packages/coding-agent/test/footer-width.test.ts` and `packages/coding-agent/test/footer-accessibility.test.ts` proving that every permission mode is the first surviving datum at all widths in compact and full token-display modes, `bypassPermissions` is never displaced, textual pressure markers remain when they fit after permission posture, and every row is width-safe.
 2. Run both footer suites and confirm the failures expose current routine-telemetry competition or ordering.
 3. Refactor only the compact branch of `packages/coding-agent/src/modes/interactive/components/footer.ts` into independently budgeted safety-first segments. Preserve the explicit full-detail mode and existing data calculations.
 4. Run the footer suites, then the relevant interactive-layout tests and `npx tsgo --noEmit`.

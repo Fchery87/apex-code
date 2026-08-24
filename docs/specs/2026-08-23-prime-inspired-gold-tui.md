@@ -116,7 +116,7 @@ The existing Apex startup identity stays. Its palette follows the gold system, w
 - [ ] Theme tests assert the canonical gold-neutral variables and token mappings.
 - [ ] Theme loading, adaptive/no-color behavior, 256-color behavior, and custom themes remain green.
 - [ ] Composer tests prove the borderless three-row slab, two-cell normal inset, narrow degradation, cursor closure, hardware cursor, and autocomplete separation.
-- [ ] Footer tests prove every non-default permission mode remains the first visible datum from 120 columns down to one, including `bypassPermissions`.
+- [ ] Footer tests prove every permission mode, including `default` and `bypassPermissions`, remains the first visible datum from 120 columns down to one in compact and full token-display modes.
 - [ ] Footer tests prove context pressure remains textual and width-safe when permission mode is default.
 - [ ] Tool tests prove full-width filled rows, textual state, content inset, narrow degradation, and no overflow.
 - [ ] Existing splash, interaction, accessibility, and specialized tool-renderer tests remain green.

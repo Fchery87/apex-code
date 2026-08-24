@@ -331,6 +331,47 @@ describe("FooterComponent width handling", () => {
 		}
 	});
 
+	it("gives permission state first claim in full token mode at every positive width", () => {
+		const session = createSession({
+			sessionName: "",
+			percent: 95,
+			usage: {
+				input: 12_345,
+				output: 6_789,
+				cacheRead: 1_000,
+				cacheWrite: 0,
+				cost: { total: 1.5 },
+			},
+		});
+		const compactNames = {
+			default: "default",
+			plan: "plan",
+			acceptEdits: "acceptEdits",
+			bypassPermissions: "bypassPermissions",
+			dontAsk: "dontAsk",
+		} as const;
+
+		for (const [mode, name] of Object.entries(compactNames)) {
+			const footer = new FooterComponent(session, createFooterData(1), {
+				getSymbolPreset: () => "unicode",
+				getColorBlindMode: () => false,
+				getTokenUsageDisplay: () => "full",
+			});
+			footer.setPermissionMode(mode as keyof typeof compactNames);
+			for (const width of [120, 42, 24, 12, 7, 3, 2, 1]) {
+				const lines = footer.render(width).map(stripAnsi);
+				const expectedPrefix = name.slice(0, Math.min(width, name.length));
+				expect(
+					lines.some((line) => line.startsWith(expectedPrefix)),
+					`${mode} at width ${width}: ${JSON.stringify(lines)}`,
+				).toBe(true);
+				for (const line of lines) {
+					expect(visibleWidth(line), `${mode} at width ${width}`).toBeLessThanOrEqual(width);
+				}
+			}
+		}
+	});
+
 	it("does not mark generic OAuth sign-in as a subscription", () => {
 		const session = createSession({
 			sessionName: "",
