@@ -522,6 +522,8 @@ describe("InteractiveMode.showLoadedResources", () => {
 		appendSystemPromptSources?: Array<{ path: string }>;
 		extensions?: ExtensionFixture[];
 		skills?: Array<{ filePath: string; name: string }>;
+		promptTemplates?: Array<{ filePath: string; name: string }>;
+		themes?: Array<{ name: string; sourcePath: string }>;
 		skillDiagnostics?: Array<{ type: "warning" | "error" | "collision"; message: string }>;
 		useRealScopeGroups?: boolean;
 	}) {
@@ -537,7 +539,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 				getCwd: () => options.cwd ?? "/tmp/project",
 			},
 			session: {
-				promptTemplates: [],
+				promptTemplates: options.promptTemplates ?? [],
 				extensionRunner: {
 					getCommandDiagnostics: () => [],
 					getShortcutDiagnostics: () => [],
@@ -553,7 +555,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 					}),
 					getPrompts: () => ({ prompts: [], diagnostics: [] }),
 					getExtensions: () => ({ extensions: options.extensions ?? [], errors: [], runtime: {} }),
-					getThemes: () => ({ themes: [], diagnostics: [] }),
+					getThemes: () => ({ themes: options.themes ?? [], diagnostics: [] }),
 				},
 			},
 			formatDisplayPath: (p: string) => (InteractiveMode as any).prototype.formatDisplayPath.call(fakeThis, p),
@@ -705,10 +707,14 @@ describe("InteractiveMode.showLoadedResources", () => {
 		];
 	}
 
-	test("shows a compact resource listing by default", () => {
+	test("hides loaded resource inventories by default", () => {
 		const fakeThis = createShowLoadedResourcesThis({
 			quietStartup: false,
+			contextFiles: [{ path: "/tmp/project/AGENTS.md" }],
 			skills: [{ filePath: "/tmp/skill/SKILL.md", name: "commit" }],
+			promptTemplates: [{ filePath: "/tmp/prompt.md", name: "review" }],
+			extensions: [{ path: "/tmp/extensions/answer.ts" }],
+			themes: [{ name: "custom", sourcePath: "/tmp/custom.json" }],
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
@@ -716,9 +722,11 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		const output = renderAll(fakeThis.loadedResourcesContainer);
-		expect(output).toContain("[Skills]");
-		expect(output).toContain("commit");
-		expect(output).not.toContain("resource-list");
+		expect(output).not.toContain("[Context]");
+		expect(output).not.toContain("[Skills]");
+		expect(output).not.toContain("[Prompts]");
+		expect(output).not.toContain("[Extensions]");
+		expect(output).not.toContain("[Themes]");
 	});
 
 	test("shows full resource listing when expanded", () => {
@@ -729,7 +737,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
-			force: false,
+			force: true,
 		});
 
 		const output = renderAll(fakeThis.loadedResourcesContainer);
@@ -763,7 +771,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
-			force: false,
+			force: true,
 		});
 
 		const output = renderAll(fakeThis.loadedResourcesContainer);
@@ -780,7 +788,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
-			force: false,
+			force: true,
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
@@ -826,7 +834,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
-			force: false,
+			force: true,
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
@@ -854,7 +862,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
-			force: false,
+			force: true,
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
@@ -882,7 +890,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
-			force: false,
+			force: true,
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
@@ -919,7 +927,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
-			force: false,
+			force: true,
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
@@ -956,7 +964,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
-			force: false,
+			force: true,
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
@@ -993,7 +1001,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
-			force: false,
+			force: true,
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
@@ -1021,7 +1029,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
-			force: false,
+			force: true,
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
@@ -1052,7 +1060,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
-			force: false,
+			force: true,
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
@@ -1089,7 +1097,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
-			force: false,
+			force: true,
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
@@ -1129,7 +1137,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
-			force: false,
+			force: true,
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
@@ -1146,7 +1154,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
-			force: false,
+			force: true,
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
@@ -1180,7 +1188,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
-			force: false,
+			force: true,
 		});
 
 		const output = renderAll(fakeThis.loadedResourcesContainer).replace(/\\/g, "/");
@@ -1200,7 +1208,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
-			force: false,
+			force: true,
 		});
 
 		const output = renderAll(fakeThis.loadedResourcesContainer).replace(/\\/g, "/");
@@ -1222,7 +1230,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
-			force: false,
+			force: true,
 		});
 
 		const output = renderAll(fakeThis.loadedResourcesContainer).replace(/\\/g, "/");
