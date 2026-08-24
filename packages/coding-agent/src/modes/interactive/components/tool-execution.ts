@@ -6,7 +6,12 @@ import { getTextOutput as getRenderedTextOutput } from "../../../core/tools/rend
 import { convertToPng } from "../../../utils/image-convert.ts";
 import { theme } from "../theme/theme.ts";
 import { keyHint } from "./keybinding-hints.ts";
-import { type ToolLifecycle, ToolStatusLineComponent, type ToolSymbolPreset } from "./tool-panel.ts";
+import {
+	ToolPanelComponent,
+	type ToolLifecycle,
+	ToolStatusLineComponent,
+	type ToolSymbolPreset,
+} from "./tool-panel.ts";
 
 const COLLAPSED_ERROR_VISUAL_LINE_LIMIT = 3;
 
@@ -76,8 +81,8 @@ export class ToolExecutionComponent extends Container {
 		// Always create all shell variants. contentBox is used for default renderer-based composition.
 		// selfRenderContainer is used when the tool renders its own framing.
 		// contentText is reserved for generic fallback rendering when no tool definition exists.
-		this.contentBox = new Box(1, 1, (text: string) => theme.bg("toolPendingBg", text));
-		this.contentText = new Text("", 1, 1, (text: string) => theme.bg("toolPendingBg", text));
+		this.contentBox = new Box(0, 0);
+		this.contentText = new Text("", 0, 0);
 		this.selfRenderContainer = new Container();
 
 		if (this.hasRendererDefinition()) {
@@ -261,11 +266,15 @@ export class ToolExecutionComponent extends Container {
 	}
 
 	private renderWithStatus(component: Component, width: number): string[] {
-		return new ToolStatusLineComponent(component, {
+		const options = {
 			lifecycle: this.getLifecycle(),
 			symbolPreset: this.symbolPreset,
 			durationMs: this.getDurationMs(),
-		}).render(width);
+		};
+		if (this.hasRendererDefinition() && this.getRenderShell() === "self") {
+			return new ToolStatusLineComponent(component, options).render(width);
+		}
+		return new ToolPanelComponent(component, options).render(width);
 	}
 
 	private renderDisclosureHint(width: number): string[] {
@@ -294,18 +303,28 @@ export class ToolExecutionComponent extends Container {
 				? this.selfRenderContainer
 				: this.contentBox
 			: this.contentText;
-		const contentLines = this.renderWithStatus(shell, width);
-		const visibleContentLines =
-			this.result?.isError && !this.isPartial && !this.expanded
-				? this.renderCollapsedError(contentLines, width)
-				: contentLines;
+		const selfRendered = this.hasRendererDefinition() && this.getRenderShell() === "self";
+		const panelContent: Component = selfRendered
+			? shell
+			: {
+					render: (innerWidth: number) => {
+						const contentLines = shell.render(innerWidth);
+						const visibleLines =
+							this.result?.isError && !this.isPartial && !this.expanded
+								? this.renderCollapsedError(contentLines, innerWidth)
+								: contentLines;
+						return [...visibleLines, ...this.renderDisclosureHint(innerWidth)];
+					},
+					invalidate: () => shell.invalidate?.(),
+				};
+		const visibleContentLines = this.renderWithStatus(panelContent, width);
 		if (visibleContentLines.length === 0 && this.imageComponents.length === 0) return [];
 
 		const lines: string[] = [];
 		if (visibleContentLines.length > 0) {
 			lines.push("");
 			lines.push(...visibleContentLines);
-			lines.push(...this.renderDisclosureHint(width));
+			if (selfRendered) lines.push(...this.renderDisclosureHint(width));
 		}
 		for (let i = 0; i < this.imageComponents.length; i++) {
 			const spacer = this.imageSpacers[i];
@@ -317,19 +336,10 @@ export class ToolExecutionComponent extends Container {
 	}
 
 	private updateDisplay(): void {
-		const bgFn = this.isPartial
-			? (text: string) => theme.bg("toolPendingBg", text)
-			: this.result?.isError
-				? (text: string) => theme.bg("toolErrorBg", text)
-				: undefined;
-
 		let hasContent = false;
 		this.hideComponent = false;
 		if (this.hasRendererDefinition()) {
 			const renderContainer = this.getRenderShell() === "self" ? this.selfRenderContainer : this.contentBox;
-			if (renderContainer instanceof Box) {
-				renderContainer.setBgFn(bgFn);
-			}
 			renderContainer.clear();
 
 			const callRenderer = this.getCallRenderer();
@@ -379,7 +389,6 @@ export class ToolExecutionComponent extends Container {
 				}
 			}
 		} else {
-			this.contentText.setCustomBgFn(bgFn);
 			this.contentText.setText(this.formatToolExecution());
 			hasContent = true;
 		}

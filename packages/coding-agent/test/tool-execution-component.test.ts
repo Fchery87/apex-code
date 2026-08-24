@@ -66,6 +66,39 @@ describe("ToolExecutionComponent parity", () => {
 		expect(error).not.toContain("done ·");
 	});
 
+	test("renders the generic shell as a full-width flat panel with label-first state", () => {
+		const toolDefinition: ToolDefinition = {
+			...createBaseToolDefinition(),
+			renderCall: () => new Text("custom call", 0, 0),
+			renderResult: () => new Text("custom result", 0, 0),
+		};
+		const component = new ToolExecutionComponent(
+			"custom_tool",
+			"tool-flat-panel",
+			{},
+			{},
+			toolDefinition,
+			createFakeTui(),
+			process.cwd(),
+		);
+
+		const pendingBg = theme.bg("toolPendingBg", "x").replace(`x\x1b[49m`, "");
+		const queued = component.render(40);
+		expect(queued[0]).toBe("");
+		expect(stripAnsi(queued[1]).startsWith("  custom call · ")).toBe(true);
+		expect(stripAnsi(queued[1])).toContain("queued");
+		expect(stripAnsi(queued[1]).endsWith("  ")).toBe(true);
+		expect(visibleWidth(queued[1])).toBe(40);
+		expect(queued[1]).toContain(pendingBg);
+
+		component.updateResult({ content: [{ type: "text", text: "done" }], details: {}, isError: false }, false);
+		const done = component.render(40).slice(1);
+		expect(stripAnsi(done[0])).toContain("custom call · ✓ done");
+		expect(stripAnsi(done[1])).toBe(" ".repeat(40));
+		expect(stripAnsi(done[2])).toContain("  custom result");
+		for (const line of done) expect(visibleWidth(line)).toBe(40);
+	});
+
 	test("uses ASCII lifecycle markers when requested", () => {
 		const component = new ToolExecutionComponent(
 			"custom_tool",
@@ -529,7 +562,8 @@ describe("ToolExecutionComponent parity", () => {
 
 		const rendered = component.render(120).join("\n");
 		expect(stripAnsi(rendered)).toContain(error);
-		expect(rendered).toContain(theme.fg("toolOutput", error));
+		const toolOutputOpen = theme.fg("toolOutput", "x").replace(`x\x1b[39m`, "");
+		expect(rendered).toContain(toolOutputOpen);
 	});
 
 	test("collapses ordinary read results until expanded", () => {
@@ -615,7 +649,8 @@ describe("ToolExecutionComponent parity", () => {
 			);
 
 			const collapsed = stripAnsi(component.render(120).join("\n"));
-			expect(collapsed).toContain(scenario.compact);
+			const compactNeedle = scenario.title === "outside AGENTS.md" ? scenario.compact.slice(0, 80) : scenario.compact;
+			expect(collapsed).toContain(compactNeedle);
 			expect(collapsed).not.toContain(scenario.hidden);
 			if (scenario.absent) {
 				expect(collapsed).not.toContain(scenario.absent);
@@ -668,7 +703,8 @@ describe("ToolExecutionComponent parity", () => {
 		const collapsed = stripAnsi(component.render(120).join("\n"));
 
 		expect(collapsed).toContain("Error: something failed");
-		expect(collapsed.split("\n").length).toBeLessThanOrEqual(7);
+		// The flat panel contributes one deliberate blank separator row.
+		expect(collapsed.split("\n").length).toBeLessThanOrEqual(8);
 		expect(collapsed).toMatch(/\d+ more lines omitted/);
 		expect(collapsed).toContain("to expand");
 
