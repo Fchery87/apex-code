@@ -60,11 +60,40 @@ describe("apex theme", () => {
 	});
 
 	it("routes chrome through the brand primary", () => {
-		// The point of the palette is that accent and borders share one hue,
-		// rather than the unrelated accent/blue/cyan split it replaces.
-		expect(apex.colors.accent).toBe("primary");
-		expect(apex.colors.border).toBe("primary");
-		expect(apex.colors.borderAccent).toBe("primary");
+		// Gold is the Apex identity colour. Operational warning/error colours
+		// remain separate so state is never confused with branding.
+		expect(apex.colors.accent).toBe("gold");
+		expect(apex.colors.border).toBe("gold");
+		expect(apex.colors.borderAccent).toBe("gold");
+	});
+
+	it("uses the approved Prime-inspired neutral and gold system", () => {
+		expect(apex.vars).toMatchObject({
+			bg: "#050506",
+			surface: "#0d0d10",
+			panel: "#151518",
+			fg: "#f4f4f5",
+			muted: "#a1a1aa",
+			dim: "#7b7b85",
+			grid: "#52525b",
+			gold: "#d6b85a",
+			goldSoft: "#e4cb7a",
+			goldDeep: "#a8842a",
+			success: "#7da876",
+			warning: "#e57c24",
+			error: "#d06f82",
+			info: "#38bdf8",
+			selectedBg: "#222226",
+			userMsgBg: "#1a1a1f",
+			toolPendingBg: "#0d0d10",
+			toolSuccessBg: "#0e1510",
+			toolErrorBg: "#1a0d12",
+		});
+		expect(apex.colors.mdHeading).toBe("goldSoft");
+		expect(apex.colors.mdListBullet).toBe("gold");
+		expect(apex.colors.thinkingHigh).toBe("goldSoft");
+		expect(apex.colors.thinkingXhigh).toBe("gold");
+		expect(apex.colors.warning).toBe("warning");
 	});
 
 	it("keeps every var referenced by colours actually defined", () => {
