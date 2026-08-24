@@ -77,28 +77,39 @@ describe("CustomEditor chrome", () => {
 	});
 
 	describe("composer surface", () => {
-		it("pads and fills only the editor block", () => {
+		it("renders a borderless slab with two columns of horizontal breathing room", () => {
 			const lines = makeEditor({ surface: true, focused: false }).render(60);
 
-			expect(lines).toHaveLength(5);
+			expect(lines).toHaveLength(3);
 			for (const line of lines) {
 				expect(visibleWidth(line)).toBe(60);
 				expect(line).toContain(userMessageBgOpen());
 			}
 			expect(plain(lines[0])).toBe(" ".repeat(60));
-			expect(plain(lines[1])).toBe(` ${"─".repeat(58)} `);
-			expect(plain(lines[2])).toContain("> ");
-			expect(plain(lines[2])).toContain(PLACEHOLDER);
-			expect(plain(lines[3])).toBe(` ${"─".repeat(58)} `);
-			expect(plain(lines[4])).toBe(" ".repeat(60));
+			expect(plain(lines[1]).startsWith("  > ")).toBe(true);
+			expect(plain(lines[1])).toContain(PLACEHOLDER);
+			expect(plain(lines[1]).endsWith("  ")).toBe(true);
+			expect(plain(lines[2])).toBe(" ".repeat(60));
 		});
 
 		it("keeps the cursor marker and restores the surface after the cursor cell", () => {
-			const line = makeEditor({ surface: true }).render(60)[2];
+			const line = makeEditor({ surface: true }).render(60)[1];
 
 			expect(line).toContain(CURSOR_MARKER);
 			const cursorCellEnd = line.indexOf(`${ESC}[7m ${ESC}[0m`) + `${ESC}[7m ${ESC}[0m`.length;
 			expect(line.slice(cursorCellEnd)).toContain(userMessageBgOpen());
+		});
+
+		it("degrades its inset locally without overflowing narrow terminals", () => {
+			for (const width of [120, 20, 8, 6, 5, 3, 2, 1]) {
+				const lines = makeEditor({ surface: true }).render(width);
+				for (const line of lines) {
+					expect(visibleWidth(line), `width ${width}`).toBeLessThanOrEqual(width);
+				}
+				expect(lines).toHaveLength(3);
+				expect(plain(lines[0])).toBe(" ".repeat(width));
+				expect(plain(lines[2])).toBe(" ".repeat(width));
+			}
 		});
 	});
 

@@ -57,7 +57,7 @@ const CONTROL_SEQUENCE = /\x1b\[[0-9;]*[A-Za-z]|\x1b_[^\x07]*\x07/y;
 /** The reverse-video cursor cell emitted by the inherited editor. */
 const INVERTED_CURSOR_CELL = /\x1b\[7m[\s\S]\x1b\[(?:0|27)m/y;
 
-const SURFACE_PADDING = 1;
+const SURFACE_PADDING = 2;
 
 /**
  * ============================ ANSI measuring hazards ============================
@@ -180,10 +180,11 @@ export class CustomEditor extends Editor {
 	}
 
 	override render(width: number): string[] {
-		const canRenderSurface = this.surfaceColor !== undefined && width > SURFACE_PADDING * 2 + 4;
-		const editorWidth = canRenderSurface ? width - SURFACE_PADDING * 2 : width;
+		const canRenderSurface = this.surfaceColor !== undefined && width > 0;
+		const surfacePadding = canRenderSurface ? Math.min(SURFACE_PADDING, Math.floor((width - 1) / 2)) : 0;
+		const editorWidth = canRenderSurface ? width - surfacePadding * 2 : width;
 		const lines = this.renderEditor(editorWidth);
-		return canRenderSurface ? this.withSurface(lines, width) : lines;
+		return canRenderSurface ? this.withSurface(lines, width, surfacePadding) : lines;
 	}
 
 	private renderEditor(width: number): string[] {
@@ -223,22 +224,20 @@ export class CustomEditor extends Editor {
 		});
 	}
 
-	private withSurface(lines: string[], width: number): string[] {
+	private withSurface(lines: string[], width: number, padding: number): string[] {
 		const surfaceColor = this.surfaceColor;
 		if (!surfaceColor) return lines;
 
 		const result = [this.surfaceLine(" ".repeat(width), surfaceColor)];
 		const editorBlockLineCount = this.editorBlockLineCount(lines);
-		for (const [index, line] of lines.entries()) {
-			if (index < editorBlockLineCount) {
-				result.push(
-					this.surfaceLine(`${" ".repeat(SURFACE_PADDING)}${line}${" ".repeat(SURFACE_PADDING)}`, surfaceColor),
-				);
-			} else {
-				result.push(line);
-			}
+		const editorContent = lines.slice(1, Math.max(1, editorBlockLineCount - 1));
+		for (const line of editorContent) {
+			result.push(this.surfaceLine(`${" ".repeat(padding)}${line}${" ".repeat(padding)}`, surfaceColor));
 		}
-		result.splice(1 + editorBlockLineCount, 0, this.surfaceLine(" ".repeat(width), surfaceColor));
+		result.push(this.surfaceLine(" ".repeat(width), surfaceColor));
+		for (const line of lines.slice(editorBlockLineCount)) {
+			result.push(`${" ".repeat(padding)}${line}`);
+		}
 		return result;
 	}
 
