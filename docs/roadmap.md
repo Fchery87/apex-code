@@ -101,7 +101,7 @@ capable and measurably worse.
 | Follow-up | State | Spec | Plan |
 | --- | --- | --- | --- |
 | Composer dock surface | **landed** — filled, cursor-safe prompt dock · `2bd3008f1` | [spec](specs/2026-08-23-composer-dock-surface.md) | — |
-| Prime-inspired gold TUI | **active** — approved; implementation not started | [spec](specs/2026-08-23-prime-inspired-gold-tui.md) | [plan](plans/2026-08-23-prime-inspired-gold-tui.md) |
+| Prime-inspired gold TUI | **landed** — gold-neutral layout and permission-safe tray · `e576190a5` | [spec](specs/2026-08-23-prime-inspired-gold-tui.md) | — |
 
 ---
 

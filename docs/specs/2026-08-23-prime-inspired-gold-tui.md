@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Author | `Apex Code` |
-| Status | `Approved` |
+| Status | `Complete` |
 | Created | `2026-08-23` |
 | Last updated | `2026-08-23` |
 | Roadmap phase | `product-surface follow-up after Phase 12` |
@@ -25,14 +25,14 @@ The implementation is based on the behavioral and visual findings in [`docs/rese
 
 ## Goals
 
-- [ ] Replace the Apex theme's teal family with a high-contrast gold family over Prime-like near-black neutrals.
-- [ ] Keep semantic success, warning, error, and information hues distinct from the brand accent.
-- [ ] Render the default composer as a continuous borderless filled slab with two columns of horizontal breathing room and one blank filled row above and below.
-- [ ] Retain cursor correctness, wrapping, placeholder, prompt modes, autocomplete separation, extension replacement, and width safety down to one column.
-- [ ] Turn the compact footer into a Prime-like information tray that prioritizes permission posture and context safety while demoting routine telemetry.
-- [ ] Render tool calls as flat, full-width filled panels with a textual `label · state` header and compact content.
-- [ ] Preserve ASCII and colorblind modes and never encode state through color alone.
-- [ ] Keep `packages/tui` unchanged.
+- [x] Replace the Apex theme's teal family with a high-contrast gold family over Prime-like near-black neutrals.
+- [x] Keep semantic success, warning, error, and information hues distinct from the brand accent.
+- [x] Render the default composer as a continuous borderless filled slab with two columns of horizontal breathing room and one blank filled row above and below.
+- [x] Retain cursor correctness, wrapping, placeholder, prompt modes, autocomplete separation, extension replacement, and width safety down to one column.
+- [x] Turn the compact footer into a Prime-like information tray that prioritizes permission posture and context safety while demoting routine telemetry.
+- [x] Render tool calls as flat, full-width filled panels with a textual `label · state` header and compact content.
+- [x] Preserve ASCII and colorblind modes and never encode state through color alone.
+- [x] Keep `packages/tui` unchanged.
 
 ## Non-goals
 
@@ -113,16 +113,30 @@ The existing Apex startup identity stays. Its palette follows the gold system, w
 
 ## Acceptance criteria
 
-- [ ] Theme tests assert the canonical gold-neutral variables and token mappings.
-- [ ] Theme loading, adaptive/no-color behavior, 256-color behavior, and custom themes remain green.
-- [ ] Composer tests prove the borderless three-row slab, two-cell normal inset, narrow degradation, cursor closure, hardware cursor, and autocomplete separation.
-- [ ] Footer tests prove every permission mode, including `default` and `bypassPermissions`, remains the first visible datum from 120 columns down to one in compact and full token-display modes.
-- [ ] Footer tests prove context pressure remains textual and width-safe when permission mode is default.
-- [ ] Tool tests prove full-width filled rows, textual state, content inset, narrow degradation, and no overflow.
-- [ ] Existing splash, interaction, accessibility, and specialized tool-renderer tests remain green.
-- [ ] A rendered local session visually matches the approved Prime-inspired hierarchy while keeping the permission state visible.
-- [ ] `npm run check`, narrow suites, the coding-agent suite, and root `npm test` pass.
-- [ ] `git diff -- packages/tui` is empty.
+- [x] Theme tests assert the canonical gold-neutral variables and token mappings.
+- [x] Theme loading, adaptive/no-color behavior, 256-color behavior, and custom themes remain green.
+- [x] Composer tests prove the borderless three-row slab, two-cell normal inset, narrow degradation, cursor closure, hardware cursor, and autocomplete separation.
+- [x] Footer tests prove every permission mode, including `default` and `bypassPermissions`, remains the first visible datum from 120 columns down to one in compact and full token-display modes.
+- [x] Footer tests prove context pressure remains textual and width-safe when permission mode is default.
+- [x] Tool tests prove full-width filled rows, textual state, content inset, narrow degradation, and no overflow.
+- [x] Existing splash, interaction, accessibility, and specialized tool-renderer tests remain green.
+- [x] A rendered local session visually matches the approved Prime-inspired hierarchy while keeping the permission state visible.
+- [x] `npm run check`, narrow suites, the coding-agent suite, and root `npm test` pass.
+- [x] `git diff -- packages/tui` is empty.
+
+## Verification
+
+Verified on 2026-08-23:
+
+- `npm run check` exited 0 after the final implementation and review fixes.
+- The focused theme, composer, footer, tool, splash, and interactive suites passed; the final review boundary passed 19 of 19 tests across the footer-width and startup-order suites.
+- Root `npm test` exited 0: scripts 80 passed/1 skipped, scrubber 21 passed, agent core 398 passed/1 skipped, and coding agent 2,738 passed/57 skipped across 317 passing files.
+- `npm run build` exited 0 and regenerated the provider catalogs before compiling every workspace.
+- A PTY smoke launch with `--permission-mode bypassPermissions` rendered `bypassPermissions` in the first frame and retained it after the complete startup layout rendered.
+- The Impeccable detector reported no actionable findings. Final independent code review reported no Critical, Important, or Minor findings.
+- `git diff -- packages/tui` and `git diff --check` were empty.
+
+Implementation commits: theme `ba0826af3`, composer `963f15213`, safety tray `3d680ff42`, tool panels `2effa70a2`, first-frame permission synchronization `6b9ea4f1e`, and final permission-layout review fixes `e576190a5`.
 
 ## Deletion inventory
 
