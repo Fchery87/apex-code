@@ -208,31 +208,31 @@ export class FooterComponent implements Component {
 			statsParts.push(`${theme.fg("dim", bulletSymbol)} ${theme.bold(theme.fg("warning", "xp"))}`);
 		}
 
-		// Any non-default permission posture is named in the footer, because the two
-		// that matter most are invisible otherwise: in bypassPermissions nothing
-		// prompts, and in plan every mutation is refused. Both look like the agent
-		// behaving oddly rather than a mode being on. Text carries the signal and
-		// color is the second channel only (WCAG 1.4.1), as with context pressure.
-		if (this.permissionMode !== "default") {
-			const modeColor = this.permissionMode === "bypassPermissions" ? "error" : "warning";
-			statsParts.unshift(theme.fg(modeColor, this.permissionMode));
-		}
+		// Permission posture is always named, including `default`. It is operational
+		// state rather than routine telemetry: hiding the safe default would make the
+		// tray change meaning by omission, while hiding bypass would conceal risk.
+		// Text carries the signal and color remains a second channel (WCAG 1.4.1).
+		const modeColor =
+			this.permissionMode === "bypassPermissions" ? "error" : this.permissionMode === "default" ? "dim" : "warning";
+		statsParts.unshift(theme.fg(modeColor, this.permissionMode));
 
 		if (tokenUsageDisplay !== "full") {
 			const separator = theme.fg("dim", symbolPreset === "ascii" ? " - " : " · ");
-			const compactPermissionNames: Record<Exclude<PermissionMode, "default">, string> = {
+			const compactPermissionNames: Record<PermissionMode, string> = {
+				default: "default",
 				plan: "plan",
 				acceptEdits: "accept",
 				bypassPermissions: "bypass",
 				dontAsk: "dontAsk",
 			};
-			const permissionColor = this.permissionMode === "bypassPermissions" ? "error" : "warning";
-			const permissionFull =
-				this.permissionMode === "default" ? undefined : theme.fg(permissionColor, this.permissionMode);
-			const permissionCompact =
-				this.permissionMode === "default"
-					? undefined
-					: theme.fg(permissionColor, compactPermissionNames[this.permissionMode]);
+			const permissionColor =
+				this.permissionMode === "bypassPermissions"
+					? "error"
+					: this.permissionMode === "default"
+						? "dim"
+						: "warning";
+			const permissionFull = theme.fg(permissionColor, this.permissionMode);
+			const permissionCompact = theme.fg(permissionColor, compactPermissionNames[this.permissionMode]);
 			const compactPercent = contextPercent === "?" ? "?" : contextPercentValue.toFixed(0);
 			const compactPressure = contextPercentValue > 90 ? "!!" : contextPercentValue > 70 ? "!" : "";
 			const contextColor =
@@ -248,16 +248,16 @@ export class FooterComponent implements Component {
 
 			const joinSegments = (segments: string[]): string => segments.join(separator);
 			const fits = (segments: string[]): boolean => visibleWidth(joinSegments(segments)) <= width;
-			let left: string[] = permissionFull ? [permissionFull] : [];
+			let left: string[] = [permissionFull];
 			let right = contextFull;
 
 			if (!fits([...left, right])) {
-				left = permissionCompact ? [permissionCompact] : [];
+				left = [permissionCompact];
 				right = contextCompact;
 			}
 
 			if (!fits([...left, right])) {
-				const safetyOnly = left[0] ?? right;
+				const safetyOnly = left[0];
 				const line =
 					visibleWidth(safetyOnly) <= width ? safetyOnly : truncateToWidth(safetyOnly, Math.max(0, width), "");
 				return width > 0 ? [line] : [];

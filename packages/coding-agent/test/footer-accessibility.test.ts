@@ -92,6 +92,7 @@ describe("Footer accessibility (task 8.6)", () => {
 		expect(rendered).not.toContain("$1.500");
 		expect(rendered).toContain("50.0%");
 		expect(rendered).toContain("test-model");
+		expect(rendered).toContain("default");
 	});
 
 	it("tokenUsageDisplay: full shows exact token counts instead of abbreviated ones", () => {

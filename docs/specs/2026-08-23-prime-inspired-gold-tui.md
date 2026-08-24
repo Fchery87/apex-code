@@ -17,7 +17,7 @@
 
 Apex Code will adopt Prime Agent's restrained terminal information architecture and near-black neutral system while retaining an unmistakable Apex identity through a narrow gold accent family. The transcript remains quiet; persistent chrome concentrates in a borderless filled composer, a single responsive safety tray, and flat filled tool panels.
 
-The permission posture is not routine telemetry. Every non-default permission mode remains visible at every terminal width and has the first claim on the tray's width budget. In particular, `bypassPermissions` must never disappear behind model, token, path, agent, or context data.
+The permission posture is not routine telemetry. Every permission mode, including `default`, remains visible at every terminal width and has the first claim on the tray's width budget. In particular, `bypassPermissions` must never disappear behind model, token, path, agent, or context data.
 
 ## Source and clean-room posture
 
@@ -37,7 +37,7 @@ The implementation is based on the behavioral and visual findings in [`docs/rese
 ## Non-goals
 
 - Making the default footer empty. Prime can do this because it does not carry Apex's permission and context safety contract; Apex cannot.
-- Hiding the default permission mode. The tray may omit the word `default`, but every non-default mode is mandatory and width-prioritized.
+- Hiding the default permission mode. The tray always names the active permission posture.
 - Copying Prime Agent's butterfly logo, name, purple accent, source files, or distinctive strings.
 - Changing permission evaluation, sandbox enforcement, tool contracts, provider routing, or session persistence.
 - Adding new configuration switches for the layout.
@@ -85,11 +85,10 @@ The inset degrades locally from two cells to one and then zero so at least one c
 
 The compact tray is one row directly below the composer. It has independently budgeted left and right segments.
 
-- Left begins with the non-default permission mode, when present. `bypassPermissions` uses error color; other non-default modes use warning color. Text is the primary signal.
+- Left begins with the permission mode. `default` is dim, `bypassPermissions` uses error color, and other modes use warning color. Text is the primary signal.
 - Right contains context usage and its textual pressure markers.
 - Model, thinking effort, cwd/session, token, cache, provider, experimental, and cost data are opportunistic. They may appear only after the mandatory safety pair fits.
-- At widths where only one item fits, a non-default permission mode wins. It may be truncated to the available width but may not be replaced by another datum.
-- With default permissions, context safety wins the narrowest width.
+- At widths where only one item fits, permission mode wins. It may be truncated to the available width but may not be replaced by another datum.
 - The detailed/full token display remains available for users who explicitly select it.
 
 The tray preserves ASCII separators and the colorblind critical-context mapping.

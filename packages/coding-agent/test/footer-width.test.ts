@@ -288,11 +288,11 @@ describe("FooterComponent width handling", () => {
 		expect(stripAnsi(footer.render(120).join("\n"))).toContain("$0.000 (sub)");
 	});
 
-	it("names a non-default permission mode and stays silent on default", () => {
+	it("names every permission mode, including default", () => {
 		const session = createSession({ sessionName: "", provider: "anthropic" });
 		const footer = new FooterComponent(session, createFooterData(1));
 
-		expect(stripAnsi(footer.render(120).join("\n"))).not.toContain("bypassPermissions");
+		expect(stripAnsi(footer.render(120).join("\n"))).toContain("default");
 
 		footer.setPermissionMode("bypassPermissions");
 		expect(stripAnsi(footer.render(120).join("\n"))).toContain("bypassPermissions");
@@ -302,10 +302,33 @@ describe("FooterComponent width handling", () => {
 		expect(planned).toContain("plan");
 		expect(planned).not.toContain("bypassPermissions");
 
-		// Resetting must clear it. A session swap resyncs through this setter, and a
-		// footer that kept a stale "bypassPermissions" would under-report the mode.
+		// Resetting must replace the old state rather than hiding permission posture.
 		footer.setPermissionMode("default");
-		expect(stripAnsi(footer.render(120).join("\n"))).not.toContain("bypassPermissions");
+		const reset = stripAnsi(footer.render(120).join("\n"));
+		expect(reset).toContain("default");
+		expect(reset).not.toContain("bypassPermissions");
+	});
+
+	it("gives permission state first claim on every positive width", () => {
+		const session = createSession({ sessionName: "", percent: 95 });
+		const compactNames = {
+			default: "default",
+			plan: "plan",
+			acceptEdits: "accept",
+			bypassPermissions: "bypass",
+			dontAsk: "dontAsk",
+		} as const;
+
+		for (const [mode, compactName] of Object.entries(compactNames)) {
+			const footer = new FooterComponent(session, createFooterData(1));
+			footer.setPermissionMode(mode as keyof typeof compactNames);
+			for (const width of [120, 42, 24, 12, 7, 3, 2, 1]) {
+				const line = stripAnsi(footer.render(width)[0] ?? "");
+				const expectedPrefix = compactName.slice(0, Math.min(width, compactName.length));
+				expect(line.startsWith(expectedPrefix), `${mode} at width ${width}`).toBe(true);
+				expect(visibleWidth(line), `${mode} at width ${width}`).toBeLessThanOrEqual(width);
+			}
+		}
 	});
 
 	it("does not mark generic OAuth sign-in as a subscription", () => {
