@@ -1,6 +1,6 @@
 # Plan: Prime-inspired gold TUI
 
-**Status:** Active — PGT.1–PGT.3 complete; PGT.4 in progress
+**Status:** Active — PGT.5 verification in progress
 
 **Spec:** [`docs/specs/2026-08-23-prime-inspired-gold-tui.md`](../specs/2026-08-23-prime-inspired-gold-tui.md)
 
@@ -11,8 +11,8 @@
 | PGT.1 | Establish the gold-neutral theme contract | Done — narrow test and TypeScript verified | `ba0826af3` |
 | PGT.2 | Replace the bordered composer with the borderless slab | Done — narrow test and TypeScript verified | `963f15213` |
 | PGT.3 | Enforce the Prime-like safety tray hierarchy | Done — permission matrix, accessibility suite, and TypeScript verified | `3d680ff42` |
-| PGT.4 | Render generic tool executions as flat filled panels | In progress | — |
-| PGT.5 | Verify the integrated TUI and close documentation | Not started | — |
+| PGT.4 | Render generic tool executions as flat filled panels | Done — component suite, renderer regressions, and TypeScript verified | `2effa70a2` |
+| PGT.5 | Verify the integrated TUI and close documentation | In progress | — |
 
 ## PGT.1 — Establish the gold-neutral theme contract
 

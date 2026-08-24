@@ -649,7 +649,8 @@ describe("ToolExecutionComponent parity", () => {
 			);
 
 			const collapsed = stripAnsi(component.render(120).join("\n"));
-			const compactNeedle = scenario.title === "outside AGENTS.md" ? scenario.compact.slice(0, 80) : scenario.compact;
+			const compactNeedle =
+				scenario.title === "outside AGENTS.md" ? scenario.compact.slice(0, 80) : scenario.compact;
 			expect(collapsed).toContain(compactNeedle);
 			expect(collapsed).not.toContain(scenario.hidden);
 			if (scenario.absent) {

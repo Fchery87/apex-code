@@ -42,10 +42,7 @@ function lifecycleBackground(lifecycle: ToolLifecycle): "toolPendingBg" | "toolS
 	return "toolPendingBg";
 }
 
-function paintBackground(
-	line: string,
-	background: "toolPendingBg" | "toolSuccessBg" | "toolErrorBg",
-): string {
+function paintBackground(line: string, background: "toolPendingBg" | "toolSuccessBg" | "toolErrorBg"): string {
 	let output = "";
 	let visibleText = "";
 	let index = 0;

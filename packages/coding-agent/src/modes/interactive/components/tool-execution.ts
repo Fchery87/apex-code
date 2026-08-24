@@ -7,8 +7,8 @@ import { convertToPng } from "../../../utils/image-convert.ts";
 import { theme } from "../theme/theme.ts";
 import { keyHint } from "./keybinding-hints.ts";
 import {
-	ToolPanelComponent,
 	type ToolLifecycle,
+	ToolPanelComponent,
 	ToolStatusLineComponent,
 	type ToolSymbolPreset,
 } from "./tool-panel.ts";
