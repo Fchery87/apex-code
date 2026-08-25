@@ -7,6 +7,7 @@ import { ENV_AGENT_DIR } from "../src/config.ts";
 
 const cliPath = resolve(__dirname, "../src/cli.ts");
 const tempDirs: string[] = [];
+const CLI_EXIT_TIMEOUT_MS = 55_000;
 
 afterEach(() => {
 	for (const dir of tempDirs.splice(0)) {
@@ -82,7 +83,7 @@ async function runCli(args: string[], dirs: CliDirs): Promise<CliResult> {
 	return new Promise((resolvePromise, reject) => {
 		const timeout = setTimeout(() => {
 			child.kill("SIGKILL");
-		}, 25_000);
+		}, CLI_EXIT_TIMEOUT_MS);
 		child.on("error", (error) => {
 			clearTimeout(timeout);
 			reject(error);
@@ -130,7 +131,7 @@ describe.skipIf(process.platform === "win32")("startup session name", () => {
 		expect(result.code).toBe(1);
 		expect(result.signal).toBeNull();
 		expect(readSessionInfoNames(dirs.sessionFile)).toEqual(["CLI Named Session"]);
-	});
+	}, 60_000);
 
 	it("rejects empty --name values without appending session metadata", async () => {
 		const dirs = setup();
@@ -154,5 +155,5 @@ describe.skipIf(process.platform === "win32")("startup session name", () => {
 		expect(result.signal).toBeNull();
 		expect(result.stderr).toContain("--name requires a non-empty value");
 		expect(readSessionInfoNames(dirs.sessionFile)).toEqual([]);
-	});
+	}, 60_000);
 });

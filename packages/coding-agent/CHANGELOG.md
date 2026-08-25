@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Hardened the cross-platform sandbox regression suite: POSIX-only credential-channel lifecycle cases are skipped on Windows, dead-supervisor cleanup uses a genuinely exited process, and macOS session-lease assertions compare canonical paths.
+
 - Sandboxed credential writes now preserve the credential store's cross-process mutation
   contract. The original channel read a credential in the child and later replaced it on
   the host, so concurrent OAuth refreshes could derive from the same token and overwrite

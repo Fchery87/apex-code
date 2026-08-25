@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Hardened the cross-platform sandbox regression suite: POSIX-only credential-channel lifecycle cases are skipped on Windows, dead-supervisor cleanup uses a genuinely exited process, and macOS session-lease assertions compare canonical paths.
+
 ## [0.0.1-alpha.7] - 2026-08-21
 
 ## [0.0.1-alpha.6] - 2026-08-21

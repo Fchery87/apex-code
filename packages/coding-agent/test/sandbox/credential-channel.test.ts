@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import * as net from "node:net";
 import { tmpdir } from "node:os";
@@ -210,9 +211,11 @@ describe.skipIf(process.platform === "win32")("createCredentialProxy", () => {
 		expect(existsSync(paths.hostSocketDirectory)).toBe(false);
 	});
 
-	it("reclaims private endpoint directories left by dead supervisors", () => {
-		const stalePid = 2_147_483_647;
-		const staleDirectory = join(tmpdir(), `apex-cred-${stalePid}-stale-test`);
+	it("reclaims private endpoint directories left by dead supervisors", async () => {
+		const child = spawn(process.execPath, ["-e", ""], { stdio: "ignore" });
+		const stalePid = child.pid as number;
+		await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+		const staleDirectory = join("/tmp", `apex-cred-${stalePid}-stale-test`);
 		rmSync(staleDirectory, { force: true, recursive: true });
 		mkdirSync(staleDirectory, { mode: 0o700 });
 		writeFileSync(join(staleDirectory, "channel.sock"), "stale");
