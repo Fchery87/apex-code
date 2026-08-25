@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Author | Apex Code |
-| Status | `Active` |
+| Status | `Implemented` |
 | Created | 2026-08-25 |
 | Last updated | 2026-08-25 |
 | Roadmap phase | `12 — Production graduation and release integrity` |
