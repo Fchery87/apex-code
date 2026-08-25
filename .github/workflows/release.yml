@@ -81,6 +81,43 @@ jobs:
       - name: Test
         run: npm test
 
+      # `scripts/build-binaries.sh` is the already-established sole producer of
+      # portable archive layouts. Build and verify them before either npm
+      # publication, but do not create a public GitHub Release until the npm
+      # provenance gate and the separate macOS verification job have both passed.
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with:
+          bun-version: 1.3.14
+
+      - name: Build standalone binary archives
+        shell: bash
+        run: ./scripts/build-binaries.sh --skip-install --skip-build --out "${RUNNER_TEMP}/binaries"
+
+      - name: Generate standalone archive checksums
+        shell: bash
+        run: node scripts/apex/prepare-binary-release.mjs "${RUNNER_TEMP}/binaries"
+
+      - name: Smoke test local standalone binary
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$("${RUNNER_TEMP}/binaries/linux-x64/apex-code" --version)" == "${VERSION}" ]]
+
+      # Preserve the exact bytes that passed the pre-publication build and
+      # smoke gate. The final job below is deliberately the only job with
+      # contents: write, and consumes this immutable workflow artifact only
+      # after the macOS registry-install gate succeeds.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: standalone-release-assets
+          path: |
+            ${{ runner.temp }}/binaries/apex-code-*.tar.gz
+            ${{ runner.temp }}/binaries/apex-code-*.zip
+            ${{ runner.temp }}/binaries/SHA256SUMS
+          if-no-files-found: error
+
       # ADR 0018 (task 12.8): a dry-run pack only proves the tarball builds, not
       # that its packed contents are what the maintainer believes they are --
       # the concrete trigger for this phase was exactly a tarball that packed
@@ -252,3 +289,35 @@ jobs:
             sleep 10
           done
           [[ "$("$scratch/global/bin/apex-code" --version)" == "${VERSION}" ]]
+
+  # This job is intentionally separate from npm Trusted Publishing. It gets
+  # only GitHub-release authority, waits for both the complete npm/provenance
+  # path and the macOS clean-install gate, and uploads the exact pre-publication
+  # archive bytes preserved by the publish job above.
+  publish-binaries:
+    name: Publish standalone GitHub Release assets
+    runs-on: ubuntu-latest
+    needs: [publish, verify-macos-install]
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: standalone-release-assets
+          path: release-assets
+
+      - name: Create GitHub Release with verified standalone archives
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.publish.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+          test -s release-assets/SHA256SUMS
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "Apex Code v${VERSION}" \
+            --generate-notes \
+            release-assets/SHA256SUMS \
+            release-assets/apex-code-*.tar.gz \
+            release-assets/apex-code-*.zip

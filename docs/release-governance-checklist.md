@@ -24,6 +24,13 @@ any item below is enabled; read it as what to check.
   - [ ] Required reviewers, if the maintainer wants a manual gate on top of the automated ones,
         is a judgment call recorded here explicitly rather than left unconsidered — a
         sole-maintainer project may reasonably decide the automated gates are sufficient.
+- [ ] **GitHub Release authority.** Only `.github/workflows/release.yml`'s
+      `publish-binaries` job may hold `contents: write`. Do not give this permission to the
+      npm publishing job or a general-purpose workflow; that would let a partial or unverified
+      run publish downloadable executables.
+- [ ] **Release asset review.** Confirm a tag's GitHub Release contains all six named
+      `apex-code-<platform>` archives and `SHA256SUMS`, and that each checksum entry describes
+      the matching uploaded asset before sharing the curl/PowerShell installer links.
 - [ ] **GitHub private vulnerability reporting** is enabled for this repository (Settings →
       Code security → Private vulnerability reporting). `SECURITY.md` documents this as the
       reporting channel; the channel does not exist unless this is on.

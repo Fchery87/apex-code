@@ -55,6 +55,22 @@ A release is suspect if any of the following is true:
    affected version range and the fixed version. Update `docs/support.md`'s supported-version
    line once it exists (task 12.12).
 
+## Recovery: a bad standalone archive is live on GitHub Releases
+
+GitHub Release assets are mutable, unlike npm versions. Treat a bad archive as a release
+integrity incident rather than quietly replacing it:
+
+1. **Remove the GitHub Release from public discovery immediately** (delete the release or
+   change it to draft) and tell users not to run the affected installer/version.
+2. **Preserve evidence before deleting assets:** record the release tag, asset names,
+   `SHA256SUMS`, download URLs, workflow run ID, and the tag commit SHA.
+3. **Do not reuse the affected version.** Publish a corrected, higher npm version through
+   the normal tag workflow, which will create a new standalone archive set only after every
+   package, provenance, and macOS installation gate succeeds.
+4. **Publish a Security Advisory or GitHub Release note** that identifies the affected
+   archive/version and corrected version. A checksum mismatch is an integrity failure even
+   if npm users were not affected.
+
 ## Recovery: an accidental publish (wrong version, wrong branch, premature)
 
 Deprecation is usually sufficient; a wrong-but-not-dangerous publish does not need a security

@@ -18,3 +18,11 @@ test("CI requires three OSes from a spaced checkout with immutable actions", asy
 		assert.match(match[1], /^[0-9a-f]{40}$/);
 	}
 });
+
+test("Windows CI parses the standalone PowerShell installer", async () => {
+	const source = await readFile(path, "utf8");
+	assert.match(source, /runner\.os == 'Windows'/);
+	assert.match(source, /shell:\s*pwsh/);
+	assert.match(source, /Parser\]::ParseFile/);
+	assert.match(source, /install\.ps1/);
+});
