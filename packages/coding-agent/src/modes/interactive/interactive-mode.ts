@@ -969,6 +969,8 @@ export class InteractiveMode {
 				{
 					topPadding: true,
 					getSymbolPreset: () => this.settingsManager.getSymbolPreset(),
+					getInventory: () => this.buildStartupInventory(),
+					inventoryHint: "/resources",
 					getHint: () => "Apex Code can explain its own features and look up its docs.",
 				},
 			);
@@ -1753,57 +1755,80 @@ export class InteractiveMode {
 			}
 		}
 
+		// Warnings collapse into the counted line on the startup screen; the full
+		// trace lives behind /resources. Errors still surface inline, because an
+		// error means a resource did not load at all.
 		if (showDiagnostics) {
-			const skillDiagnostics = skillsResult.diagnostics;
-			if (skillDiagnostics.length > 0) {
-				const warningLines = this.formatDiagnostics(skillDiagnostics, sourceInfos);
+			for (const group of this.collectDiagnosticGroups()) {
+				const visible = showListing
+					? group.diagnostics
+					: group.diagnostics.filter((diagnostic) => diagnostic.type === "error");
+				if (visible.length === 0) continue;
+				const severity = visible.some((diagnostic) => diagnostic.type === "error") ? "error" : "warning";
+				const body = this.formatDiagnostics(visible, sourceInfos);
 				this.loadedResourcesContainer.addChild(
-					new Text(`${theme.fg("warning", "[Skill conflicts]")}\n${warningLines}`, 0, 0),
-				);
-				this.loadedResourcesContainer.addChild(new Spacer(1));
-			}
-
-			const promptDiagnostics = promptsResult.diagnostics;
-			if (promptDiagnostics.length > 0) {
-				const warningLines = this.formatDiagnostics(promptDiagnostics, sourceInfos);
-				this.loadedResourcesContainer.addChild(
-					new Text(`${theme.fg("warning", "[Prompt conflicts]")}\n${warningLines}`, 0, 0),
-				);
-				this.loadedResourcesContainer.addChild(new Spacer(1));
-			}
-
-			const extensionDiagnostics: ResourceDiagnostic[] = [];
-			const extensionErrors = this.session.resourceLoader.getExtensions().errors;
-			if (extensionErrors.length > 0) {
-				for (const error of extensionErrors) {
-					extensionDiagnostics.push({ type: "error", message: error.error, path: error.path });
-				}
-			}
-
-			const commandDiagnostics = this.session.extensionRunner.getCommandDiagnostics();
-			extensionDiagnostics.push(...commandDiagnostics);
-			extensionDiagnostics.push(...this.getBuiltInCommandConflictDiagnostics(this.session.extensionRunner));
-
-			const shortcutDiagnostics = this.session.extensionRunner.getShortcutDiagnostics();
-			extensionDiagnostics.push(...shortcutDiagnostics);
-
-			if (extensionDiagnostics.length > 0) {
-				const warningLines = this.formatDiagnostics(extensionDiagnostics, sourceInfos);
-				this.loadedResourcesContainer.addChild(
-					new Text(`${theme.fg("warning", "[Extension issues]")}\n${warningLines}`, 0, 0),
-				);
-				this.loadedResourcesContainer.addChild(new Spacer(1));
-			}
-
-			const themeDiagnostics = themesResult.diagnostics;
-			if (themeDiagnostics.length > 0) {
-				const warningLines = this.formatDiagnostics(themeDiagnostics, sourceInfos);
-				this.loadedResourcesContainer.addChild(
-					new Text(`${theme.fg("warning", "[Theme conflicts]")}\n${warningLines}`, 0, 0),
+					new Text(`${theme.fg(severity, `[${group.label}]`)}\n${body}`, 0, 0),
 				);
 				this.loadedResourcesContainer.addChild(new Spacer(1));
 			}
 		}
+
+		// Counts on the startup screen are read at render time, so they fill in
+		// once resources finish loading without an explicit refresh here.
+		this.builtInHeader?.invalidate?.();
+	}
+
+	/**
+	 * Every startup diagnostic, grouped by the resource kind that produced it.
+	 *
+	 * One list feeds both the counted line in the header and the detailed
+	 * listing, so the two can never disagree about how many issues exist.
+	 */
+	private collectDiagnosticGroups(): Array<{ label: string; diagnostics: ResourceDiagnostic[] }> {
+		const extensionDiagnostics: ResourceDiagnostic[] = [
+			...this.session.resourceLoader
+				.getExtensions()
+				.errors.map((error) => ({ type: "error" as const, message: error.error, path: error.path })),
+			...this.session.extensionRunner.getCommandDiagnostics(),
+			...this.getBuiltInCommandConflictDiagnostics(this.session.extensionRunner),
+			...this.session.extensionRunner.getShortcutDiagnostics(),
+		];
+		return [
+			{ label: "Skill conflicts", diagnostics: this.session.resourceLoader.getSkills().diagnostics },
+			{ label: "Prompt conflicts", diagnostics: this.session.resourceLoader.getPrompts().diagnostics },
+			{ label: "Extension issues", diagnostics: extensionDiagnostics },
+			{ label: "Theme conflicts", diagnostics: this.session.resourceLoader.getThemes().diagnostics },
+		].filter((group) => group.diagnostics.length > 0);
+	}
+
+	/**
+	 * The counted line in the ruled band under the mark.
+	 *
+	 * The startup screen used to print all 152 skill names across fifteen rows.
+	 * A count answers the only question that screen can usefully answer, which
+	 * is what got loaded; the names live behind /resources now.
+	 */
+	private buildStartupInventory(): string | undefined {
+		const counted = (total: number, singular: string) => `${total} ${singular}${total === 1 ? "" : "s"}`;
+		const parts: string[] = [];
+
+		const skills = this.session.resourceLoader.getSkills().skills.length;
+		const extensions = this.session.resourceLoader.getExtensions().extensions.filter((e) => !e.hidden).length;
+		const prompts = this.session.resourceLoader.getPrompts().prompts.length;
+		if (skills > 0) parts.push(theme.fg("muted", counted(skills, "skill")));
+		if (extensions > 0) parts.push(theme.fg("muted", counted(extensions, "extension")));
+		if (prompts > 0) parts.push(theme.fg("muted", counted(prompts, "prompt")));
+
+		const diagnostics = this.collectDiagnosticGroups().flatMap((group) => group.diagnostics);
+		const errors = diagnostics.filter((diagnostic) => diagnostic.type === "error").length;
+		const conflicts = diagnostics.length - errors;
+		if (errors > 0) parts.push(theme.fg("error", counted(errors, "error")));
+		if (conflicts > 0) parts.push(theme.fg("warning", counted(conflicts, "conflict")));
+
+		if (parts.length === 0) return undefined;
+		const ascii = this.settingsManager.getSymbolPreset() === "ascii";
+		const separator = theme.fg("borderMuted", ascii ? " - " : " · ");
+		return parts.join(separator);
 	}
 
 	/**
@@ -2982,6 +3007,11 @@ export class InteractiveMode {
 			}
 			if (text === "/changelog") {
 				this.handleChangelogCommand();
+				this.editor.setText("");
+				return;
+			}
+			if (text === "/resources") {
+				this.showLoadedResources({ force: true });
 				this.editor.setText("");
 				return;
 			}

@@ -24,6 +24,11 @@ export interface ApexSplashHeaderOptions {
 	 * finished line so the resource loader stays on its own side of the seam.
 	 */
 	getInventory?: () => string | undefined;
+	/**
+	 * Affordance appended to the inventory line, e.g. the command that shows the
+	 * detail. Dropped whole rather than clipped, so it never renders as a stub.
+	 */
+	inventoryHint?: string;
 	/** Hint rendered under the metadata block. Return undefined for none. */
 	getHint?: () => string | undefined;
 	/** Resolves `terminal.symbolPreset`. Defaults to unicode. */
@@ -186,7 +191,11 @@ export class ApexSplashHeader implements Component {
 			const rule = theme.fg("borderMuted", (symbolPreset === "ascii" ? "-" : "─").repeat(contentWidth));
 			lines.push(this.padLine("", safeWidth, paddingX));
 			lines.push(this.padLine(rule, safeWidth, paddingX));
-			lines.push(this.padLine(truncateToWidth(inventory, contentWidth, ""), safeWidth, paddingX));
+			const hint = this.options.inventoryHint;
+			const withHint = hint ? `${inventory}  ${theme.fg("dim", hint)}` : inventory;
+			const fitted =
+				visibleWidth(withHint) <= contentWidth ? withHint : truncateToWidth(inventory, contentWidth, "");
+			lines.push(this.padLine(fitted, safeWidth, paddingX));
 			lines.push(this.padLine(rule, safeWidth, paddingX));
 		}
 

@@ -29,6 +29,7 @@ function makeHeader(options?: {
 		{
 			getSymbolPreset: () => options?.symbolPreset ?? "unicode",
 			getInventory: () => options?.inventory,
+			inventoryHint: "/resources",
 			getHint: () => "Apex Code can explain its own features and look up its docs.",
 		},
 	);
@@ -213,6 +214,17 @@ describe("ApexSplashHeader", () => {
 
 		it("drops the band rather than clipping it on a narrow terminal", () => {
 			expect(render(10, { inventory: "152 skills" }).map(plain).join("\n")).not.toContain("─");
+		});
+
+		it("drops the hint whole rather than clipping it to a stub", () => {
+			// A clipped affordance renders as a bare "/" and names no command.
+			const wide = render(80, { inventory: "115 skills · 1 conflict" }).map(plain).join("\n");
+			expect(wide).toContain("/resources");
+
+			const narrow = render(28, { inventory: "115 skills · 1 conflict" }).map(plain).join("\n");
+			expect(narrow).toContain("115 skills");
+			expect(narrow).not.toContain("/resources");
+			expect(narrow).not.toMatch(/\/r?e?s?$/m);
 		});
 
 		it("keeps every line inside the width with the band present", () => {
