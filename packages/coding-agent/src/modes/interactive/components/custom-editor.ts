@@ -23,6 +23,10 @@ export interface CustomEditorOptions extends EditorOptions {
 	commandColor?: (text: string) => string;
 	/** Applies the filled prompt surface around the editor block. */
 	surfaceColor?: (text: string) => string;
+	/** Rule drawn above the autocomplete rows. Omit for no rule. */
+	autocompleteRule?: (width: number) => string;
+	/** Keybinding footer drawn under the autocomplete rows. Omit for no footer. */
+	autocompleteFooter?: () => string;
 }
 
 /** Box-drawing horizontal rule: the character the base Editor draws borders from. */
@@ -158,6 +162,8 @@ export class CustomEditor extends Editor {
 	private readonly commandColor: ((text: string) => string) | undefined;
 	private readonly surfaceColor: ((text: string) => string) | undefined;
 	private readonly placeholder: string | undefined;
+	private readonly autocompleteRule: ((width: number) => string) | undefined;
+	private readonly autocompleteFooter: (() => string) | undefined;
 	private modeLabel = "";
 	public actionHandlers: Map<AppKeybinding, () => void> = new Map();
 
@@ -177,13 +183,15 @@ export class CustomEditor extends Editor {
 		this.placeholderColor = options?.placeholderColor ?? ((text) => text);
 		this.commandColor = options?.commandColor;
 		this.surfaceColor = options?.surfaceColor;
+		this.autocompleteRule = options?.autocompleteRule;
+		this.autocompleteFooter = options?.autocompleteFooter;
 	}
 
 	override render(width: number): string[] {
 		const canRenderSurface = this.surfaceColor !== undefined && width > 0;
 		const surfacePadding = canRenderSurface ? Math.min(SURFACE_PADDING, Math.floor((width - 1) / 2)) : 0;
 		const editorWidth = canRenderSurface ? width - surfacePadding * 2 : width;
-		const lines = this.renderEditor(editorWidth);
+		const lines = this.withAutocompleteChrome(this.renderEditor(editorWidth), editorWidth);
 		return canRenderSurface ? this.withSurface(lines, width, surfacePadding) : lines;
 	}
 
@@ -222,6 +230,26 @@ export class CustomEditor extends Editor {
 			}
 			return blank + line;
 		});
+	}
+
+	/**
+	 * Brackets the autocomplete rows with a rule and a keybinding footer.
+	 *
+	 * The rows arrive after the editor's second border, so the same border count
+	 * that separates the box from its dropdown elsewhere in this file finds them
+	 * here. Nothing is added when the dropdown is closed.
+	 */
+	private withAutocompleteChrome(lines: string[], width: number): string[] {
+		if (!this.autocompleteRule && !this.autocompleteFooter) return lines;
+		const blockLineCount = this.editorBlockLineCount(lines);
+		const rows = lines.slice(blockLineCount);
+		if (rows.length === 0) return lines;
+
+		const chrome = [...lines.slice(0, blockLineCount)];
+		if (this.autocompleteRule) chrome.push(this.autocompleteRule(width));
+		chrome.push(...rows);
+		if (this.autocompleteFooter) chrome.push(this.autocompleteFooter());
+		return chrome;
 	}
 
 	private withSurface(lines: string[], width: number, padding: number): string[] {

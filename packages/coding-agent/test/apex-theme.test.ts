@@ -5,7 +5,9 @@ import {
 	detectTerminalBackgroundFromEnv,
 	getAvailableThemes,
 	getDefaultTheme,
+	getSelectListTheme,
 	initTheme,
+	paintBackground,
 	theme,
 } from "../src/modes/interactive/theme/theme.ts";
 
@@ -126,5 +128,27 @@ describe("apex theme", () => {
 			expect(theme.fg("accent", "x")).toContain("x");
 		}
 		initTheme("apex", false);
+	});
+});
+
+describe("overlay chrome", () => {
+	it("paints a selected row as a background step, not as accent text", () => {
+		// The accent means "Apex owns this". Spending it on every selected row
+		// would leave nothing to distinguish the brand from the cursor.
+		initTheme("apex", false);
+		const selected = getSelectListTheme().selectedText("  /model");
+		const selectedBg = theme.bg("selectedBg", "x").replace(`x\u001b[49m`, "");
+		expect(selected).toContain(selectedBg);
+		expect(selected).toContain("/model");
+	});
+
+	it("keeps a background intact across an inner colour reset", () => {
+		// A row that already carries foreground colour would otherwise lose its
+		// fill at the first reset, leaving the highlight half-painted.
+		initTheme("apex", false);
+		const row = `${theme.fg("accent", "/model")} plain`;
+		const painted = paintBackground(row, "selectedBg");
+		const open = theme.bg("selectedBg", "x").replace(`x\u001b[49m`, "");
+		expect(painted.split(open).length - 1, "each visible run gets its own fill").toBeGreaterThan(1);
 	});
 });

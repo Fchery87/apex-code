@@ -1293,13 +1293,55 @@ export function getMarkdownTheme(): MarkdownTheme {
 	};
 }
 
+/** Matches an ANSI control sequence, including the APC hardware-cursor marker. */
+const CONTROL_SEQUENCE = /\x1b\[[0-9;]*[A-Za-z]|\x1b_[^\x07]*\x07/y;
+
+/**
+ * Paint a background across a string that may already carry foreground colour.
+ *
+ * Wrapping the whole string in one background pair does not survive: any reset
+ * inside it closes the background too, and the rest of the row loses its fill.
+ * This walks the string, leaves control sequences untouched, and paints each
+ * visible run on its own.
+ */
+export function paintBackground(line: string, background: ThemeBg): string {
+	let output = "";
+	let visibleText = "";
+	let index = 0;
+
+	const flush = () => {
+		if (!visibleText) return;
+		output += theme.bg(background, visibleText);
+		visibleText = "";
+	};
+
+	while (index < line.length) {
+		CONTROL_SEQUENCE.lastIndex = index;
+		const control = CONTROL_SEQUENCE.exec(line);
+		if (control) {
+			flush();
+			output += control[0];
+			index = CONTROL_SEQUENCE.lastIndex;
+			continue;
+		}
+		visibleText += line[index];
+		index += 1;
+	}
+	flush();
+	return output;
+}
+
 export function getSelectListTheme(): SelectListTheme {
 	return {
 		selectedPrefix: (text: string) => theme.fg("accent", text),
-		selectedText: (text: string) => theme.fg("accent", text),
-		description: (text: string) => theme.fg("muted", text),
-		scrollInfo: (text: string) => theme.fg("muted", text),
-		noMatch: (text: string) => theme.fg("muted", text),
+		// The selected row is the only lit surface in an overlay: a background
+		// step plus full-contrast text. That reads at a glance without the accent
+		// having to carry it, which leaves the accent free to mean "Apex owns
+		// this" everywhere else on screen.
+		selectedText: (text: string) => paintBackground(theme.fg("text", text), "selectedBg"),
+		description: (text: string) => theme.fg("dim", text),
+		scrollInfo: (text: string) => theme.fg("dim", text),
+		noMatch: (text: string) => theme.fg("dim", text),
 	};
 }
 

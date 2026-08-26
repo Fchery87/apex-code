@@ -21,6 +21,7 @@ function makeEditor(options?: {
 	focused?: boolean;
 	paddingX?: number;
 	surface?: boolean;
+	autocomplete?: boolean;
 }) {
 	const tui = { terminal: { rows: 40, cols: 80 }, requestRender() {}, invalidate() {} };
 	const editor = new CustomEditor(tui as never, getEditorTheme(), new KeybindingsManager(), {
@@ -31,6 +32,10 @@ function makeEditor(options?: {
 		placeholderColor: (text) => theme.fg("dim", text),
 		commandColor: (text) => theme.fg("accent", text),
 		surfaceColor: options?.surface ? (text: string) => theme.bg("userMessageBg", text) : undefined,
+		autocompleteRule: options?.autocomplete
+			? (width: number) => theme.fg("borderMuted", "┄".repeat(width))
+			: undefined,
+		autocompleteFooter: options?.autocomplete ? () => theme.fg("dim", "tab complete") : undefined,
 	});
 	editor.focused = options?.focused ?? true;
 	return editor;
@@ -311,5 +316,63 @@ describe("CustomEditor chrome", () => {
 				}
 			}
 		});
+	});
+});
+
+describe("autocomplete chrome", () => {
+	/** Two commands, so the dropdown has rows to bracket. */
+	const provider = {
+		triggerCharacters: ["/"],
+		async getSuggestions(lines: string[], _l: number, _c: number) {
+			if (!lines[0]?.startsWith("/")) return null;
+			return {
+				items: [
+					{ value: "/model", label: "/model", description: "switch the active model" },
+					{ value: "/mode", label: "/mode", description: "change permission mode" },
+				],
+				prefix: lines[0],
+			};
+		},
+		applyCompletion(lines: string[], cursorLine: number, cursorCol: number) {
+			return { lines, cursorLine, cursorCol };
+		},
+	};
+
+	async function openDropdown(editor: ReturnType<typeof makeEditor>) {
+		editor.setAutocompleteProvider(provider as never);
+		for (const key of "/mo") editor.handleInput(key);
+		// getSuggestions is async; let its promise settle before rendering.
+		await new Promise((resolve) => setTimeout(resolve, 20));
+	}
+
+	it("adds no rule or footer while the dropdown is closed", () => {
+		const output = makeEditor({ autocomplete: true }).render(80).map(plain).join("\n");
+		expect(output).not.toContain("┄");
+		expect(output).not.toContain("tab complete");
+	});
+
+	it("brackets the dropdown rows with a rule above and a footer below", async () => {
+		const editor = makeEditor({ autocomplete: true });
+		await openDropdown(editor);
+		const lines = editor.render(80).map(plain);
+
+		const ruleRow = lines.findIndex((line) => line.includes("┄"));
+		const firstItem = lines.findIndex((line) => line.includes("/model"));
+		const footerRow = lines.findIndex((line) => line.includes("tab complete"));
+
+		expect(ruleRow, "no rule rendered").toBeGreaterThan(-1);
+		expect(firstItem, "no dropdown rows rendered").toBeGreaterThan(ruleRow);
+		expect(footerRow, "no footer rendered").toBeGreaterThan(firstItem);
+		expect(footerRow).toBe(lines.length - 1);
+	});
+
+	it("keeps every line inside the width with the dropdown open", async () => {
+		for (const width of [120, 80, 40, 24]) {
+			const editor = makeEditor({ autocomplete: true });
+			await openDropdown(editor);
+			for (const line of editor.render(width)) {
+				expect(visibleWidth(line), `width ${width}`).toBeLessThanOrEqual(width);
+			}
+		}
 	});
 });

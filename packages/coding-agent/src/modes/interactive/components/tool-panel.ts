@@ -1,5 +1,5 @@
 import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { theme } from "../theme/theme.ts";
+import { paintBackground, theme } from "../theme/theme.ts";
 
 export type ToolLifecycle = "queued" | "running" | "done" | "error";
 export type ToolSymbolPreset = "unicode" | "ascii";
@@ -8,8 +8,6 @@ const LIFECYCLE_SYMBOLS: Record<ToolSymbolPreset, Record<ToolLifecycle, string>>
 	unicode: { queued: "○", running: "◌", done: "✓", error: "✗" },
 	ascii: { queued: "[ ]", running: "[~]", done: "[x]", error: "[!]" },
 };
-
-const CONTROL_SEQUENCE = /\x1b\[[0-9;]*[A-Za-z]|\x1b_[^\x07]*\x07/y;
 
 /**
  * Running takes the brand accent rather than `warning`. Work in progress is
@@ -56,33 +54,6 @@ function lifecycleBackground(lifecycle: ToolLifecycle): "toolPendingBg" | "toolS
 	if (lifecycle === "done") return "toolSuccessBg";
 	if (lifecycle === "error") return "toolErrorBg";
 	return "toolPendingBg";
-}
-
-function paintBackground(line: string, background: "toolPendingBg" | "toolSuccessBg" | "toolErrorBg"): string {
-	let output = "";
-	let visibleText = "";
-	let index = 0;
-
-	const flush = () => {
-		if (!visibleText) return;
-		output += theme.bg(background, visibleText);
-		visibleText = "";
-	};
-
-	while (index < line.length) {
-		CONTROL_SEQUENCE.lastIndex = index;
-		const control = CONTROL_SEQUENCE.exec(line);
-		if (control) {
-			flush();
-			output += control[0];
-			index = CONTROL_SEQUENCE.lastIndex;
-			continue;
-		}
-		visibleText += line[index];
-		index += 1;
-	}
-	flush();
-	return output;
 }
 
 /** Prime-style flat shell for renderer-based tool calls. */

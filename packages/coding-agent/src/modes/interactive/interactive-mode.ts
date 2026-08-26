@@ -593,6 +593,12 @@ export class InteractiveMode {
 			placeholderColor: (text) => theme.fg("dim", text),
 			commandColor: (text) => theme.fg("accent", text),
 			surfaceColor: (text) => theme.bg("userMessageBg", text),
+			autocompleteRule: (width) =>
+				theme.fg(
+					"borderMuted",
+					(this.settingsManager.getSymbolPreset() === "ascii" ? "-" : "┄").repeat(Math.max(1, width)),
+				),
+			autocompleteFooter: () => this.buildAutocompleteFooter(),
 		});
 		this.editor = this.defaultEditor;
 		this.editorContainer = new Container();
@@ -1833,6 +1839,17 @@ export class InteractiveMode {
 	 * These are the only three characters that change what the composer does, so
 	 * they take the accent and everything around them stays quiet.
 	 */
+	/** Live keybindings under the autocomplete dropdown. */
+	private buildAutocompleteFooter(): string {
+		const separator = theme.fg("borderMuted", this.settingsManager.getSymbolPreset() === "ascii" ? " - " : " · ");
+		return [
+			rawKeyHint(`${keyText("tui.select.up")}/${keyText("tui.select.down")}`, "move"),
+			keyHint("tui.select.confirm", "select"),
+			keyHint("tui.input.tab", "complete"),
+			keyHint("tui.select.cancel", "dismiss"),
+		].join(separator);
+	}
+
 	private buildStartupShortcuts(): string {
 		const entry = (sigil: string, label: string) => `${theme.fg("accent", sigil)} ${theme.fg("muted", label)}`;
 		return [
