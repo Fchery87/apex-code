@@ -1,9 +1,10 @@
 import { Container, getKeybindings, Spacer, Text } from "@earendil-works/pi-tui";
 import { APP_NAME } from "../../../config.ts";
-import { APEX_PEAK_LOGO_COMPACT } from "../../../themes/apex-logo.ts";
+import { APEX_MARK_BLOCK } from "../../../themes/apex-logo.ts";
 import { type TerminalTheme, theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, rawKeyHint } from "./keybinding-hints.ts";
+import { paintBrandMark } from "./splash-header.ts";
 
 export interface FirstTimeSetupResult {
 	theme: TerminalTheme;
@@ -20,8 +21,6 @@ const THEME_OPTIONS: Array<{ value: TerminalTheme; label: string }> = [
 	{ value: "dark", label: "Dark" },
 	{ value: "light", label: "Light" },
 ];
-
-const SETUP_LOGO_LINES = APEX_PEAK_LOGO_COMPACT.split("\n");
 
 /** First-time setup dialog: theme choice. */
 export class FirstTimeSetupComponent extends Container {
@@ -43,7 +42,10 @@ export class FirstTimeSetupComponent extends Container {
 		this.clear();
 		this.addChild(new DynamicBorder());
 		this.addChild(new Spacer(1));
-		this.addChild(new Text(theme.fg("accent", SETUP_LOGO_LINES.join("\n")), 1, 0));
+		// The same mark the splash header stamps, so a new user's first two screens
+		// agree. Painted here rather than at module load: theme.fg throws until
+		// initTheme has run, and this module is imported from the CLI entry point.
+		this.addChild(new Text(paintBrandMark(APEX_MARK_BLOCK).join("\n"), 1, 0));
 		this.addChild(new Spacer(1));
 		this.addChild(
 			new Text(theme.fg("accent", theme.bold(`Welcome to ${APP_NAME}, the minimal coding agent.`)), 1, 0),

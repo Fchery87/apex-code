@@ -2,7 +2,7 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, it } from "vitest";
 import { ApexSplashHeader } from "../src/modes/interactive/components/splash-header.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
-import { APEX_PEAK_LOGO, APEX_PEAK_LOGO_ASCII, APEX_PEAK_LOGO_COMPACT } from "../src/themes/apex-logo.ts";
+import { APEX_MARK_BLOCK, APEX_MARK_INLINE, APEX_MARK_INLINE_ASCII } from "../src/themes/apex-logo.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
 /** Strip SGR sequences so assertions can look at the glyphs alone. */
@@ -19,6 +19,7 @@ function makeHeader(options?: {
 	cwd?: string;
 	symbolPreset?: "unicode" | "ascii";
 	verbose?: string;
+	inventory?: string;
 }) {
 	return new ApexSplashHeader(
 		"0.0.1-alpha.4",
@@ -27,13 +28,16 @@ function makeHeader(options?: {
 		options?.verbose,
 		{
 			getSymbolPreset: () => options?.symbolPreset ?? "unicode",
+			getInventory: () => options?.inventory,
 			getHint: () => "Apex Code can explain its own features and look up its docs.",
 		},
 	);
 }
 
-const LOGO_WIDTH = APEX_PEAK_LOGO.split("\n").reduce((max, line) => Math.max(max, visibleWidth(line)), 0);
-const COMPACT_WIDTH = APEX_PEAK_LOGO_COMPACT.split("\n").reduce((max, line) => Math.max(max, visibleWidth(line)), 0);
+const MARK_TOP = (APEX_MARK_BLOCK.rows[0].accent + APEX_MARK_BLOCK.rows[0].text).trim();
+const MARK_BASELINE = (APEX_MARK_BLOCK.rows[4].accent + APEX_MARK_BLOCK.rows[4].text).trim();
+const INLINE_MARK = (APEX_MARK_INLINE.rows[0].accent + APEX_MARK_INLINE.rows[0].text).trim();
+const INLINE_ASCII_MARK = (APEX_MARK_INLINE_ASCII.rows[0].accent + APEX_MARK_INLINE_ASCII.rows[0].text).trim();
 
 describe("ApexSplashHeader", () => {
 	beforeAll(() => {
@@ -65,7 +69,7 @@ describe("ApexSplashHeader", () => {
 	describe("degradation tiers", () => {
 		it("shows the full mark and the metadata column when there is room", () => {
 			const output = render(100).map(plain).join("\n");
-			expect(output).toContain(APEX_PEAK_LOGO.split("\n")[0].trim());
+			expect(output).toContain(MARK_TOP);
 			expect(output).toContain("version");
 			expect(output).toContain("v0.0.1-alpha.4");
 			expect(output).toContain("claude-opus-5");
@@ -73,29 +77,45 @@ describe("ApexSplashHeader", () => {
 		});
 
 		it("drops the metadata column but keeps the full mark at mid widths", () => {
-			const output = render(50).map(plain).join("\n");
-			expect(output).toContain(APEX_PEAK_LOGO.split("\n")[0].trim());
+			const output = render(40).map(plain).join("\n");
+			expect(output).toContain(MARK_TOP);
 			expect(output).not.toContain("version");
 			expect(output).not.toContain("claude-opus-5");
 		});
 
-		it("falls back to the compact mark below the full mark's width", () => {
-			const output = render(COMPACT_WIDTH + 6)
+		it("replaces the block mark with the type lockup below its width", () => {
+			// The block wordmark does not shrink. A two- or three-row block form
+			// dissolves into texture on a monospace grid, so the narrow fallback
+			// is type instead of a smaller block.
+			const output = render(APEX_MARK_BLOCK.width - 1)
 				.map(plain)
 				.join("\n");
-			expect(output).toContain(APEX_PEAK_LOGO_COMPACT.split("\n")[0].trim());
-			// The full mark's widest row cannot fit here.
-			expect(visibleWidth(output.split("\n")[1] ?? "")).toBeLessThan(LOGO_WIDTH);
+			expect(output).toContain(INLINE_MARK);
+			expect(output).not.toContain("█");
 		});
 	});
 
 	describe("symbol preset", () => {
 		it("uses the ASCII mark when the preset is ascii", () => {
 			const output = render(100, { symbolPreset: "ascii" }).map(plain).join("\n");
-			expect(output).toContain(APEX_PEAK_LOGO_ASCII.split("\n")[0].trim());
+			expect(output).toContain(INLINE_ASCII_MARK);
 			expect(output).not.toContain("█");
 			expect(output).not.toContain("▄");
 			expect(output).not.toContain("▀");
+		});
+
+		it("spells the product name in every mark", () => {
+			// The previous ASCII mark was line-drawn art whose first letter was an
+			// O, so it read OPEX. Type cannot drift that way.
+			expect(INLINE_MARK).toContain("apex code");
+			expect(INLINE_ASCII_MARK).toContain("apex code");
+		});
+
+		it("draws its rule with dashes under the ascii preset", () => {
+			const output = render(100, { symbolPreset: "ascii", inventory: "12 skills" }).map(plain).join("\n");
+			expect(output).toContain("12 skills");
+			expect(output).not.toContain("─");
+			expect(output).toContain("-".repeat(20));
 		});
 
 		it("still renders the metadata column alongside the ASCII mark", () => {
@@ -162,6 +182,59 @@ describe("ApexSplashHeader", () => {
 		});
 	});
 
+	describe("accent footing", () => {
+		it("paints the baseline row in the accent and the rest in text", () => {
+			// The whole logo treatment is one accent row, so the mark sits on an
+			// ember footing without competing with the content beside it.
+			const lines = render(100);
+			const baseline = lines.find((line) => plain(line).includes(MARK_BASELINE));
+			const upper = lines.find((line) => plain(line).includes(MARK_TOP));
+			expect(baseline, "baseline row missing").toBeDefined();
+			expect(upper, "top row missing").toBeDefined();
+			expect(baseline).not.toBe(upper);
+			// Different tones mean different SGR prefixes on the two rows.
+			const sgr = (line: string) => line.match(/\x1b\[[0-9;]*m/)?.[0];
+			expect(sgr(baseline as string)).not.toBe(sgr(upper as string));
+		});
+	});
+
+	describe("inventory band", () => {
+		it("renders the counted line between two rules", () => {
+			const lines = render(100, { inventory: "152 skills · 8 extensions" }).map(plain);
+			const row = lines.findIndex((line) => line.includes("152 skills"));
+			expect(row).toBeGreaterThan(0);
+			expect(lines[row - 1]).toContain("─");
+			expect(lines[row + 1]).toContain("─");
+		});
+
+		it("omits the band entirely when there is nothing to count", () => {
+			expect(render(100).map(plain).join("\n")).not.toContain("─");
+		});
+
+		it("drops the band rather than clipping it on a narrow terminal", () => {
+			expect(render(10, { inventory: "152 skills" }).map(plain).join("\n")).not.toContain("─");
+		});
+
+		it("keeps every line inside the width with the band present", () => {
+			for (const width of [120, 80, 57, 40, 30, 20, 12, 11, 5, 1]) {
+				for (const line of render(width, { inventory: "152 skills · 8 extensions · 1 conflict" })) {
+					expect(visibleWidth(line), `width ${width}`).toBeLessThanOrEqual(width);
+				}
+			}
+		});
+	});
+
+	describe("metadata beside a one-row mark", () => {
+		it("shows every metadata row even when the mark is a single line", () => {
+			// The ascii preset picks a one-row lockup. Iterating mark rows alone
+			// would drop the second and third metadata rows on the floor.
+			const output = render(100, { symbolPreset: "ascii" }).map(plain).join("\n");
+			expect(output).toContain("version");
+			expect(output).toContain("model");
+			expect(output).toContain("cwd");
+		});
+	});
+
 	describe("verbose instructions", () => {
 		it("omits the cheatsheet by default", () => {
 			expect(render(100).map(plain).join("\n")).not.toContain("to interrupt");
@@ -173,7 +246,7 @@ describe("ApexSplashHeader", () => {
 			expect(output).toContain("to exit");
 			// It sits below the mark, not beside it.
 			const lines = output.split("\n");
-			const markRow = lines.findIndex((line) => line.includes(APEX_PEAK_LOGO.split("\n")[0].trim()));
+			const markRow = lines.findIndex((line) => line.includes(MARK_TOP));
 			const hintRow = lines.findIndex((line) => line.includes("to interrupt"));
 			expect(hintRow).toBeGreaterThan(markRow);
 		});

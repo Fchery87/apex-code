@@ -1,33 +1,74 @@
+import { visibleWidth } from "@earendil-works/pi-tui";
+
 /**
- * Pre-rendered ASCII versions of the Apex Code peak mark.
+ * The Apex Code brand mark, in the forms a terminal can actually render.
  *
- * Three variants cover the terminals we render into:
- * - the half-block peak is the brand mark, used whenever the terminal is wide
- *   enough and block glyphs are in play;
- * - the compact peak keeps a mark on screen in narrow terminals rather than
- *   truncating the full one mid-glyph;
- * - the ASCII peak honours `terminal.symbolPreset: "ascii"`, whose users opted
- *   out of block drawing because it renders badly for them.
+ * Only the five-row block wordmark survives a monospace grid. Every monospace
+ * face leaves a hairline gap at the cell boundary, so a letterform two or three
+ * rows tall dissolves into texture rather than reading as a word. The mark
+ * therefore does not shrink: below the width the block form needs, it is
+ * replaced outright by a glyph-and-type lockup.
  *
- * All three are rendered in a single flat tone by the header. A flat tone is
- * what makes the mark read as a mark rather than as decoration.
+ * A mark is a list of rows, each split into an accent run and a text run. That
+ * one shape covers both forms: the block wordmark puts its whole baseline row
+ * in the accent so the letters sit on an ember footing, and the inline lockup
+ * puts only its leading glyph there.
  */
 
-/** 10 rows x 34 cols. The default brand mark — half-block peak with a hollow summit. */
-export const APEX_PEAK_LOGO = ` ▄▄▄▄▄  ▄▄▄▄▄▄  ▄▄▄▄▄▄ ▄▄   ▄▄
-██   ██ ██   ██ ██      ██ ██ 
-███████ ██████  █████    ███  
-██   ██ ██      ██      ██ ██ 
-▀▀   ▀▀ ▀▀      ▀▀▀▀▀▀ ▀▀   ▀▀`;
+export interface MarkRow {
+	/** Leading run, painted in the brand accent. */
+	readonly accent: string;
+	/** Trailing run, painted in the neutral text tone. */
+	readonly text: string;
+}
 
-/** 6 rows x 18 cols. Same silhouette for terminals too narrow for the full mark. */
-export const APEX_PEAK_LOGO_COMPACT = ` ▄▄▄▄▄ 
-██   ██
-███████
-██   ██
-▀▀   ▀▀`;
+export interface BrandMark {
+	readonly rows: readonly MarkRow[];
+	/** Widest row, in terminal columns. */
+	readonly width: number;
+}
 
-/** 9 rows x 19 cols. Line-drawing fallback for `symbolPreset: "ascii"`. */
-export const APEX_PEAK_LOGO_ASCII = `  _   _  ____ __ 
- / \\ |_) |__  \\/ 
- \\_/ |   |___ /\\ `;
+export type MarkSymbolPreset = "unicode" | "ascii";
+
+function mark(rows: readonly MarkRow[]): BrandMark {
+	return {
+		rows,
+		width: rows.reduce((max, row) => Math.max(max, visibleWidth(row.accent + row.text)), 0),
+	};
+}
+
+const BLOCK_ROWS = [
+	" ▄▄▄▄▄  ▄▄▄▄▄▄  ▄▄▄▄▄▄ ▄▄   ▄▄",
+	"██   ██ ██   ██ ██      ██ ██ ",
+	"███████ ██████  █████    ███  ",
+	"██   ██ ██      ██      ██ ██ ",
+	"▀▀   ▀▀ ▀▀      ▀▀▀▀▀▀ ▀▀   ▀▀",
+];
+
+/** 5 rows x 30 columns. The brand mark, with the baseline row in the accent. */
+export const APEX_MARK_BLOCK = mark(
+	BLOCK_ROWS.map((row, index) =>
+		index === BLOCK_ROWS.length - 1 ? { accent: row, text: "" } : { accent: "", text: row },
+	),
+);
+
+/** 1 row x 11 columns. Used when the block mark will not fit. */
+export const APEX_MARK_INLINE = mark([{ accent: "◤", text: " apex code" }]);
+
+/**
+ * 1 row x 12 columns. Honours `terminal.symbolPreset: "ascii"`, whose users
+ * opted out of block drawing because it renders badly for them. The previous
+ * ASCII mark was line-drawn art whose first letter was an O, so it read "OPEX".
+ */
+export const APEX_MARK_INLINE_ASCII = mark([{ accent: "/\\", text: " apex code" }]);
+
+/** Pick the widest mark that fits. ASCII users always get the type lockup. */
+export function selectBrandMark(contentWidth: number, symbolPreset: MarkSymbolPreset): BrandMark {
+	if (symbolPreset === "ascii") return APEX_MARK_INLINE_ASCII;
+	return contentWidth >= APEX_MARK_BLOCK.width ? APEX_MARK_BLOCK : APEX_MARK_INLINE;
+}
+
+/** Wrap a mark supplied by a rebranding extension. It carries no accent run. */
+export function customBrandMark(logo: string): BrandMark {
+	return mark(logo.split("\n").map((row) => ({ accent: "", text: row })));
+}
