@@ -20,6 +20,7 @@ function makeHeader(options?: {
 	symbolPreset?: "unicode" | "ascii";
 	verbose?: string;
 	inventory?: string;
+	shortcuts?: string;
 }) {
 	return new ApexSplashHeader(
 		"0.0.1-alpha.4",
@@ -30,6 +31,7 @@ function makeHeader(options?: {
 			getSymbolPreset: () => options?.symbolPreset ?? "unicode",
 			getInventory: () => options?.inventory,
 			inventoryHint: "/resources",
+			getShortcuts: () => options?.shortcuts,
 			getHint: () => "Apex Code can explain its own features and look up its docs.",
 		},
 	);
@@ -244,6 +246,33 @@ describe("ApexSplashHeader", () => {
 			expect(output).toContain("version");
 			expect(output).toContain("model");
 			expect(output).toContain("cwd");
+		});
+	});
+
+	describe("composition", () => {
+		it("bottom-aligns the metadata so its last row sits on the accent baseline", () => {
+			const lines = render(100).map(plain);
+			const baseline = lines.findIndex((line) => line.includes(MARK_BASELINE));
+			const cwdRow = lines.findIndex((line) => line.includes("cwd"));
+			expect(baseline).toBeGreaterThan(0);
+			// version/model/cwd occupy the three rows ending on the baseline.
+			expect(cwdRow).toBe(baseline);
+		});
+
+		it("renders the shortcut row under the hint", () => {
+			const output = render(100, { shortcuts: "/ commands  ! bash" }).map(plain);
+			const hintRow = output.findIndex((line) => line.includes("Apex Code can explain"));
+			const shortcutRow = output.findIndex((line) => line.includes("/ commands"));
+			expect(shortcutRow).toBeGreaterThan(hintRow);
+		});
+
+		it("keeps the shortcut row inside the width", () => {
+			const shortcuts = "/ commands    ! bash    @ files    escape interrupt";
+			for (const width of [120, 80, 40, 20, 5, 1]) {
+				for (const line of render(width, { shortcuts })) {
+					expect(visibleWidth(line), `width ${width}`).toBeLessThanOrEqual(width);
+				}
+			}
 		});
 	});
 

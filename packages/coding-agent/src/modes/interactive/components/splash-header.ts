@@ -31,6 +31,11 @@ export interface ApexSplashHeaderOptions {
 	inventoryHint?: string;
 	/** Hint rendered under the metadata block. Return undefined for none. */
 	getHint?: () => string | undefined;
+	/**
+	 * One row of entry-point sigils under the hint, already coloured by the
+	 * caller. The header does not know the keybindings, so it does not build it.
+	 */
+	getShortcuts?: () => string | undefined;
 	/** Resolves `terminal.symbolPreset`. Defaults to unicode. */
 	getSymbolPreset?: () => MarkSymbolPreset;
 	/** Emit a leading blank line above the mark. */
@@ -166,7 +171,9 @@ export class ApexSplashHeader implements Component {
 		const showMeta = metaWidth >= LABEL_WIDTH + MIN_VALUE_WIDTH;
 		const valueWidth = Math.max(1, metaWidth - LABEL_WIDTH);
 		const metaLines = showMeta ? this.buildMetadata(valueWidth) : [];
-		const metaStart = Math.max(0, Math.floor((brandMark.rows.length - metaLines.length) / 2));
+		// Bottom-aligned, so the last metadata row sits on the mark's ember
+		// baseline and the two read as one block rather than two stacks.
+		const metaStart = Math.max(0, brandMark.rows.length - metaLines.length);
 
 		const lines = this.options.topPadding ? [this.padLine("", safeWidth, paddingX)] : [];
 
@@ -206,6 +213,12 @@ export class ApexSplashHeader implements Component {
 		if (hint) {
 			lines.push(this.padLine("", safeWidth, paddingX));
 			lines.push(this.padLine(theme.fg("dim", truncateToWidth(hint, contentWidth)), safeWidth, paddingX));
+		}
+
+		const shortcuts = this.options.getShortcuts?.();
+		if (shortcuts) {
+			lines.push(this.padLine("", safeWidth, paddingX));
+			lines.push(this.padLine(truncateToWidth(shortcuts, contentWidth, ""), safeWidth, paddingX));
 		}
 
 		if (this.verboseInstructions) {

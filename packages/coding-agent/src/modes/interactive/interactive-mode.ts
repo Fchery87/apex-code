@@ -587,9 +587,9 @@ export class InteractiveMode {
 		this.defaultEditor = new CustomEditor(this.ui, getEditorTheme(), this.keybindings, {
 			paddingX: editorPaddingX,
 			autocompleteMaxVisible,
-			promptPrefix: "> ",
+			promptPrefix: "› ",
 			promptColor: (text) => theme.fg("accent", text),
-			placeholder: "Ask anything, / for commands, ! for bash",
+			placeholder: "Ask anything",
 			placeholderColor: (text) => theme.fg("dim", text),
 			commandColor: (text) => theme.fg("accent", text),
 			surfaceColor: (text) => theme.bg("userMessageBg", text),
@@ -986,6 +986,7 @@ export class InteractiveMode {
 					},
 					getInventory: () => this.buildStartupInventory(),
 					inventoryHint: "/resources",
+					getShortcuts: () => this.buildStartupShortcuts(),
 					getHint: () => "Apex Code can explain its own features and look up its docs.",
 				},
 			);
@@ -1826,6 +1827,22 @@ export class InteractiveMode {
 	 * A count answers the only question that screen can usefully answer, which
 	 * is what got loaded; the names live behind /resources now.
 	 */
+	/**
+	 * The sigil row under the hint: how to reach commands, bash, and files.
+	 *
+	 * These are the only three characters that change what the composer does, so
+	 * they take the accent and everything around them stays quiet.
+	 */
+	private buildStartupShortcuts(): string {
+		const entry = (sigil: string, label: string) => `${theme.fg("accent", sigil)} ${theme.fg("muted", label)}`;
+		return [
+			entry("/", "commands"),
+			entry("!", "bash"),
+			entry("@", "files"),
+			`${theme.fg("dim", keyText("app.interrupt"))} ${theme.fg("muted", "interrupt")}`,
+		].join("    ");
+	}
+
 	private buildStartupInventory(): string | undefined {
 		const counted = (total: number, singular: string) => `${total} ${singular}${total === 1 ? "" : "s"}`;
 		const parts: string[] = [];
