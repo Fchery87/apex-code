@@ -7,7 +7,7 @@
 | Author | `Apex Code` |
 | Status | `Complete` |
 | Created | `2026-08-25` |
-| Last updated | `2026-08-25` |
+| Last updated | `2026-08-26` |
 | Roadmap phase | `product-surface follow-up after the composer dock` |
 | Tracking issue/PR | `none` |
 | Compatibility posture | `packages/tui` remains byte-identical. `dark` and `light` are unchanged and still selectable. The header's `logo` option, the editor, autocomplete, and every selector behave as before. |
@@ -42,6 +42,8 @@ Two findings from it drove the shape of the work:
 - [x] An in-session route to the detail that the counted line replaces.
 - [x] A context gauge that is redundant with the percentage it sits beside.
 - [x] A tool lifecycle spine that costs no content width and no rows.
+- [x] One selector shape across commands, file references, and permission.
+- [x] Terminal resize reflows the UI.
 - [x] `packages/tui` untouched.
 
 ## Non-goals
@@ -80,6 +82,22 @@ permission mode is.
 **Spine.** `ToolPanelComponent` draws a one-column spine in the first column of
 its existing left padding, coloured by lifecycle and dropped below two columns
 of padding.
+
+**Overlays.** Two shared pieces carry the selector shape. `DynamicBorder` is the
+boundary every overlay draws, so it becomes a dotted rule in `borderMuted`
+rather than a solid one in the accent. `SelectListTheme.selectedText` lights the
+selected row with a background step instead of accent-coloured text, which
+reaches every list at once. The background painter `tool-panel` already needed
+moves into `theme.ts` so both callers share it. Per-surface: `CustomEditor`
+brackets the autocomplete rows with a rule and a keybinding footer, found by the
+same border count it already uses; the model selector's hints move below the
+list.
+
+**Resize.** The interactive UI runs inside the sandbox, which `bwrap
+--new-session` leaves without a controlling terminal, so its stdout reports a
+window size frozen at sandbox creation. The supervisor publishes the real size
+to a file in the bind-mounted workspace and the child watches it and republishes
+a `resize`.
 
 ## Acceptance criteria
 
@@ -133,6 +151,11 @@ scanner the same way `node_modules` already is, in its own commit.
 | Four copy-pasted diagnostic render blocks | code | Replaced by one grouped table. |
 | The startup skill-name listing at default verbosity | behavior | Replaced by a count; the listing moves to `/resources`. |
 | `apex-theme.test.ts` assertions pinning the gold vars | tests | Moved to the ember vars. |
+| Full-width accent rules around every overlay | behavior | Replaced by a quiet dotted rule. |
+| Accent-coloured selected rows | behavior | Replaced by a background step with full-contrast text. |
+| `paintBackground` duplicated in `tool-panel` | code | Moved to `theme.ts`; both callers share it. |
+| The model selector's hint row above the list | behavior | Moved to a footer below it. |
+| The composer placeholder listing the entry points in prose | copy | Replaced by the sigil row; placeholder is now "Ask anything". |
 
 ## Risks
 
