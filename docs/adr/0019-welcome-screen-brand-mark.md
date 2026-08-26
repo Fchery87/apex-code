@@ -1,6 +1,10 @@
 # ADR 0019 — Brand mark, palette, and input chrome
 
-**Status:** Accepted · **Date:** 2026-08-18
+**Status:** Accepted, superseded in part · **Date:** 2026-08-18
+
+The palette, the compact mark, and the ASCII mark below are superseded by
+[ADR 0022](0022-ember-palette-and-counted-startup.md). The construction rule for
+the palette and the header layout still stand.
 
 ## Decision
 
