@@ -136,7 +136,8 @@ describe("FooterComponent width handling", () => {
 		expect(lines).toHaveLength(1);
 		const tray = stripAnsi(lines[0]);
 		expect(tray).toContain("test-model");
-		expect(tray).toContain("context 12.3%");
+		// The gauge sits between the label and the number at this width.
+		expect(tray).toMatch(/context [█░]{8} 12\.3%/);
 	});
 
 	it("drops routine metadata before permission and context state", () => {
@@ -161,6 +162,24 @@ describe("FooterComponent width handling", () => {
 		expect(tray).toContain("context 95.0%!!");
 		expect(tray).not.toContain("CH");
 		expect(tray).not.toContain("$1.234");
+		// The gauge is the first rung to go. It must never cost the tray its
+		// spelled-out permission mode on the way down.
+		expect(tray).not.toMatch(/[█░]/);
+	});
+
+	it("drops the context gauge before it drops the spelled-out permission mode", () => {
+		const session = createSession({ sessionName: "", percent: 40 });
+		const footer = new FooterComponent(session, createFooterData(1));
+		footer.setPermissionMode("bypassPermissions");
+
+		// Wide: the gauge rides along.
+		expect(stripAnsi(footer.render(120)[0])).toMatch(/context [█░]{8} 40\.0%/);
+
+		// Narrowing past the gauge keeps the full mode name and the exact figure.
+		const squeezed = stripAnsi(footer.render(40)[0]);
+		expect(squeezed).toContain("bypassPermissions");
+		expect(squeezed).toContain("context 40.0%");
+		expect(squeezed).not.toMatch(/[█░]/);
 	});
 
 	it("uses compact safety labels at very narrow widths without clipping them mid-segment", () => {
