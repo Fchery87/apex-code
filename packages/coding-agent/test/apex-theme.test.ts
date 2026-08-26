@@ -60,40 +60,56 @@ describe("apex theme", () => {
 	});
 
 	it("routes chrome through the brand primary", () => {
-		// Gold is the Apex identity colour. Operational warning/error colours
+		// Ember is the Apex identity colour. Operational warning/error colours
 		// remain separate so state is never confused with branding.
-		expect(apex.colors.accent).toBe("gold");
-		expect(apex.colors.border).toBe("gold");
-		expect(apex.colors.borderAccent).toBe("gold");
+		expect(apex.colors.accent).toBe("ember");
+		expect(apex.colors.border).toBe("ember");
+		expect(apex.colors.borderAccent).toBe("ember");
 	});
 
-	it("uses the approved Prime-inspired neutral and gold system", () => {
+	it("uses the approved Ember neutral and accent system", () => {
 		expect(apex.vars).toMatchObject({
-			bg: "#050506",
-			surface: "#0d0d10",
-			panel: "#151518",
-			fg: "#f4f4f5",
-			muted: "#a1a1aa",
-			dim: "#7b7b85",
-			grid: "#52525b",
-			gold: "#d6b85a",
-			goldSoft: "#e4cb7a",
-			goldDeep: "#a8842a",
-			success: "#7da876",
-			warning: "#e57c24",
-			error: "#d06f82",
-			info: "#38bdf8",
-			selectedBg: "#222226",
-			userMsgBg: "#1a1a1f",
-			toolPendingBg: "#0d0d10",
-			toolSuccessBg: "#0e1510",
-			toolErrorBg: "#1a0d12",
+			void: "#09090a",
+			surface: "#111113",
+			panel: "#17171a",
+			sel: "#202024",
+			line: "#26262b",
+			dim: "#5f5f68",
+			muted: "#8e8e97",
+			text: "#e9e9ec",
+			ember: "#c87a46",
+			emberSoft: "#e0a479",
+			emberDeep: "#7d4726",
+			sage: "#7fa37a",
+			brick: "#c97070",
+			amber: "#c6a052",
+			slate: "#6f92a6",
 		});
-		expect(apex.colors.mdHeading).toBe("goldSoft");
-		expect(apex.colors.mdListBullet).toBe("gold");
-		expect(apex.colors.thinkingHigh).toBe("goldSoft");
-		expect(apex.colors.thinkingXhigh).toBe("gold");
-		expect(apex.colors.warning).toBe("warning");
+		expect(apex.colors.mdHeading).toBe("emberSoft");
+		expect(apex.colors.mdListBullet).toBe("ember");
+		expect(apex.colors.thinkingHigh).toBe("emberSoft");
+		expect(apex.colors.thinkingXhigh).toBe("ember");
+		expect(apex.colors.warning).toBe("amber");
+	});
+
+	it("keeps four distinct greys between the ground and the content", () => {
+		// The gold palette collapsed rules and labels onto one grey, which is why
+		// the metadata column read flat. Each step must be its own value.
+		const greys = [apex.vars.line, apex.vars.dim, apex.vars.muted, apex.vars.text];
+		expect(new Set(greys).size).toBe(4);
+	});
+
+	it("carries no fully saturated hue", () => {
+		// The inherited palette shipped #3fb950 and #f85149 for diffs, which
+		// vibrate against a near-black ground. Every hue here is desaturated.
+		const hexes = Object.values(apex.vars as Record<string, string>).filter((v) => /^#[0-9a-f]{6}$/i.test(v));
+		for (const hex of hexes) {
+			const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+			const max = Math.max(r, g, b);
+			const min = Math.min(r, g, b);
+			const saturation = max === 0 ? 0 : (max - min) / max;
+			expect(saturation, `${hex} is too saturated`).toBeLessThan(0.75);
+		}
 	});
 
 	it("keeps every var referenced by colours actually defined", () => {
