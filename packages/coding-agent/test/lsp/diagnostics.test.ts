@@ -10,9 +10,18 @@ const temporaryDirectories: string[] = [];
 const diagnosticsServices: LspDiagnostics[] = [];
 const pools: LspPool[] = [];
 
+/**
+ * The default has to cover a real child process spawn plus the LSP handshake before
+ * the first publish can arrive, because `afterMutation` starts the server on demand.
+ * The old 100ms covered none of that and only passed on fast Linux runners; Windows
+ * CI spent longer than the whole budget just spawning node, and the publish-path
+ * tests then read the timeout as `status: "unavailable"`. Cases that assert the
+ * timeout itself pass their own short budget -- that number is their subject, and it
+ * must not double as the budget for cases that need the publish to land.
+ */
 function createDiagnostics(
 	mode: "stale-then-exact" | "many" | "none",
-	timeoutMs = 100,
+	timeoutMs = 10_000,
 ): {
 	diagnostics: LspDiagnostics;
 	logPath: string;
@@ -103,7 +112,7 @@ describe("LspDiagnostics", () => {
 	});
 
 	test("returns unavailable rather than clean when the server does not publish", async () => {
-		const { diagnostics, sourcePath } = createDiagnostics("none");
+		const { diagnostics, sourcePath } = createDiagnostics("none", 100);
 
 		await expect(diagnostics.afterMutation(sourcePath)).resolves.toEqual({
 			status: "unavailable",

@@ -42,7 +42,6 @@ import { FS_WATCH_RETRY_DELAY_MS } from "../src/utils/fs-watch.ts";
 
 type WorktreeFixture = {
 	worktreeDir: string;
-	reftableDir: string;
 };
 
 function createPlainReftableRepo(tempDir: string): string {
@@ -75,21 +74,14 @@ function createReftableWorktree(tempDir: string): WorktreeFixture {
 	writeFileSync(join(gitDir, "commondir"), "../..\n");
 	writeFileSync(join(reftableDir, "tables.list"), "0\n");
 
-	return { worktreeDir, reftableDir };
+	return { worktreeDir };
 }
 
 /**
- * Budget derived from the implementation rather than guessed, because the old
- * fixed 3000ms was *below* one of the delays the code under test can legitimately
- * take. A failed watch establish is retried after FS_WATCH_RETRY_DELAY_MS (5000),
- * and only then does the 500ms WATCH_DEBOUNCE_MS run before execFile is called, so
- * a single retry guaranteed a timeout no matter how fast the machine was. macOS
- * made that visible first: fs.watch there is FSEvents-backed, whose delivery
- * latency under a loaded CI runner is what pushed the establish into a retry.
- *
- * The remaining margin absorbs the debounce, the async refresh, and poll
- * granularity. Well under the 30s vitest testTimeout even for the one case that
- * awaits twice in sequence.
+ * Only has to cover the 500ms debounce plus the async refresh now that nothing
+ * here waits on the platform to deliver a filesystem event. Kept at the retry
+ * delay plus a margin so the one case that awaits twice in sequence stays well
+ * under the 30s vitest testTimeout.
  */
 const WATCH_WAIT_TIMEOUT_MS = FS_WATCH_RETRY_DELAY_MS + 3000;
 
@@ -101,6 +93,24 @@ async function waitFor(condition: () => boolean, timeoutMs = WATCH_WAIT_TIMEOUT_
 		}
 		await new Promise((resolve) => setTimeout(resolve, 10));
 	}
+}
+
+/**
+ * Drive the reftable listener directly instead of writing the file and waiting.
+ *
+ * A write issued right after the constructor can be lost outright: fs.watch
+ * registers with FSEvents asynchronously on macOS, and watchFile's baseline stat
+ * is also taken asynchronously, so both can start listening *after* the write and
+ * see nothing changed. A lost event never retries -- the retry path fires only on
+ * watcher error -- so the wait can only time out, which is why raising the budget
+ * from 3000ms to 8000ms did not stop this flaking. These cases are about the
+ * debounce and the notification decision, not about whether the platform delivers
+ * events, so they trigger the listener themselves and leave delivery to Node.
+ */
+function emitReftableChange(provider: FooterDataProvider): void {
+	const { reftableWatcher } = provider as unknown as { reftableWatcher: FSWatcher | null };
+	if (!reftableWatcher) throw new Error("reftable watcher was not established");
+	reftableWatcher.emit("change", "change", "tables.list");
 }
 
 describe("FooterDataProvider reftable branch detection", () => {
@@ -184,7 +194,7 @@ describe("FooterDataProvider reftable branch detection", () => {
 	});
 
 	it("does not notify listeners when reftable updates keep the same branch", async () => {
-		const { worktreeDir, reftableDir } = createReftableWorktree(tempDir);
+		const { worktreeDir } = createReftableWorktree(tempDir);
 		process.chdir(worktreeDir);
 
 		const provider = new FooterDataProvider(worktreeDir);
@@ -194,7 +204,7 @@ describe("FooterDataProvider reftable branch detection", () => {
 			const onBranchChange = vi.fn();
 			provider.onBranchChange(onBranchChange);
 
-			writeFileSync(join(reftableDir, "tables.list"), "1\n");
+			emitReftableChange(provider);
 			await waitFor(() => vi.mocked(execFile).mock.calls.length === 1);
 
 			expect(vi.mocked(execFile)).toHaveBeenCalledTimes(1);
@@ -207,7 +217,7 @@ describe("FooterDataProvider reftable branch detection", () => {
 	});
 
 	it("debounces rapid reftable updates into a single async refresh", async () => {
-		const { worktreeDir, reftableDir } = createReftableWorktree(tempDir);
+		const { worktreeDir } = createReftableWorktree(tempDir);
 		process.chdir(worktreeDir);
 
 		const provider = new FooterDataProvider(worktreeDir);
@@ -215,9 +225,9 @@ describe("FooterDataProvider reftable branch detection", () => {
 			expect(provider.getGitBranch()).toBe("main");
 			vi.mocked(execFile).mockClear();
 
-			writeFileSync(join(reftableDir, "tables.list"), "1\n");
-			writeFileSync(join(reftableDir, "tables.list"), "2\n");
-			writeFileSync(join(reftableDir, "tables.list"), "3\n");
+			emitReftableChange(provider);
+			emitReftableChange(provider);
+			emitReftableChange(provider);
 			await waitFor(() => vi.mocked(execFile).mock.calls.length === 1);
 			await new Promise((resolve) => setTimeout(resolve, 650));
 
@@ -228,7 +238,7 @@ describe("FooterDataProvider reftable branch detection", () => {
 	});
 
 	it("updates the cached branch when the reftable directory changes", async () => {
-		const { worktreeDir, reftableDir } = createReftableWorktree(tempDir);
+		const { worktreeDir } = createReftableWorktree(tempDir);
 		process.chdir(worktreeDir);
 
 		const provider = new FooterDataProvider(worktreeDir);
@@ -238,7 +248,7 @@ describe("FooterDataProvider reftable branch detection", () => {
 			const onBranchChange = vi.fn();
 			provider.onBranchChange(onBranchChange);
 
-			writeFileSync(join(reftableDir, "tables.list"), "1\n");
+			emitReftableChange(provider);
 			await waitFor(() => vi.mocked(execFile).mock.calls.length === 1);
 			await waitFor(() => provider.getGitBranch() === "foo");
 

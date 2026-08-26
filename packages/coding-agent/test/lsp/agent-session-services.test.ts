@@ -96,10 +96,14 @@ describe("createAgentSessionServices LSP startup", () => {
 					command: process.execPath,
 					args: [hangingStub],
 					languages: [{ languageId: "text", extensions: [".bad"] }],
-					// Short and well within the 100-120000ms bound (registry.ts) -- the
-					// hanging stub never responds, so this always times out; it is not a
-					// race against the good server's near-instant handshake.
-					initializationTimeoutMs: 100,
+					// The hanging stub never responds, so any value here times out. It must
+					// still outlast the good server's handshake: this timeout is what aborts
+					// pool startup, and the assertions below require the good server to have
+					// reached ready before that happens. At 100ms it did not under parallel
+					// load -- spawning node alone can cost more than that -- and the sibling
+					// assertions failed. The bound is 100-120000ms (registry.ts); this test
+					// spends it, so keep it just long enough to be decisive.
+					initializationTimeoutMs: 5_000,
 				},
 			},
 		});
