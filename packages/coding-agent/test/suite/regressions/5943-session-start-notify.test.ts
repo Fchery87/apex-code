@@ -73,6 +73,7 @@ type LoadedResourcesContext = {
 	formatDisplayPath: (resourcePath: string) => string;
 	formatContextPath: (resourcePath: string) => string;
 	getBuiltInCommandConflictDiagnostics: (extensionRunner: LoadedResourcesContext["session"]["extensionRunner"]) => [];
+	collectDiagnosticGroups: () => [];
 };
 
 type RebindContext = {
