@@ -413,6 +413,14 @@ export class InteractiveMode {
 	private footer: FooterComponent;
 	private footerContainer: Container;
 	private footerDataProvider: FooterDataProvider;
+	/**
+	 * Whether the startup screen is showing its counted inventory line.
+	 *
+	 * Warnings are only allowed to collapse into that count when the count is
+	 * actually on screen. Under a quiet startup there is no splash header, so
+	 * collapsing them would hide conflicts entirely rather than summarise them.
+	 */
+	private startupInventoryVisible = false;
 	// Stored so the same manager can be injected into custom editors, selectors, and extension UI.
 	private keybindings: KeybindingsManager;
 	private version: string;
@@ -983,10 +991,12 @@ export class InteractiveMode {
 			);
 
 			// Setup UI layout
+			this.startupInventoryVisible = true;
 			this.headerContainer.addChild(this.builtInHeader);
 			this.headerContainer.addChild(new Spacer(1));
 		} else {
 			// Minimal header when silenced
+			this.startupInventoryVisible = false;
 			this.builtInHeader = new Text("", 0, 0);
 			this.headerContainer.addChild(this.builtInHeader);
 		}
@@ -1762,14 +1772,15 @@ export class InteractiveMode {
 			}
 		}
 
-		// Warnings collapse into the counted line on the startup screen; the full
-		// trace lives behind /resources. Errors still surface inline, because an
-		// error means a resource did not load at all.
+		// Warnings collapse into the counted line when that line is on screen; the
+		// full trace lives behind /resources. Errors always surface inline,
+		// because an error means a resource did not load at all.
 		if (showDiagnostics) {
+			const collapseWarnings = !showListing && this.startupInventoryVisible;
 			for (const group of this.collectDiagnosticGroups()) {
-				const visible = showListing
-					? group.diagnostics
-					: group.diagnostics.filter((diagnostic) => diagnostic.type === "error");
+				const visible = collapseWarnings
+					? group.diagnostics.filter((diagnostic) => diagnostic.type === "error")
+					: group.diagnostics;
 				if (visible.length === 0) continue;
 				const severity = visible.some((diagnostic) => diagnostic.type === "error") ? "error" : "warning";
 				const body = this.formatDiagnostics(visible, sourceInfos);

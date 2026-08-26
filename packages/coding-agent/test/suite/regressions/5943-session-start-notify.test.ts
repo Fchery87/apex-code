@@ -249,6 +249,7 @@ function createLoadedResourcesContext(): LoadedResourcesContext {
 		formatDisplayPath: (resourcePath) => resourcePath,
 		formatContextPath: (resourcePath) => resourcePath.replace("/repo/", ""),
 		getBuiltInCommandConflictDiagnostics: () => [],
+		collectDiagnosticGroups: () => [],
 	};
 }
 
