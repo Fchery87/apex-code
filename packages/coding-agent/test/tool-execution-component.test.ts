@@ -85,7 +85,9 @@ describe("ToolExecutionComponent parity", () => {
 		const pendingBg = theme.bg("toolPendingBg", "x").replace(`x\x1b[49m`, "");
 		const queued = component.render(40);
 		expect(queued[0]).toBe("");
-		expect(stripAnsi(queued[1]).startsWith("  custom call · ")).toBe(true);
+		// The status spine takes the first column of the left padding, so the
+		// label still starts at column 2 and the panel is still 40 wide.
+		expect(stripAnsi(queued[1]).startsWith("┆ custom call · ")).toBe(true);
 		expect(stripAnsi(queued[1])).toContain("queued");
 		expect(stripAnsi(queued[1]).endsWith("  ")).toBe(true);
 		expect(visibleWidth(queued[1])).toBe(40);
@@ -94,8 +96,9 @@ describe("ToolExecutionComponent parity", () => {
 		component.updateResult({ content: [{ type: "text", text: "done" }], details: {}, isError: false }, false);
 		const done = component.render(40).slice(1);
 		expect(stripAnsi(done[0])).toContain("custom call · ✓ done");
-		expect(stripAnsi(done[1])).toBe(" ".repeat(40));
-		expect(stripAnsi(done[2])).toContain("  custom result");
+		// The spine runs unbroken through the panel's blank separator row.
+		expect(stripAnsi(done[1])).toBe(`▌${" ".repeat(39)}`);
+		expect(stripAnsi(done[2])).toContain("▌ custom result");
 		for (const line of done) expect(visibleWidth(line)).toBe(40);
 	});
 
@@ -331,8 +334,10 @@ describe("ToolExecutionComponent parity", () => {
 
 		const rendered = stripAnsi(component.render(200).join("\n"));
 		expect(rendered.match(/Full output:/g)?.length ?? 0).toBe(1);
-		expect(rendered).toMatch(/line-4000[^\n]*\n[^\S\n]*\n[^\S\n]*\[Full output:/);
-		expect(rendered).not.toMatch(/line-4000[^\n]*\n[^\S\n]*\n[^\S\n]*\n[^\S\n]*\[Full output:/);
+		// `\s` no longer covers a separator row: the spine glyph leads every line.
+		const blank = String.raw`[▌┆\s]*`;
+		expect(rendered).toMatch(new RegExp(String.raw`line-4000[^\n]*\n${blank}\n${blank}\[Full output:`));
+		expect(rendered).not.toMatch(new RegExp(String.raw`line-4000[^\n]*\n${blank}\n${blank}\n${blank}\[Full output:`));
 		expect(rendered).toContain("Truncated: showing 2000 of 4000 lines");
 		expect(rendered).not.toContain("[Showing lines 2001-4000 of 4000. Full output:");
 	});

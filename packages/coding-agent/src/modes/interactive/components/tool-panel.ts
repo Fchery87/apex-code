@@ -11,18 +11,34 @@ const LIFECYCLE_SYMBOLS: Record<ToolSymbolPreset, Record<ToolLifecycle, string>>
 
 const CONTROL_SEQUENCE = /\x1b\[[0-9;]*[A-Za-z]|\x1b_[^\x07]*\x07/y;
 
-function lifecycleColor(lifecycle: ToolLifecycle): "dim" | "warning" | "success" | "error" {
+/**
+ * Running takes the brand accent rather than `warning`. Work in progress is
+ * not a caution; amber is reserved for states the user may need to act on.
+ */
+function lifecycleColor(lifecycle: ToolLifecycle): "dim" | "accent" | "success" | "error" {
 	switch (lifecycle) {
 		case "queued":
 			return "dim";
 		case "running":
-			return "warning";
+			return "accent";
 		case "done":
 			return "success";
 		case "error":
 			return "error";
 	}
 }
+
+/**
+ * The status spine drawn down the left edge of a tool panel.
+ *
+ * It is a redundant channel over the lifecycle word in the header, so it is
+ * free to lean on colour. The glyph still distinguishes work that has not
+ * started from work that has, which is the distinction a glance most needs.
+ */
+const SPINE_GLYPHS: Record<ToolSymbolPreset, Record<ToolLifecycle, string>> = {
+	unicode: { queued: "┆", running: "▌", done: "▌", error: "▌" },
+	ascii: { queued: ":", running: "|", done: "|", error: "|" },
+};
 
 export function formatToolDuration(durationMs: number): string {
 	if (durationMs < 1000) return `${Math.max(0, Math.round(durationMs))}ms`;
@@ -103,10 +119,18 @@ export class ToolPanelComponent implements Component {
 		if (childLines.length > 1) panelLines.push("", ...childLines.slice(1));
 
 		const background = lifecycleBackground(lifecycle);
+		// The spine occupies the first column of the existing left padding, so it
+		// marks state without costing the panel a column of content. Below two
+		// columns of padding there is no room for it and it is dropped.
+		const showSpine = padding >= 1;
+		const spine = showSpine
+			? paintBackground(theme.fg(lifecycleColor(lifecycle), SPINE_GLYPHS[symbolPreset][lifecycle]), background)
+			: "";
+		const leftPadding = " ".repeat(Math.max(0, padding - (showSpine ? 1 : 0)));
 		return panelLines.map((line) => {
 			const clipped = truncateToWidth(line, innerWidth, "");
 			const rightPadding = " ".repeat(Math.max(0, innerWidth - visibleWidth(clipped)));
-			return paintBackground(`${" ".repeat(padding)}${clipped}${rightPadding}${" ".repeat(padding)}`, background);
+			return spine + paintBackground(`${leftPadding}${clipped}${rightPadding}${" ".repeat(padding)}`, background);
 		});
 	}
 
