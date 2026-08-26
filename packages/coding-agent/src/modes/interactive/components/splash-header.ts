@@ -1,5 +1,11 @@
 import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { APEX_PEAK_LOGO, APEX_PEAK_LOGO_ASCII, APEX_PEAK_LOGO_COMPACT } from "../../../themes/apex-logo.ts";
+import {
+	type BrandMark,
+	customBrandMark,
+	type MarkRow,
+	type MarkSymbolPreset,
+	selectBrandMark,
+} from "../../../themes/apex-logo.ts";
 import { theme } from "../theme/theme.ts";
 import { formatCwdForFooter } from "./footer.ts";
 
@@ -12,20 +18,54 @@ export interface SplashHeaderMetadataLine {
 export interface ApexSplashHeaderOptions {
 	/** Rows appended after `cwd`, for extensions that want to contribute context. */
 	getExtraMetadata?: () => readonly SplashHeaderMetadataLine[];
+	/**
+	 * One line of counted totals, rendered between the rules under the mark.
+	 * The header does not know how to count anything; the caller supplies the
+	 * finished line so the resource loader stays on its own side of the seam.
+	 */
+	getInventory?: () => string | undefined;
+	/**
+	 * Affordance appended to the inventory line, e.g. the command that shows the
+	 * detail. Dropped whole rather than clipped, so it never renders as a stub.
+	 */
+	inventoryHint?: string;
 	/** Hint rendered under the metadata block. Return undefined for none. */
 	getHint?: () => string | undefined;
+	/**
+	 * One row of entry-point sigils under the hint, already coloured by the
+	 * caller. The header does not know the keybindings, so it does not build it.
+	 */
+	getShortcuts?: () => string | undefined;
 	/** Resolves `terminal.symbolPreset`. Defaults to unicode. */
-	getSymbolPreset?: () => "unicode" | "ascii";
+	getSymbolPreset?: () => MarkSymbolPreset;
 	/** Emit a leading blank line above the mark. */
 	topPadding?: boolean;
 	/** Override the mark. Used by tests and by extensions that rebrand. */
 	logo?: string;
 }
 
+/**
+ * Paint one mark row: accent run then text run.
+ *
+ * Empty runs are skipped so no row carries a bare, unclosed SGR pair.
+ */
+export function paintMarkRow(row: MarkRow): string {
+	const accent = row.accent ? theme.fg("accent", row.accent) : "";
+	const text = row.text ? theme.fg("text", row.text) : "";
+	return accent + text;
+}
+
+/** The whole mark as painted lines, for surfaces that just want to stamp it. */
+export function paintBrandMark(brandMark: BrandMark): string[] {
+	return brandMark.rows.map(paintMarkRow);
+}
+
 const GUTTER = 4;
 const LABEL_WIDTH = 9;
 /** Smallest value column worth rendering; below this the metadata column is dropped. */
 const MIN_VALUE_WIDTH = 8;
+/** Below this the rules and the inventory line are dropped rather than clipped. */
+const MIN_RULE_WIDTH = 12;
 
 /**
  * Keep the rightmost path segments that fit, so the leaf directory stays visible.
@@ -83,13 +123,14 @@ function trailingByWidth(text: string, maxWidth: number): string {
 }
 
 /**
- * Startup header: brand mark on the left, runtime metadata on the right.
+ * Startup header: brand mark on the left, runtime metadata on the right, then a
+ * ruled band carrying the counted inventory.
  *
  * Values are read through getters rather than captured at construction, so the
  * model fills in once the session binds without an explicit refresh.
  *
  * The metadata column is dropped when the terminal cannot hold it, and the mark
- * falls back to a compact variant rather than being truncated mid-glyph.
+ * falls back to a type lockup rather than being truncated mid-glyph.
  */
 export class ApexSplashHeader implements Component {
 	private readonly version: string;
@@ -120,24 +161,50 @@ export class ApexSplashHeader implements Component {
 		const safeWidth = Math.max(1, width);
 		const paddingX = safeWidth > 1 ? 1 : 0;
 		const contentWidth = Math.max(1, safeWidth - paddingX * 2);
+		const symbolPreset = this.options.getSymbolPreset?.() ?? "unicode";
 
-		const logoLines = this.selectLogo(contentWidth);
-		const logoWidth = logoLines.reduce((max, line) => Math.max(max, visibleWidth(line)), 0);
+		const brandMark = this.options.logo
+			? customBrandMark(this.options.logo)
+			: selectBrandMark(contentWidth, symbolPreset);
 
-		const metaWidth = contentWidth - logoWidth - GUTTER;
+		const metaWidth = contentWidth - brandMark.width - GUTTER;
 		const showMeta = metaWidth >= LABEL_WIDTH + MIN_VALUE_WIDTH;
 		const valueWidth = Math.max(1, metaWidth - LABEL_WIDTH);
 		const metaLines = showMeta ? this.buildMetadata(valueWidth) : [];
-		const metaStart = Math.max(0, Math.floor((logoLines.length - metaLines.length) / 2));
+		// Bottom-aligned, so the last metadata row sits on the mark's ember
+		// baseline and the two read as one block rather than two stacks.
+		const metaStart = Math.max(0, brandMark.rows.length - metaLines.length);
 
 		const lines = this.options.topPadding ? [this.padLine("", safeWidth, paddingX)] : [];
 
-		logoLines.forEach((line, index) => {
-			const meta = index >= metaStart && index < metaStart + metaLines.length ? metaLines[index - metaStart] : "";
-			const gap = showMeta ? " ".repeat(Math.max(0, logoWidth - visibleWidth(line) + GUTTER)) : "";
-			const content = truncateToWidth(theme.fg("text", line) + gap + meta, contentWidth, "");
+		// The mark and the metadata column are two stacks of different heights
+		// sharing one block, so the block is as tall as the taller of them. A
+		// one-row mark beside three metadata rows still shows all three.
+		const blockRows = Math.max(brandMark.rows.length, metaStart + metaLines.length);
+		for (let index = 0; index < blockRows; index++) {
+			const row = brandMark.rows[index];
+			const painted = row ? paintMarkRow(row) : "";
+			const rowWidth = row ? visibleWidth(row.accent + row.text) : 0;
+			const meta = index >= metaStart ? (metaLines[index - metaStart] ?? "") : "";
+			const gap = showMeta ? " ".repeat(Math.max(0, brandMark.width - rowWidth + GUTTER)) : "";
+			const content = truncateToWidth(painted + (meta ? gap + meta : ""), contentWidth, "");
 			lines.push(this.padLine(content, safeWidth, paddingX));
-		});
+		}
+
+		// Counted totals sit in a ruled band of their own. The rules are what
+		// carry the structure on this screen, so nothing here is boxed.
+		const inventory = this.options.getInventory?.();
+		if (inventory && contentWidth >= MIN_RULE_WIDTH) {
+			const rule = theme.fg("borderMuted", (symbolPreset === "ascii" ? "-" : "─").repeat(contentWidth));
+			lines.push(this.padLine("", safeWidth, paddingX));
+			lines.push(this.padLine(rule, safeWidth, paddingX));
+			const hint = this.options.inventoryHint;
+			const withHint = hint ? `${inventory}  ${theme.fg("dim", hint)}` : inventory;
+			const fitted =
+				visibleWidth(withHint) <= contentWidth ? withHint : truncateToWidth(inventory, contentWidth, "");
+			lines.push(this.padLine(fitted, safeWidth, paddingX));
+			lines.push(this.padLine(rule, safeWidth, paddingX));
+		}
 
 		// The hint is product copy rather than a runtime fact, so it sits under the
 		// whole block at full width instead of inside the narrow metadata column,
@@ -148,6 +215,12 @@ export class ApexSplashHeader implements Component {
 			lines.push(this.padLine(theme.fg("dim", truncateToWidth(hint, contentWidth)), safeWidth, paddingX));
 		}
 
+		const shortcuts = this.options.getShortcuts?.();
+		if (shortcuts) {
+			lines.push(this.padLine("", safeWidth, paddingX));
+			lines.push(this.padLine(truncateToWidth(shortcuts, contentWidth, ""), safeWidth, paddingX));
+		}
+
 		if (this.verboseInstructions) {
 			lines.push(this.padLine("", safeWidth, paddingX));
 			for (const instruction of this.verboseInstructions.split("\n")) {
@@ -156,18 +229,6 @@ export class ApexSplashHeader implements Component {
 		}
 
 		return lines;
-	}
-
-	private selectLogo(contentWidth: number): string[] {
-		if (this.options.logo) {
-			return this.options.logo.split("\n");
-		}
-		if (this.options.getSymbolPreset?.() === "ascii") {
-			return APEX_PEAK_LOGO_ASCII.split("\n");
-		}
-		const full = APEX_PEAK_LOGO.split("\n");
-		const fullWidth = full.reduce((max, line) => Math.max(max, visibleWidth(line)), 0);
-		return contentWidth >= fullWidth ? full : APEX_PEAK_LOGO_COMPACT.split("\n");
 	}
 
 	private buildMetadata(valueWidth: number): string[] {

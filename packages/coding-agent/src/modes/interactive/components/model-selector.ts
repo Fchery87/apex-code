@@ -16,7 +16,7 @@ import type { SettingsManager } from "../../../core/settings-manager.ts";
 import { getModelSelectorSearchText } from "../model-search.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
-import { keyHint, rawKeyHint } from "./keybinding-hints.ts";
+import { keyHint, keyText, rawKeyHint } from "./keybinding-hints.ts";
 
 interface ModelItem {
 	provider: string;
@@ -60,6 +60,7 @@ export class ModelSelectorComponent extends Container implements Focusable {
 	}
 	private headerContainer: Container;
 	private listContainer: Container;
+	private footerContainer: Container;
 	private allModels: ModelItem[] = [];
 	private scopedModelItems: ModelItem[] = [];
 	private activeModels: ModelItem[] = [];
@@ -126,6 +127,12 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		this.addChild(this.listContainer);
 
 		this.addChild(new Spacer(1));
+
+		// Keybindings live under the list, where the eye already is once it has
+		// finished reading. Above the list they were the first thing read and the
+		// least useful.
+		this.footerContainer = new Container();
+		this.addChild(this.footerContainer);
 
 		// Add bottom border
 		this.addChild(new DynamicBorder());
@@ -304,7 +311,12 @@ export class ModelSelectorComponent extends Container implements Focusable {
 			this.headerContainer.addChild(new Text(theme.fg("warning", hintText), 0, 0));
 		}
 
-		this.headerContainer.addChild(new Text(this.getHintText(), 0, 0));
+		this.renderFooter();
+	}
+
+	private renderFooter(): void {
+		this.footerContainer.clear();
+		this.footerContainer.addChild(new Text(this.getHintText(), 0, 0));
 	}
 
 	private getScopeText(): string {
@@ -314,13 +326,17 @@ export class ModelSelectorComponent extends Container implements Focusable {
 	}
 
 	private getHintText(): string {
-		const hints: string[] = [];
+		const hints: string[] = [
+			// Both arrows, since either one moves the selection.
+			rawKeyHint(`${keyText("tui.select.up")}/${keyText("tui.select.down")}`, "move"),
+			keyHint("tui.select.confirm", "select"),
+		];
 		if (this.scopedModelItems.length > 0) {
 			hints.push(keyHint("tui.input.tab", "scope") + theme.fg("muted", " (all/scoped)"));
 		}
 		if (this.canGoBack()) hints.push(rawKeyHint("escape", "providers"), rawKeyHint("ctrl+c", "close"));
 		else hints.push(keyHint("tui.select.cancel", "close"));
-		return hints.join(theme.fg("muted", " · "));
+		return hints.join(theme.fg("borderMuted", " · "));
 	}
 
 	private setScope(scope: ModelScope): void {

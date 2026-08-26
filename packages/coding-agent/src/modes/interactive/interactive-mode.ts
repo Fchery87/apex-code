@@ -413,6 +413,14 @@ export class InteractiveMode {
 	private footer: FooterComponent;
 	private footerContainer: Container;
 	private footerDataProvider: FooterDataProvider;
+	/**
+	 * Whether the startup screen is showing its counted inventory line.
+	 *
+	 * Warnings are only allowed to collapse into that count when the count is
+	 * actually on screen. Under a quiet startup there is no splash header, so
+	 * collapsing them would hide conflicts entirely rather than summarise them.
+	 */
+	private startupInventoryVisible = false;
 	// Stored so the same manager can be injected into custom editors, selectors, and extension UI.
 	private keybindings: KeybindingsManager;
 	private version: string;
@@ -579,12 +587,18 @@ export class InteractiveMode {
 		this.defaultEditor = new CustomEditor(this.ui, getEditorTheme(), this.keybindings, {
 			paddingX: editorPaddingX,
 			autocompleteMaxVisible,
-			promptPrefix: "> ",
+			promptPrefix: "› ",
 			promptColor: (text) => theme.fg("accent", text),
-			placeholder: "Ask anything, / for commands, ! for bash",
+			placeholder: "Ask anything",
 			placeholderColor: (text) => theme.fg("dim", text),
 			commandColor: (text) => theme.fg("accent", text),
 			surfaceColor: (text) => theme.bg("userMessageBg", text),
+			autocompleteRule: (width) =>
+				theme.fg(
+					"borderMuted",
+					(this.settingsManager.getSymbolPreset() === "ascii" ? "-" : "┄").repeat(Math.max(1, width)),
+				),
+			autocompleteFooter: () => this.buildAutocompleteFooter(),
 		});
 		this.editor = this.defaultEditor;
 		this.editorContainer = new Container();
@@ -969,15 +983,27 @@ export class InteractiveMode {
 				{
 					topPadding: true,
 					getSymbolPreset: () => this.settingsManager.getSymbolPreset(),
+					getExtraMetadata: () => {
+						// Which branch the session is rooted on differs between launches
+						// and is not derivable from the prompt, so it belongs here. The
+						// tray carries it too, but drops it first when space is tight.
+						const branch = this.footerDataProvider.getGitBranch();
+						return branch ? [{ label: "branch", value: branch }] : [];
+					},
+					getInventory: () => this.buildStartupInventory(),
+					inventoryHint: "/resources",
+					getShortcuts: () => this.buildStartupShortcuts(),
 					getHint: () => "Apex Code can explain its own features and look up its docs.",
 				},
 			);
 
 			// Setup UI layout
+			this.startupInventoryVisible = true;
 			this.headerContainer.addChild(this.builtInHeader);
 			this.headerContainer.addChild(new Spacer(1));
 		} else {
 			// Minimal header when silenced
+			this.startupInventoryVisible = false;
 			this.builtInHeader = new Text("", 0, 0);
 			this.headerContainer.addChild(this.builtInHeader);
 		}
@@ -1753,57 +1779,108 @@ export class InteractiveMode {
 			}
 		}
 
+		// Warnings collapse into the counted line when that line is on screen; the
+		// full trace lives behind /resources. Errors always surface inline,
+		// because an error means a resource did not load at all.
 		if (showDiagnostics) {
-			const skillDiagnostics = skillsResult.diagnostics;
-			if (skillDiagnostics.length > 0) {
-				const warningLines = this.formatDiagnostics(skillDiagnostics, sourceInfos);
+			const collapseWarnings = !showListing && this.startupInventoryVisible;
+			for (const group of this.collectDiagnosticGroups()) {
+				const visible = collapseWarnings
+					? group.diagnostics.filter((diagnostic) => diagnostic.type === "error")
+					: group.diagnostics;
+				if (visible.length === 0) continue;
+				const severity = visible.some((diagnostic) => diagnostic.type === "error") ? "error" : "warning";
+				const body = this.formatDiagnostics(visible, sourceInfos);
 				this.loadedResourcesContainer.addChild(
-					new Text(`${theme.fg("warning", "[Skill conflicts]")}\n${warningLines}`, 0, 0),
-				);
-				this.loadedResourcesContainer.addChild(new Spacer(1));
-			}
-
-			const promptDiagnostics = promptsResult.diagnostics;
-			if (promptDiagnostics.length > 0) {
-				const warningLines = this.formatDiagnostics(promptDiagnostics, sourceInfos);
-				this.loadedResourcesContainer.addChild(
-					new Text(`${theme.fg("warning", "[Prompt conflicts]")}\n${warningLines}`, 0, 0),
-				);
-				this.loadedResourcesContainer.addChild(new Spacer(1));
-			}
-
-			const extensionDiagnostics: ResourceDiagnostic[] = [];
-			const extensionErrors = this.session.resourceLoader.getExtensions().errors;
-			if (extensionErrors.length > 0) {
-				for (const error of extensionErrors) {
-					extensionDiagnostics.push({ type: "error", message: error.error, path: error.path });
-				}
-			}
-
-			const commandDiagnostics = this.session.extensionRunner.getCommandDiagnostics();
-			extensionDiagnostics.push(...commandDiagnostics);
-			extensionDiagnostics.push(...this.getBuiltInCommandConflictDiagnostics(this.session.extensionRunner));
-
-			const shortcutDiagnostics = this.session.extensionRunner.getShortcutDiagnostics();
-			extensionDiagnostics.push(...shortcutDiagnostics);
-
-			if (extensionDiagnostics.length > 0) {
-				const warningLines = this.formatDiagnostics(extensionDiagnostics, sourceInfos);
-				this.loadedResourcesContainer.addChild(
-					new Text(`${theme.fg("warning", "[Extension issues]")}\n${warningLines}`, 0, 0),
-				);
-				this.loadedResourcesContainer.addChild(new Spacer(1));
-			}
-
-			const themeDiagnostics = themesResult.diagnostics;
-			if (themeDiagnostics.length > 0) {
-				const warningLines = this.formatDiagnostics(themeDiagnostics, sourceInfos);
-				this.loadedResourcesContainer.addChild(
-					new Text(`${theme.fg("warning", "[Theme conflicts]")}\n${warningLines}`, 0, 0),
+					new Text(`${theme.fg(severity, `[${group.label}]`)}\n${body}`, 0, 0),
 				);
 				this.loadedResourcesContainer.addChild(new Spacer(1));
 			}
 		}
+
+		// Counts on the startup screen are read at render time, so they fill in
+		// once resources finish loading without an explicit refresh here.
+		this.builtInHeader?.invalidate?.();
+	}
+
+	/**
+	 * Every startup diagnostic, grouped by the resource kind that produced it.
+	 *
+	 * One list feeds both the counted line in the header and the detailed
+	 * listing, so the two can never disagree about how many issues exist.
+	 */
+	private collectDiagnosticGroups(): Array<{ label: string; diagnostics: ResourceDiagnostic[] }> {
+		const extensionDiagnostics: ResourceDiagnostic[] = [
+			...this.session.resourceLoader
+				.getExtensions()
+				.errors.map((error) => ({ type: "error" as const, message: error.error, path: error.path })),
+			...this.session.extensionRunner.getCommandDiagnostics(),
+			...this.getBuiltInCommandConflictDiagnostics(this.session.extensionRunner),
+			...this.session.extensionRunner.getShortcutDiagnostics(),
+		];
+		return [
+			{ label: "Skill conflicts", diagnostics: this.session.resourceLoader.getSkills().diagnostics },
+			{ label: "Prompt conflicts", diagnostics: this.session.resourceLoader.getPrompts().diagnostics },
+			{ label: "Extension issues", diagnostics: extensionDiagnostics },
+			{ label: "Theme conflicts", diagnostics: this.session.resourceLoader.getThemes().diagnostics },
+		].filter((group) => group.diagnostics.length > 0);
+	}
+
+	/**
+	 * The counted line in the ruled band under the mark.
+	 *
+	 * The startup screen used to print all 152 skill names across fifteen rows.
+	 * A count answers the only question that screen can usefully answer, which
+	 * is what got loaded; the names live behind /resources now.
+	 */
+	/**
+	 * The sigil row under the hint: how to reach commands, bash, and files.
+	 *
+	 * These are the only three characters that change what the composer does, so
+	 * they take the accent and everything around them stays quiet.
+	 */
+	/** Live keybindings under the autocomplete dropdown. */
+	private buildAutocompleteFooter(): string {
+		const separator = theme.fg("borderMuted", this.settingsManager.getSymbolPreset() === "ascii" ? " - " : " · ");
+		return [
+			rawKeyHint(`${keyText("tui.select.up")}/${keyText("tui.select.down")}`, "move"),
+			keyHint("tui.select.confirm", "select"),
+			keyHint("tui.input.tab", "complete"),
+			keyHint("tui.select.cancel", "dismiss"),
+		].join(separator);
+	}
+
+	private buildStartupShortcuts(): string {
+		const entry = (sigil: string, label: string) => `${theme.fg("accent", sigil)} ${theme.fg("muted", label)}`;
+		return [
+			entry("/", "commands"),
+			entry("!", "bash"),
+			entry("@", "files"),
+			`${theme.fg("dim", keyText("app.interrupt"))} ${theme.fg("muted", "interrupt")}`,
+		].join("    ");
+	}
+
+	private buildStartupInventory(): string | undefined {
+		const counted = (total: number, singular: string) => `${total} ${singular}${total === 1 ? "" : "s"}`;
+		const parts: string[] = [];
+
+		const skills = this.session.resourceLoader.getSkills().skills.length;
+		const extensions = this.session.resourceLoader.getExtensions().extensions.filter((e) => !e.hidden).length;
+		const prompts = this.session.resourceLoader.getPrompts().prompts.length;
+		if (skills > 0) parts.push(theme.fg("muted", counted(skills, "skill")));
+		if (extensions > 0) parts.push(theme.fg("muted", counted(extensions, "extension")));
+		if (prompts > 0) parts.push(theme.fg("muted", counted(prompts, "prompt")));
+
+		const diagnostics = this.collectDiagnosticGroups().flatMap((group) => group.diagnostics);
+		const errors = diagnostics.filter((diagnostic) => diagnostic.type === "error").length;
+		const conflicts = diagnostics.length - errors;
+		if (errors > 0) parts.push(theme.fg("error", counted(errors, "error")));
+		if (conflicts > 0) parts.push(theme.fg("warning", counted(conflicts, "conflict")));
+
+		if (parts.length === 0) return undefined;
+		const ascii = this.settingsManager.getSymbolPreset() === "ascii";
+		const separator = theme.fg("borderMuted", ascii ? " - " : " · ");
+		return parts.join(separator);
 	}
 
 	/**
@@ -2982,6 +3059,11 @@ export class InteractiveMode {
 			}
 			if (text === "/changelog") {
 				this.handleChangelogCommand();
+				this.editor.setText("");
+				return;
+			}
+			if (text === "/resources") {
+				this.showLoadedResources({ force: true });
 				this.editor.setText("");
 				return;
 			}

@@ -586,6 +586,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 				(InteractiveMode as any).prototype.getCompactExtensionLabels.call(fakeThis, extensions),
 			formatDiagnostics: () => "diagnostics",
 			getBuiltInCommandConflictDiagnostics: () => [],
+			collectDiagnosticGroups: () => (InteractiveMode as any).prototype.collectDiagnosticGroups.call(fakeThis),
 		};
 
 		if (options.useRealScopeGroups) {
@@ -1253,6 +1254,49 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(fakeThis.loadedResourcesContainer.children).toHaveLength(0);
+	});
+
+	test("collapses warnings into the counted line only when that line is on screen", () => {
+		// The counted line lives on the splash header. With the header present a
+		// warning is represented by the count; with it suppressed the warning has
+		// nowhere else to go and must still print.
+		const withHeader = createShowLoadedResourcesThis({
+			quietStartup: false,
+			skills: [{ filePath: "/tmp/skill/SKILL.md", name: "commit" }],
+			skillDiagnostics: [{ type: "warning", message: "duplicate skill name" }],
+		});
+		withHeader.startupInventoryVisible = true;
+		(InteractiveMode as any).prototype.showLoadedResources.call(withHeader, {
+			force: false,
+			showDiagnosticsWhenQuiet: true,
+		});
+		expect(renderAll(withHeader.loadedResourcesContainer)).not.toContain("[Skill conflicts]");
+
+		const withoutHeader = createShowLoadedResourcesThis({
+			quietStartup: true,
+			skills: [{ filePath: "/tmp/skill/SKILL.md", name: "commit" }],
+			skillDiagnostics: [{ type: "warning", message: "duplicate skill name" }],
+		});
+		withoutHeader.startupInventoryVisible = false;
+		(InteractiveMode as any).prototype.showLoadedResources.call(withoutHeader, {
+			force: false,
+			showDiagnosticsWhenQuiet: true,
+		});
+		expect(renderAll(withoutHeader.loadedResourcesContainer)).toContain("[Skill conflicts]");
+	});
+
+	test("never collapses an error, even with the counted line on screen", () => {
+		const fakeThis = createShowLoadedResourcesThis({
+			quietStartup: false,
+			skills: [{ filePath: "/tmp/skill/SKILL.md", name: "commit" }],
+			skillDiagnostics: [{ type: "error", message: "skill failed to parse" }],
+		});
+		fakeThis.startupInventoryVisible = true;
+		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
+			force: false,
+			showDiagnosticsWhenQuiet: true,
+		});
+		expect(renderAll(fakeThis.loadedResourcesContainer)).toContain("[Skill conflicts]");
 	});
 
 	test("still shows diagnostics on quiet startup when requested", () => {

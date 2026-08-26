@@ -30,6 +30,33 @@ export function formatTokens(count: number): string {
 	return `${Math.round(count / 1000000)}M`;
 }
 
+/** Cells in the context gauge. Eight reads as a bar without crowding the tray. */
+const CONTEXT_GAUGE_CELLS = 8;
+
+/**
+ * A filled bar for the context window, split into its filled and empty runs so
+ * the caller can colour them separately.
+ *
+ * This is a redundant channel and never the only one: the percentage beside it
+ * states the same value as text (WCAG 1.4.1). An unknown percentage renders an
+ * empty track rather than guessing a position.
+ */
+export function renderContextGauge(
+	percent: number | undefined,
+	symbolPreset: "unicode" | "ascii",
+): { filled: string; empty: string } {
+	const filledGlyph = symbolPreset === "ascii" ? "#" : "█";
+	const emptyGlyph = symbolPreset === "ascii" ? "-" : "░";
+	if (percent === undefined) {
+		return { filled: "", empty: emptyGlyph.repeat(CONTEXT_GAUGE_CELLS) };
+	}
+	const clamped = Math.min(100, Math.max(0, percent));
+	// Any non-zero usage lights at least one cell, so the bar never reads empty
+	// while the window is genuinely filling.
+	const cells = clamped === 0 ? 0 : Math.max(1, Math.round((clamped / 100) * CONTEXT_GAUGE_CELLS));
+	return { filled: filledGlyph.repeat(cells), empty: emptyGlyph.repeat(CONTEXT_GAUGE_CELLS - cells) };
+}
+
 /** Accessibility/display settings the footer reads (roadmap Phase 8, task 8.6). */
 export interface FooterAccessibilitySettings {
 	getSymbolPreset(): "unicode" | "ascii";
@@ -243,13 +270,34 @@ export class FooterComponent implements Component {
 					: contextPercentValue > 70
 						? "warning"
 						: "dim";
+			// The gauge rides along only in the roomy form. The compact form drops
+			// it, which is what lets it keep winning the fit ladder below.
+			const gauge = renderContextGauge(contextPercent === "?" ? undefined : contextPercentValue, symbolPreset);
+			// Below the warning threshold the text is dim, which would make the bar
+			// invisible; the fill takes the accent there and tracks the text colour
+			// at every level that actually signals pressure.
+			const gaugeColor = contextColor === "dim" ? "accent" : contextColor;
+			// An empty run would still emit an open/close SGR pair, so skip it.
+			const paintRun = (color: Parameters<typeof theme.fg>[0], text: string) => (text ? theme.fg(color, text) : "");
+			const contextGauged =
+				theme.fg(contextColor, "context ") +
+				paintRun(gaugeColor, gauge.filled) +
+				paintRun("borderMuted", gauge.empty) +
+				theme.fg(contextColor, ` ${contextPercent}%${pressureMarker}`);
 			const contextFull = theme.fg(contextColor, `context ${contextPercent}%${pressureMarker}`);
 			const contextCompact = theme.fg(contextColor, `ctx ${compactPercent}%${compactPressure}`);
 
 			const joinSegments = (segments: string[]): string => segments.join(separator);
 			const fits = (segments: string[]): boolean => visibleWidth(joinSegments(segments)) <= width;
 			let left: string[] = [permissionFull];
-			let right = contextFull;
+			let right = contextGauged;
+
+			// The gauge is decoration over a value the text already states, so it
+			// is the first thing to go. Dropping it must not cost the tray its
+			// spelled-out permission mode, which is why this is its own rung.
+			if (!fits([...left, right])) {
+				right = contextFull;
+			}
 
 			if (!fits([...left, right])) {
 				left = [permissionCompact];
