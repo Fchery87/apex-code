@@ -161,3 +161,51 @@ product. The packages/ argument for keeping paths mergeable does not apply, beca
 we want none of their CI. `.github/APPROVED_CONTRIBUTORS` and `ISSUE_TEMPLATE/` went
 with them — the first was orphaned once its enforcing workflow was gone, and the
 templates pointed users at Pi's Discord and Pi's contribution rules.
+
+### Upstream defects we cannot fix — Cloudflare AI Gateway, 2026-08-24
+
+The second instance of the same class, and the first that turned `main` red without a
+commit causing it.
+
+`packages/ai/src/providers/cloudflare-ai-gateway.ts` declares three API dialects, but
+`createProvider` infers its type parameter from the **generated** model catalog rather
+than from the declared return type. That catalog is built at build time from
+models.dev. When models.dev stopped listing the `workers-ai/*` passthroughs under the
+`cloudflare-ai-gateway` provider, the inferred union narrowed to
+`"anthropic-messages" | "openai-responses"` and upstream's own source stopped
+compiling:
+
+```
+src/providers/cloudflare-ai-gateway.ts(19,4): error TS2353: Object literal may only
+specify known properties, and '"openai-completions"' does not exist in type
+'Partial<Record<"anthropic-messages" | "openai-responses", ProviderStreams>>'
+```
+
+Note what this means. A third party's catalog edit turns this repository's `main`
+red, on a commit that changed nothing related. Every green build between the fork
+point and 2026-08-24 was green only because models.dev happened to list a model.
+
+Upstream fixed it in `e8c632ef6` ("fix(ai): cloudflare gateway type, include
+workers"), which does two things: pins the type parameter explicitly so the type no
+longer depends on live data, and mirrors the Workers AI catalog under the documented
+`workers-ai/` prefix, because the gateway `/compat` endpoint routes to those models
+whether or not models.dev lists them. That commit is on upstream `main` and carries no
+tag, so `v0.84.2` and `v0.84.3` both still fail. There is no pin to bump to.
+
+Resolution: `scripts/apex/restore-gateway-workers-models.mjs` performs the same
+mirroring above the boundary, against the generated catalog rather than inside the
+frozen generator, and rewrites the model data manifest to match. The root `build`
+script now hydrates model data, runs the restore, then builds offline — so a local
+`npm run build` and CI take the identical path. `packages/ai` stays byte-identical to
+`v0.84.1` and the frozen gate still passes.
+
+Only the data half is reproduced, not the type-pinning half. The fragility therefore
+remains: if models.dev ever drops the `cloudflare-workers-ai` catalog too, the mirror
+has no source and the build breaks again the same way. Taking the type fix requires
+either an upstream release containing `e8c632ef6` or a sanctioned way to pin frozen
+packages to `<tag> + backported upstream commits`, which the `.upstream-tag` mechanism
+cannot express today. That is an ADR 0001 decision, not a build fix, and it is open.
+
+**Delete the script** once `.upstream-tag` names a release containing `e8c632ef6`.
+From then on the frozen generator emits these entries itself, every model is skipped
+as already present, and the script is a no-op that still costs a build step.
