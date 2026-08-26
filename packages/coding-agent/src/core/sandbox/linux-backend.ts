@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createSandboxNetworkProxy, type SandboxNetworkProxy } from "./network-proxy.ts";
 import type { SandboxBackend, SandboxLaunch } from "./supervisor.ts";
+import { publishTerminalSize, TERMINAL_SIZE_PATH_VARIABLE } from "./terminal-size.ts";
 import type { SandboxViolationStore } from "./violations.ts";
 
 /** AF_UNIX `sun_path` is 108 bytes on Linux, including the terminating NUL. */
@@ -179,6 +180,10 @@ server.on("error", (err) => {
 			// The descriptors above are opened before the child spawns and must be closed
 			// on every exit path -- including a spawn/wait rejection -- or a crashed launch
 			// leaks an open handle onto a host-owned credential file for the process's life.
+			// The workspace is bind-mounted read-write into the sandbox, so a file
+			// here is visible at the same absolute path on both sides of it.
+			const terminalSizePath = join(stateDirectory, "terminal-size");
+			const stopPublishingTerminalSize = publishTerminalSize(terminalSizePath);
 			try {
 				const spawnBwrap = options?.spawnChild ?? spawn;
 				const child = spawnBwrap(
@@ -232,6 +237,9 @@ server.on("error", (err) => {
 						"--setenv",
 						"APEX_UDS_PATH",
 						childSocketPath,
+						"--setenv",
+						TERMINAL_SIZE_PATH_VARIABLE,
+						terminalSizePath,
 						"--",
 						process.execPath,
 						relayScriptPath,
@@ -260,6 +268,7 @@ server.on("error", (err) => {
 				}
 				return exitCode;
 			} finally {
+				stopPublishingTerminalSize();
 				for (const descriptor of readOnlyFileDescriptors) closeSync(descriptor);
 				// The socket now lives outside the workspace, so nothing else will ever clean
 				// it up; leaving it would litter the temp directory once per launch.
