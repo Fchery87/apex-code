@@ -969,6 +969,13 @@ export class InteractiveMode {
 				{
 					topPadding: true,
 					getSymbolPreset: () => this.settingsManager.getSymbolPreset(),
+					getExtraMetadata: () => {
+						// Which branch the session is rooted on differs between launches
+						// and is not derivable from the prompt, so it belongs here. The
+						// tray carries it too, but drops it first when space is tight.
+						const branch = this.footerDataProvider.getGitBranch();
+						return branch ? [{ label: "branch", value: branch }] : [];
+					},
 					getInventory: () => this.buildStartupInventory(),
 					inventoryHint: "/resources",
 					getHint: () => "Apex Code can explain its own features and look up its docs.",
