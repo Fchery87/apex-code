@@ -135,7 +135,11 @@ describe("AuthStorage", () => {
 	test("keeps a coalesced reload alive while another credential reader is waiting", async () => {
 		writeAuthJson({ anthropic: { type: "api_key", key: "old" } });
 		const storage = AuthStorage.create(authJsonPath);
-		writeAuthJson({ anthropic: { type: "api_key", key: "new" } });
+		// Must differ from "old" in *length*. getFileRevision is dev:ino:size:mtimeNs:ctimeNs,
+		// and Windows updates file timestamps too coarsely to separate two writes this close
+		// together, so a same-size rewrite leaves the revision identical, no reload happens,
+		// and the cached "old" is served. Size is the only field that reliably changes here.
+		writeAuthJson({ anthropic: { type: "api_key", key: "new-value" } });
 		let grantLock: (() => void) | undefined;
 		const lockGranted = new Promise<void>((resolve) => {
 			grantLock = resolve;
@@ -153,7 +157,7 @@ describe("AuthStorage", () => {
 		firstController.abort();
 		await expect(first).rejects.toMatchObject({ name: "AbortError" });
 		grantLock?.();
-		await expect(second).resolves.toEqual({ type: "api_key", key: "new" });
+		await expect(second).resolves.toEqual({ type: "api_key", key: "new-value" });
 		expect(lockSpy).toHaveBeenCalledTimes(1);
 		expect(release).toHaveBeenCalledTimes(1);
 	});
