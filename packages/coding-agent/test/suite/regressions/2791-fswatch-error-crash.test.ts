@@ -87,21 +87,29 @@ process.exit(0);
 		let _stdout = "";
 		let stderr = "";
 		let exitCode: number;
+		let timedOut = false;
 		try {
 			_stdout = execFileSync(process.execPath, [scriptPath], {
-				timeout: 10000,
+				// The child spawns node and type-strips the whole theme module graph before
+				// it reaches the watcher, which does not fit in 10s under parallel suite
+				// load. A timeout also reports `status: null`, so the old budget failed as
+				// "Child crashed (exit 1). stderr: " -- a crash that never happened, with
+				// nothing to debug. Budget generously and name a timeout as a timeout.
+				timeout: 60_000,
 				encoding: "utf-8",
 				env: { ...process.env, APEX_CODE_CODING_AGENT_DIR: agentDir },
 				stdio: ["pipe", "pipe", "pipe"],
 			});
 			exitCode = 0;
 		} catch (err: unknown) {
-			const e = err as { status: number; stdout: string; stderr: string };
+			const e = err as { status: number | null; stdout: string; stderr: string; code?: string; signal?: string };
 			_stdout = e.stdout ?? "";
 			stderr = e.stderr ?? "";
+			timedOut = e.code === "ETIMEDOUT" || e.signal === "SIGTERM";
 			exitCode = e.status ?? 1;
 		}
 
+		expect(timedOut, "child never exited within 60s; that is a stuck or starved runner, not issue #2791").toBe(false);
 		expect(exitCode, `Child crashed (exit ${exitCode}). stderr: ${stderr.trim()}`).toBe(0);
 	});
 });
