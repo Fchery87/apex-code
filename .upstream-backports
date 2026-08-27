@@ -1,0 +1,12 @@
+# Upstream commits taken inside the ADR 0001 boundary ahead of an upstream release.
+#
+# Each line is a full 40-character sha reachable from upstream/main, and the frozen
+# packages must equal `.upstream-tag` plus these commits' own diffs, restricted to
+# frozen paths. Nothing here is hand-written: the diff is read from upstream's history
+# when the gate runs.
+#
+# A line earns its place only when upstream has already fixed something that breaks
+# this repository and no tag carries the fix yet. Delete it at the next upstream merge
+# -- the gate fails when the baseline already contains a listed commit, so a stale
+# entry reports itself rather than lingering.
+e8c632ef64f99b0d2ce7cc7c215aecb5c66b0016 fix(ai): cloudflare gateway type, include workers
