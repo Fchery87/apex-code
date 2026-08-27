@@ -93,3 +93,52 @@ this ADR combined.
 The prohibition is unchanged and now enforced: a change needed inside a consumed
 package goes upstream as a contribution. A local patch converts a dependency into an
 unmanaged fork without anyone deciding to, and now it also breaks the build.
+
+## Amendment — 2026-08-26: the pin is a baseline plus backports
+
+The prohibition is unchanged. What changes is how the gate expresses it.
+
+`.upstream-tag` alone stated the rule as "byte-identical to a release", which conflates
+two different things: **who authored the code**, which is the invariant this ADR is
+about, and **upstream's release cadence**, which is an accident of how they ship. They
+came apart on 2026-08-25.
+
+models.dev stopped listing the `workers-ai/*` passthroughs under `cloudflare-ai-gateway`.
+That catalog is generated at build time and `createProvider` inferred its type parameter
+from it, so upstream's own frozen source stopped compiling and `main` went red on a
+commit that changed nothing related. Upstream had already authored the fix — `e8c632ef6`,
+which pins the type parameter and restores the passthroughs — but no tag carried it, and
+`v0.84.2` and `v0.84.3` both still failed. This repository could not take a fix upstream
+had already written, purely because of someone else's release schedule. The available
+moves were to wait indefinitely, patch a frozen package, or work around it above the
+boundary. The third shipped, and it duplicated upstream's generator logic in
+`scripts/apex/`, which does not scale to the next occurrence.
+
+So the pin is now a baseline tag **plus an ordered list of upstream commits taken ahead
+of release**, listed in `.upstream-backports`. The frozen packages must equal the baseline
+with each listed commit's own diff applied, restricted to frozen paths.
+
+This is a stricter statement of the same rule, not a hole in it:
+
+- Every byte still traces to a commit upstream wrote. A backport must be reachable from
+  `upstream/main`, and its content is the diff read from upstream's history when the gate
+  runs. Nothing hand-written is trusted, so a hand-edited patch cannot masquerade as an
+  upstream fix the way a checked-in patch file could.
+- The diff is applied, never the file's post-image. A backported file may have moved on
+  upstream since the baseline — `generate-models.ts` had diverged by 149 lines — and
+  taking its snapshot would import every unrelated change with it.
+- Only frozen paths are carried. A backport is permission to take one fix across the
+  boundary, not to import whatever else that commit touched.
+- The gate now also catches a careless `.upstream-tag` bump, which the old check could
+  not: a backport the new baseline already contains fails with an instruction to delete it.
+
+A line earns its place only when upstream has already fixed something that breaks this
+repository and no tag carries the fix. It is deleted at the next upstream merge, and the
+gate enforces that rather than trusting anyone to remember.
+
+**Ancestry cannot decide retirement here.** Upstream's release tags sit on a different
+lineage from `upstream/main` — `v0.84.1` and `main` share only a merge-base from
+2025-11-26, with roughly five thousand commits on each side since. A staleness test built
+on `merge-base --is-ancestor` would silently never fire. Retirement is therefore decided
+by content: a patch that will not apply forward but applies in reverse is already present,
+which distinguishes a retired backport from a genuine conflict.
