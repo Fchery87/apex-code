@@ -190,5 +190,9 @@ describe("defaultTools setting", () => {
 		]);
 		expect(session.getActiveToolNames()).toEqual(["ls", "tool_schema"]);
 		session.dispose();
+		// This path hands ownership of the services to the caller, so the caller closes
+		// them. Without it the model runtime keeps agentDir/state.sqlite open and the
+		// afterEach cleanup fails on Windows, which refuses to unlink an open file.
+		await services.close();
 	});
 });
