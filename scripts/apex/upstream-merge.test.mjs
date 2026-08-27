@@ -42,3 +42,10 @@ test("counts conflicts from the merged content, not from unmerged index entries"
 	assert.match(code, /git grep -c '\^<<<<<<< '/);
 	assert.doesNotMatch(code, /--diff-filter=U/);
 });
+
+test("reads the merged tree without a pipe that can close early", () => {
+	// See the comment in the script: `| head -1` takes SIGPIPE once merge-tree's conflict
+	// list outgrows the pipe buffer, and pipefail turns that into a silent abort.
+	assert.doesNotMatch(code, /merge_output[^\n]*\|\s*head/);
+	assert.match(code, /tree="\$\{merge_output%%/);
+});
