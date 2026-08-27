@@ -77,6 +77,7 @@ three merges that follow Phase 2, not from a Phase 0 rehearsal.
 | --- | --- | --- | --- | --- | --- |
 | 2026-08-08 | `v0.84.0` | — | — | — | Fork point. Full-tree graft, 1,353 files. |
 | 2026-08-09 | `v0.84.1` | **1** | 1 (`AGENTS.md`) | 57 (+1,770 / −279) | First real rehearsal. **0 conflicts in forked code.** Total merge: 136 files, +3,976 / −992. |
+| 2026-08-27 | `v0.84.2` | **53** | 49 (27 in forked paths) | 100 (+5,654 / −4,198) | First merge since the graft that actually ran; see "The merge path was broken" below. Total: 191 files, +14,555 / −4,541. |
 | 2026-08-09 | Apex Code identity rename | — (fork divergence, not a merge) | — | 218 files (+736 / −744), 602 diff hunks | Renamed the two forked package identities, active imports/docs/examples, binary, and global config root. Recorded separately from upstream merge conflicts. |
 
 ### Two kinds of merge cost, tracked separately
@@ -261,3 +262,56 @@ This is the first number the ceiling has ever had from a merge that actually ran
 `v0.84.1` row above records 1 conflicted hunk, measured when Apex had not yet modified
 forked code; it was never a usable baseline. **The merge itself has not been taken.** It
 needs 49 conflict resolutions and belongs in its own reviewed change.
+
+
+## v0.84.2 — taken 2026-08-27
+
+The first upstream release taken since the fork point, and the first measurement of the
+ADR 0003 metric from a merge that ran.
+
+| Signal | Value |
+| --- | --- |
+| Conflicted hunks | 53 |
+| Conflicted files | 49 (27 in forked paths) |
+| Churn, forked paths | 100 files, +5,654 / −4,198 |
+| Churn, total | 191 files, +14,555 / −4,541 |
+
+**Zero conflicts in frozen packages.** The ADR 0001 boundary held without intervention,
+and the `e8c632ef6` backport carried across the pin bump on its own: the three-way merge
+saw v0.84.2 had not touched the provider file, kept ours, and the gate went straight from
+`v0.84.1 + e8c632ef6` to `v0.84.2 + e8c632ef6`.
+
+### Where the cost actually is
+
+Not in taking upstream's changes. In the four places Apex has genuinely diverged, each of
+which needed a decision rather than a rule:
+
+- **`system-prompt.ts`** — v0.84.2 reinstates an early-return `customPrompt` path. Apex
+  replaced that with an assignment further down so tool snippets and contributed
+  guidelines still append to a custom prompt. Taking upstream's block would have silently
+  reverted that fix. Resolved ours.
+- **`sdk.ts`** — Apex's default tool list is conditional on `lsp` and `web_search` being
+  configured; upstream added `getDefaultTools()` settings support. Both, because the code
+  below the conflict already reads the configured names.
+- **The four core tools** — Apex's ADR 0010 `contract` and upstream's `constrainedSampling`
+  are both properties of the same object, and `ApexToolDefinition extends ToolDefinition`,
+  so both.
+- **`interactive-mode.ts`** — Apex's renamed version-check symbols and extracted
+  `publishSessionShare` flow stay; upstream's `FullscreenExitOutput` and `ToolStatus` come
+  across because Apex's own code uses them.
+
+### Three regressions the build caught, all from resolving too mechanically
+
+1. Upstream **moved** managed-tool setup from before the TUI mounts to after it, with a
+   progress callback, so slow downloads no longer look like a freeze. Keeping Apex's side
+   wholesale left the old copy in place and redeclared `fdPath`. Apex's pre-mount
+   permission-mode resolution is separate and stays; it has its own test.
+2. `ensureTool`'s second parameter changed from `silent: boolean` to an `onStatus`
+   callback. Apex's `prepareHostToolBinaries` still passed a boolean. It now renders to
+   stderr, keeping stdout clean for the callers that parse it.
+3. Concatenating both sides of a conflict is safe for imports and object properties and
+   unsafe across statement boundaries. It cut an `it` block in half in
+   `interactive-mode-startup-input.test.ts` and left it unterminated.
+
+The general lesson for the next merge: "take ours" is wrong wherever upstream *moved*
+code rather than changing it, because the conflict shows only one end of the move.

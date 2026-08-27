@@ -16,6 +16,7 @@ import {
 	untrackDetachedChildPid,
 } from "../../utils/shell.ts";
 import { setApexEnvironment } from "../environment.ts";
+import { getExperimentalToolSampling } from "../experimental.ts";
 import type { ExtensionContext, ToolRenderResultOptions } from "../extensions/types.ts";
 import { classifyBashCommand } from "./bash-command-segments.ts";
 import type { ApexToolDefinition, PermissionSpec } from "./contract.ts";
@@ -416,6 +417,7 @@ export function createBashToolDefinition(
 				},
 			},
 		},
+		constrainedSampling: getExperimentalToolSampling(),
 		async execute(
 			_toolCallId,
 			{ command, timeout }: { command: string; timeout?: number },
