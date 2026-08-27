@@ -29,7 +29,13 @@ type InputContext = {
 	pendingUserInputs: string[];
 };
 
+type StartupSubmitContext = {
+	editor: { setText: (text: string) => void };
+	showStatus: (message: string) => void;
+};
+
 type InteractiveModePrivate = {
+	handleStartupSubmit(this: StartupSubmitContext, text: string): void;
 	setupEditorSubmitHandler(this: SubmitContext): void;
 	getUserInput(this: InputContext): Promise<string>;
 	refreshFooterPermissionMode(this: PermissionModeContext): Promise<void>;
@@ -111,6 +117,18 @@ describe("InteractiveMode startup input", () => {
 
 		await expect(InteractiveMode.prototype.init.call(context as never)).rejects.toBe(firstFrame);
 		expect(events).toEqual(["permission:bypassPermissions", "mount:bypassPermissions", "start:bypassPermissions"]);
+	});
+
+	it("restores a prompt submitted while managed-tool setup is running", () => {
+		const context: StartupSubmitContext = {
+			editor: { setText: vi.fn() },
+			showStatus: vi.fn(),
+		};
+
+		interactiveModePrototype.handleStartupSubmit.call(context, "early prompt");
+
+		expect(context.editor.setText).toHaveBeenCalledWith("early prompt");
+		expect(context.showStatus).toHaveBeenCalledWith("Startup is still in progress");
 	});
 
 	it("queues a normal prompt submitted before the input callback is installed", async () => {

@@ -11,6 +11,7 @@ import { getLanguageFromPath, highlightCode, type Theme } from "../../modes/inte
 import { processImage } from "../../utils/image-process.ts";
 import { detectSupportedImageMimeTypeFromFile } from "../../utils/mime.ts";
 import { formatPathRelativeToCwdOrAbsolute } from "../../utils/paths.ts";
+import { getExperimentalToolSampling } from "../experimental.ts";
 import type { ToolRenderResultOptions } from "../extensions/types.ts";
 import type { ApexToolDefinition } from "./contract.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
@@ -231,6 +232,7 @@ export function createReadToolDefinition(
 			context: { resultRecoverable: true, deferSchema: false },
 			evidence: { emits: new Set(), capture: () => [] },
 		},
+		constrainedSampling: getExperimentalToolSampling(),
 		async execute(
 			_toolCallId,
 			{ path, offset, limit }: { path: string; offset?: number; limit?: number },
