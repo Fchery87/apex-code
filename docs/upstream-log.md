@@ -192,20 +192,27 @@ longer depends on live data, and mirrors the Workers AI catalog under the docume
 whether or not models.dev lists them. That commit is on upstream `main` and carries no
 tag, so `v0.84.2` and `v0.84.3` both still fail. There is no pin to bump to.
 
-Resolution: `scripts/apex/restore-gateway-workers-models.mjs` performs the same
-mirroring above the boundary, against the generated catalog rather than inside the
-frozen generator, and rewrites the model data manifest to match. The root `build`
-script now hydrates model data, runs the restore, then builds offline — so a local
-`npm run build` and CI take the identical path. `packages/ai` stays byte-identical to
-`v0.84.1` and the frozen gate still passes.
+**Resolved 2026-08-26 by taking the upstream fix.** The first resolution shipped a
+workaround: `scripts/apex/restore-gateway-workers-models.mjs` mirrored the Workers AI
+catalog above the boundary and rewrote the model data manifest to match. It reproduced
+only the data half of `e8c632ef6`, not the type pinning, so the fragility remained. If
+models.dev dropped the `cloudflare-workers-ai` catalog too, the mirror would have had no
+source and the build would have broken the same way.
 
-Only the data half is reproduced, not the type-pinning half. The fragility therefore
-remains: if models.dev ever drops the `cloudflare-workers-ai` catalog too, the mirror
-has no source and the build breaks again the same way. Taking the type fix requires
-either an upstream release containing `e8c632ef6` or a sanctioned way to pin frozen
-packages to `<tag> + backported upstream commits`, which the `.upstream-tag` mechanism
-cannot express today. That is an ADR 0001 decision, not a build fix, and it is open.
+ADR 0001 was amended so the pin is a baseline tag plus backported upstream commits, and
+`e8c632ef6` is now listed in `.upstream-backports`. Both halves of upstream's fix are in
+the tree: the generator restores the passthroughs (17 models, one more than the
+workaround produced) and the provider pins its type parameter explicitly, so the build no
+longer depends on live catalog contents at all.
 
-**Delete the script** once `.upstream-tag` names a release containing `e8c632ef6`.
-From then on the frozen generator emits these entries itself, every model is skipped
-as already present, and the script is a no-op that still costs a build step.
+Verified by simulating the original failure. With the `openai-completions` group deleted
+from the generated catalog, the exact state that turned `main` red, the package now
+typechecks clean. Before, that state produced the TS2353 above.
+
+The workaround and its build step are deleted. `packages/ai` is no longer byte-identical
+to `v0.84.1`; it equals `v0.84.1 + e8c632ef6`, which the frozen gate verifies against
+upstream's own history.
+
+**Delete the `.upstream-backports` line** at the next upstream merge whose release
+contains `e8c632ef6`. The gate enforces this rather than trusting anyone to remember: a
+backport the baseline already carries fails with an instruction to delete it.

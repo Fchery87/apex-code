@@ -18,11 +18,19 @@
  * Exit 0 when every frozen package matches; exit 1 with a diffstat when not.
  */
 
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { FROZEN_PACKAGE_DIRECTORIES } from "./frozen-packages.mjs";
+import {
+  buildExpectedTree,
+  createGit,
+  readBackports,
+  UPSTREAM_BACKPORTS_FILE,
+  UPSTREAM_BRANCH,
+  UPSTREAM_REMOTE,
+  verifyBackportProvenance,
+} from "./frozen-pin.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -38,8 +46,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
  */
 const FROZEN = FROZEN_PACKAGE_DIRECTORIES;
 
-const git = (args, opts = {}) =>
-  execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8", ...opts }).trim();
+const git = createGit(REPO_ROOT);
 
 function readPinnedTag() {
   const flagIndex = process.argv.indexOf("--tag");
@@ -71,7 +78,7 @@ function ensureTagPresent(tag) {
   }
   console.log(`fetching upstream tag ${tag}…`);
   try {
-    git(["remote", "get-url", "upstream"], { stdio: "pipe" });
+    git(["remote", "get-url", UPSTREAM_REMOTE], { stdio: "pipe" });
   } catch {
     git([
       "remote",
@@ -87,10 +94,52 @@ function ensureTagPresent(tag) {
   }
 }
 
+// Backport provenance is decided against upstream's own branch, so it has to be
+// present before any backport can be trusted. CI checkouts never have it.
+function ensureUpstreamBranchPresent() {
+  try {
+    git(["rev-parse", "-q", "--verify", UPSTREAM_BRANCH], { stdio: "pipe" });
+    return;
+  } catch {
+    // Not fetched yet.
+  }
+  console.log(`fetching ${UPSTREAM_BRANCH}…`);
+  try {
+    git(["remote", "get-url", UPSTREAM_REMOTE], { stdio: "pipe" });
+  } catch {
+    git(["remote", "add", UPSTREAM_REMOTE, "https://github.com/earendil-works/pi.git"]);
+  }
+  try {
+    git(["fetch", "--quiet", UPSTREAM_REMOTE, "main"]);
+  } catch {
+    fail(`could not fetch ${UPSTREAM_BRANCH}, which is required to verify ${UPSTREAM_BACKPORTS_FILE}.`);
+  }
+}
+
 const tag = readPinnedTag();
 ensureTagPresent(tag);
 
-console.log(`checking ${FROZEN.length} frozen packages against ${tag}\n`);
+const backports = readBackports(REPO_ROOT);
+if (backports.length > 0) ensureUpstreamBranchPresent();
+const provenanceProblems = verifyBackportProvenance(git, backports);
+if (provenanceProblems.length > 0) {
+  fail(
+    `${UPSTREAM_BACKPORTS_FILE} does not describe upstream history.\n\n` +
+      provenanceProblems.map((problem) => `  • ${problem}`).join("\n"),
+  );
+}
+
+const expected = buildExpectedTree(git, {
+  baselineTag: tag,
+  backports,
+  frozenDirectories: FROZEN,
+});
+const pinDescription =
+  backports.length === 0
+    ? tag
+    : `${tag} + ${backports.length} backport(s): ${backports.map((entry) => entry.sha.slice(0, 9)).join(", ")}`;
+
+console.log(`checking ${FROZEN.length} frozen packages against ${pinDescription}\n`);
 
 const drifted = [];
 for (const pkg of FROZEN) {
@@ -100,7 +149,7 @@ for (const pkg of FROZEN) {
   // makes git compare the tag to what is actually on disk, catching committed and
   // uncommitted drift alike. (This was a real bug here, caught by the negative
   // test that deliberately edits a frozen file; keep that test.)
-  const diff = git(["diff", "--stat", tag, "--", pkg]);
+  const diff = git(["diff", "--stat", expected, "--", pkg]);
   if (diff === "") {
     console.log(`  ✓ ${pkg}`);
   } else {
@@ -110,12 +159,12 @@ for (const pkg of FROZEN) {
 }
 
 if (drifted.length === 0) {
-  console.log(`\n✓ all frozen packages match ${tag}\n`);
+  console.log(`\n✓ all frozen packages match ${pinDescription}\n`);
   process.exit(0);
 }
 
 console.error(
-  `\n✗ ${drifted.length} frozen package(s) differ from ${tag}.\n\n` +
+  `\n✗ ${drifted.length} frozen package(s) differ from ${pinDescription}.\n\n` +
     "These packages are consumed, not forked (ADR 0001). They are present in\n" +
     "this repository only because Apex Code is a full-tree graft, and they must\n" +
     "stay byte-identical to upstream.\n",
@@ -127,6 +176,8 @@ console.error(
   "To fix, pick one:\n" +
     `  • Revert the change:   git checkout ${tag} -- <path>\n` +
     "  • It belongs upstream: contribute it to github.com/earendil-works/pi\n" +
+    `  • Upstream already fixed it but has not tagged a release: add the commit to\n` +
+    `    ${UPSTREAM_BACKPORTS_FILE}. It must be reachable from ${UPSTREAM_BRANCH}.\n` +
     "  • It belongs in Apex Code: implement it above the boundary, in\n" +
     "    packages/coding-agent or packages/agent\n" +
     "  • The pin is stale: run scripts/apex/upstream-merge.sh, which updates\n" +

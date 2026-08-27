@@ -12,7 +12,7 @@
 	],
 	"scripts": {
 		"clean": "npm run clean --workspaces",
-		"build": "npm run hydrate:model-data && node scripts/apex/restore-gateway-workers-models.mjs && npm run build:offline",
+		"build": "npm run hydrate:model-data && npm run build:offline",
 		"build:offline": "cd packages/tui && npm run build && cd ../telemetry && npm run build && cd ../ai && npm run build:offline && cd ../agent && npm run build && cd ../protocol && npm run build && cd ../client && npm run build && cd ../server && npm run build && cd ../coding-agent && npm run build",
 		"check": "biome check --write --error-on-warnings . && npm run check:docs && npm run check:pinned-deps && npm run check:ts-imports && npm run check:scrubber && npm run check:shrinkwrap && npm run check:install-lock:coding-agent && tsgo --noEmit && npm run check:browser-smoke",
 		"check:browser-smoke": "node scripts/check-browser-smoke.mjs",
