@@ -12,6 +12,10 @@ import { SettingsManager } from "../src/core/settings-manager.ts";
 
 type ToolOptions = Pick<CreateAgentSessionOptions, "tools" | "excludeTools" | "noTools" | "customTools">;
 
+// Apex registers nine built-ins upstream does not, and ADR 0011 keeps `tool_schema`
+// present in every active selection so a deferred schema stays reachable. The setting
+// under test still governs the selection; only the inventory it is measured against
+// differs from upstream's.
 describe("defaultTools setting", () => {
 	let tempDir: string;
 	let agentDir: string;
@@ -63,8 +67,25 @@ describe("defaultTools setting", () => {
 				.getAllTools()
 				.map((tool) => tool.name)
 				.sort(),
-		).toEqual(["bash", "edit", "find", "grep", "ls", "read", "write"]);
-		expect(session.getActiveToolNames()).toEqual(["grep", "find"]);
+		).toEqual([
+			"ask_user",
+			"bash",
+			"delegate",
+			"edit",
+			"find",
+			"grep",
+			"ls",
+			"plan_present",
+			"read",
+			"skill_search",
+			"test",
+			"todo_write",
+			"tool_schema",
+			"web_fetch",
+			"web_search",
+			"write",
+		]);
+		expect(session.getActiveToolNames()).toEqual(["grep", "find", "tool_schema"]);
 		expect(session.systemPrompt).toContain("- grep:");
 		expect(session.systemPrompt).not.toContain("- read:");
 		session.dispose();
@@ -107,7 +128,13 @@ describe("defaultTools setting", () => {
 		);
 		await session.bindExtensions({});
 
-		expect(session.getActiveToolNames().sort()).toEqual(["dynamic_tool", "grep", "sdk_tool", "static_tool"]);
+		expect(session.getActiveToolNames().sort()).toEqual([
+			"dynamic_tool",
+			"grep",
+			"sdk_tool",
+			"static_tool",
+			"tool_schema",
+		]);
 		expect(session.getAllTools().map((tool) => tool.name)).toEqual(
 			expect.arrayContaining(["read", "dynamic_tool", "sdk_tool", "static_tool"]),
 		);
@@ -120,7 +147,7 @@ describe("defaultTools setting", () => {
 		allowlistedSession.dispose();
 
 		const excludedSession = await createSession(["read", "grep"], { excludeTools: ["read"] });
-		expect(excludedSession.getActiveToolNames()).toEqual(["grep"]);
+		expect(excludedSession.getActiveToolNames()).toEqual(["grep", "tool_schema"]);
 		excludedSession.dispose();
 
 		const toolLessSession = await createSession(["read"], { noTools: "all" });
@@ -143,8 +170,25 @@ describe("defaultTools setting", () => {
 				.getAllTools()
 				.map((tool) => tool.name)
 				.sort(),
-		).toEqual(["bash", "edit", "find", "grep", "ls", "read", "write"]);
-		expect(session.getActiveToolNames()).toEqual(["ls"]);
+		).toEqual([
+			"ask_user",
+			"bash",
+			"delegate",
+			"edit",
+			"find",
+			"grep",
+			"ls",
+			"plan_present",
+			"read",
+			"skill_search",
+			"test",
+			"todo_write",
+			"tool_schema",
+			"web_fetch",
+			"web_search",
+			"write",
+		]);
+		expect(session.getActiveToolNames()).toEqual(["ls", "tool_schema"]);
 		session.dispose();
 	});
 });

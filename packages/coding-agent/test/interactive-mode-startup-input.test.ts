@@ -111,6 +111,9 @@ describe("InteractiveMode startup input", () => {
 				}),
 			},
 			editor: component,
+			// v0.84.2 wires interrupt, exit, and submission feedback on the default editor
+			// before mounting, so startup can accept text while it finishes.
+			defaultEditor: { onAction: vi.fn() },
 			setupKeyHandlers: vi.fn(),
 			setupEditorSubmitHandler: vi.fn(),
 		});
