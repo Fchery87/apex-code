@@ -89,7 +89,12 @@ if [ "${merge_status}" -gt 1 ]; then
   exit 1
 fi
 
-tree="$(printf '%s\n' "${merge_output}" | head -1)"
+# Parameter expansion, not `| head -1`: head closes the pipe after the first line, and on
+# a merge whose conflict list exceeds the 64KB pipe buffer the write upstream of it takes
+# SIGPIPE. Under `set -o pipefail` that ended the run at exit 141, after the churn summary
+# had printed and before anything was applied, so it read as "the merge just stopped".
+# v0.84.2's output fit in the buffer and hid this; v0.84.3's did not.
+tree="${merge_output%%$'\n'*}"
 # Between the tree oid and the first blank line, merge-tree lists one record per
 # conflicted stage as `<mode> <oid> <stage>\t<path>`, so the same path repeats.
 conflict_paths="$(printf '%s\n' "${merge_output}" | awk 'NR>1 && NF==0 { exit } NR>1 { print $4 }' | sort -u)"
