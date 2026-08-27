@@ -216,3 +216,48 @@ upstream's own history.
 **Delete the `.upstream-backports` line** at the next upstream merge whose release
 contains `e8c632ef6`. The gate enforces this rather than trusting anyone to remember: a
 backport the baseline already carries fails with an instruction to delete it.
+
+
+## The merge path was broken from the graft until 2026-08-27
+
+`scripts/apex/upstream-merge.sh` could not take a release, and the way it failed looked
+like nothing at all.
+
+**The tags in this repository are not one lineage.** `v0.84.0` and `v0.84.1` arrived
+with the graft, which rewrote every commit object: their trees are byte-identical to
+upstream's, their shas are not. `v0.84.2` onward were fetched from upstream directly and
+sit on upstream's real history. The two meet only at a 2025-11-26 merge-base with about
+five thousand commits on each side.
+
+Two consequences, both silent:
+
+- `git fetch --quiet upstream --tags` exits non-zero rather than clobber the graft-era
+  tags. Under `set -euo pipefail` that ended the script on the fetch, before it touched
+  anything. This is why the fork sat on `v0.84.1` from 2026-08-07 and why an abandoned
+  half-merge is parked on `fix/cloudflare-gateway-provider-api-union`.
+- Had it got past the fetch, `git merge v0.84.2` would not have meant "take the next
+  release". Measured 2026-08-27: **1559 files, +308419/-49265**, against **202 files,
+  +10051/-4750** for the actual `v0.84.1` to `v0.84.2` change.
+
+The script now merges with `git merge-tree --write-tree --merge-base=<pin>`, which gives
+real three-way semantics with the base stated explicitly, so lineage never enters into
+it. The release is taken as content rather than as a merge commit, because making
+v0.84.2's unrelated history ancestors of `main` would be wrong; `.upstream-tag` and the
+frozen-package gate are what record which upstream revision the consumed packages sit at.
+
+`git apply -3` was tried first and rejected. It is atomic, so one path Apex had deleted
+(`.github/APPROVED_CONTRIBUTORS`) rolled the whole thing back, and it leaves conflicted
+content without unmerged index entries, so the conflict metric read **zero** for a merge
+that had applied nothing. The count is now taken from conflict markers in the merged
+content.
+
+### First real measurement of the ADR 0003 metric
+
+| Range | Conflicted hunks | Conflicted files | In forked paths | Churn in forked paths |
+| --- | --- | --- | --- | --- |
+| `v0.84.1` -> `v0.84.2` | 53 | 49 | 27 | 109 files, +5707 / -4232 |
+
+This is the first number the ceiling has ever had from a merge that actually ran. The
+`v0.84.1` row above records 1 conflicted hunk, measured when Apex had not yet modified
+forked code; it was never a usable baseline. **The merge itself has not been taken.** It
+needs 49 conflict resolutions and belongs in its own reviewed change.

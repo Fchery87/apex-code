@@ -1,14 +1,36 @@
 #!/usr/bin/env bash
 #
-# Merge an upstream Pi release into Apex Code and report the merge cost.
+# Take an upstream Pi release into Apex Code and report the cost.
 #
-# The conflicted-hunk count is the metric ADR 0003's ceiling and tripwires read.
-# This script prints it because a number nobody is shown is a number nobody records.
+# The conflict count is the metric ADR 0003's ceiling and tripwires read. This script
+# prints it because a number nobody is shown is a number nobody records.
 #
-# Usage:  scripts/upstream-merge.sh v0.84.1
+# Usage:  scripts/upstream-merge.sh v0.84.2
 #
-# Leaves the merge staged and uncommitted so you can resolve conflicts, record the
+# Leaves the result staged and uncommitted so you can resolve conflicts, record the
 # numbers in docs/upstream-log.md, and commit yourself. It never commits for you.
+#
+# ## Why this is not `git merge <tag>`
+#
+# The tags in this repository do not form one lineage. v0.84.0 and v0.84.1 arrived with
+# the ADR 0001 graft, which rewrote every commit object: their trees are byte-identical
+# to upstream's, their shas are not. v0.84.2 onward were fetched from upstream directly
+# and sit on upstream's real history. The two meet only at a 2025-11-26 merge-base with
+# roughly five thousand commits on each side.
+#
+# So `git merge v0.84.2` does not mean "take the next release". Measured on 2026-08-27
+# it meant 1559 files and +308419/-49265, against 202 files and +10051/-4750 for the
+# actual v0.84.1 -> v0.84.2 change. The previous version of this script would have
+# produced that, and never got far enough to find out: `git fetch --tags` exits non-zero
+# rather than clobber the graft-era tags, and `set -e` killed the run every time. The
+# documented merge path has not worked since the graft, which is why this fork sat on
+# v0.84.1 from 2026-08-07 with an abandoned half-merge parked on a branch.
+#
+# `git merge-tree --merge-base=<pin>` gives real three-way merge semantics with the base
+# stated explicitly, so lineage never enters into it. The result is committed as content
+# rather than as a merge: making v0.84.2's five thousand unrelated commits ancestors of
+# main would be wrong, and .upstream-tag plus the frozen-package gate are what actually
+# record which upstream revision the consumed packages sit at.
 
 set -euo pipefail
 
@@ -28,8 +50,12 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   exit 1
 fi
 
+# Never `--tags`: it exits non-zero rather than clobber the graft-era tags, and under
+# `set -e` that ends the run before anything happens. Fetch only what is missing.
 echo "==> fetching upstream"
-git fetch --quiet upstream --tags
+if ! git rev-parse -q --verify "refs/tags/${target}" >/dev/null; then
+  git fetch --quiet upstream "refs/tags/${target}:refs/tags/${target}" || true
+fi
 
 if ! git rev-parse -q --verify "refs/tags/${target}" >/dev/null; then
   echo "error: tag '${target}' not found after fetch." >&2
@@ -38,30 +64,57 @@ if ! git rev-parse -q --verify "refs/tags/${target}" >/dev/null; then
   exit 1
 fi
 
-merge_base="$(git merge-base HEAD "${target}" || true)"
-
-echo "==> upstream churn since our merge base, in forked paths"
-if [ -n "${merge_base}" ]; then
-  git diff --shortstat "${merge_base}" "${target}" -- "${FORKED_PATHS[@]}" || true
-else
-  echo "  (no common ancestor — first graft)"
+pin="$(cat .upstream-tag 2>/dev/null || true)"
+if [ -z "${pin}" ]; then
+  echo "error: no .upstream-tag to advance from. This script moves the pin forward; it" >&2
+  echo "       cannot reconstruct where the frozen packages currently sit." >&2
+  exit 1
+fi
+if [ "${pin}" = "${target}" ]; then
+  echo "error: .upstream-tag is already ${target}. Nothing to take." >&2
+  exit 1
 fi
 
-echo "==> merging ${target}"
-git merge --no-commit --no-ff "${target}" || true
+echo "==> upstream churn ${pin} -> ${target}, in forked paths"
+git diff --shortstat "${pin}" "${target}" -- "${FORKED_PATHS[@]}" || true
 
-# Conflicted hunks: the real cost signal. Counted from the unmerged diff, which
-# renders conflict regions as hunks.
-hunks="$(git diff --diff-filter=U | grep -c '^@@' || true)"
-files="$(git diff --name-only --diff-filter=U | wc -l | tr -d ' ')"
-forked_files="$(git diff --name-only --diff-filter=U -- "${FORKED_PATHS[@]}" | wc -l | tr -d ' ')"
+echo "==> merging ${pin} -> ${target}"
+merge_output="$(git merge-tree --write-tree --merge-base="${pin}" HEAD "${target}")" || merge_status=$?
+merge_status="${merge_status:-0}"
+
+# 0 is a clean merge and 1 is a conflicted one. Anything else means merge-tree could not
+# run at all, and continuing would advance the pin over a merge that never happened.
+if [ "${merge_status}" -gt 1 ]; then
+  echo "error: git merge-tree failed (exit ${merge_status}). Nothing has been changed." >&2
+  exit 1
+fi
+
+tree="$(printf '%s\n' "${merge_output}" | head -1)"
+# Between the tree oid and the first blank line, merge-tree lists one record per
+# conflicted stage as `<mode> <oid> <stage>\t<path>`, so the same path repeats.
+conflict_paths="$(printf '%s\n' "${merge_output}" | awk 'NR>1 && NF==0 { exit } NR>1 { print $4 }' | sort -u)"
+messages="$(printf '%s\n' "${merge_output}" | awk 'seen { print } /^$/ { seen=1 }')"
+
+git read-tree -u --reset "${tree}"
+
+files="$(printf '%s' "${conflict_paths}" | grep -c . || true)"
+forked_files="$(printf '%s\n' "${conflict_paths}" | grep -c -E "^($(IFS='|'; echo "${FORKED_PATHS[*]}"))/" || true)"
+# Count the markers actually written into the tree rather than trusting the index:
+# `git apply -3` leaves conflicted content without unmerged index entries, and an
+# earlier version of this script reported zero conflicts for a merge that had in fact
+# applied nothing at all.
+hunks="$(git grep -c '^<<<<<<< ' -- $(printf '%s\n' "${conflict_paths}" | tr '\n' ' ') 2>/dev/null | awk -F: '{ total += $2 } END { print total + 0 }')"
 
 echo
 echo "────────────────────────────────────────────────"
-echo "  target             ${target}"
+echo "  taking             ${pin} -> ${target}"
 echo "  conflicted hunks   ${hunks}"
 echo "  conflicted files   ${files}  (${forked_files} in forked paths)"
 echo "────────────────────────────────────────────────"
+if [ -n "${messages}" ]; then
+  echo
+  printf '%s\n' "${messages}"
+fi
 # Advance the pin the frozen-package check reads. Doing this here rather than by
 # hand is the point: if the pin lags the merge, check-frozen-packages.mjs compares
 # the consumed packages against a stale tag and reports drift that is really just
