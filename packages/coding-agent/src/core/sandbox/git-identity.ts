@@ -81,12 +81,24 @@ function quote(value: string): string {
  * same reason `resolveCredentialChannelPaths` uses one. TMPDIR is deliberately not
  * honoured: it can point inside the workspace on macOS, which the sandbox may write.
  */
-export function createProjectedGitConfig(identity: HostGitIdentity): ProjectedGitConfig {
+export function createProjectedGitConfig(
+	identity: HostGitIdentity,
+	options?: {
+		/**
+		 * A `credential.helper` value for the child. It names the supervisor-mediated
+		 * helper, never a host one: the point is that the child asks over the channel
+		 * rather than reading any store itself.
+		 */
+		credentialHelper?: string;
+	},
+): ProjectedGitConfig {
 	const directory = mkdtempSync(`/tmp/apex-git-${process.pid}-`, { encoding: "utf8" });
 	chmodSync(directory, 0o700);
 	const path = join(directory, "config");
-	writeFileSync(path, `[user]\n\tname = ${quote(identity.name)}\n\temail = ${quote(identity.email)}\n`, {
-		mode: 0o600,
-	});
+	const sections = [`[user]\n\tname = ${quote(identity.name)}\n\temail = ${quote(identity.email)}\n`];
+	if (options?.credentialHelper) {
+		sections.push(`[credential]\n\thelper = ${quote(options.credentialHelper)}\n`);
+	}
+	writeFileSync(path, sections.join(""), { mode: 0o600 });
 	return { directory, path };
 }

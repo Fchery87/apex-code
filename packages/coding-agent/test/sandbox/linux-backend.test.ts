@@ -16,6 +16,7 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createProjectedGitConfig } from "../../src/core/sandbox/git-identity.ts";
 import { createLinuxSandboxBackend } from "../../src/core/sandbox/linux-backend.ts";
+import { gitCredentialHelperCommand } from "../../src/core/sandbox/rpc/git-credential-helper.ts";
 import { createSandboxSupervisor } from "../../src/core/sandbox/supervisor.ts";
 import { SandboxViolationStore } from "../../src/core/sandbox/violations.ts";
 
@@ -183,6 +184,81 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 						"-c",
 						`test "$APEX_TERMINAL_HANDOFF_PATH" = "${stateDirectory}" && test -d "$APEX_TERMINAL_HANDOFF_PATH"`,
 					],
+				}),
+			).resolves.toBe(0);
+		} finally {
+			await supervisor.close();
+		}
+	});
+
+	it("lets git inside the child fetch a credential over the channel without one entering the workspace", async () => {
+		const cwd = workspace();
+		const stateDirectory = join(cwd, ".apex-code", "sandbox-state");
+		mkdirSync(stateDirectory, { recursive: true });
+		const identity = createProjectedGitConfig(
+			{ name: "Ada Lovelace", email: "ada@example.invalid" },
+			{ credentialHelper: gitCredentialHelperCommand(stateDirectory) },
+		);
+		temporaryDirectories.push(identity.directory);
+		const backend = createLinuxSandboxBackend({
+			requestGitCredentialRelease: async () => true,
+			fillGitCredential: async () => ({ username: "ada", password: "host-owned-token" }),
+		});
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: ["github.com"] },
+		});
+		const output = join(cwd, "credential-output");
+
+		try {
+			// git's own credential machinery, run inside the boundary against the projected
+			// config. Nothing here reads a store: the child has none, and /home is a tmpfs.
+			const script = [
+				`printf 'protocol=https\\nhost=github.com\\n\\n' | git credential fill > ${output} 2>/dev/null`,
+				`grep -q 'password=host-owned-token' ${output}`,
+				`! grep -rq host-owned-token ${stateDirectory}`,
+			].join(" && ");
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: ["-c", script],
+					readOnlyFiles: [identity.path],
+					environment: { PATH: process.env.PATH, GIT_CONFIG_GLOBAL: identity.path },
+				}),
+			).resolves.toBe(0);
+		} finally {
+			await supervisor.close();
+		}
+	});
+
+	it("refuses a credential for a host the session cannot reach", async () => {
+		const cwd = workspace();
+		const stateDirectory = join(cwd, ".apex-code", "sandbox-state");
+		mkdirSync(stateDirectory, { recursive: true });
+		const identity = createProjectedGitConfig(
+			{ name: "Ada Lovelace", email: "ada@example.invalid" },
+			{ credentialHelper: gitCredentialHelperCommand(stateDirectory) },
+		);
+		temporaryDirectories.push(identity.directory);
+		const backend = createLinuxSandboxBackend({
+			requestGitCredentialRelease: async () => true,
+			fillGitCredential: async () => ({ username: "ada", password: "host-owned-token" }),
+		});
+		// Empty allowlist: the session could not open a connection to github.com, so a
+		// credential request for it is not git doing its job.
+		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const output = join(cwd, "credential-output");
+
+		try {
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: [
+						"-c",
+						`printf 'protocol=https\\nhost=github.com\\n\\n' | git credential fill > ${output} 2>/dev/null; ! grep -q host-owned-token ${output}`,
+					],
+					readOnlyFiles: [identity.path],
+					environment: { PATH: process.env.PATH, GIT_CONFIG_GLOBAL: identity.path },
 				}),
 			).resolves.toBe(0);
 		} finally {

@@ -7,6 +7,15 @@ export interface SandboxNetworkProxy {
 	readonly server: http.Server;
 	/** Set only in TCP-listen mode (`tcpHost`); the ephemeral port the proxy bound. */
 	readonly port?: number;
+	/**
+	 * Whether this session may reach `hostname` on any port, by configuration or by a
+	 * grant the human made this session.
+	 *
+	 * Exposed so the git credential channel can ask the one component that actually knows,
+	 * rather than keeping a second copy of the allowlist that would drift from this one the
+	 * first time a host is approved at runtime.
+	 */
+	isHostReachable(hostname: string): boolean;
 	close(): Promise<void>;
 }
 
@@ -36,6 +45,14 @@ export function createSandboxNetworkProxy(
 	 * own prompt for the same question.
 	 */
 	const pending = new Map<string, Promise<boolean>>();
+
+	function isHostReachable(hostname: string): boolean {
+		if (options.allowedHosts.some((entry) => entry === hostname || entry.startsWith(`${hostname}:`))) return true;
+		for (const grant of granted) {
+			if (grant === hostname || grant.startsWith(`${hostname}:`)) return true;
+		}
+		return false;
+	}
 
 	function isAllowed(hostname: string, port: number): boolean {
 		return (
@@ -152,6 +169,7 @@ export function createSandboxNetworkProxy(
 				resolve({
 					server,
 					port,
+					isHostReachable,
 					close: () => new Promise((r) => server.close(() => r())),
 				});
 			});
@@ -169,6 +187,7 @@ export function createSandboxNetworkProxy(
 			server.off("error", reject);
 			resolve({
 				server,
+				isHostReachable,
 				close: () => new Promise((r) => server.close(() => r())),
 			});
 		});

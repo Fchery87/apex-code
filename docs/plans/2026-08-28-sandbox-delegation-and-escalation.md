@@ -27,8 +27,8 @@ existing framed Unix-socket protocol.
 | SDE.3 | U2 | Done | `0867d9e2c` |
 | SDE.4 | U3 | Done | pending |
 | SDE.5 | U3 | Done | pending |
-| SDE.6 | U4 | Not started | — |
-| SDE.7 | U4 | Not started | — |
+| SDE.6 | U4 | Done | pending |
+| SDE.7 | U4 | Done | pending |
 | SDE.8 | U5 | Not started | — |
 | SDE.9 | U5 | Not started | — |
 | SDE.10 | U6 | Not started | — |

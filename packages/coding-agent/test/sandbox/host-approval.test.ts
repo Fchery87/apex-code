@@ -1,6 +1,6 @@
 import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { createHostApprover } from "../../src/core/sandbox/host-approval.ts";
+import { createCredentialReleaser, createHostApprover } from "../../src/core/sandbox/host-approval.ts";
 import type { TerminalHandoff } from "../../src/core/sandbox/terminal-handoff.ts";
 
 /** A handoff that records its use without touching a real filesystem or terminal. */
@@ -90,5 +90,38 @@ describe("sandbox host approval", () => {
 		await answered;
 
 		expect(events).toEqual(["borrow", "return"]);
+	});
+});
+
+describe("sandbox credential release", () => {
+	it("offers no releaser without a terminal, so a headless session releases nothing", () => {
+		const { input, output } = terminal(false);
+
+		expect(createCredentialReleaser({ handoff: recordingHandoff([]), input, output })).toBeUndefined();
+	});
+
+	it("names the host and says the credential never enters the workspace", async () => {
+		const { input, output, written } = terminal(true);
+		const releaser = createCredentialReleaser({ handoff: recordingHandoff([]), input, output });
+		const answered = (releaser as NonNullable<typeof releaser>)("github.com");
+		input.push("y\n");
+		await answered;
+
+		expect(written()).toContain("github.com");
+		expect(written()).toContain("never written into the workspace");
+	});
+
+	it("releases on yes and withholds on anything else", async () => {
+		const yes = terminal(true);
+		const releaser = createCredentialReleaser({ handoff: recordingHandoff([]), ...yes });
+		const granted = (releaser as NonNullable<typeof releaser>)("github.com");
+		yes.input.push("yes\n");
+		await expect(granted).resolves.toBe(true);
+
+		const no = terminal(true);
+		const second = createCredentialReleaser({ handoff: recordingHandoff([]), ...no });
+		const refused = (second as NonNullable<typeof second>)("github.com");
+		no.input.push("maybe\n");
+		await expect(refused).resolves.toBe(false);
 	});
 });

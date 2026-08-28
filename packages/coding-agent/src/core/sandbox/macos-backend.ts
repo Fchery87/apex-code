@@ -1,9 +1,16 @@
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import { createHostApprover } from "./host-approval.ts";
+import { createCredentialReleaser, createHostApprover } from "./host-approval.ts";
 import { createSandboxNetworkProxy, type SandboxNetworkProxy } from "./network-proxy.ts";
+import {
+	fillHostGitCredential,
+	GIT_CREDENTIAL_SOCKET_VARIABLE,
+	resolveGitCredentialChannelPaths,
+	writeGitCredentialHelper,
+} from "./rpc/git-credential-helper.ts";
+import { createGitCredentialProxy, type GitCredentialProxy } from "./rpc/git-credential-proxy.ts";
 import type { SandboxBackend, SandboxLaunch } from "./supervisor.ts";
 import { createTerminalHandoff, TERMINAL_HANDOFF_PATH_VARIABLE, type TerminalHandoff } from "./terminal-handoff.ts";
 import type { SandboxViolationStore } from "./violations.ts";
@@ -119,6 +126,8 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 	const violationStore = options?.violationStore;
 	let proxy: SandboxNetworkProxy | undefined;
 	let handoff: TerminalHandoff | undefined;
+	let gitCredentialProxy: GitCredentialProxy | undefined;
+	let gitCredentialDirectory: string | undefined;
 
 	if (!hasCommand("sandbox-exec")) {
 		return {
@@ -143,6 +152,8 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 			const violationCountBeforeLaunch = violationStore?.totalCount ?? 0;
 
 			handoff = createTerminalHandoff(stateDirectory);
+			const gitCredentialPaths = resolveGitCredentialChannelPaths();
+			gitCredentialDirectory = gitCredentialPaths.hostSocketDirectory;
 			proxy = await createSandboxNetworkProxy({
 				tcpHost: "127.0.0.1",
 				allowedHosts: launch.policy.allowedHosts,
@@ -151,6 +162,17 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 				// deny-without-asking path in place for headless, print, JSON, and RPC.
 				requestApproval: createHostApprover({ handoff }),
 			});
+			// After the network proxy, because reachability is its answer to give.
+			gitCredentialProxy = await createGitCredentialProxy({
+				socketPath: gitCredentialPaths.hostSocketPath,
+				isHostAllowed: (host) => proxy?.isHostReachable(host) ?? false,
+				requestRelease: createCredentialReleaser({ handoff }),
+				// The supervisor's own environment: this runs outside the boundary and must
+				// resolve against the real host home the child cannot see.
+				fillCredential: (request) => fillHostGitCredential(request, { environment: process.env }),
+				violationStore,
+			});
+			writeGitCredentialHelper(stateDirectory);
 			const proxyPort = proxy.port as number;
 
 			// Seatbelt cannot remap a path, so the child connects to the channel socket at
@@ -230,6 +252,7 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 						HTTP_PROXY: `http://127.0.0.1:${proxyPort}`,
 						HTTPS_PROXY: `http://127.0.0.1:${proxyPort}`,
 						[TERMINAL_HANDOFF_PATH_VARIABLE]: stateDirectory,
+						[GIT_CREDENTIAL_SOCKET_VARIABLE]: gitCredentialPaths.childSocketPath,
 					},
 					stdio: ["inherit", "inherit", "pipe"],
 				},
@@ -256,6 +279,8 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 		},
 		async close() {
 			handoff?.stop();
+			await gitCredentialProxy?.close();
+			if (gitCredentialDirectory) rmSync(gitCredentialDirectory, { force: true, recursive: true });
 			await proxy?.close();
 		},
 	};

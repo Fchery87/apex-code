@@ -3,8 +3,15 @@ import { randomBytes } from "node:crypto";
 import { closeSync, mkdirSync, openSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { createHostApprover } from "./host-approval.ts";
+import { createCredentialReleaser, createHostApprover } from "./host-approval.ts";
 import { createSandboxNetworkProxy, type SandboxNetworkProxy } from "./network-proxy.ts";
+import {
+	fillHostGitCredential,
+	GIT_CREDENTIAL_SOCKET_VARIABLE,
+	resolveGitCredentialChannelPaths,
+	writeGitCredentialHelper,
+} from "./rpc/git-credential-helper.ts";
+import { createGitCredentialProxy, type GitCredentialProxy } from "./rpc/git-credential-proxy.ts";
 import type { SandboxBackend, SandboxLaunch } from "./supervisor.ts";
 import { createTerminalHandoff, TERMINAL_HANDOFF_PATH_VARIABLE, type TerminalHandoff } from "./terminal-handoff.ts";
 import { publishTerminalSize, TERMINAL_SIZE_PATH_VARIABLE } from "./terminal-size.ts";
@@ -20,6 +27,14 @@ export interface LinuxSandboxBackendOptions {
 	violationStore?: SandboxViolationStore;
 	/** Injectable only to prove crash cleanup in tests; production spawns `bwrap` directly. */
 	spawnChild?: typeof spawn;
+	/**
+	 * Injectable only for tests, which have no terminal and would otherwise be unable to
+	 * exercise a released credential at all. Production builds the releaser from the
+	 * terminal handoff, and its absence there is what makes a headless session refuse.
+	 */
+	requestGitCredentialRelease?: (host: string) => Promise<boolean>;
+	/** Injectable only for tests; production resolves against the real host store. */
+	fillGitCredential?: typeof fillHostGitCredential;
 }
 
 function commandExists(command: string): boolean {
@@ -138,6 +153,8 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 	const violationStore = options?.violationStore;
 	let proxy: SandboxNetworkProxy | undefined;
 	let handoff: TerminalHandoff | undefined;
+	let gitCredentialProxy: GitCredentialProxy | undefined;
+	let gitCredentialDirectory: string | undefined;
 
 	if (!hasCommand("bwrap")) {
 		return {
@@ -158,6 +175,8 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 
 			const { hostSocketPath, childSocketPath } = resolveProxySocketPaths();
 			handoff = createTerminalHandoff(stateDirectory);
+			const gitCredentialPaths = resolveGitCredentialChannelPaths();
+			gitCredentialDirectory = gitCredentialPaths.hostSocketDirectory;
 			proxy = await createSandboxNetworkProxy({
 				socketPath: hostSocketPath,
 				allowedHosts: launch.policy.allowedHosts,
@@ -166,6 +185,21 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 				// deny-without-asking path in place for headless, print, JSON, and RPC.
 				requestApproval: createHostApprover({ handoff }),
 			});
+			// After the network proxy, because reachability is its answer to give: the
+			// credential channel must never hand out a token for a host this session
+			// cannot even open a connection to.
+			gitCredentialProxy = await createGitCredentialProxy({
+				socketPath: gitCredentialPaths.hostSocketPath,
+				isHostAllowed: (host) => proxy?.isHostReachable(host) ?? false,
+				requestRelease: options?.requestGitCredentialRelease ?? createCredentialReleaser({ handoff }),
+				// The supervisor's own environment, deliberately: this runs outside the
+				// boundary and must resolve against the real host home, which is exactly
+				// what the child cannot see.
+				fillCredential: (request) =>
+					(options?.fillGitCredential ?? fillHostGitCredential)(request, { environment: process.env }),
+				violationStore,
+			});
+			writeGitCredentialHelper(stateDirectory);
 
 			// .cjs forces CommonJS regardless of the target workspace's package.json "type"
 			// field -- a plain .js here would be parsed as ESM under "type": "module" and
@@ -245,6 +279,11 @@ server.on("error", (err) => {
 						...(launch.credentialChannel
 							? ["--bind", launch.credentialChannel.hostSocketPath, launch.credentialChannel.childSocketPath]
 							: []),
+						// Same writable-under-/home constraint and same position as the two
+						// sockets above.
+						"--bind",
+						gitCredentialPaths.hostSocketPath,
+						gitCredentialPaths.childSocketPath,
 						...readOnlyMounts,
 						...readOnlyFileMounts,
 						"--bind",
@@ -278,6 +317,9 @@ server.on("error", (err) => {
 						"--setenv",
 						TERMINAL_HANDOFF_PATH_VARIABLE,
 						stateDirectory,
+						"--setenv",
+						GIT_CREDENTIAL_SOCKET_VARIABLE,
+						gitCredentialPaths.childSocketPath,
 						"--",
 						process.execPath,
 						relayScriptPath,
@@ -315,6 +357,8 @@ server.on("error", (err) => {
 		},
 		async close() {
 			handoff?.stop();
+			await gitCredentialProxy?.close();
+			if (gitCredentialDirectory) rmSync(gitCredentialDirectory, { force: true, recursive: true });
 			await proxy?.close();
 		},
 	};

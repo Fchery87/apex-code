@@ -14,11 +14,11 @@ import type { Credential } from "@earendil-works/pi-ai";
 import { AuthStorage } from "../../auth-storage.ts";
 import { getConfigValueEnvVarNames, isCommandConfigValue } from "../../resolve-config-value.ts";
 import type { SandboxViolationStore } from "../violations.ts";
+import { FrameReader, isRequestObject, writeFrame } from "./framing.ts";
 
 /** AF_UNIX `sun_path` is 108 bytes on Linux, including the terminating NUL. */
 const SUN_PATH_LIMIT = 108;
 /** Credentials are small; reject larger frames before UTF-8 decoding or JSON parsing. */
-const MAX_FRAME_BYTES = 64 * 1024;
 const MAX_CONNECTIONS = 32;
 const CONNECTION_IDLE_TIMEOUT_MS = 30_000;
 
@@ -167,93 +167,6 @@ interface CommitRequest {
 	readonly credential?: unknown;
 }
 
-function writeFrame(socket: net.Socket, response: object): void {
-	if (socket.destroyed) return;
-	const frame = Buffer.from(`${JSON.stringify(response)}\n`, "utf8");
-	if (frame.length > MAX_FRAME_BYTES) {
-		throw new Error("Credential channel response exceeded its byte limit.");
-	}
-	socket.write(frame);
-}
-
-class FrameReader {
-	private readonly socket: net.Socket;
-	private readonly onProtocolRefusal: (detail: string) => void;
-	private buffer = Buffer.alloc(0);
-	private readonly queued: unknown[] = [];
-	private readonly waiting: Array<{ resolve(value: unknown): void; reject(error: Error): void }> = [];
-	private terminalError: Error | undefined;
-
-	constructor(socket: net.Socket, onProtocolRefusal: (detail: string) => void) {
-		this.socket = socket;
-		this.onProtocolRefusal = onProtocolRefusal;
-		socket.on("data", (chunk: Buffer) => this.push(chunk));
-		socket.on("close", () => this.fail(new Error("Credential channel client disconnected.")));
-		socket.on("error", (error) => this.fail(error));
-	}
-
-	next(): Promise<unknown> {
-		const queued = this.queued.shift();
-		if (queued !== undefined) return Promise.resolve(queued);
-		if (this.terminalError) return Promise.reject(this.terminalError);
-		return new Promise((resolve, reject) => this.waiting.push({ resolve, reject }));
-	}
-
-	private push(chunk: Buffer): void {
-		if (this.terminalError) return;
-		this.buffer = Buffer.concat([this.buffer, chunk]);
-		while (true) {
-			const newline = this.buffer.indexOf(0x0a);
-			if (newline < 0) {
-				if (this.buffer.length > MAX_FRAME_BYTES) this.rejectOversizedFrame();
-				return;
-			}
-			if (newline > MAX_FRAME_BYTES) {
-				this.rejectOversizedFrame();
-				return;
-			}
-			const frame = this.buffer.subarray(0, newline);
-			this.buffer = this.buffer.subarray(newline + 1);
-			if (frame.length === 0) continue;
-			let value: unknown;
-			try {
-				value = JSON.parse(frame.toString("utf8")) as unknown;
-			} catch {
-				this.onProtocolRefusal("Invalid request frame: not JSON.");
-				writeFrame(this.socket, { ok: false, error: "Invalid request frame: not JSON." });
-				this.fail(new Error("Invalid credential channel JSON frame."));
-				this.socket.end();
-				return;
-			}
-			const waiter = this.waiting.shift();
-			if (waiter) {
-				waiter.resolve(value);
-			} else if (this.queued.length === 0) {
-				this.queued.push(value);
-			} else {
-				this.onProtocolRefusal("Unexpected pipelined request frame.");
-				writeFrame(this.socket, { ok: false, error: "Unexpected pipelined request frame." });
-				this.fail(new Error("Credential channel received an unexpected pipelined frame."));
-				this.socket.end();
-				return;
-			}
-		}
-	}
-
-	private rejectOversizedFrame(): void {
-		this.onProtocolRefusal("Request frame exceeded the 64 KiB byte limit.");
-		writeFrame(this.socket, { ok: false, error: "Request frame is too large." });
-		this.fail(new Error("Credential channel frame exceeded its byte limit."));
-		this.socket.end();
-	}
-
-	private fail(error: Error): void {
-		if (this.terminalError) return;
-		this.terminalError = error;
-		for (const waiter of this.waiting.splice(0)) waiter.reject(error);
-	}
-}
-
 class ChannelRefusal extends Error {
 	readonly command: string;
 
@@ -262,10 +175,6 @@ class ChannelRefusal extends Error {
 		this.name = "ChannelRefusal";
 		this.command = command;
 	}
-}
-
-function isRequestObject(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Serve serialized credential mutations on one private Unix socket. */
@@ -380,7 +289,9 @@ export function createCredentialProxy(options: {
 				sockets.delete(socket);
 				controller.abort();
 			});
-			const reader = new FrameReader(socket, (detail) => audit("credential-channel", `Refused: ${detail}`));
+			const reader = new FrameReader(socket, "Credential channel", (detail) =>
+				audit("credential-channel", `Refused: ${detail}`),
+			);
 			const operation = handleConnection(socket, reader, controller.signal)
 				.catch((error: unknown) => {
 					if (error instanceof ChannelRefusal) {

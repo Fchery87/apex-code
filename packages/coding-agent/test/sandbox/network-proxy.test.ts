@@ -294,3 +294,31 @@ describe("sandbox network proxy escalation", () => {
 		expect(asks).toBe(0);
 	});
 });
+
+describe("sandbox network reachability", () => {
+	it("reports a configured host reachable, by bare name and by pinned port", async () => {
+		const proxy = await createSandboxNetworkProxy({
+			socketPath: socketPath(),
+			allowedHosts: ["github.com", "registry.internal:8443"],
+		});
+		proxies.push(proxy);
+
+		expect(proxy.isHostReachable("github.com")).toBe(true);
+		expect(proxy.isHostReachable("registry.internal")).toBe(true);
+		expect(proxy.isHostReachable("gitlab.com")).toBe(false);
+	});
+
+	it("reports a host reachable once the human granted it, not before", async () => {
+		const port = await targetServer();
+		const proxy = await createSandboxNetworkProxy({
+			socketPath: socketPath(),
+			allowedHosts: [],
+			requestApproval: async () => true,
+		});
+		proxies.push(proxy);
+
+		expect(proxy.isHostReachable("127.0.0.1")).toBe(false);
+		await connectThroughProxy(proxy.server.address() as string, "127.0.0.1", port);
+		expect(proxy.isHostReachable("127.0.0.1")).toBe(true);
+	});
+});
