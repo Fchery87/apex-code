@@ -18,7 +18,9 @@ afterEach(() => {
  * able to veto the next prompt -- so the resume lands just after `borrowTerminal` returns.
  */
 async function eventually(condition: () => boolean, label: string): Promise<void> {
-	for (let attempt = 0; attempt < 100; attempt++) {
+	// Generous relative to the 100ms poll, so a slow runner cannot fail this on timing
+	// alone; the assertion that resume is *prompt* lives in its own test with a real bound.
+	for (let attempt = 0; attempt < 400; attempt++) {
 		if (condition()) return;
 		await new Promise((r) => setTimeout(r, 10));
 	}
@@ -57,13 +59,13 @@ describe("terminal handoff", () => {
 		expect(events).toEqual(["suspend", "prompt", "resume"]);
 	});
 
-	it("delivers a state written immediately after the previous one", async () => {
-		// DIAGNOSTIC, macOS. FSEvents coalesces events whose type, path, and PID match the
-		// previous one inside a one-second window, which is exactly what two handoff writes
-		// milliseconds apart look like. If that is the mechanism, the second state never
-		// arrives and this fails however long it waits. If the real problem were latency,
-		// it arrives late and this passes. The two need different fixes, so the wait here
-		// is deliberately long enough to tell them apart.
+	it("delivers a resume promptly, not whenever the platform watcher gets round to it", async () => {
+		// macOS CI delivered a resume more than a second after it was written, and
+		// intermittently: `fs.watch` is a thin wrapper over whatever the platform provides
+		// and FSEvents is entitled to take its time. The event does arrive, but a TUI that
+		// sits frozen for a second after the human answered is the same thing as broken to
+		// the person looking at it. The bound here is what the poll guarantees, well under
+		// the several seconds the unaided watcher was observed taking.
 		const directory = handoffDirectory();
 		const seen: string[] = [];
 		const handoff = createTerminalHandoff(directory, { acknowledgementTimeoutMs: 50 });
@@ -79,16 +81,11 @@ describe("terminal handoff", () => {
 		stops.push(observer.stop);
 
 		await handoff.borrowTerminal(async () => undefined);
-
 		const startedAt = Date.now();
-		for (let attempt = 0; attempt < 500; attempt++) {
-			if (seen.includes("resume")) break;
-			await new Promise((r) => setTimeout(r, 10));
-		}
-		console.log(`[handoff-diagnostic] seen=${JSON.stringify(seen)} after ${Date.now() - startedAt}ms`);
+		await eventually(() => seen.includes("resume"), "the child to resume");
 
-		expect(seen).toContain("suspend");
-		expect(seen).toContain("resume");
+		expect(seen).toEqual(["suspend", "resume"]);
+		expect(Date.now() - startedAt).toBeLessThan(1_500);
 	});
 
 	it("waits for the child to acknowledge before running the prompt", async () => {

@@ -32,6 +32,17 @@ const STATE_FILE = "terminal-handoff";
 const ACKNOWLEDGEMENT_FILE = "terminal-handoff-ack";
 const DEFAULT_ACKNOWLEDGEMENT_TIMEOUT_MS = 1_000;
 
+/**
+ * How often each side re-reads the state file, independently of the watcher.
+ *
+ * `fs.watch` is a thin wrapper over whatever the platform provides, and the platforms do
+ * not agree. macOS CI delivered a resume more than a second after it was written, and
+ * intermittently: the event arrives, late enough that a TUI would sit visibly frozen
+ * after the human had already answered. The watcher still does the work in the common
+ * case; this only bounds how wrong it can be.
+ */
+const POLL_INTERVAL_MS = 100;
+
 type HandoffState = "suspend" | "resume";
 
 function parseState(contents: string): HandoffState | undefined {
@@ -73,8 +84,10 @@ export function createTerminalHandoff(
 		return new Promise((resolve) => {
 			let watcher: FSWatcher | undefined;
 			let timer: NodeJS.Timeout | undefined;
+			let poll: NodeJS.Timeout | undefined;
 			const finish = () => {
 				if (timer) clearTimeout(timer);
+				if (poll) clearInterval(poll);
 				watcher?.close();
 				resolve();
 			};
@@ -89,8 +102,10 @@ export function createTerminalHandoff(
 			try {
 				watcher = watch(directory, check);
 			} catch {
-				// Without a watcher the timeout still bounds the wait.
+				// Without a watcher the poll below still delivers, just less promptly.
 			}
+			poll = setInterval(check, POLL_INTERVAL_MS);
+			poll.unref();
 			check();
 		});
 	}
@@ -169,12 +184,17 @@ export function observeTerminalHandoff(
 	try {
 		watcher = watch(directory, apply);
 	} catch {
-		// Without a watcher the child simply never yields; the prompt is still drawn.
+		// Without a watcher the poll below still delivers, just less promptly.
 	}
+	const poll = setInterval(apply, POLL_INTERVAL_MS);
+	// Never hold the process open for this. The child exits on its own schedule and a
+	// handoff that stops being observed at shutdown has nothing left to deliver.
+	poll.unref();
 
 	return {
 		stop: () => {
 			watcher?.close();
+			clearInterval(poll);
 		},
 	};
 }
