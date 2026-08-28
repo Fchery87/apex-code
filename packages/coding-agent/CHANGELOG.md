@@ -1,6 +1,6 @@
 # Apex Code changelog
 
-## [Unreleased]
+## [0.0.1-alpha.10] - 2026-08-28
 
 - Commits made inside a session now carry your identity. `--tmpfs /home` leaves git's global
   config resolution pointing at an empty directory, so every fresh workspace failed with

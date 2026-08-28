@@ -1,6 +1,6 @@
 {
 	"name": "apex-code",
-	"version": "0.0.1-alpha.9",
+	"version": "0.0.1-alpha.10",
 	"description": "Coding agent CLI with read, bash, edit, write tools and session management",
 	"type": "module",
 	"piConfig": {
@@ -43,7 +43,7 @@
 		"prepublishOnly": "npm run clean && npm run build && npm run shrinkwrap"
 	},
 	"dependencies": {
-		"apex-code-agent-core": "0.0.1-alpha.9",
+		"apex-code-agent-core": "0.0.1-alpha.10",
 		"@earendil-works/pi-ai": "^0.84.3",
 		"@earendil-works/pi-client": "^0.84.3",
 		"@earendil-works/pi-protocol": "^0.84.3",

@@ -1,6 +1,6 @@
 {
 	"name": "apex-code-agent-core",
-	"version": "0.0.1-alpha.9",
+	"version": "0.0.1-alpha.10",
 	"description": "General-purpose agent with transport abstraction, state management, and attachment support",
 	"type": "module",
 	"main": "./dist/index.js",
