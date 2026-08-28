@@ -95,6 +95,16 @@ test("the POSIX installer performs a checksum-verified Linux install without tou
 		"#!/usr/bin/env bash\nset -Eeuo pipefail\nout=''\nwhile [[ $# -gt 0 ]]; do\n  case \"$1\" in\n    --output) out=\"$2\"; shift 2 ;;\n    *) url=\"$1\"; shift ;;\n  esac\ndone\ncp \"$APEX_INSTALL_FIXTURE/${url##*/}\" \"$out\"\n",
 	);
 	await chmod(join(fakeBinDirectory, "curl"), 0o755);
+	// The installer's platform detection shells out to the real `uname`, so without a
+	// stub this test only exercises the Linux install path by accident of which OS
+	// happens to run it -- it passed on Linux CI and failed on macOS/Windows CI, where
+	// the real `uname -s` reports Darwin or MINGW/MSYS. Fix the platform the test
+	// claims to cover regardless of the runner's actual OS.
+	await writeFile(
+		join(fakeBinDirectory, "uname"),
+		'#!/usr/bin/env bash\ncase "$1" in\n  -s) printf \'%s\\n\' "Linux" ;;\n  -m) printf \'%s\\n\' "x86_64" ;;\n  *) printf \'%s\\n\' "Linux" ;;\nesac\n',
+	);
+	await chmod(join(fakeBinDirectory, "uname"), 0o755);
 
 	await execFileAsync("bash", [fileURLToPath(posixInstallerUrl)], {
 		env: {
