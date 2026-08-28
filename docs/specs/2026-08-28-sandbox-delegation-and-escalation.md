@@ -9,7 +9,7 @@
 | Created | `2026-08-28` |
 | Last updated | `2026-08-28` |
 | Roadmap phase | `none — follow-up to Phase 2b (OS sandbox)` |
-| Tracking issue/PR | `none` |
+| Tracking issue/PR | branch `feat/sandbox-delegation-and-escalation` |
 | Compatibility posture | Preserves compatibility for units 1 through 4 and 6. No session, settings key, mount, or allowlist behaviour that works today stops working; each of those units turns a current hard failure into a success, and a user who configures nothing sees exactly today's boundary. Unit 5 is the one real break, and it is a break in the *claim* rather than the code: ADR 0005 currently states that an opt-out is not introduced, and shipping `--sandbox` retires that sentence. Unit 7 adds a new settings surface that is inert when unset. The CLI surface grows by three flags and never changes the meaning of an existing one. |
 
 ## Executive summary
@@ -406,6 +406,14 @@ Order is load-bearing rather than convenient:
    the pressure that gets U3 and U4 built, which is the failure mode named in Risks.
 4. **U6, then U7.** Only if filesystem escalation proves to bite in practice. Observe it
    rather than predict it.
+
+**Landed 2026-08-28**, all seven units, on `feat/sandbox-delegation-and-escalation`. Two
+things went differently from this document and are recorded where they happened rather
+than quietly reconciled. U3 surfaced that the credential channel has no peer
+authentication, which made the prompt's owner a security property and produced ADR 0023
+and the amendment above. U5's policy shape kept `workspace` singular instead of the flat
+`workspaceRoots` this spec proposed; the deletion inventory records why. U6's ADR is 0024,
+not 0023 as Rollout first said, because 0023 was taken by the finding U3 produced.
 
 ADRs required, each written before its unit lands:
 

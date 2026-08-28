@@ -581,9 +581,14 @@ export function createShellToolDefinition(
 					// refused by someone reading it, never granted quietly.
 					const escalated = await escalateRefusedCommand(command, outputText);
 					if (escalated) {
+						// The reported exit code has to be the escalated run's, not the
+						// refused one's. Leaving the original would have the details say the
+						// command failed while the content says it succeeded, and anything
+						// reading the facts rather than the text would disagree with the
+						// model about what happened.
 						return {
-							content: [{ type: "text", text: escalated }],
-							details: resultDetails,
+							content: [{ type: "text", text: escalated.text }],
+							details: { ...resultDetails, execution: { ...execution, exitCode: 0 } },
 						};
 					}
 					throw new ToolExecutionError(appendStatus(outputText, `Command exited with code ${exitCode}`), {
@@ -668,14 +673,17 @@ export function createBashTool(cwd: string, options?: BashToolOptions): AgentToo
  * refused prompt -- because the caller's behaviour is the same in all of them: report
  * what originally happened.
  */
-async function escalateRefusedCommand(command: string, output: string): Promise<string | undefined> {
+async function escalateRefusedCommand(command: string, output: string): Promise<{ text: string } | undefined> {
 	if (!looksLikeSandboxRefusal(output)) return undefined;
 	const refusedPath = extractRefusedPath(output);
 	if (!refusedPath) return undefined;
 	const outcome = await requestCommandEscalation({ command, writableRoot: escalationRootFor(refusedPath) });
 	if (!outcome || outcome.code !== 0) return undefined;
-	return [outcome.stdout, outcome.stderr]
+	const combined = [outcome.stdout, outcome.stderr]
 		.filter((part) => part.length > 0)
 		.join("\n")
 		.trim();
+	// A silent success still has to say something, or the model reads an empty result as
+	// the command having had no effect.
+	return { text: combined.length > 0 ? combined : "Command ran with approved escalated access." };
 }
