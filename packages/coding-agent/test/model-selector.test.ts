@@ -45,7 +45,6 @@ describe("model selector", () => {
 		const selector = new ModelSelectorComponent(
 			createFakeTui(),
 			undefined,
-			harness.settingsManager,
 			harness.session.modelRuntime,
 			[],
 			() => {},
@@ -68,7 +67,6 @@ describe("model selector", () => {
 		const selector = new ModelSelectorComponent(
 			createFakeTui(),
 			harness.getModel(),
-			harness.settingsManager,
 			harness.session.modelRuntime,
 			[],
 			() => {},
@@ -130,7 +128,6 @@ describe("model selector", () => {
 		const selector = new ModelSelectorComponent(
 			createFakeTui(),
 			undefined,
-			harness.settingsManager,
 			harness.session.modelRuntime,
 			[],
 			() => {},
@@ -155,7 +152,6 @@ describe("model selector", () => {
 		const selector = new ModelSelectorComponent(
 			createFakeTui(),
 			undefined,
-			harness.settingsManager,
 			harness.session.modelRuntime,
 			[],
 			onSelect,

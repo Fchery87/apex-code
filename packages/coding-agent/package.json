@@ -18,7 +18,7 @@
 			"import": "./dist/index.js"
 		},
 		"./rpc-entry": {
-			"import": "./dist/rpc-entry.js"
+			"import": "./dist/bundle/rpc-entry.js"
 		},
 		"./client": {
 			"types": "./dist/client/index.d.ts",
@@ -44,15 +44,14 @@
 	},
 	"dependencies": {
 		"apex-code-agent-core": "0.0.1-alpha.8",
-		"@earendil-works/pi-ai": "^0.84.2",
-		"@earendil-works/pi-client": "^0.84.2",
-		"@earendil-works/pi-protocol": "^0.84.2",
-		"@earendil-works/pi-tui": "^0.84.2",
+		"@earendil-works/pi-ai": "^0.84.3",
+		"@earendil-works/pi-client": "^0.84.3",
+		"@earendil-works/pi-protocol": "^0.84.3",
+		"@earendil-works/pi-tui": "^0.84.3",
 		"@silvia-odwyer/photon-node": "0.3.4",
 		"chalk": "5.6.2",
 		"cross-spawn": "7.0.6",
 		"diff": "8.0.4",
-		"glob": "13.0.6",
 		"grok-mermaid": "0.2.2",
 		"highlight.js": "10.7.3",
 		"hosted-git-info": "9.0.3",
@@ -77,12 +76,11 @@
 	},
 	"devDependencies": {
 		"@types/cross-spawn": "6.0.6",
-		"@types/diff": "7.0.2",
 		"@types/hosted-git-info": "3.0.5",
-		"@types/ms": "2.1.0",
-		"@types/node": "24.12.4",
+		"@types/node": "22.19.19",
 		"@types/proper-lockfile": "4.1.4",
 		"@types/semver": "7.7.1",
+		"glob": "13.0.6",
 		"shx": "0.4.0",
 		"typescript": "5.9.3",
 		"vitest": "4.1.9"

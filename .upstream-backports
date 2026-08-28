@@ -10,4 +10,3 @@
 # -- the gate fails when the baseline already contains a listed commit, so a stale
 # entry reports itself rather than lingering.
 e8c632ef64f99b0d2ce7cc7c215aecb5c66b0016 fix(ai): cloudflare gateway type, include workers
-70e878d4cf8f643067c8fc73ea27b74133dca0ab feat(ai): route xAI models through Responses and default to Grok 4.6

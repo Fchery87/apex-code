@@ -79,13 +79,20 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 		}
 	} else {
 		const hasBash = tools.includes("bash");
+		const hasPowerShell = tools.includes("powershell");
 		const hasGrep = tools.includes("grep");
 		const hasFind = tools.includes("find");
 		const hasLs = tools.includes("ls");
-		const usesBashForExploration = hasBash && !hasGrep && !hasFind && !hasLs;
+		const usesShellForExploration = (hasBash || hasPowerShell) && !hasGrep && !hasFind && !hasLs;
+		const shellExplorationGuideline =
+			hasBash && hasPowerShell
+				? "Use bash or PowerShell for file operations like listing, searching, and finding files"
+				: hasPowerShell
+					? "Use PowerShell for file operations like listing, searching, and finding files"
+					: "Use bash for file operations like ls, rg, find";
 
 		const guidelines = dedupeGuidelines([
-			...(usesBashForExploration ? ["Use bash for file operations like ls, rg, find"] : []),
+			...(usesShellForExploration ? [shellExplorationGuideline] : []),
 			...contributedGuidelines,
 			"Be concise in your responses",
 			"Show file paths clearly when working with files",

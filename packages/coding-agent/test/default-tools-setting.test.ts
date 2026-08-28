@@ -76,6 +76,7 @@ describe("defaultTools setting", () => {
 			"grep",
 			"ls",
 			"plan_present",
+			"powershell",
 			"read",
 			"skill_search",
 			"test",
@@ -88,6 +89,15 @@ describe("defaultTools setting", () => {
 		expect(session.getActiveToolNames()).toEqual(["grep", "find", "tool_schema"]);
 		expect(session.systemPrompt).toContain("- grep:");
 		expect(session.systemPrompt).not.toContain("- read:");
+		session.dispose();
+	});
+
+	it("can select powershell instead of bash", async () => {
+		const session = await createSession(["read", "powershell", "edit", "write"]);
+
+		expect(session.getActiveToolNames()).toEqual(["read", "powershell", "edit", "write"]);
+		expect(session.systemPrompt).toContain("- powershell: Execute PowerShell commands");
+		expect(session.systemPrompt).not.toContain("- bash:");
 		session.dispose();
 	});
 
@@ -179,6 +189,7 @@ describe("defaultTools setting", () => {
 			"grep",
 			"ls",
 			"plan_present",
+			"powershell",
 			"read",
 			"skill_search",
 			"test",

@@ -315,3 +315,134 @@ which needed a decision rather than a rule:
 
 The general lesson for the next merge: "take ours" is wrong wherever upstream *moved*
 code rather than changing it, because the conflict shows only one end of the move.
+
+
+## v0.84.3 — taken 2026-08-27
+
+| Signal | Value |
+| --- | --- |
+| Conflicted hunks | 75 |
+| Conflicted files | 49 (47 with `<<<<<<<` markers, 2 modify/delete with none — see below) |
+| Churn, forked paths | 147 files, +4,911 / −1,889 |
+| Churn, total | 233 files, +8,451 / −3,366 |
+
+**One frozen-package violation, self-inflicted and pre-existing.** `70e878d4c` (the xAI
+Responses/Grok 4.6 backport) turned out to already be an ancestor of `v0.84.3` — retired,
+per `frozen-pin.mjs`'s content-based check — but the manual backport commit that applied
+it by hand (`817b647ef`, since v0.84.3's real history implements the same feature
+differently) had left a `forcePiUserAgent` helper in `packages/ai/src/utils/pi-user-agent.ts`
+that the retirement didn't clean up. `check-frozen-packages.mjs` caught it immediately:
+dead code, unused once the two call sites were reset to `v0.84.3` verbatim. Removed
+`70e878d4c` from `.upstream-backports` and reset the file to match upstream exactly.
+`e8c632ef6` (Cloudflare gateway) is not yet an ancestor and stays.
+
+### `upstream-merge.sh` had a blind spot this merge found the hard way
+
+Two files Apex deliberately deleted in the ADR 0001 boundary commit
+(`.github/APPROVED_CONTRIBUTORS`, `.github/workflows/build-binaries.yml` — upstream's own
+CI, "hazardous on a different repo") came back. `git merge-tree` resolves a modify/delete
+conflict by writing upstream's content straight into the tree with **no `<<<<<<<`
+markers**, so a review that greps for markers — which is what `check-frozen-packages.mjs`
+does not check, and what "resolve conflicts" means to a human — walks straight past it.
+The script's own `files` count already included both paths; only the messages buried in
+a `tail -60` said why. Fixed by name-parsing `CONFLICT (modify/delete)` out of
+merge-tree's own output and printing it as its own, impossible-to-miss category —
+`scripts/apex/upstream-merge.test.mjs` now pins this. Both resurrected files were
+deleted again before commit.
+
+### Where the cost actually is
+
+Same shape as v0.84.2: not in taking upstream's changes, in Apex's own divergence meeting
+new upstream code.
+
+- **`system-prompt.ts`** — same fix as v0.84.2, same resolution: kept Apex's assignment
+  form, ported the new `powershell`-aware shell-exploration guideline into it by hand
+  since upstream's version lives in a `guidelinesList`/`addGuideline` scaffold Apex's
+  restructured function doesn't use. `system-prompt.test.ts`'s new
+  `test.each` case for shell-specific guidance covers exactly this.
+- **`tools/index.ts`, `model-selector.ts`, `settings-selector.ts`, `thinking-selector.ts`,
+  `bash.ts`** — the new `powershell` tool (upstream's PowerShell support) and the new
+  `/thinking` and `/tree` commands, unioned onto Apex's `ApexToolDefinition` contract, its
+  Row-based model-selector refactor, and its `apex-code-agent-core` package for
+  `ThinkingLevel`/`AgentTool` rather than upstream's `@earendil-works/pi-agent-core`.
+- **`handleShareCommand`** — upstream extracted session sharing into
+  `modes/interactive/session-share.ts`, adding a **Radius artifact upload** as the
+  first-choice destination ahead of the GitHub Gist fallback, with no confirmation step.
+  Radius is already a supported model provider in Apex; any user with Radius auth
+  configured running `/share` would have silently uploaded the full session — system
+  prompt, tool definitions, transcript — to an endpoint Apex does not own, bypassing the
+  confirm dialog Apex's own flow shows specifically because sharing publishes content
+  externally. Rejected outright, not deferred: kept Apex's `handleShareCommand` wholesale,
+  deleted the new file and its now-orphaned test (`export-jsonl-share.test.ts`).
+- **Bundled Node runtime / esbuild `dist/bundle` build** — five upstream commits
+  (`7d4c0e05d` etc.) reducing startup cost and dependency tree by bundling the CLI.
+  Deferred, not rejected: real value, but adopting it means retooling `apex-code`'s own
+  build/bin/release paths, out of scope for a merge that should stay reviewable. Kept
+  Apex's unbundled `build`/`bin`. Its own test (`package-distribution.test.ts`, checking
+  `bin.pi === "dist/bundle/cli.js"`) tests exactly the feature not taken; deleted rather
+  than left red.
+- **ADR 0013 (ADR-adjacent, not upstream's)** — the new managed-install self-update path
+  (`runManagedSelfUpdate`) shipped with `DEFAULT_INSTALLER_API_BASE = "https://pi.dev/..."`,
+  an unowned hosted-service default with no fallback disclosed anywhere. Apex does not run
+  that service. Removed the default; `APEX_CODE_INSTALLER_API_BASE` is now required and
+  the managed-update path fails closed, with a comment, when it is unset.
+
+### Four more silent drops the typecheck sweep caught, none flagged by a conflict marker
+
+`git merge-tree`'s three-way diff resolves cleanly whenever only one side touched a
+region — including when the untouched side's *own, still-present* code depended on
+something the touching side removed. Each of these compiled fine in isolation and only
+surfaced on a full `tsgo --noEmit` pass across the whole tree:
+
+1. `createBashToolDefinition`'s return type still said `ToolDefinition` — upstream's own
+   type name, never imported here. Apex's is `ApexToolDefinition`.
+2. `model-selector.ts`'s Ctrl+S handler still read `this.filteredModels`, a field that
+   only existed on upstream's pre-refactor version; Apex's Row-based rewrite calls it
+   `filteredRows`.
+3. `interactive-mode.ts` lost the `spawnSync` import (upstream's refactor no longer needs
+   it directly) and the `BorderedLoader`/`getShareViewerUrl` imports (upstream's version
+   delegates to the deleted `session-share.ts`) — all three still used by the
+   `handleShareCommand` body kept above.
+4. `generate-coding-agent-shrinkwrap.mjs` and `generate-coding-agent-install-lock.mjs`
+   both resolve a workspace's own dependencies starting from a *synthetic* output path
+   (`node_modules/apex-code`) rather than the workspace's real lockfile location
+   (`packages/coding-agent`). Harmless as long as root and nested hoisting happen to
+   agree; the moment they don't — as they didn't here, for `cross-spawn` and later
+   `semver`, after an unrelated `npm cache clean --force` changed what the root
+   flat-hoists — the walk silently falls through to whatever the root hoisted, picking
+   the wrong version with no error until a downstream validator (`--check`) catches the
+   mismatch. Fixed in both scripts: resolve from the real workspace path, then strip any
+   monorepo-checkout prefix before the first `node_modules/` segment when writing the
+   output key.
+
+### New v0.84.3 test files needed Apex-specific fixture fixes, not source changes
+
+Several brand-new upstream test files exercised real Apex code correctly but were never
+adapted past a straight merge: `package-command-paths.test.ts`'s managed-update tests
+stubbed the pre-ADR-0013 env var names (`PI_INSTALLER_API_BASE`, `PI_MANAGED_INSTALL_ROOT`),
+the pre-rename marker `kind: "pi-managed-install"`, a `pi.dev`-hosted version-check
+endpoint Apex's `getLatestApexCodeRelease` has never used (it hits npm's own per-tag
+registry endpoint directly), and a naive `VERSION.split(".")` next-version helper that
+parses Apex's prerelease format (`0.0.1-alpha.8`) into a nonsense `0.0.2` — replaced with
+`semver.inc(VERSION, "patch")`. `8261-subagent-project-trust.test.ts` mocked
+`@earendil-works/pi-coding-agent`, a module the code under test never imports (it imports
+`apex-code`), making the mock a silent no-op. `8337-utf8-bom-parsing.test.ts` and
+`8261-...` both wrote project fixtures to `.pi/` instead of `.apex-code/`.
+`8237-node-sea-extension-loading.test.ts` asserted a virtual-module key
+(`@earendil-works/pi-coding-agent`) that was never in Apex's `VIRTUAL_MODULES` map, which
+has always kept `apex-code` and `apex-code-agent-core`. None of these were wrong about
+what they were testing — every one needed only its fixture updated to Apex's actual
+identity, not its assertion weakened.
+
+`static-prefix.test.ts`'s enforced budget is deliberately not upstream's problem: two new
+always-active tools (`powershell` alongside `bash`) each carry a real snippet and a real
+guideline-text contribution, moving the measured skill-library worst case from 3,261 to
+3,484 (both the 200-skill and 2,000-skill libraries agree, so the catalog bound still
+holds). Per this file's own established practice, raised the budget to 3,700 — the same
+~5.5% margin every prior revision used — rather than trim real prompt content to fit a
+number that was never meant to be a ceiling on Apex's own tool growth.
+
+The general lesson for this merge: a clean three-way diff and a passing typecheck in
+isolation are not the same claim as "nothing broke" — only a full-tree build, typecheck,
+and test run catches code whose only fault is depending on something a neighboring,
+unconflicted diff quietly removed.

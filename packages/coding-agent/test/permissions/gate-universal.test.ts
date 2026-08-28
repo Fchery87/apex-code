@@ -32,6 +32,7 @@ const REPRESENTATIVE_PARAMS: Record<ToolName, unknown> = {
 	find: { pattern: "*.ts" },
 	ls: {},
 	bash: { command: "echo test" },
+	powershell: { command: "Write-Output test" },
 	tool_schema: { name: "read" },
 	todo_write: { todos: [{ content: "write the spec", status: "pending" }] },
 	skill_search: { query: "browser" },

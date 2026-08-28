@@ -103,8 +103,16 @@ const LARGE_SKILL_LIBRARY: Skill[] = Array.from({ length: 200 }, (_, i) => synth
  * SKILL.8 and LSP.7 used. The guidelines are the half that matters: the tool JSON
  * schemas already carry names and descriptions, but nothing else carries
  * "prefer grep over bash" to the model.
+ *
+ * Re-measured for the `powershell` tool (upstream v0.84.3): a second always-available
+ * exec tool alongside `bash` carries its own one-line snippet and its own entry in
+ * the shell-choice guideline text ("Use bash or PowerShell for file operations...").
+ * Both the 200-skill and 2,000-skill libraries measure 3,484, so the catalog bound
+ * still holds. The budget is raised to 3,700, a ~5.5% margin over the new measured
+ * worst case, the same proportional margin every prior revision of this budget used.
+ * It does not budge for the next tool the same way this one didn't.
  */
-const ENFORCED_PRODUCTION_PREFIX_BUDGET = 3_450;
+const ENFORCED_PRODUCTION_PREFIX_BUDGET = 3_700;
 
 function lspToolOptions() {
 	return { lsp: { operations: { request: async () => [] } } };

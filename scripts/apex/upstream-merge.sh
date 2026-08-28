@@ -110,12 +110,30 @@ forked_files="$(printf '%s\n' "${conflict_paths}" | grep -c -E "^($(IFS='|'; ech
 # applied nothing at all.
 hunks="$(git grep -c '^<<<<<<< ' -- $(printf '%s\n' "${conflict_paths}" | tr '\n' ' ') 2>/dev/null | awk -F: '{ total += $2 } END { print total + 0 }')"
 
+# A path Apex deleted (e.g. the ten upstream-operations files removed in the ADR 0001
+# boundary commit: .github/ workflows we do not run, APPROVED_CONTRIBUTORS) that upstream
+# later modifies is a modify/delete conflict, not a content conflict. `git merge-tree`
+# resolves it by writing upstream's content straight into the tree with no `<<<<<<<`
+# markers, so it inflates `files` above without ever showing up in `hunks`, and a review
+# that only greps for markers walks straight past it. Pull these out by name so a
+# deliberately-deleted file coming back is impossible to miss.
+resurrected="$(printf '%s\n' "${messages}" | awk -F': ' '/^CONFLICT \(modify\/delete\)/ { sub(/ deleted in .*/, "", $2); print $2 }')"
+resurrected_count="$(printf '%s' "${resurrected}" | grep -c . || true)"
+
 echo
 echo "────────────────────────────────────────────────"
 echo "  taking             ${pin} -> ${target}"
 echo "  conflicted hunks   ${hunks}"
 echo "  conflicted files   ${files}  (${forked_files} in forked paths)"
+echo "  resurrected files  ${resurrected_count}  (deleted on our side, modified upstream — no markers)"
 echo "────────────────────────────────────────────────"
+if [ "${resurrected_count}" -gt 0 ]; then
+  echo
+  echo "warning: upstream modified a file Apex deliberately deleted. It is back in the tree"
+  echo "         with no conflict markers to find by grepping for '<<<<<<<'. Confirm each one"
+  echo "         should stay deleted (check its removal commit for why) before committing:"
+  printf '%s\n' "${resurrected}" | sed 's/^/  - /'
+fi
 if [ -n "${messages}" ]; then
   echo
   printf '%s\n' "${messages}"

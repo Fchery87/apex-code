@@ -30,6 +30,7 @@ const REPRESENTATIVE_PARAMS: Record<string, unknown> = {
 	find: { pattern: "**/*.ts", path: "src" },
 	ls: { path: "src" },
 	bash: { command: "git status" },
+	powershell: { command: "Write-Output test" },
 	tool_schema: { name: "read" },
 	todo_write: { todos: [{ content: "write the spec", status: "pending" }] },
 	skill_search: { query: "browser" },
@@ -87,6 +88,7 @@ describe("tool contracts", () => {
 			write: ["fs.write"],
 			edit: ["fs.read", "fs.write"],
 			bash: ["exec"],
+			powershell: ["exec"],
 		};
 		for (const [name, caps] of Object.entries(expected)) {
 			expect([...tools[name].contract.capabilities].sort(), name).toEqual(caps.sort());

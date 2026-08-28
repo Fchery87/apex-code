@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
 const codingAgentDir = join(repoRoot, "packages/coding-agent");
+const codingAgentLockPath = "packages/coding-agent";
 const rootLockfilePath = join(repoRoot, "package-lock.json");
 const shrinkwrapPath = join(codingAgentDir, "npm-shrinkwrap.json");
 const internalPackagePrefix = "@earendil-works/pi-";
@@ -202,20 +203,35 @@ function addInternalWorkspace(shrinkwrapPackages, addedPaths, queue, name, works
 	shrinkwrapPackages[outputPath] = sortedPackageEntry(entry);
 	addedPaths.add(outputPath);
 
+	// Resolve this workspace's own dependencies from its real lockfile location, not
+	// `outputPath` (the synthetic `node_modules/<name>` path this function writes into
+	// the shrinkwrap's output). `outputPath` doesn't exist in the root lockfile being
+	// walked, so resolution would fall straight through to whatever the flat root
+	// happens to hoist -- silently wrong whenever that differs from what this workspace
+	// actually resolves to (e.g. two packages pinning different versions of the same
+	// dependency, one hoisted to the root and one nested under the workspace).
 	for (const dependencyName of Object.keys(packageDependencies(packageJson))) {
-		queue.push({ name: dependencyName, from: outputPath });
+		queue.push({ name: dependencyName, from: workspace.lockPath });
 	}
 }
 
 function addExternalPackage(lockPackages, shrinkwrapPackages, addedPaths, queue, name, from) {
 	const lockPath = resolveExternalDependency(lockPackages, name, from);
-	if (addedPaths.has(lockPath)) {
+	// Resolution can land inside a workspace's own nested node_modules (e.g.
+	// `packages/coding-agent/node_modules/cross-spawn`, present because the root only
+	// hoisted a different version some devDependency chain needed). That prefix is a
+	// monorepo-checkout detail with no meaning in the standalone shrinkwrap this output
+	// represents, so strip everything before the first `node_modules/` segment; an
+	// already-flat or already-nested-under-a-dependency path (nothing before that
+	// segment) passes through unchanged.
+	const outputPath = lockPath.replace(/^.*?(?=node_modules\/)/, "");
+	if (addedPaths.has(outputPath)) {
 		return;
 	}
 
 	const entry = lockPackages[lockPath];
-	shrinkwrapPackages[lockPath] = copyLockEntry(entry);
-	addedPaths.add(lockPath);
+	shrinkwrapPackages[outputPath] = copyLockEntry(entry);
+	addedPaths.add(outputPath);
 
 	for (const dependencyName of Object.keys(packageDependencies(entry))) {
 		queue.push({ name: dependencyName, from: lockPath });
@@ -302,7 +318,10 @@ function generateShrinkwrap() {
 	};
 	const addedPaths = new Set([""]);
 	const internalNames = new Set();
-	const queue = Object.keys(packageDependencies(codingAgentPackage)).map((name) => ({ name, from: "" }));
+	const queue = Object.keys(packageDependencies(codingAgentPackage)).map((name) => ({
+		name,
+		from: codingAgentLockPath,
+	}));
 
 	while (queue.length > 0) {
 		const item = queue.shift();

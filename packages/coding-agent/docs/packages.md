@@ -38,7 +38,7 @@ apex-code update npm:@foo/bar      # update one package
 apex-code update --extension npm:@foo/bar
 ```
 
-These commands manage Apex Code packages and `apex-code update` can update the Apex Code CLI installation. To uninstall Apex Code itself, see [Quickstart](quickstart.md#uninstall).
+These commands manage Apex Code packages and `apex-code update` can update the Apex Code CLI installation. For experimental installer-managed installations, `apex-code update` installs the exact checked version into a staged, lockfile-backed release and activates it only after verification, leaving the current release intact if the update fails. Managed installations do not support `--force`; rerun the installer to repair one. To uninstall Apex Code itself, see [Quickstart](quickstart.md#uninstall).
 
 By default, `install` and `remove` write to user settings (`~/.apex-code/agent/settings.json`). Use `-l` to write to project settings (`.apex-code/settings.json`) instead. Project settings can be shared with your team, and apex-code installs any missing packages automatically on startup after the project is trusted.
 
@@ -130,7 +130,7 @@ Add a `pi` manifest to `package.json` or use conventional directories. `pi` is A
 }
 ```
 
-Paths are relative to the package root. Arrays support glob patterns and `!exclusions`.
+Paths are relative to the package root. Arrays support glob patterns and `!exclusions`. Positive manifest globs discover visible paths in lexical order. List dot-prefixed paths directly. If a glob would need to continue through a symlink, list the symlinked resource root directly.
 
 ### Gallery Metadata
 

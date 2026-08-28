@@ -209,20 +209,31 @@ function addInternalWorkspace(installLockPackages, addedPaths, queue, name, work
 	installLockPackages[outputPath] = sortedPackageEntry(entry);
 	addedPaths.add(outputPath);
 
+	// Resolve this workspace's own dependencies from its real lockfile location
+	// (`workspace.lockPath`), not `outputPath` (the synthetic `node_modules/<name>` path
+	// this function writes into the install-lock's output). `outputPath` doesn't exist
+	// in the root lockfile being walked, so resolution would fall straight through to
+	// whatever the flat root happens to hoist -- silently wrong whenever that differs
+	// from what this workspace actually resolves to.
 	for (const dependencyName of Object.keys(packageDependencies(packageJson))) {
-		queue.push({ name: dependencyName, from: outputPath });
+		queue.push({ name: dependencyName, from: workspace.lockPath });
 	}
 }
 
 function addExternalPackage(lockPackages, installLockPackages, addedPaths, queue, name, from) {
 	const lockPath = resolveExternalDependency(lockPackages, name, from);
-	if (addedPaths.has(lockPath)) {
+	// Strip any monorepo-checkout prefix before the first `node_modules/` segment --
+	// see the matching comment in generate-coding-agent-shrinkwrap.mjs's
+	// addExternalPackage. A path already rooted at `node_modules/` passes through
+	// unchanged.
+	const outputPath = lockPath.replace(/^.*?(?=node_modules\/)/, "");
+	if (addedPaths.has(outputPath)) {
 		return;
 	}
 
 	const entry = lockPackages[lockPath];
-	installLockPackages[lockPath] = copyLockEntry(entry);
-	addedPaths.add(lockPath);
+	installLockPackages[outputPath] = copyLockEntry(entry);
+	addedPaths.add(outputPath);
 
 	for (const dependencyName of Object.keys(packageDependencies(entry))) {
 		queue.push({ name: dependencyName, from: lockPath });
