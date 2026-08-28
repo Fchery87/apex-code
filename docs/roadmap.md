@@ -102,7 +102,7 @@ capable and measurably worse.
 | --- | --- | --- | --- |
 | Composer dock surface | **landed** — filled, cursor-safe prompt dock · `2bd3008f1` | [spec](specs/2026-08-23-composer-dock-surface.md) | — |
 | Prime-inspired gold TUI | **landed** — gold-neutral layout and permission-safe tray · `e576190a5` | [spec](specs/2026-08-23-prime-inspired-gold-tui.md) | — |
-| Native MCP support | **landed**, 13 of 13 tasks | [spec](specs/2026-08-28-native-mcp.md) | [plan](plans/2026-08-28-native-mcp.md) |
+| Native MCP support | **landed** — 13 of 13 tasks · `ed3b3a9c1` | [spec](specs/2026-08-28-native-mcp.md) | — |
 
 ---
 
@@ -433,6 +433,51 @@ load-flake signature this machine produced before these changes.
 `docs/plans/2026-08-22-pr33-followups.md` is deleted now that the work is landed
 (recoverable via `git show <commit>:docs/plans/2026-08-22-pr33-followups.md`); Phase 2b's
 **landed** state is unchanged.
+
+### Follow-up (2026-08-28): native MCP support — landed
+
+Apex Code had no MCP support. The only traces were a comment at `core/tools/contract.ts`
+naming MCP servers as the example of a tool that cannot be classified, and a status string
+offering "Resources, extensions, and MCP adapters" from a command that manages package
+resources and never could configure a server.
+
+Adoption was considered and rejected on one ground. A tool registered from outside the repo
+cannot supply a `contract`, so it resolves `UNCLASSIFIED`: every capability, `ask` by
+default, and matching by exact serialized arguments. Under that fallback a second call with
+different arguments prompts again and no result is ever evictable, which is precisely what
+ADR 0010 exists to prevent. `docs/research/2026-08-28-pi-extension-references-mcp-and-questions.md`
+records the comparison, including that `pi-mcp-adapter` is 25,627 lines of non-test source
+of which 8,444 was deliberately not built here.
+[`specs/2026-08-28-native-mcp.md`](specs/2026-08-28-native-mcp.md) specifies the design and
+`docs/plans/2026-08-28-native-mcp.md` tracked the thirteen tasks, and is deleted now the
+work is landed (recoverable via `git show <commit>:docs/plans/2026-08-28-native-mcp.md`).
+
+All thirteen landed on 2026-08-28 across four commits (`16e28d2db`, `5100c7a6c`,
+`482c7df1e`, `ed3b3a9c1`). One `mcp` proxy tool replaces per-tool registration, metadata
+caches to disk so `search` and `describe` answer with no server running, and servers connect
+on the first call that needs one and disconnect when idle. ADR 0025 settles the rule grammar
+before the tool shipped, because a rule lands in users' saved settings and can be extended
+later but never re-spelled.
+
+Two decisions were corrected by measurement rather than argument. Transport is inferred from
+`command` versus `url`, never declared, because no MCP host writes a `transport` field and a
+parser requiring one would reject every config file users already have. And capabilities
+cannot be per-server: `contract.capabilities` feeds the delegation ceiling (`sdk.ts:467`) and
+mode resolution (`gate.ts:66`), both per-tool and static, so one proxy tool carries the union
+and the per-server distinction lives in the grammar instead.
+
+Budget, stated as measured: the production static prefix is **2,891 tokens with no MCP
+configured and 3,076 with two servers and forty cached tools**, a delta of 185 against the
+enforced 3,700. Registering those forty tools directly at the 150-300 tokens each the spec
+cites would have cost 6,000 or more. A session with no `.mcp.json` builds no runtime and its
+prefix is byte-identical to before.
+
+Full-suite status, stated as run: `npm run check` passed end to end, and `npm test` reported
+**350 test files passed and 6 skipped, 3,020 tests passed and 58 skipped**, exit 0. Separately,
+an end-to-end script drove `@modelcontextprotocol/server-everything` over real stdio and passed
+14 of 14 checks, including that a second runtime built with a connector that throws still answers
+`search` and `describe` from disk, and that the saved rule `Mcp(everything:echo)` authorizes a
+differently-argued second call.
 
 ### Follow-up (2026-08-28): sandbox delegation and escalation — landed
 
