@@ -135,3 +135,162 @@ describe("createSandboxNetworkProxy TCP-listen mode", () => {
 		expect(blocked).toContain("403");
 	});
 });
+
+describe("sandbox network proxy escalation", () => {
+	it("asks the approver for a refused host, naming exactly that host and port", async () => {
+		const port = await targetServer();
+		const asked: string[] = [];
+		const proxy = await createSandboxNetworkProxy({
+			socketPath: socketPath(),
+			allowedHosts: [],
+			requestApproval: async (hostname, requestedPort) => {
+				asked.push(`${hostname}:${requestedPort}`);
+				return true;
+			},
+		});
+		proxies.push(proxy);
+
+		const status = await connectThroughProxy(proxy.server.address() as string, "127.0.0.1", port);
+
+		expect(status).toContain("200");
+		expect(asked).toEqual([`127.0.0.1:${port}`]);
+	});
+
+	it("grants only the approved host, leaving a different one refused", async () => {
+		const port = await targetServer();
+		const proxy = await createSandboxNetworkProxy({
+			socketPath: socketPath(),
+			allowedHosts: [],
+			// Approve the loopback literal only. "localhost" resolves to the same machine
+			// and the same port, so a grant that leaked by address rather than by the name
+			// that was asked about would show up here as a 200.
+			requestApproval: async (hostname) => hostname === "127.0.0.1",
+		});
+		proxies.push(proxy);
+
+		await expect(connectThroughProxy(proxy.server.address() as string, "127.0.0.1", port)).resolves.toContain("200");
+		await expect(connectThroughProxy(proxy.server.address() as string, "localhost", port)).resolves.toContain("403");
+	});
+
+	it("asks once for a host already granted, rather than on every connection", async () => {
+		const port = await targetServer();
+		let asks = 0;
+		const proxy = await createSandboxNetworkProxy({
+			socketPath: socketPath(),
+			allowedHosts: [],
+			requestApproval: async () => {
+				asks += 1;
+				return true;
+			},
+		});
+		proxies.push(proxy);
+
+		await connectThroughProxy(proxy.server.address() as string, "127.0.0.1", port);
+		await connectThroughProxy(proxy.server.address() as string, "127.0.0.1", port);
+
+		expect(asks).toBe(1);
+	});
+
+	it("raises one prompt for concurrent connections to the same refused host", async () => {
+		const port = await targetServer();
+		let asks = 0;
+		const proxy = await createSandboxNetworkProxy({
+			socketPath: socketPath(),
+			allowedHosts: [],
+			requestApproval: async () => {
+				asks += 1;
+				// A real prompt is slow. Without in-flight coalescing every connection that
+				// arrives while the human is reading raises its own prompt.
+				await new Promise((r) => setTimeout(r, 50));
+				return true;
+			},
+		});
+		proxies.push(proxy);
+
+		const address = proxy.server.address() as string;
+		await Promise.all([
+			connectThroughProxy(address, "127.0.0.1", port),
+			connectThroughProxy(address, "127.0.0.1", port),
+			connectThroughProxy(address, "127.0.0.1", port),
+		]);
+
+		expect(asks).toBe(1);
+	});
+
+	it("keeps a declined host refused instead of caching the refusal as a grant", async () => {
+		const port = await targetServer();
+		let asks = 0;
+		const proxy = await createSandboxNetworkProxy({
+			socketPath: socketPath(),
+			allowedHosts: [],
+			requestApproval: async () => {
+				asks += 1;
+				return false;
+			},
+		});
+		proxies.push(proxy);
+
+		const address = proxy.server.address() as string;
+		await expect(connectThroughProxy(address, "127.0.0.1", port)).resolves.toContain("403");
+		await expect(connectThroughProxy(address, "127.0.0.1", port)).resolves.toContain("403");
+		expect(asks).toBe(2);
+	});
+
+	it("records a violation for a declined host, exactly as an unasked refusal does", async () => {
+		const port = await targetServer();
+		const violationStore = new SandboxViolationStore();
+		const proxy = await createSandboxNetworkProxy({
+			socketPath: socketPath(),
+			allowedHosts: [],
+			violationStore,
+			requestApproval: async () => false,
+		});
+		proxies.push(proxy);
+
+		await connectThroughProxy(proxy.server.address() as string, "127.0.0.1", port);
+
+		expect(violationStore.list()).toHaveLength(1);
+		expect(violationStore.list()[0]).toMatchObject({ kind: "network" });
+	});
+
+	it("records no violation for a host the human approved", async () => {
+		const port = await targetServer();
+		const violationStore = new SandboxViolationStore();
+		const proxy = await createSandboxNetworkProxy({
+			socketPath: socketPath(),
+			allowedHosts: [],
+			violationStore,
+			requestApproval: async () => true,
+		});
+		proxies.push(proxy);
+
+		await connectThroughProxy(proxy.server.address() as string, "127.0.0.1", port);
+
+		expect(violationStore.list()).toHaveLength(0);
+	});
+
+	it("denies without asking when no approver is configured, preserving ADR 0005 headless behaviour", async () => {
+		const port = await targetServer();
+		const proxy = await createSandboxNetworkProxy({ socketPath: socketPath(), allowedHosts: [] });
+		proxies.push(proxy);
+
+		await expect(connectThroughProxy(proxy.server.address() as string, "127.0.0.1", port)).resolves.toContain("403");
+	});
+
+	it("never asks about a host the configured allowlist already permits", async () => {
+		const port = await targetServer();
+		let asks = 0;
+		const proxy = await createSandboxNetworkProxy({
+			socketPath: socketPath(),
+			allowedHosts: ["127.0.0.1"],
+			requestApproval: async () => {
+				asks += 1;
+				return true;
+			},
+		});
+		proxies.push(proxy);
+
+		await expect(connectThroughProxy(proxy.server.address() as string, "127.0.0.1", port)).resolves.toContain("200");
+		expect(asks).toBe(0);
+	});
+});
