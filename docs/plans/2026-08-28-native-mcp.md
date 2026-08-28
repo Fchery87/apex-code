@@ -24,8 +24,8 @@ deletion inventory.
 
 | Task | Unit | Status | Commit |
 | --- | --- | --- | --- |
-| MCP.1 | U1 | Done | pending |
-| MCP.2 | U1 | Done | pending |
+| MCP.1 | U1 | Done | `16e28d2db` |
+| MCP.2 | U1 | Done | `16e28d2db` |
 | MCP.3 | U2 | Not started | — |
 | MCP.4 | U2 | Not started | — |
 | MCP.5 | U3 | Not started | — |
