@@ -1063,6 +1063,7 @@ takes the next free number instead of a reserved one.
 | 0016 | Trust-first supervisor policy inputs | 12 | ✅ |
 | 0017 | Downloaded tool artifact integrity: pinned metadata, bounded/verified/atomic install | 12 | ✅ |
 | 0018 | Apex-only release/version authority and artifact contract | 12 | ✅ |
+| 0025 | MCP rule grammar: `Mcp(server:tool)`, wildcard in the tool position only, metadata separate | follow-up | ✅ |
 
 ## Cross-phase contracts
 

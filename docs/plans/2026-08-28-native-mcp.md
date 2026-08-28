@@ -26,10 +26,10 @@ deletion inventory.
 | --- | --- | --- | --- |
 | MCP.1 | U1 | Done | `16e28d2db` |
 | MCP.2 | U1 | Done | `16e28d2db` |
-| MCP.3 | U2 | Not started | — |
-| MCP.4 | U2 | Not started | — |
-| MCP.5 | U3 | Not started | — |
-| MCP.6 | U3 | Not started | — |
+| MCP.3 | U2 | Done | pending |
+| MCP.4 | U2 | Done | pending |
+| MCP.5 | U3 | Done | pending |
+| MCP.6 | U3 | Done | pending |
 | MCP.7 | U4 | Not started | — |
 | MCP.8 | U4 | Not started | — |
 | MCP.9 | U5 | Not started | — |
@@ -175,6 +175,23 @@ capability cannot be valid in a tool contract and invalid in an MCP config.
 4. Run the focused tests until green, then `npx tsgo --noEmit`.
 5. Before moving on, write the ADR the spec's Rollout names for the `ruleContent` grammar,
    and cite it from the spec. The grammar becomes unchangeable once MCP.10 ships.
+
+**Outcome.** U2 is 7 tests, U3 is 17, all green. Two findings changed the design.
+
+The capability set cannot be per-server. `contract.capabilities` is read at
+`sdk.ts:467` for the delegation ceiling and at `gate.ts:66` for mode resolution, and both
+are per-tool and static. One proxy tool therefore carries one set, and the union across
+configured servers is the only sound answer. The spec is corrected; the per-server
+distinction lives entirely in the rule grammar instead.
+
+`ADR 0025` settles that grammar, written before the tool ships per this plan's ordering
+note. Server names are never wildcardable, so a rule saved today cannot silently extend to
+a server added next month. Metadata is separated from calls in both directions, so
+discovery does not require authorizing a server and a call rule cannot authorize searching
+every other one.
+
+Parameter properties are not erasable syntax under this repo's `tsgo` settings, which the
+typecheck caught in the cache constructor.
 
 ### MCP.7: Pin server lifecycle behavior
 
