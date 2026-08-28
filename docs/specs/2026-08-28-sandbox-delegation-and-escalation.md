@@ -204,12 +204,16 @@ directory for the reason in Risks.
 | Protocol | Add a host-request frame to the existing framed protocol | `core/sandbox/rpc/` |
 | Proxy | On refusal, request approval instead of recording and returning 403 | `core/sandbox/network-proxy.ts` |
 | Allowlist | Make the proxy's allowlist a mutable per-session set rather than a captured array | `core/sandbox/network-proxy.ts`, `linux-backend.ts:127` |
-| Prompt | Render the request in the TUI, naming the exact host | `modes/interactive/` |
+| Prompt | Rendered by the **supervisor**, reading the answer from `/dev/tty` itself | `core/sandbox/rpc/escalation-proxy.ts` (new) |
+| Child role | Yield the terminal on request and redraw afterwards. It never decides | `modes/interactive/` |
 | Headless | Deny without prompting in print, JSON, and RPC modes, per ADR 0005 | `core/sandbox/network-proxy.ts` |
 
 The request carries one concrete host. Approval adds that host and nothing else. This is
 the constraint ADR 0005 named, satisfied rather than worked around, and it is possible
 only because the refusal happens in a userspace proxy Apex owns.
+
+**Who renders the prompt is a security property, not a UI choice.** See the amendment
+below.
 
 ### U4 — Supervisor-mediated git credential channel
 
@@ -271,6 +275,39 @@ escape.
 U6's escalation is requested *after* the gate has already allowed a call and the OS
 boundary has then refused it. Evidence capture is untouched. The one-projection rule of
 ADR 0010 is the reason U6 extracts a single argv builder rather than writing a second one.
+
+## Amendment (2026-08-28): the escalation prompt must be supervisor-owned
+
+Found while implementing U3, before any escalation code was written.
+
+The existing credential channel performs **no peer authentication**. Its socket is
+bind-mounted at a fixed path inside the child's namespace, and any descendant process in
+that namespace can connect to it. ADR 0015's amendment lists what does constrain it --
+literal secrets only, byte-bounded frames, an audited tail -- and peer identity is not on
+that list. That is defensible for credential writes, whose worst case is writing a literal
+secret into a file the child already reads.
+
+It is not defensible for host escalation. An escalation channel of the same shape would
+let any process inside the boundary send "the user approved github.com", and the
+supervisor would have no way to tell that frame from one the human actually caused. The
+grant would be forgeable by exactly the code the boundary exists to contain -- a build
+script, a git hook, a postinstall, or repository content steering the agent. The allowlist
+would become advisory.
+
+So the child cannot be the one that decides, and it therefore cannot be the one that
+prompts either, because a prompt whose answer travels back over the same forgeable channel
+is not evidence of anything. **The supervisor renders the prompt and reads the answer from
+`/dev/tty` itself.** The child's only role is to stop drawing while that happens, which it
+is asked to do over the channel.
+
+What this buys: a forged "please suspend" frame gains an attacker nothing, because the
+human still has to type at a prompt the supervisor owns. The worst case of a child that
+refuses to yield the terminal is a prompt drawn over by TUI output, which is a legibility
+failure, not a grant. The design fails safe in the direction that matters.
+
+This is recorded as `docs/adr/0023-supervisor-owned-escalation-authority.md`, per this
+template's rule that an irreversible decision surfacing during implementation becomes its
+own ADR rather than being folded into the spec.
 
 ## Deletion inventory
 

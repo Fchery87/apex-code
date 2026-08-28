@@ -22,10 +22,10 @@ existing framed Unix-socket protocol.
 
 | Task | Unit | Status | Commit |
 | --- | --- | --- | --- |
-| SDE.1 | U1 | Verified — full suite green, awaiting commit | — |
-| SDE.2 | U1 | Verified — full suite green, awaiting commit | — |
-| SDE.3 | U2 | Verified — full suite green, awaiting commit | — |
-| SDE.4 | U3 | Not started | — |
+| SDE.1 | U1 | Done | `37e6708d6` |
+| SDE.2 | U1 | Done | `37e6708d6` |
+| SDE.3 | U2 | Done | `0867d9e2c` |
+| SDE.4 | U3 | In progress | — |
 | SDE.5 | U3 | Not started | — |
 | SDE.6 | U4 | Not started | — |
 | SDE.7 | U4 | Not started | — |
@@ -143,9 +143,20 @@ have been re-broken by SDE.7's third projection.
 
 1. Failing test: a refused host raises exactly one request naming that host.
 2. Failing test: approval permits that host and still denies a second, different host.
-3. Failing test: print, JSON, and RPC modes deny without prompting, per ADR 0005.
-4. Failing test: global settings mtime is unchanged across an approval.
-5. Run the focused files and confirm each fails for the right reason.
+3. Failing test: concurrent requests for the same refused host raise one prompt, not one
+   per connection.
+4. Failing test: with no approver configured the proxy denies exactly as it does today,
+   so headless and non-interactive modes keep ADR 0005's behaviour by construction.
+5. Failing test: a denial leaves the host refused on the next attempt, so a refusal is not
+   silently cached as a grant.
+6. Failing test: global settings mtime is unchanged across an approval.
+7. Run the focused files and confirm each fails for the right reason.
+
+**Design note.** The approver is supervisor-owned per ADR 0023, found while reading the
+credential channel for this task: that channel has no peer authentication, so any
+descendant in the namespace can reach its socket. An escalation channel of the same shape
+would let a build script self-approve a host. The child yields the terminal; it never
+decides.
 
 ### SDE.5: Implement interactive network escalation
 
@@ -160,10 +171,11 @@ have been re-broken by SDE.7's third projection.
 1. Add a host-request frame carrying one concrete host, never a retry token.
 2. Make the proxy's allowlist a mutable per-session set instead of the array captured at
    `linux-backend.ts:127`.
-3. Render the prompt naming the exact host and the global settings key that would make it
-   permanent.
+3. Render the prompt from the supervisor, reading the answer from `/dev/tty`, naming the
+   exact host and the global settings key that would make it permanent. The child is asked
+   to stop drawing over the channel and takes no part in the decision.
 4. Amend ADR 0005 to record that the deferral's stated prerequisite was met by
-   `core/sandbox/rpc/` on 2026-08-22, and that headless remains deny.
+   `core/sandbox/rpc/` on 2026-08-22, that headless remains deny, and to cite ADR 0023.
 5. Run the focused files, then `npm test`, then commit and record the SHA.
 
 ### SDE.6: Prove the git credential channel
