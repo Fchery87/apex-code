@@ -78,3 +78,21 @@ export interface McpConfig {
 	servers: ReadonlyMap<string, McpServerConfig>;
 	diagnostics: readonly McpConfigDiagnostic[];
 }
+
+/** One tool call's result, in the shape the proxy tool converts to `AgentToolResult`. */
+export interface McpCallResult {
+	content: Array<{ type: "text"; text: string }>;
+	isError?: boolean;
+}
+
+/**
+ * A live session with one server. The seam that keeps the MCP SDK out of the
+ * lifecycle logic, and lets the server manager be tested without a child process.
+ */
+export interface McpConnection {
+	listTools(): Promise<CachedTool[]>;
+	callTool(name: string, args: unknown): Promise<McpCallResult>;
+	close(): Promise<void>;
+}
+
+export type McpConnector = (server: McpServerConfig) => Promise<McpConnection>;

@@ -30,10 +30,10 @@ deletion inventory.
 | MCP.4 | U2 | Done | pending |
 | MCP.5 | U3 | Done | pending |
 | MCP.6 | U3 | Done | pending |
-| MCP.7 | U4 | Not started | — |
-| MCP.8 | U4 | Not started | — |
-| MCP.9 | U5 | Not started | — |
-| MCP.10 | U5 | Not started | — |
+| MCP.7 | U4 | Done | pending |
+| MCP.8 | U4 | Done | pending |
+| MCP.9 | U5 | Done | pending |
+| MCP.10 | U5 | Done | pending |
 | MCP.11 | U6 | Not started | — |
 | MCP.12 | U6 | Not started | — |
 | MCP.13 | — | Not started | — |
@@ -260,6 +260,19 @@ typecheck caught in the cache constructor.
 4. Keep the description tight. Every character is prompt-resident even with a deferred
    schema.
 5. Run the focused tests until green, then `npx tsgo --noEmit`.
+
+**Outcome.** U4 is 13 tests, U5 is 13, 62 across the whole MCP suite.
+
+The `McpConnection` seam was added beyond the plan's text and earns its place. The
+lifecycle failures worth testing (a connect that never returns, a broken server retried on
+every call, two callers racing one spawn) are all reachable against a fake, so
+`server-manager.ts` imports no SDK and starts no process. `connector.ts` is the only file
+that knows MCP exists on the wire.
+
+`@modelcontextprotocol/client` and `@modelcontextprotocol/core` pinned at 2.0.0, both MIT.
+They pull `zod` 4 transitively, which this repo does not otherwise use. Shrinkwrap moved
+from 131 to 144 packages. The SDK's own types check clean against the connector with no
+casts at the call boundary.
 
 ### MCP.11: Wire the registry and hold the budget
 
