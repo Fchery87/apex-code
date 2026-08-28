@@ -400,8 +400,14 @@ has no way to express a tool-gate mode or to disable the boundary.
 
 **Widening the boundary.** `--add-dir <path>` makes another directory writable, repeatable.
 `--sandbox danger-full-access` runs with no OS boundary at all, announces itself, and asks
-you to confirm at a terminal. Both are command-line flags only. Neither can be set from
-project or global settings, so a repository cannot grant itself either one.
+you to confirm at a terminal.
+
+Neither can be set from project settings, so a repository cannot grant itself either one.
+The difference between them is where else they can come from: a writable root may also
+come from a profile in your **global** settings, because that is your own configuration
+about your own machine. Turning the sandbox off cannot come from settings of any scope. It
+is only ever a flag you type, so no saved configuration can leave a session unconfined
+without you asking for it that time.
 
 For untrusted repositories or unattended generated code, use a container, VM, or micro-VM
 with only the files and credentials the task requires. Read [`SECURITY.md`](SECURITY.md)
