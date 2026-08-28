@@ -2,6 +2,82 @@
 
 ## [Unreleased]
 
+- Commits made inside a session now carry your identity. `--tmpfs /home` leaves git's global
+  config resolution pointing at an empty directory, so every fresh workspace failed with
+  `Author identity unknown` and the only cure was setting `user.name` and `user.email` by hand,
+  per repository, forever. The supervisor still sees the host home before the sandbox hides it,
+  so it reads those two keys there and projects a synthesized config read-only. Synthesized
+  rather than copied: a real `~/.gitconfig` can carry a `credential.helper` that runs a command
+  or an `insteadOf` rule holding a token, and projecting the file wholesale would hand both to
+  the child. Repository-scope config still wins inside the session, exactly as it would on the
+  host.
+
+- A request to a host the allowlist does not name now pauses and asks instead of failing.
+  Previously the allowlist was fixed when the session started, so a refused host was terminal:
+  the only remedy was to exit, edit global settings, and start again. Approving permits that one
+  host and nothing else for the rest of the session, is never written to settings, and declining
+  is not remembered -- a second attempt asks again, because a cached refusal is indistinguishable
+  to the user from the boundary having quietly stopped asking. Concurrent connections to the same
+  refused host raise one prompt rather than one each. Non-interactive modes (`--print`,
+  `--mode json`, `--mode rpc`) still deny without asking, now because the approver is only built
+  when a terminal exists rather than because of a mode check that could be forgotten.
+
+  The prompt is drawn by the supervisor and answered on its terminal, not by the session. That is
+  a security property rather than a presentation choice: the channel the child would ask over has
+  no peer authentication, so an approval asserted from inside the boundary would be
+  indistinguishable from one forged by a postinstall script or a git hook -- exactly the code the
+  boundary exists to contain. The session's only role is to stop drawing while the human answers.
+  See `docs/adr/0023-supervisor-owned-escalation-authority.md`.
+
+- `git push` works from inside a session, without a credential ever entering the workspace. A git
+  credential cannot be projected the way `auth.json` is, because it is not one file with a stable
+  shape -- it is whatever the host's configured helper answers per host, and reimplementing that
+  resolution in the child would be a second, quietly diverging copy of git's own. So the
+  credential stays on the host: the child runs a helper speaking git's ordinary protocol, and the
+  supervisor answers by running `git credential fill` in its own environment. What crosses the
+  boundary is the answer to one question about one host. The host must already be reachable by
+  the session, since git only asks after a server challenged it and a request for an unreachable
+  host is not git doing its job; and you must release it, once per host, for that session only.
+  Only reads are served, so the session still cannot rewrite your credential store.
+
+- A command the boundary refuses can now run once, with your approval, in a separate sandbox. A
+  refused write is refused by the kernel inside a namespace whose mounts are fixed for its
+  lifetime, so unlike a refused host there is nothing to hold open while a human decides. The
+  approved command therefore runs in a second child, and the session's own namespace is never
+  modified -- its next attempt at the same operation is refused exactly as before. Nothing is
+  remembered between commands, because a command is not a stable subject to grant against and a
+  remembered approval would silently cover the next one naming the same directory. See
+  `docs/adr/0024-per-command-sandbox-escalation.md`.
+
+- `--add-dir <path>` makes another directory writable, and `--sandbox danger-full-access` runs
+  with no OS boundary at all, announcing itself and asking for confirmation at a terminal. The
+  opt-out was deliberately withheld until now: shipping an escape hatch into a boundary that
+  could not be worked with would have made the hatch the ordinary way to use the product. With
+  identity, network escalation, and the credential channel in place, the reasons to reach for it
+  are gone. Neither flag can be set from project settings, so a repository cannot grant itself
+  either; and turning the sandbox off cannot come from settings of any scope, only from a flag
+  typed for that run.
+
+- `--permission-profile <name>` selects a saved combination of allowed hosts and writable roots
+  from global settings. It carries boundary inputs only -- it cannot express a permission mode,
+  because conflating the tool gate with the OS boundary is the misreading that makes
+  `bypassPermissions` look like a sandbox escape, and it cannot express "no boundary" either.
+  Unknown keys are ignored rather than rejected, so a profile written for a later version does
+  not break this one.
+
+- Two read-only files projected from the same host directory no longer hide each other. Each
+  projection laid a `tmpfs` over the file's parent, so a second one replaced the first and the
+  child got `ENOENT` for a file that was supposed to be there. Only one projection existed until
+  this release, which is why nothing had caught it; projections are now grouped so one `tmpfs`
+  per directory carries every file bound into it.
+
+- Documentation that contradicted itself is fixed. The README said `/share` uses your
+  authenticated GitHub CLI forty lines after saying the sandbox hides those credentials; the
+  roadmap listed interactive escalation as delivered Phase 2b scope while ADR 0005 deferred it;
+  and the user guide said the sandbox restricts writes and network "to what the permission layer
+  has allowed", which conflates two independent layers -- the boundary is fixed by the supervisor
+  before the gate ever runs.
+
 ## [0.0.1-alpha.9] - 2026-08-28
 
 ## [0.0.1-alpha.8] - 2026-08-27
