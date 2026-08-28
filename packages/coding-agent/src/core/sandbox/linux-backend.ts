@@ -32,19 +32,49 @@ function waitForExit(child: ReturnType<typeof spawn>): Promise<number> {
 	});
 }
 
-function readOnlyMountArguments(path: string, kind: "directory" | "file" = "directory", descriptor = 3): string[] {
-	const target = resolve(path);
-	const directory = dirname(target);
+function ancestorDirectoryArguments(directory: string): string[] {
 	const ancestors: string[] = [];
 	let current = directory;
 	while (current !== "/" && current !== "/home") {
 		ancestors.push(current);
 		current = dirname(current);
 	}
-	const parentArguments = ancestors.reverse().flatMap((ancestor) => ["--dir", ancestor]);
-	return kind === "file"
-		? [...parentArguments, "--tmpfs", directory, "--perms", "0400", "--file", String(descriptor), target]
-		: [...parentArguments, "--ro-bind", directory, directory];
+	return ancestors.reverse().flatMap((ancestor) => ["--dir", ancestor]);
+}
+
+function readOnlyMountArguments(path: string): string[] {
+	const directory = dirname(resolve(path));
+	return [...ancestorDirectoryArguments(directory), "--ro-bind", directory, directory];
+}
+
+/**
+ * Project every read-only file, grouped by the directory each one lives in.
+ *
+ * A file needs a `--tmpfs` over its parent to have somewhere to be mounted, and that
+ * tmpfs replaces whatever the parent held. Emitting one per file meant two files sharing
+ * a directory produced two `--tmpfs` on the same path, and the second silently masked the
+ * first -- the child saw one file and got ENOENT for the other. Grouping keeps a single
+ * tmpfs per directory carrying every file bound into it.
+ *
+ * Descriptor numbers stay tied to each path's index in the original list, because the
+ * caller opens them in that order and passes them to `spawn` as `stdio` entries 3 onward.
+ */
+function readOnlyFileMountArguments(paths: readonly string[], firstDescriptor = 3): string[] {
+	const byDirectory = new Map<string, { target: string; descriptor: number }[]>();
+	paths.forEach((path, index) => {
+		const target = resolve(path);
+		const directory = dirname(target);
+		const group = byDirectory.get(directory);
+		const entry = { target, descriptor: firstDescriptor + index };
+		if (group) group.push(entry);
+		else byDirectory.set(directory, [entry]);
+	});
+	return [...byDirectory].flatMap(([directory, files]) => [
+		...ancestorDirectoryArguments(directory),
+		"--tmpfs",
+		directory,
+		...files.flatMap(({ target, descriptor }) => ["--perms", "0400", "--file", String(descriptor), target]),
+	]);
 }
 
 /**
@@ -173,9 +203,7 @@ server.on("error", (err) => {
 			const readOnlyMounts = [process.execPath, launch.command, ...(launch.readOnlyPaths ?? [])].flatMap((path) =>
 				readOnlyMountArguments(path),
 			);
-			const readOnlyFileMounts = (launch.readOnlyFiles ?? []).flatMap((path, index) =>
-				readOnlyMountArguments(path, "file", index + 3),
-			);
+			const readOnlyFileMounts = readOnlyFileMountArguments(launch.readOnlyFiles ?? []);
 			const readOnlyFileDescriptors = (launch.readOnlyFiles ?? []).map((path) => openSync(path, "r"));
 			// The descriptors above are opened before the child spawns and must be closed
 			// on every exit path -- including a spawn/wait rejection -- or a crashed launch

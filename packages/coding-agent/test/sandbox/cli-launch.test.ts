@@ -66,6 +66,39 @@ describe("sandbox CLI launch", () => {
 		expect(launch.readOnlyFiles).toEqual([authPath]);
 	});
 
+	it("projects a synthesized git config alongside the credential file and names it to the child", () => {
+		const cwd = workspace();
+		const authPath = join(cwd, "host-auth.json");
+		const gitConfigPath = join(cwd, "projected-gitconfig");
+		const launch = buildSandboxedCliLaunch({
+			workspace: cwd,
+			command: "/usr/bin/node",
+			args: ["cli.js"],
+			environment: { PATH: "/usr/bin:/bin", GIT_CONFIG_GLOBAL: "/host-home/.gitconfig" },
+			authPath,
+			gitConfigPath,
+		});
+
+		expect(launch.readOnlyFiles).toEqual([authPath, gitConfigPath]);
+		// The supervisor resolved this, so it must beat anything the invoking shell exported.
+		expect(launch.environment.GIT_CONFIG_GLOBAL).toBe(gitConfigPath);
+	});
+
+	it("names no git config when the host had no identity to project", () => {
+		const cwd = workspace();
+		const authPath = join(cwd, "host-auth.json");
+		const launch = buildSandboxedCliLaunch({
+			workspace: cwd,
+			command: "/usr/bin/node",
+			args: ["cli.js"],
+			environment: { PATH: "/usr/bin:/bin" },
+			authPath,
+		});
+
+		expect(launch.readOnlyFiles).toEqual([authPath]);
+		expect(launch.environment.GIT_CONFIG_GLOBAL).toBeUndefined();
+	});
+
 	it("projects host tool executables at the paths the child already looks in", () => {
 		const cwd = workspace();
 		const hostToolsDirectory = workspace();

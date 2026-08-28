@@ -1,8 +1,10 @@
+import { rmSync } from "node:fs";
 import { parseArgs } from "../../cli/args.ts";
 import { reportConcurrentSessionRefusal } from "../../cli/concurrent-session.ts";
 import type { HostToolBinary } from "../../utils/tools-manager.ts";
 import { acquireSessionLease, readLiveSessionLeases } from "../session-lease.ts";
 import { buildSandboxedCliLaunch, getSandboxSessionDirectory, type HostSkillPaths } from "./cli-launch.ts";
+import { createProjectedGitConfig, resolveHostGitIdentity } from "./git-identity.ts";
 import { createLinuxSandboxBackend } from "./linux-backend.ts";
 import { createMacosSandboxBackend } from "./macos-backend.ts";
 import { createSandboxPolicy } from "./policy.ts";
@@ -56,6 +58,7 @@ export async function launchSandboxedCli(options: {
 	const supervisor = createSandboxSupervisor({ backend, policy: policyResult.policy });
 	let credentialProxy: Awaited<ReturnType<typeof createCredentialProxy>> | undefined;
 	let lease: ReturnType<typeof acquireSessionLease> | undefined;
+	let projectedGitConfig: ReturnType<typeof createProjectedGitConfig> | undefined;
 	try {
 		const parsed = parseArgs(options.args);
 		const wantsPersistentSession = !parsed.noSession && !parsed.help && parsed.listModels === undefined;
@@ -86,6 +89,12 @@ export async function launchSandboxedCli(options: {
 			credentialChannel = paths;
 		}
 
+		// Resolved here rather than in the caller because this function owns the teardown
+		// that removes the directory again. The supervisor is unsandboxed, so the host home
+		// is still visible at this point; inside the child it is not.
+		const identity = resolveHostGitIdentity({ environment: options.environment });
+		projectedGitConfig = identity ? createProjectedGitConfig(identity) : undefined;
+
 		const launch = buildSandboxedCliLaunch({
 			workspace: policyResult.policy.workspace,
 			command: options.command,
@@ -94,6 +103,7 @@ export async function launchSandboxedCli(options: {
 			allowedHosts: options.allowedHosts,
 			readOnlyPaths: options.readOnlyPaths,
 			authPath: options.authPath,
+			gitConfigPath: projectedGitConfig?.path,
 			toolBinaries: options.toolBinaries,
 			skillPaths: options.skillPaths,
 			credentialChannel,
@@ -105,6 +115,7 @@ export async function launchSandboxedCli(options: {
 		return 1;
 	} finally {
 		lease?.release();
+		if (projectedGitConfig) rmSync(projectedGitConfig.directory, { force: true, recursive: true });
 		const cleanupResults = await Promise.allSettled([supervisor.close(), credentialProxy?.close()]);
 		for (const violation of violationStore.list()) {
 			dependencies.stderr.write(

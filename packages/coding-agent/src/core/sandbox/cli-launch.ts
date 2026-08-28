@@ -260,6 +260,11 @@ export function buildSandboxedCliLaunch(options: {
 	allowedHosts?: readonly string[];
 	readOnlyPaths?: readonly string[];
 	authPath?: string;
+	/**
+	 * A synthesized two-key git config, projected read-only so the child can author a
+	 * commit as the user. Absent when the host had no global identity to resolve.
+	 */
+	gitConfigPath?: string;
 	toolBinaries?: readonly HostToolBinary[];
 	/**
 	 * Host user-scope skill directories, pre-filtered by the caller to those that
@@ -298,7 +303,7 @@ export function buildSandboxedCliLaunch(options: {
 	const { agentSkills, agentsHomeSkills } = options.skillPaths ?? {};
 	const skillMountPaths = [agentSkills, agentsHomeSkills].filter((path): path is string => path !== undefined);
 	const readOnlyPaths = [...(options.readOnlyPaths ?? []), ...skillMountPaths];
-	const readOnlyFiles = options.authPath ? [options.authPath] : [];
+	const readOnlyFiles = [options.authPath, options.gitConfigPath].filter((path): path is string => path !== undefined);
 	const readOnlyBinaries = (options.toolBinaries ?? []).map((binary) => ({
 		source: binary.path,
 		destination: join(toolsDirectory, binary.name),
@@ -322,6 +327,7 @@ export function buildSandboxedCliLaunch(options: {
 			// After childEnvironment: these come only from the supervisor's own
 			// resolution, never from the invoking shell, so their value always wins over
 			// anything of the same name that childEnvironment's allowlist let through.
+			...(options.gitConfigPath ? { GIT_CONFIG_GLOBAL: options.gitConfigPath } : {}),
 			...(agentSkills ? { APEX_CODE_SKILL_PATH_AGENT: agentSkills } : {}),
 			...(agentsHomeSkills ? { APEX_CODE_SKILL_PATH_AGENTS_HOME: agentsHomeSkills } : {}),
 			APEX_CODE_CODING_AGENT_DIR: agentDirectory,

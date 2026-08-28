@@ -14,6 +14,7 @@ import * as net from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { createProjectedGitConfig } from "../../src/core/sandbox/git-identity.ts";
 import { createLinuxSandboxBackend } from "../../src/core/sandbox/linux-backend.ts";
 import { createSandboxSupervisor } from "../../src/core/sandbox/supervisor.ts";
 import { SandboxViolationStore } from "../../src/core/sandbox/violations.ts";
@@ -76,6 +77,91 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 				}),
 			).resolves.not.toBe(0);
 			expect(readFileSync(authPath, "utf8")).toBe("host-secret");
+		} finally {
+			await supervisor.close();
+		}
+	});
+
+	it("projects two read-only files from separate directories without either hiding the other", async () => {
+		// readOnlyMountArguments emits `--tmpfs <parent>` for every projected file, so two
+		// files sharing a parent would have the second tmpfs mask the first. The supervisor
+		// therefore gives each projection its own directory; this pins that it keeps working.
+		const cwd = workspace();
+		const credentialDirectory = workspace();
+		const gitDirectory = workspace();
+		const authPath = join(credentialDirectory, "auth.json");
+		const gitConfigPath = join(gitDirectory, "config");
+		writeFileSync(authPath, "host-secret", { mode: 0o600 });
+		writeFileSync(gitConfigPath, "host-identity", { mode: 0o600 });
+		const backend = createLinuxSandboxBackend();
+		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+
+		try {
+			const script = `test "$(cat ${authPath})" = host-secret && test "$(cat ${gitConfigPath})" = host-identity`;
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: ["-c", script],
+					readOnlyFiles: [authPath, gitConfigPath],
+				}),
+			).resolves.toBe(0);
+		} finally {
+			await supervisor.close();
+		}
+	});
+
+	it("projects two read-only files from one directory without either hiding the other", async () => {
+		// The same guarantee as above, for the harder case. Each projected file needs a
+		// `--tmpfs` over its parent to exist as a mountpoint, and a second `--tmpfs` on the
+		// same parent used to remount an empty filesystem over the first file. Grouping the
+		// projections by directory is what keeps both readable.
+		const cwd = workspace();
+		const hostDirectory = workspace();
+		const authPath = join(hostDirectory, "auth.json");
+		const gitConfigPath = join(hostDirectory, "gitconfig");
+		writeFileSync(authPath, "host-secret", { mode: 0o600 });
+		writeFileSync(gitConfigPath, "host-identity", { mode: 0o600 });
+		const backend = createLinuxSandboxBackend();
+		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+
+		try {
+			const script = `test "$(cat ${authPath})" = host-secret && test "$(cat ${gitConfigPath})" = host-identity`;
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: ["-c", script],
+					readOnlyFiles: [authPath, gitConfigPath],
+				}),
+			).resolves.toBe(0);
+		} finally {
+			await supervisor.close();
+		}
+	});
+
+	it("lets the child author a commit from a projected identity with no repository-scope config", async () => {
+		const cwd = workspace();
+		const identity = createProjectedGitConfig({ name: "Ada Lovelace", email: "ada@example.invalid" });
+		temporaryDirectories.push(identity.directory);
+		const backend = createLinuxSandboxBackend();
+		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+
+		try {
+			// No `git config user.*` anywhere: the workspace repository is fresh, and the
+			// sandbox has replaced /home, so the only identity available is the projection.
+			const script = [
+				"git init --quiet",
+				"git commit --allow-empty --quiet -m probe",
+				'test "$(git log -1 --format=%an)" = "Ada Lovelace"',
+				'test "$(git log -1 --format=%ae)" = "ada@example.invalid"',
+			].join(" && ");
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: ["-c", script],
+					readOnlyFiles: [identity.path],
+					environment: { PATH: process.env.PATH, GIT_CONFIG_GLOBAL: identity.path },
+				}),
+			).resolves.toBe(0);
 		} finally {
 			await supervisor.close();
 		}
