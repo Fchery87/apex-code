@@ -259,7 +259,7 @@ decides.
 
 - Create: `packages/coding-agent/src/core/sandbox/rpc/command-proxy.ts`
 - Modify: `packages/coding-agent/src/core/sandbox/linux-backend.ts`, `macos-backend.ts`
-- Create: `docs/adr/0023-per-command-sandbox-escalation.md`
+- Create: `docs/adr/0024-per-command-sandbox-escalation.md`
 
 1. Extract one argv builder per backend so the second child cannot drift from the first,
    which is the divergence ADR 0010 exists to prevent.

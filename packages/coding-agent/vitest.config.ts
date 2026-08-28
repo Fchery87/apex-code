@@ -8,7 +8,14 @@ export default mergeConfig(
 		test: {
 			globals: true,
 			environment: "node",
-			testTimeout: 30000,
+			// 30s was too tight for the tests that spawn a whole CLI, which transpiles its
+			// module graph in a cold worker before doing anything. Warm they take ten to
+			// thirty seconds; in a parallel run on a loaded machine they crossed the limit
+			// and then passed in isolation, which is the load-flake signature Phase 2b's
+			// roadmap entry records across eight files. The cost is real rather than a hang,
+			// so the budget was the thing that was wrong. Raised to double rather than to a
+			// number nothing could ever hit, so a genuine hang still surfaces promptly.
+			testTimeout: 60000,
 			// Tests run offline by default; opt in with allowNetwork() from test/test-network-env.ts.
 			env: { PI_OFFLINE: "1" },
 			unstubEnvs: true,
