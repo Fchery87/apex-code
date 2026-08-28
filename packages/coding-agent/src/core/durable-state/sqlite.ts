@@ -1,5 +1,36 @@
 import { randomUUID } from "node:crypto";
-import { DatabaseSync } from "node:sqlite";
+import { createRequire } from "node:module";
+import type { DatabaseSync } from "node:sqlite";
+
+/**
+ * `bun build --compile` bundles this module into the standalone binary, and Bun does not
+ * implement `node:sqlite` at all — not under `bun run`, not compiled. A static
+ * `import { DatabaseSync } from "node:sqlite"` therefore breaks the standalone binary. Bun
+ * ships its own `bun:sqlite`, whose `Database` exposes the same `.exec` / `.prepare(sql).get
+ * /.all/.run` / `.close` surface this module relies on (verified directly against 1.3.14),
+ * so the fix is to pick the binding at runtime rather than pull in either module statically.
+ *
+ * `createRequire` plus a runtime-computed specifier is load-bearing: it's what keeps this
+ * `require("node:sqlite")` call from being resolved when Bun bundles the compiled binary
+ * (the branch is never taken under Bun, but the bundler would still try to resolve every
+ * import it can see statically). A plain top-level `import` of either module — or a
+ * dynamic `import()` with a literal specifier — does not get that exemption.
+ */
+const requireSqliteModule = createRequire(import.meta.url);
+
+/** The subset of `DatabaseSync` / `bun:sqlite`'s `Database` this module actually uses. */
+type SqliteDatabaseConstructor = new (path: string) => DatabaseSync;
+
+function loadSqliteDatabaseConstructor(): SqliteDatabaseConstructor {
+	if (typeof (globalThis as { Bun?: unknown }).Bun !== "undefined") {
+		const { Database } = requireSqliteModule("bun:sqlite") as { Database: SqliteDatabaseConstructor };
+		return Database;
+	}
+	const { DatabaseSync: NodeDatabaseSync } = requireSqliteModule("node:sqlite") as {
+		DatabaseSync: SqliteDatabaseConstructor;
+	};
+	return NodeDatabaseSync;
+}
 
 /** Current schema for the daemon-owned durable-state sidecar. */
 export const CURRENT_DURABLE_STATE_SCHEMA_VERSION = 4;
@@ -236,7 +267,8 @@ function transitionCommand(
 }
 
 export function openDurableStateStore(path: string): DurableStateStore {
-	const database = new DatabaseSync(path);
+	const Sqlite = loadSqliteDatabaseConstructor();
+	const database = new Sqlite(path);
 	try {
 		database.exec("BEGIN IMMEDIATE");
 		createSchema(database);
