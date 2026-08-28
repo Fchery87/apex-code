@@ -1,6 +1,7 @@
 import { chmodSync, existsSync, mkdtempSync, unlinkSync } from "node:fs";
 import * as net from "node:net";
 import { join } from "node:path";
+import { supervisorTempDirectory } from "../supervisor-temp.ts";
 import type { SandboxViolationStore } from "../violations.ts";
 import { FrameReader, isRequestObject, writeFrame } from "./framing.ts";
 
@@ -30,7 +31,9 @@ export interface CommandEscalationChannelPaths {
 }
 
 export function resolveCommandEscalationChannelPaths(): CommandEscalationChannelPaths {
-	const hostSocketDirectory = mkdtempSync(`/tmp/apex-escalate-${process.pid}-`, { encoding: "utf8" });
+	const hostSocketDirectory = mkdtempSync(join(supervisorTempDirectory(), `apex-escalate-${process.pid}-`), {
+		encoding: "utf8",
+	});
 	chmodSync(hostSocketDirectory, 0o700);
 	const hostSocketPath = join(hostSocketDirectory, "channel.sock");
 	if (Buffer.byteLength(hostSocketPath) + 1 > SUN_PATH_LIMIT) {

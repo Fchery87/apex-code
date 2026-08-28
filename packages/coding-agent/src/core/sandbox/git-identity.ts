@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { supervisorTempDirectory } from "./supervisor-temp.ts";
 
 export interface HostGitIdentity {
 	readonly name: string;
@@ -92,7 +93,7 @@ export function createProjectedGitConfig(
 		credentialHelper?: string;
 	},
 ): ProjectedGitConfig {
-	const directory = mkdtempSync(`/tmp/apex-git-${process.pid}-`, { encoding: "utf8" });
+	const directory = mkdtempSync(join(supervisorTempDirectory(), `apex-git-${process.pid}-`), { encoding: "utf8" });
 	chmodSync(directory, 0o700);
 	const path = join(directory, "config");
 	const sections = [`[user]\n\tname = ${quote(identity.name)}\n\temail = ${quote(identity.email)}\n`];

@@ -48,7 +48,7 @@ function ask(path: string, request: unknown): Promise<Record<string, unknown>> {
 	});
 }
 
-describe("command escalation channel", () => {
+describe.skipIf(process.platform === "win32")("command escalation channel", () => {
 	it("runs an approved command and returns its output", async () => {
 		const channel = resolveCommandEscalationChannelPaths();
 		directories.push(channel.hostSocketDirectory);
@@ -255,7 +255,7 @@ describe.skipIf(process.platform !== "linux" || createLinuxSandboxBackend().stat
 	},
 );
 
-describe("recognising a boundary refusal in command output", () => {
+describe.skipIf(process.platform === "win32")("recognising a boundary refusal in command output", () => {
 	it("finds the path in the wordings the shell and kernel actually produce", () => {
 		// Every string here was copied from a real refusal in this repo's own test output.
 		expect(extractRefusedPath("/bin/sh: 1: cannot create /tmp/x.txt: Read-only file system")).toBe("/tmp/x.txt");

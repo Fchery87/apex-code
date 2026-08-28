@@ -77,7 +77,11 @@ describe.skipIf(!hasGit())("projected git configuration", () => {
 		const contents = readFileSync(projected.path, "utf8");
 		expect(contents).toContain("Ada Lovelace");
 		expect(contents).toContain("ada@example.invalid");
-		expect(statSync(projected.directory).mode & 0o777).toBe(0o700);
+		// POSIX modes only. Windows has no OS sandbox at all (ADR 0005), so there is nothing
+		// here to keep private from; the content assertions above still matter everywhere.
+		if (process.platform !== "win32") {
+			expect(statSync(projected.directory).mode & 0o777).toBe(0o700);
+		}
 	});
 
 	it("carries nothing the host config held beyond the identity", () => {

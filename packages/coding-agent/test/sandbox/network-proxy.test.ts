@@ -136,7 +136,7 @@ describe("createSandboxNetworkProxy TCP-listen mode", () => {
 	});
 });
 
-describe("sandbox network proxy escalation", () => {
+describe.skipIf(process.platform === "win32")("sandbox network proxy escalation", () => {
 	it("asks the approver for a refused host, naming exactly that host and port", async () => {
 		const port = await targetServer();
 		const asked: string[] = [];
@@ -295,7 +295,7 @@ describe("sandbox network proxy escalation", () => {
 	});
 });
 
-describe("sandbox network reachability", () => {
+describe.skipIf(process.platform === "win32")("sandbox network reachability", () => {
 	it("reports a configured host reachable, by bare name and by pinned port", async () => {
 		const proxy = await createSandboxNetworkProxy({
 			socketPath: socketPath(),

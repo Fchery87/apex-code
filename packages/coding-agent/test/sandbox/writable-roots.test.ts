@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -44,14 +44,18 @@ describe("writable root arguments", () => {
 });
 
 describe("writable root policy", () => {
-	it("carries validated additional roots onto the policy", () => {
+	it("carries validated additional roots onto the policy, canonicalised", () => {
 		const cwd = workspace();
 		const extra = workspace();
 
 		const result = createSandboxPolicy({ workspace: cwd, additionalWritableRoots: [extra] });
 
 		expect(result.kind).toBe("valid");
-		expect(result.kind === "valid" && result.policy.additionalWritableRoots).toEqual([extra]);
+		// realpathSync, like the workspace has always been: on macOS /tmp is a symlink to
+		// /private/tmp, so the raw path and the resolved one differ and a mount must use
+		// the resolved one. Comparing against the raw path passed on Linux and failed on
+		// macOS CI, which is the whole reason the policy canonicalises at all.
+		expect(result.kind === "valid" && result.policy.additionalWritableRoots).toEqual([realpathSync(extra)]);
 	});
 
 	it("refuses a relative additional root rather than resolving it against something", () => {

@@ -1,5 +1,6 @@
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { supervisorTempDirectory } from "../supervisor-temp.ts";
 import type { GitCredential, GitCredentialRequest } from "./git-credential-proxy.ts";
 
 /** Env var naming the child-side socket the helper talks to. */
@@ -88,7 +89,9 @@ export interface GitCredentialChannelPaths {
  * because the `--tmpfs /home` is the only writable mount when bwrap creates the mountpoint.
  */
 export function resolveGitCredentialChannelPaths(): GitCredentialChannelPaths {
-	const hostSocketDirectory = mkdtempSync(`/tmp/apex-gitcred-${process.pid}-`, { encoding: "utf8" });
+	const hostSocketDirectory = mkdtempSync(join(supervisorTempDirectory(), `apex-gitcred-${process.pid}-`), {
+		encoding: "utf8",
+	});
 	chmodSync(hostSocketDirectory, 0o700);
 	const hostSocketPath = join(hostSocketDirectory, "channel.sock");
 	if (Buffer.byteLength(hostSocketPath) + 1 > SUN_PATH_LIMIT) {

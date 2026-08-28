@@ -44,7 +44,7 @@ function ask(path: string, request: unknown): Promise<Record<string, unknown>> {
 
 const HOST_CREDENTIAL = { username: "fchery87", password: "host-owned-token" };
 
-describe("sandbox git credential channel", () => {
+describe.skipIf(process.platform === "win32")("sandbox git credential channel", () => {
 	it("answers a request for an allowed host the human released", async () => {
 		const path = socketPath();
 		const proxy = await createGitCredentialProxy({
@@ -241,7 +241,7 @@ describe("sandbox git credential channel", () => {
 	});
 });
 
-describe("git credential helper, run as git runs it", () => {
+describe.skipIf(process.platform === "win32")("git credential helper, run as git runs it", () => {
 	function runHelper(
 		helperPath: string,
 		operation: string,
