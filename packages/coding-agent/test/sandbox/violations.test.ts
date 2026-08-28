@@ -33,7 +33,10 @@ describe("sandbox policy", () => {
 		// on platforms without a relevant symlink (Linux's /tmp), but on macOS
 		// os.tmpdir() resolves through /var -> /private/var, and the whole point of
 		// this test is that createSandboxPolicy resolves that, not that it doesn't.
-		expect(result).toEqual({ kind: "valid", policy: { workspace: realpathSync(workspace), allowedHosts: [] } });
+		expect(result).toEqual({
+			kind: "valid",
+			policy: { workspace: realpathSync(workspace), allowedHosts: [], additionalWritableRoots: [] },
+		});
 	});
 
 	it("rejects a relative or missing workspace before an OS process is started", () => {

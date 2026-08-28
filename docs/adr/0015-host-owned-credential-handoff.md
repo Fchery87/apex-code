@@ -62,3 +62,45 @@ What keeps the amendment inside this ADR's posture:
 - The socket lives in a supervisor-owned `0700` directory, validates and byte-bounds every
   protocol frame, redacts credential values from refusals, and closes active clients during
   teardown.
+
+## Amendment (2026-08-28): git credentials, a second class served by a channel not a mount
+
+This ADR's read-only projection does not generalise to git credentials, and the reason is
+shape rather than policy. A provider credential is one file with a stable location, so
+mounting it read-only is possible. A git credential is whatever the host's configured
+helper answers for a given host — `gh`, libsecret, the macOS keychain, a plain file — and
+there is no single artefact to project. Reimplementing that resolution inside the child
+would be a second copy of git's own, quietly diverging from the host's actual setup.
+
+So the credential stays on the host and never enters the sandbox at all. The child runs a
+helper that speaks git's ordinary `get` protocol and relays one question over a
+supervisor-owned socket; the supervisor answers it by running `git credential fill` in its
+own environment, where the real home is still visible. What crosses the boundary is the
+answer to one question about one host, not a store, not a file, and not an environment
+variable.
+
+Two gates, and the ordering matters.
+
+**The host must be reachable by this session.** git only asks for a credential after a
+server challenged it, so in the ordinary flow the host was already permitted at the
+network layer. A request for a host the session cannot open a connection to is therefore
+not git doing its job, and answering it would make this channel more useful to something
+hunting for a token than to git. Reachability is asked of the network proxy itself rather
+than kept as a second copy of the allowlist, because a host approved at runtime under
+ADR 0005's escalation amendment must count, and a duplicated list would not know.
+
+**The human must release it**, per ADR 0023, for the same reason escalation is
+supervisor-owned: this socket has no peer authentication, and every descendant in the
+child's namespace can reach it. A release covers one host for the session, is never
+persisted, and is never widened to a second host, so approving a push does not also
+release a token to whatever the session contacts later. Without a releaser the channel
+refuses outright, so a headless session hands out nothing.
+
+Only `get` is served. `store` and `erase` are answered as handled and do nothing, which
+keeps this ADR's original rule that credential mutation is an explicit host operation; a
+channel that let the child rewrite the host's store would be a way out of the boundary
+rather than a way to work inside it. Every grant and every refusal is recorded in the
+supervisor's violation tail, by host, with no credential value in it.
+
+This amendment does not change the provider credential projection, which stays exactly as
+this ADR decided.

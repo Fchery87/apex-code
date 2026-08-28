@@ -95,6 +95,7 @@ import { aggregateUsagePerformance } from "../../core/observability/aggregate.ts
 import { DefaultPackageManager } from "../../core/package-manager.ts";
 import type { PermissionMode } from "../../core/permissions/store.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
+import { observeTerminalHandoff, TERMINAL_HANDOFF_PATH_VARIABLE } from "../../core/sandbox/terminal-handoff.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
 import { type SessionEntry, SessionManager, sessionEntryToContextMessages } from "../../core/session-manager.ts";
 import { formatShareUnavailableMessage, publishSessionShare } from "../../core/session-share.ts";
@@ -4193,6 +4194,33 @@ export class InteractiveMode {
 		const uncaughtExceptionHandler = (error: Error) => this.uncaughtCrash(error);
 		process.prependListener("uncaughtException", uncaughtExceptionHandler);
 		this.signalCleanupHandlers.push(() => process.off("uncaughtException", uncaughtExceptionHandler));
+
+		// Lend the terminal back to the supervisor when it needs to draw a sandbox
+		// escalation prompt. The supervisor owns that decision (ADR 0023) and this
+		// process cannot read the answer anyway -- bwrap --new-session leaves it with no
+		// controlling terminal. `ui.stop()` is the same restore Ctrl+Z already performs,
+		// so the terminal is in cooked mode with a visible cursor while the human answers.
+		const handoffDirectory = process.env[TERMINAL_HANDOFF_PATH_VARIABLE];
+		if (handoffDirectory) {
+			const observer = observeTerminalHandoff(handoffDirectory, {
+				suspend: () => {
+					try {
+						this.ui.stop();
+					} catch {
+						// A terminal we cannot restore still leaves the prompt readable.
+					}
+				},
+				resume: () => {
+					try {
+						this.ui.start();
+						this.ui.requestRender(true);
+					} catch {
+						// Nothing further to try; the next render request recovers.
+					}
+				},
+			});
+			this.signalCleanupHandlers.push(() => observer.stop());
+		}
 	}
 
 	private unregisterSignalHandlers(): void {

@@ -2,9 +2,26 @@ import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { closeSync, mkdirSync, openSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
+import { buildBwrapArguments } from "./bwrap-arguments.ts";
+import { createCommandEscalationApprover, createCredentialReleaser, createHostApprover } from "./host-approval.ts";
 import { createSandboxNetworkProxy, type SandboxNetworkProxy } from "./network-proxy.ts";
+import {
+	COMMAND_ESCALATION_SOCKET_VARIABLE,
+	type CommandEscalationRequest,
+	type CommandEscalationResult,
+	createCommandEscalationProxy,
+	resolveCommandEscalationChannelPaths,
+} from "./rpc/command-proxy.ts";
+import {
+	fillHostGitCredential,
+	GIT_CREDENTIAL_SOCKET_VARIABLE,
+	resolveGitCredentialChannelPaths,
+	writeGitCredentialHelper,
+} from "./rpc/git-credential-helper.ts";
+import { createGitCredentialProxy, type GitCredentialProxy } from "./rpc/git-credential-proxy.ts";
 import type { SandboxBackend, SandboxLaunch } from "./supervisor.ts";
+import { createTerminalHandoff, TERMINAL_HANDOFF_PATH_VARIABLE, type TerminalHandoff } from "./terminal-handoff.ts";
 import { publishTerminalSize, TERMINAL_SIZE_PATH_VARIABLE } from "./terminal-size.ts";
 import type { SandboxViolationStore } from "./violations.ts";
 
@@ -18,6 +35,16 @@ export interface LinuxSandboxBackendOptions {
 	violationStore?: SandboxViolationStore;
 	/** Injectable only to prove crash cleanup in tests; production spawns `bwrap` directly. */
 	spawnChild?: typeof spawn;
+	/**
+	 * Injectable only for tests, which have no terminal and would otherwise be unable to
+	 * exercise a released credential at all. Production builds the releaser from the
+	 * terminal handoff, and its absence there is what makes a headless session refuse.
+	 */
+	requestGitCredentialRelease?: (host: string) => Promise<boolean>;
+	/** Injectable only for tests; production resolves against the real host store. */
+	fillGitCredential?: typeof fillHostGitCredential;
+	/** Injectable only for tests, which have no terminal to approve an escalation at. */
+	requestCommandEscalation?: (request: CommandEscalationRequest) => Promise<boolean>;
 }
 
 function commandExists(command: string): boolean {
@@ -30,21 +57,6 @@ function waitForExit(child: ReturnType<typeof spawn>): Promise<number> {
 		child.once("error", reject);
 		child.once("exit", (code) => resolve(code ?? 1));
 	});
-}
-
-function readOnlyMountArguments(path: string, kind: "directory" | "file" = "directory", descriptor = 3): string[] {
-	const target = resolve(path);
-	const directory = dirname(target);
-	const ancestors: string[] = [];
-	let current = directory;
-	while (current !== "/" && current !== "/home") {
-		ancestors.push(current);
-		current = dirname(current);
-	}
-	const parentArguments = ancestors.reverse().flatMap((ancestor) => ["--dir", ancestor]);
-	return kind === "file"
-		? [...parentArguments, "--tmpfs", directory, "--perms", "0400", "--file", String(descriptor), target]
-		: [...parentArguments, "--ro-bind", directory, directory];
 }
 
 /**
@@ -105,6 +117,11 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 	const hasCommand = options?.commandExists ?? commandExists;
 	const violationStore = options?.violationStore;
 	let proxy: SandboxNetworkProxy | undefined;
+	let handoff: TerminalHandoff | undefined;
+	let gitCredentialProxy: GitCredentialProxy | undefined;
+	let gitCredentialDirectory: string | undefined;
+	let escalationProxy: Awaited<ReturnType<typeof createCommandEscalationProxy>> | undefined;
+	let escalationDirectory: string | undefined;
 
 	if (!hasCommand("bwrap")) {
 		return {
@@ -124,11 +141,35 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 			const violationCountBeforeLaunch = violationStore?.totalCount ?? 0;
 
 			const { hostSocketPath, childSocketPath } = resolveProxySocketPaths();
+			handoff = createTerminalHandoff(stateDirectory);
+			const gitCredentialPaths = resolveGitCredentialChannelPaths();
+			gitCredentialDirectory = gitCredentialPaths.hostSocketDirectory;
 			proxy = await createSandboxNetworkProxy({
 				socketPath: hostSocketPath,
 				allowedHosts: launch.policy.allowedHosts,
 				violationStore,
+				// Undefined without a terminal, which leaves the proxy's own
+				// deny-without-asking path in place for headless, print, JSON, and RPC.
+				requestApproval: createHostApprover({ handoff }),
 			});
+			// After the network proxy, because reachability is its answer to give: the
+			// credential channel must never hand out a token for a host this session
+			// cannot even open a connection to.
+			gitCredentialProxy = await createGitCredentialProxy({
+				socketPath: gitCredentialPaths.hostSocketPath,
+				isHostAllowed: (host) => proxy?.isHostReachable(host) ?? false,
+				requestRelease: options?.requestGitCredentialRelease ?? createCredentialReleaser({ handoff }),
+				// The supervisor's own environment, deliberately: this runs outside the
+				// boundary and must resolve against the real host home, which is exactly
+				// what the child cannot see.
+				fillCredential: (request) =>
+					(options?.fillGitCredential ?? fillHostGitCredential)(request, { environment: process.env }),
+				violationStore,
+			});
+			writeGitCredentialHelper(stateDirectory);
+
+			const escalationPaths = resolveCommandEscalationChannelPaths();
+			escalationDirectory = escalationPaths.hostSocketDirectory;
 
 			// .cjs forces CommonJS regardless of the target workspace's package.json "type"
 			// field -- a plain .js here would be parsed as ESM under "type": "module" and
@@ -170,12 +211,6 @@ server.on("error", (err) => {
 `.trim(),
 			);
 
-			const readOnlyMounts = [process.execPath, launch.command, ...(launch.readOnlyPaths ?? [])].flatMap((path) =>
-				readOnlyMountArguments(path),
-			);
-			const readOnlyFileMounts = (launch.readOnlyFiles ?? []).flatMap((path, index) =>
-				readOnlyMountArguments(path, "file", index + 3),
-			);
 			const readOnlyFileDescriptors = (launch.readOnlyFiles ?? []).map((path) => openSync(path, "r"));
 			// The descriptors above are opened before the child spawns and must be closed
 			// on every exit path -- including a spawn/wait rejection -- or a crashed launch
@@ -184,68 +219,59 @@ server.on("error", (err) => {
 			// here is visible at the same absolute path on both sides of it.
 			const terminalSizePath = join(stateDirectory, "terminal-size");
 			const stopPublishingTerminalSize = publishTerminalSize(terminalSizePath);
+
+			// The second child derives its argv from the same builder as the first, with one
+			// extra writable root. Nothing about the original child's namespace changes.
+			escalationProxy = await createCommandEscalationProxy({
+				socketPath: escalationPaths.hostSocketPath,
+				requestApproval: options?.requestCommandEscalation ?? createCommandEscalationApprover({ handoff }),
+				violationStore,
+				runEscalated: (request) =>
+					runEscalatedCommand({
+						request,
+						launch,
+						stateDirectory,
+						spawnBwrap: options?.spawnChild ?? spawn,
+					}),
+			});
 			try {
 				const spawnBwrap = options?.spawnChild ?? spawn;
 				const child = spawnBwrap(
 					"bwrap",
-					[
-						"--new-session",
-						"--die-with-parent",
-						"--unshare-user",
-						"--unshare-pid",
-						"--unshare-net",
-						"--ro-bind",
-						"/",
-						"/",
-						"--tmpfs",
-						"/home",
-						// Immediately after the /home tmpfs: that is the only writable mount at
-						// this point, so it is the only place bwrap can create the mountpoint.
-						"--bind",
-						hostSocketPath,
-						childSocketPath,
-						// The credential channel socket: same writable-under-/home constraint
-						// and same position as the network socket above. Its child-side path
-						// is what `APEX_CREDENTIAL_PROXY_PATH` names in the launch environment.
-						...(launch.credentialChannel
-							? ["--bind", launch.credentialChannel.hostSocketPath, launch.credentialChannel.childSocketPath]
-							: []),
-						...readOnlyMounts,
-						...readOnlyFileMounts,
-						"--bind",
-						launch.policy.workspace,
-						launch.policy.workspace,
-						// After the workspace bind: these destinations sit inside it, and an
-						// earlier mount would be masked when the workspace is bound over them.
-						...(launch.readOnlyBinaries ?? []).flatMap(({ source, destination }) => [
-							"--ro-bind",
-							source,
-							destination,
-						]),
-						"--dev",
-						"/dev",
-						"--proc",
-						"/proc",
-						"--chdir",
-						launch.policy.workspace,
-						"--setenv",
-						"HOME",
-						launch.environment?.HOME ?? stateDirectory,
-						"--setenv",
-						"TMPDIR",
-						launch.environment?.TMPDIR ?? stateDirectory,
-						"--setenv",
-						"APEX_UDS_PATH",
-						childSocketPath,
-						"--setenv",
-						TERMINAL_SIZE_PATH_VARIABLE,
-						terminalSizePath,
-						"--",
-						process.execPath,
-						relayScriptPath,
-						launch.command,
-						...launch.args,
-					],
+					buildBwrapArguments({
+						workspace: launch.policy.workspace,
+						additionalWritableRoots: launch.policy.additionalWritableRoots,
+						readOnlyPaths: [process.execPath, launch.command, ...(launch.readOnlyPaths ?? [])],
+						readOnlyFiles: launch.readOnlyFiles ?? [],
+						readOnlyBinaries: launch.readOnlyBinaries ?? [],
+						sockets: [
+							{ hostPath: hostSocketPath, childPath: childSocketPath },
+							// Its child-side path is what `APEX_CREDENTIAL_PROXY_PATH` names.
+							...(launch.credentialChannel
+								? [
+										{
+											hostPath: launch.credentialChannel.hostSocketPath,
+											childPath: launch.credentialChannel.childSocketPath,
+										},
+									]
+								: []),
+							{
+								hostPath: gitCredentialPaths.hostSocketPath,
+								childPath: gitCredentialPaths.childSocketPath,
+							},
+						],
+						environment: {
+							HOME: launch.environment?.HOME ?? stateDirectory,
+							TMPDIR: launch.environment?.TMPDIR ?? stateDirectory,
+							APEX_UDS_PATH: childSocketPath,
+							[TERMINAL_SIZE_PATH_VARIABLE]: terminalSizePath,
+							[TERMINAL_HANDOFF_PATH_VARIABLE]: stateDirectory,
+							[GIT_CREDENTIAL_SOCKET_VARIABLE]: gitCredentialPaths.childSocketPath,
+							[COMMAND_ESCALATION_SOCKET_VARIABLE]: escalationPaths.childSocketPath,
+						},
+						command: process.execPath,
+						args: [relayScriptPath, launch.command, ...launch.args],
+					}),
 					{ env: launch.environment, stdio: ["inherit", "inherit", "pipe", ...readOnlyFileDescriptors] },
 				);
 				let stderr = "";
@@ -276,7 +302,63 @@ server.on("error", (err) => {
 			}
 		},
 		async close() {
+			handoff?.stop();
+			await escalationProxy?.close();
+			if (escalationDirectory) rmSync(escalationDirectory, { force: true, recursive: true });
+			await gitCredentialProxy?.close();
+			if (gitCredentialDirectory) rmSync(gitCredentialDirectory, { force: true, recursive: true });
 			await proxy?.close();
 		},
 	};
+}
+
+/**
+ * Start one approved command in its own child, with one extra writable root.
+ *
+ * Deliberately minimal compared with the session child: no network relay, no credential
+ * channels, no terminal handoff. An escalated command is a single shell invocation the
+ * human just read and approved, not a session, and every channel omitted here is one it
+ * cannot reach. Its stdio is captured rather than inherited so the session that asked
+ * receives the output instead of the escalated process writing over the TUI.
+ */
+async function runEscalatedCommand(options: {
+	request: CommandEscalationRequest;
+	launch: SandboxLaunch;
+	stateDirectory: string;
+	spawnBwrap: typeof spawn;
+}): Promise<CommandEscalationResult> {
+	const { request, launch, stateDirectory } = options;
+	const child = options.spawnBwrap(
+		"bwrap",
+		buildBwrapArguments({
+			workspace: launch.policy.workspace,
+			additionalWritableRoots: [...launch.policy.additionalWritableRoots, request.writableRoot],
+			readOnlyPaths: launch.readOnlyPaths ?? [],
+			readOnlyFiles: [],
+			readOnlyBinaries: [],
+			sockets: [],
+			environment: {
+				HOME: launch.environment?.HOME ?? stateDirectory,
+				TMPDIR: launch.environment?.TMPDIR ?? stateDirectory,
+			},
+			command: "/bin/sh",
+			args: ["-c", request.command],
+		}),
+		{ stdio: ["ignore", "pipe", "pipe"] },
+	);
+	let stdout = "";
+	let stderr = "";
+	child.stdout?.setEncoding("utf8");
+	child.stdout?.on("data", (chunk: string) => {
+		stdout += chunk;
+	});
+	child.stderr?.setEncoding("utf8");
+	child.stderr?.on("data", (chunk: string) => {
+		stderr += chunk;
+	});
+	const code = await new Promise<number>((resolveCode) => {
+		child.once("error", () => resolveCode(1));
+		child.once("exit", (exitCode) => resolveCode(exitCode ?? 1));
+	});
+	return { code, stdout, stderr };
 }

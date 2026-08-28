@@ -25,7 +25,7 @@ describe("SandboxSupervisor", () => {
 		const unavailable = backend({ kind: "unavailable", reason: "bubblewrap is unavailable" });
 		const supervisor = createSandboxSupervisor({
 			backend: unavailable,
-			policy: { workspace: "/workspace", allowedHosts: [] },
+			policy: { workspace: "/workspace", allowedHosts: [], additionalWritableRoots: [] },
 		});
 
 		await expect(supervisor.launch({ command: "node", args: ["cli.js"] })).rejects.toThrow(
@@ -38,7 +38,7 @@ describe("SandboxSupervisor", () => {
 		const enforcing = backend({ kind: "enforced" });
 		const supervisor = createSandboxSupervisor({
 			backend: enforcing,
-			policy: { workspace: "/workspace", allowedHosts: [] },
+			policy: { workspace: "/workspace", allowedHosts: [], additionalWritableRoots: [] },
 		});
 
 		await expect(supervisor.launch({ command: "/usr/bin/node", args: ["cli.js", "--print", "hello"] })).resolves.toBe(
@@ -48,7 +48,7 @@ describe("SandboxSupervisor", () => {
 			{
 				command: "/usr/bin/node",
 				args: ["cli.js", "--print", "hello"],
-				policy: { workspace: "/workspace", allowedHosts: [] },
+				policy: { workspace: "/workspace", allowedHosts: [], additionalWritableRoots: [] },
 			},
 		]);
 		await supervisor.close();

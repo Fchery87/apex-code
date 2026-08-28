@@ -14,7 +14,9 @@ import * as net from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { createProjectedGitConfig } from "../../src/core/sandbox/git-identity.ts";
 import { createLinuxSandboxBackend } from "../../src/core/sandbox/linux-backend.ts";
+import { gitCredentialHelperCommand } from "../../src/core/sandbox/rpc/git-credential-helper.ts";
 import { createSandboxSupervisor } from "../../src/core/sandbox/supervisor.ts";
 import { SandboxViolationStore } from "../../src/core/sandbox/violations.ts";
 
@@ -42,7 +44,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		const outside = join(dirname(cwd), `outside-${Date.now()}.txt`);
 		const violations = new SandboxViolationStore();
 		const backend = createLinuxSandboxBackend({ violationStore: violations });
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 		const script = `sh -c 'printf allowed > ${join(cwd, "allowed.txt")}' && sh -c 'printf blocked > ${outside}'`;
 
 		await expect(supervisor.launch({ command: "/bin/sh", args: ["-c", script] })).resolves.not.toBe(0);
@@ -61,7 +66,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		writeFileSync(authPath, "host-secret", { mode: 0o600 });
 		writeFileSync(siblingPath, "host-settings", { mode: 0o600 });
 		const backend = createLinuxSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			const script = `test "$(cat ${authPath})" = host-secret && test ! -e ${siblingPath}`;
@@ -81,6 +89,204 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		}
 	});
 
+	it("projects two read-only files from separate directories without either hiding the other", async () => {
+		// readOnlyMountArguments emits `--tmpfs <parent>` for every projected file, so two
+		// files sharing a parent would have the second tmpfs mask the first. The supervisor
+		// therefore gives each projection its own directory; this pins that it keeps working.
+		const cwd = workspace();
+		const credentialDirectory = workspace();
+		const gitDirectory = workspace();
+		const authPath = join(credentialDirectory, "auth.json");
+		const gitConfigPath = join(gitDirectory, "config");
+		writeFileSync(authPath, "host-secret", { mode: 0o600 });
+		writeFileSync(gitConfigPath, "host-identity", { mode: 0o600 });
+		const backend = createLinuxSandboxBackend();
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
+
+		try {
+			const script = `test "$(cat ${authPath})" = host-secret && test "$(cat ${gitConfigPath})" = host-identity`;
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: ["-c", script],
+					readOnlyFiles: [authPath, gitConfigPath],
+				}),
+			).resolves.toBe(0);
+		} finally {
+			await supervisor.close();
+		}
+	});
+
+	it("projects two read-only files from one directory without either hiding the other", async () => {
+		// The same guarantee as above, for the harder case. Each projected file needs a
+		// `--tmpfs` over its parent to exist as a mountpoint, and a second `--tmpfs` on the
+		// same parent used to remount an empty filesystem over the first file. Grouping the
+		// projections by directory is what keeps both readable.
+		const cwd = workspace();
+		const hostDirectory = workspace();
+		const authPath = join(hostDirectory, "auth.json");
+		const gitConfigPath = join(hostDirectory, "gitconfig");
+		writeFileSync(authPath, "host-secret", { mode: 0o600 });
+		writeFileSync(gitConfigPath, "host-identity", { mode: 0o600 });
+		const backend = createLinuxSandboxBackend();
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
+
+		try {
+			const script = `test "$(cat ${authPath})" = host-secret && test "$(cat ${gitConfigPath})" = host-identity`;
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: ["-c", script],
+					readOnlyFiles: [authPath, gitConfigPath],
+				}),
+			).resolves.toBe(0);
+		} finally {
+			await supervisor.close();
+		}
+	});
+
+	it("lets the child author a commit from a projected identity with no repository-scope config", async () => {
+		const cwd = workspace();
+		const identity = createProjectedGitConfig({ name: "Ada Lovelace", email: "ada@example.invalid" });
+		temporaryDirectories.push(identity.directory);
+		const backend = createLinuxSandboxBackend();
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
+
+		try {
+			// No `git config user.*` anywhere: the workspace repository is fresh, and the
+			// sandbox has replaced /home, so the only identity available is the projection.
+			const script = [
+				"git init --quiet",
+				"git commit --allow-empty --quiet -m probe",
+				'test "$(git log -1 --format=%an)" = "Ada Lovelace"',
+				'test "$(git log -1 --format=%ae)" = "ada@example.invalid"',
+			].join(" && ");
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: ["-c", script],
+					readOnlyFiles: [identity.path],
+					environment: { PATH: process.env.PATH, GIT_CONFIG_GLOBAL: identity.path },
+				}),
+			).resolves.toBe(0);
+		} finally {
+			await supervisor.close();
+		}
+	});
+
+	it("names the terminal handoff directory to the child so it can yield for an escalation prompt", async () => {
+		const cwd = workspace();
+		const backend = createLinuxSandboxBackend();
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
+		const stateDirectory = join(cwd, ".apex-code", "sandbox-state");
+
+		try {
+			// The directory must be inside the workspace bind, or the child watches a path
+			// the sandbox never gave it and silently never yields the terminal.
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: [
+						"-c",
+						`test "$APEX_TERMINAL_HANDOFF_PATH" = "${stateDirectory}" && test -d "$APEX_TERMINAL_HANDOFF_PATH"`,
+					],
+				}),
+			).resolves.toBe(0);
+		} finally {
+			await supervisor.close();
+		}
+	});
+
+	it("lets git inside the child fetch a credential over the channel without one entering the workspace", async () => {
+		const cwd = workspace();
+		const stateDirectory = join(cwd, ".apex-code", "sandbox-state");
+		mkdirSync(stateDirectory, { recursive: true });
+		const identity = createProjectedGitConfig(
+			{ name: "Ada Lovelace", email: "ada@example.invalid" },
+			{ credentialHelper: gitCredentialHelperCommand(stateDirectory) },
+		);
+		temporaryDirectories.push(identity.directory);
+		const backend = createLinuxSandboxBackend({
+			requestGitCredentialRelease: async () => true,
+			fillGitCredential: async () => ({ username: "ada", password: "host-owned-token" }),
+		});
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: ["github.com"], additionalWritableRoots: [] },
+		});
+		const output = join(cwd, "credential-output");
+
+		try {
+			// git's own credential machinery, run inside the boundary against the projected
+			// config. Nothing here reads a store: the child has none, and /home is a tmpfs.
+			const script = [
+				`printf 'protocol=https\\nhost=github.com\\n\\n' | git credential fill > ${output} 2>/dev/null`,
+				`grep -q 'password=host-owned-token' ${output}`,
+				`! grep -rq host-owned-token ${stateDirectory}`,
+			].join(" && ");
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: ["-c", script],
+					readOnlyFiles: [identity.path],
+					environment: { PATH: process.env.PATH, GIT_CONFIG_GLOBAL: identity.path },
+				}),
+			).resolves.toBe(0);
+		} finally {
+			await supervisor.close();
+		}
+	});
+
+	it("refuses a credential for a host the session cannot reach", async () => {
+		const cwd = workspace();
+		const stateDirectory = join(cwd, ".apex-code", "sandbox-state");
+		mkdirSync(stateDirectory, { recursive: true });
+		const identity = createProjectedGitConfig(
+			{ name: "Ada Lovelace", email: "ada@example.invalid" },
+			{ credentialHelper: gitCredentialHelperCommand(stateDirectory) },
+		);
+		temporaryDirectories.push(identity.directory);
+		const backend = createLinuxSandboxBackend({
+			requestGitCredentialRelease: async () => true,
+			fillGitCredential: async () => ({ username: "ada", password: "host-owned-token" }),
+		});
+		// Empty allowlist: the session could not open a connection to github.com, so a
+		// credential request for it is not git doing its job.
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
+		const output = join(cwd, "credential-output");
+
+		try {
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: [
+						"-c",
+						`printf 'protocol=https\\nhost=github.com\\n\\n' | git credential fill > ${output} 2>/dev/null; ! grep -q host-owned-token ${output}`,
+					],
+					readOnlyFiles: [identity.path],
+					environment: { PATH: process.env.PATH, GIT_CONFIG_GLOBAL: identity.path },
+				}),
+			).resolves.toBe(0);
+		} finally {
+			await supervisor.close();
+		}
+	});
+
 	it("projects a host tool executable read-only at the child's managed tools path", async () => {
 		const cwd = workspace();
 		const hostToolsDirectory = workspace();
@@ -90,7 +296,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		const destination = join(cwd, ".apex-code", "sandbox-agent", "bin", "fd");
 		mkdirSync(dirname(destination), { recursive: true });
 		const backend = createLinuxSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(
@@ -119,7 +328,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		const cwd = workspace();
 		const violations = new SandboxViolationStore();
 		const backend = createLinuxSandboxBackend({ violationStore: violations });
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(
@@ -144,7 +356,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		expect(join(deep, ".apex-code", "sandbox-state", "proxy.sock").length).toBeGreaterThan(108);
 
 		const backend = createLinuxSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: deep, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: deep, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(supervisor.launch({ command: "/bin/sh", args: ["-c", "true"] })).resolves.toBe(0);
@@ -156,7 +371,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 	it("does not expose the invoking account home outside the workspace mount", async () => {
 		const cwd = workspace();
 		const backend = createLinuxSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(
@@ -171,7 +389,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		const cwd = workspace();
 		writeFileSync(join(cwd, "package.json"), JSON.stringify({ type: "module" }));
 		const backend = createLinuxSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(supervisor.launch({ command: "/bin/sh", args: ["-c", "true"] })).resolves.toBe(0);
@@ -184,7 +405,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		const cwd = workspace();
 		const violations = new SandboxViolationStore();
 		const backend = createLinuxSandboxBackend({ violationStore: violations });
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(
@@ -242,7 +466,10 @@ describe.skipIf(process.platform !== "linux")("Linux sandbox crash cleanup", () 
 				return fake;
 			}) as unknown as typeof spawn,
 		});
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		await expect(
 			supervisor.launch({ command: "/bin/sh", args: ["-c", "true"], readOnlyFiles: [authPath] }),
@@ -268,7 +495,10 @@ describe.skipIf(!canEnforceLinuxSandboxForChannel())("Linux credential channel p
 		await new Promise<void>((resolve) => listener.listen(hostSocketPath, resolve));
 
 		const backend = createLinuxSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(
@@ -291,7 +521,10 @@ describe.skipIf(!canEnforceLinuxSandboxForChannel())("Linux credential channel p
 	it("adds no channel environment when the supervisor opened no channel", async () => {
 		const cwd = workspace();
 		const backend = createLinuxSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(

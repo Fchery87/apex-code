@@ -232,7 +232,8 @@ it. Every tool added before this phase is a retrofit.
   `removeRules` / `setMode`) against explicit destinations.
 - Interception at `beforeToolCall` — the seam Pi's `Agent` already exposes.
 - **OS-level sandbox** underneath: filesystem read/write restriction, network host
-  allowlist, a violation store, and an interactive escalation callback. ADR-0005
+  allowlist, and a violation store. The interactive escalation callback named here was
+  deferred by ADR 0005 when it was accepted, and is not part of what 2b delivered. ADR-0005
   must state plainly what the boundary does and does not guarantee — Pi's own
   security doc is right that a half-sandbox misread as a real one is worse than none.
 
@@ -254,7 +255,7 @@ and is divided at its own seam:
 | Sub-phase | Scope | Exit criterion |
 | --- | --- | --- |
 | **2a — rule model** | Rules, eight-source precedence, modes, `PermissionUpdate`, `beforeToolCall` interception, `ToolContract` backfill for the seven inherited tools. ADR 0004. | Every registered tool passes the gate, registry-derived with no exceptions list. Precedence verified across all eight sources. |
-| **2b — OS sandbox** | Filesystem read/write restriction, network host allowlist, violation store, interactive escalation. ADR 0005. | The sandbox blocks a write outside the workspace and a request to a non-allowlisted host, and both surface as violations rather than silent failures. |
+| **2b — OS sandbox** | Filesystem read/write restriction, network host allowlist, violation store. Interactive escalation is **deferred** by ADR 0005 and tracked in `docs/specs/2026-08-28-sandbox-delegation-and-escalation.md`. ADR 0005. | The sandbox blocks a write outside the workspace and a request to a non-allowlisted host, and both surface as violations rather than silent failures. |
 
 **Phase 4 is gated on 2a only.** What Phase 4 needs is the `ruleContent` grammar its
 fifteen tools declare against; it does not need OS enforcement to exist. Keeping the
@@ -431,6 +432,34 @@ load-flake signature this machine produced before these changes.
 `docs/plans/2026-08-22-pr33-followups.md` is deleted now that the work is landed
 (recoverable via `git show <commit>:docs/plans/2026-08-22-pr33-followups.md`); Phase 2b's
 **landed** state is unchanged.
+
+### Follow-up (2026-08-28): sandbox delegation and escalation — landed
+
+2b delivered containment. It did not deliver the delegation half, and ADR 0005's own
+deferral of interactive escalation named a prerequisite — supervisor/child IPC carrying a
+concrete blocked-host request — that `core/sandbox/rpc/` satisfied on 2026-08-22, ten days
+after the ADR was accepted.
+[`specs/2026-08-28-sandbox-delegation-and-escalation.md`](specs/2026-08-28-sandbox-delegation-and-escalation.md)
+specifies the seven units that close it, and
+`docs/plans/2026-08-28-sandbox-delegation-and-escalation.md` tracked them, and is deleted now the work is landed
+(recoverable via `git show <commit>:docs/plans/2026-08-28-sandbox-delegation-and-escalation.md`).
+This does not change Phase 2b's **landed** state; escalation was never part of what 2b
+shipped.
+
+All seven units landed on 2026-08-28. A session now authors commits under the host
+identity, asks before reaching an unlisted host, pushes with a host-owned credential that
+never enters the workspace, and can run one approved command in a second child without its
+own boundary widening. `--add-dir`, `--sandbox danger-full-access`, and
+`--permission-profile` are the deliberate widenings, none reachable from project settings.
+Three ADRs record the decisions: 0023 (escalation authority is the supervisor's, because
+the RPC channel has no peer authentication), 0024 (an approved command runs in a second
+child rather than widening the first), and amendments to 0005 and 0015.
+
+Full-suite status, stated as run: `test:scripts` 21 passed; `packages/agent` 419 passed;
+`packages/coding-agent` run in five filtered passes covering every directory and every
+root-level file, 3060 tests passed with 58 skipped and 0 failed, each pass exiting 0. The
+package was split because a single ~22-minute invocation was twice terminated by the
+harness mid-run, not by a failure. `npm run check` passes end to end.
 
 ---
 

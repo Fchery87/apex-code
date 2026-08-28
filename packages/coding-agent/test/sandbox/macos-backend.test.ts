@@ -51,7 +51,10 @@ describe.skipIf(!canEnforceMacosSandbox())("macOS sandbox backend", () => {
 		const outside = join(dirname(cwd), `outside-${Date.now()}.txt`);
 		const violations = new SandboxViolationStore();
 		const backend = createMacosSandboxBackend({ violationStore: violations });
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 		const script = `sh -c 'printf allowed > ${join(cwd, "allowed.txt")}' && sh -c 'printf blocked > ${outside}'`;
 
 		await expect(supervisor.launch({ command: "/bin/sh", args: ["-c", script] })).resolves.not.toBe(0);
@@ -67,7 +70,10 @@ describe.skipIf(!canEnforceMacosSandbox())("macOS sandbox backend", () => {
 	it("does not expose the invoking account home outside the workspace mount", async () => {
 		const cwd = workspace();
 		const backend = createMacosSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(
@@ -99,7 +105,10 @@ describe.skipIf(!canEnforceMacosSandbox())("macOS sandbox backend", () => {
 		mkdirSync(hostDirectory, { recursive: true });
 		writeFileSync(authPath, "host-secret", { mode: 0o600 });
 		const backend = createMacosSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(
@@ -121,7 +130,10 @@ describe.skipIf(!canEnforceMacosSandbox())("macOS sandbox backend", () => {
 		mkdirSync(hostDirectory, { recursive: true });
 		writeFileSync(authPath, "host-secret", { mode: 0o600 });
 		const backend = createMacosSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(
@@ -155,7 +167,10 @@ describe.skipIf(!canEnforceMacosSandbox())("macOS sandbox backend", () => {
 		const cwd = workspace();
 		const violations = new SandboxViolationStore();
 		const backend = createMacosSandboxBackend({ violationStore: violations });
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(
@@ -213,7 +228,11 @@ describe("macOS violation attribution", () => {
 		});
 		const cwd = workspace();
 		return backend
-			.launch({ command: "/bin/sh", args: ["-c", "true"], policy: { workspace: cwd, allowedHosts: [] } })
+			.launch({
+				command: "/bin/sh",
+				args: ["-c", "true"],
+				policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+			})
 			.then(async () => {
 				await backend.close();
 				return violations;
@@ -282,7 +301,7 @@ describe("macOS credential channel projection", () => {
 			.launch({
 				command: "/bin/sh",
 				args: ["-c", "true"],
-				policy: { workspace: cwd, allowedHosts: [] },
+				policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
 				// As on Linux, the launch builder advertises the channel; this backend
 				// must carry it through to sandbox-exec's environment untouched.
 				environment: credentialChannel ? { APEX_CREDENTIAL_PROXY_PATH: credentialChannel.childSocketPath } : {},
@@ -318,7 +337,10 @@ describe("macOS credential channel projection", () => {
 
 		expect(code).toBe(0);
 		const profile = readFileSync(join(cwd, ".apex-code", "sandbox-state", "profile.sb"), "utf8");
-		expect(profile).not.toContain("unix-socket");
+		// The git credential and command escalation channels are always opened, so their
+		// socket rules are always present. What must be absent is the credential channel's,
+		// whose sockets live under an `apex-cred-` directory.
+		expect(profile).not.toContain("apex-cred-");
 		expect(spawnEnvironment?.APEX_CREDENTIAL_PROXY_PATH).toBeUndefined();
 	});
 });

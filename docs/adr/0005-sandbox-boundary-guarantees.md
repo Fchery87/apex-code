@@ -146,3 +146,74 @@ flaw in this repo's design), fixed with one `sysctl` line before `bwrap` runs. S
 the 2026-08-12 spec's third 2026-08-13 amendment and the plan's 2b.7 record. This
 does not change what this ADR claims — it closes the gap between what was claimed
 and what CI actually verified.
+
+## Amendment (2026-08-28): interactive network escalation is no longer deferred
+
+This ADR deferred interactive escalation "until supervisor/child IPC can carry a concrete
+blocked-host request without granting an unrestricted retry." That prerequisite was met on
+2026-08-22 by `core/sandbox/rpc/`, built for supervisor-mediated credential writes
+(ADR 0015's amendment) — ten days after this ADR was accepted, and by work that had no
+reason to notice it was also unblocking this. The deferral outlived its own condition.
+
+Escalation now ships for the network layer, and the shape this ADR asked for is what
+landed. A refusal carries one concrete host and port. A grant covers that host and port and
+nothing else, lasts for the session, and is never persisted; a durable entry remains an
+explicit edit to global `network.allowedHosts`, per ADR 0016. Declining is not remembered,
+so a later attempt asks again rather than presenting a cached refusal as policy.
+Concurrent connections to the same refused host coalesce onto one question. Nothing grants
+an unrestricted retry.
+
+**Headless, print, JSON, and RPC behaviour is unchanged and remains deny**, now for a
+structural reason rather than a deferral: the approver is constructed only when the
+supervisor holds a terminal, and its absence leaves this ADR's original
+deny-without-asking path running untouched. There is no mode check to forget.
+
+One decision inside this work was large enough to need its own record.
+`docs/adr/0023-supervisor-owned-escalation-authority.md` establishes that the supervisor,
+not the child, renders the prompt and reads the answer, because the credential channel
+performs no peer authentication and an approval asserted from inside the boundary would be
+forgeable by exactly the code this boundary exists to contain. This amendment does not
+restate that reasoning; it depends on it.
+
+Filesystem escalation remains deferred and is **not** delivered here. A refused write is
+refused by the kernel inside a namespace whose mounts are fixed for its lifetime, so there
+is no in-place equivalent of holding a CONNECT open while a human decides. That gap and a
+proposed shape for it are recorded in
+`docs/specs/2026-08-28-sandbox-delegation-and-escalation.md`, not settled by this
+amendment.
+
+## Amendment (2026-08-28): an explicit opt-out, and named writable roots
+
+This ADR states that "an opt-out is not introduced in Phase 2b." That sentence is now
+retired, and the reason it can be is the order the work landed rather than a change of
+mind about the risk.
+
+The opt-out was withheld because the boundary could not be worked with. A session could
+not author a commit, could not reach a host it needed, could not push, and could not ask
+for any of those. An escape hatch shipped into that state would not have been an escape
+hatch; it would have become the ordinary way to use the product, and the boundary would
+have been nominal. With the identity projection, network escalation, and the git
+credential channel in place, the reasons to reach for it are gone, so it can exist as what
+it was always meant to be — a deliberate, announced choice for a session that genuinely
+needs no boundary, typically one already contained by something else.
+
+`--sandbox danger-full-access` runs with no OS boundary. It is spelled out in full on the
+command line and is never read from settings of any scope, so no repository and no saved
+configuration can turn containment off; that is the same rule ADR 0016 applies to every
+supervisor policy input, applied to the input where it matters most. It always prints a
+banner naming what stops being enforced, because a session that silently ran unconfined is
+indistinguishable afterwards from one that did not. At a terminal it additionally requires
+an affirmative answer. Where no terminal exists it proceeds unprompted, since prompting
+would hang the run rather than protect anything, and that non-interactive case — CI that
+is already externally sandboxed — is the one the flag legitimately exists for.
+
+`--add-dir` names further writable directories. Each is validated exactly as the workspace
+always was: absolute, existing, a directory, resolved through `realpathSync`, so a backend
+never silently broadens an ambiguous path into host authority. The workspace itself stays
+singular, because state, sessions, and the concurrency lease are anchored to one
+directory; extra roots are additional mounts, not co-equal workspaces. Like the opt-out,
+they come only from argv.
+
+Neither addition changes what the boundary guarantees when it is enforced, and neither is
+reachable from inside the child. The default with no flags is byte for byte the boundary
+this ADR has described throughout.

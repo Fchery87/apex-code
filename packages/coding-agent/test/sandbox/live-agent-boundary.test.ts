@@ -46,32 +46,51 @@ async function runCli(options: { args: readonly string[]; cwd: string; environme
 	return { code, stdout, stderr };
 }
 
-describe.skipIf(!canEnforceLinuxSandbox())("live-agent OS sandbox boundary", () => {
-	it("constrains a native write and a bash descendant in the same sandboxed child tree", async () => {
-		const workspace = temporaryDirectory("apex-sandbox-live-agent-");
-		const outsideBash = join(dirname(workspace), `live-agent-bash-${Date.now()}.txt`);
-		const outsideWrite = join(dirname(workspace), `live-agent-write-${Date.now()}.txt`);
+/**
+ * These tests spawn a whole CLI, which transpiles its module graph in a cold worker before
+ * it does anything. Warm they take seconds; in a parallel suite run on a loaded machine
+ * they have repeatedly crossed the 30s default and then passed in isolation, which is the
+ * load-flake signature Phase 2b's roadmap entry already records for CLI-spawning files.
+ * The cost is real rather than a hang, so the timeout is the thing that was wrong.
+ */
+const CLI_SPAWN_TIMEOUT_MS = 120_000;
 
-		const result = await runCli({
-			args: [
-				"--print",
-				"run the boundary test",
-				"--extension",
-				extensionPath,
-				"--model",
-				"boundary-test/scripted",
-				"--permission-mode",
-				"bypassPermissions",
-			],
-			cwd: workspace,
-			environment: {
-				APEX_BOUNDARY_TEST_OUTSIDE_BASH: outsideBash,
-				APEX_BOUNDARY_TEST_OUTSIDE_WRITE: outsideWrite,
-			},
-		});
+describe.skipIf(!canEnforceLinuxSandbox())("live-agent OS sandbox boundary", { timeout: CLI_SPAWN_TIMEOUT_MS }, () => {
+	// This spawns a whole CLI, which transpiles its module graph in a cold worker before
+	// it does anything. Warm it runs in about four seconds; under a parallel suite run on a
+	// loaded machine it has repeatedly crossed the 30s default and passed in isolation,
+	// which is the load-flake signature Phase 2b's roadmap entry already records for
+	// CLI-spawning files. The cost is real rather than a hang, so the timeout is the thing
+	// that is wrong.
+	it(
+		"constrains a native write and a bash descendant in the same sandboxed child tree",
+		{ timeout: 120_000 },
+		async () => {
+			const workspace = temporaryDirectory("apex-sandbox-live-agent-");
+			const outsideBash = join(dirname(workspace), `live-agent-bash-${Date.now()}.txt`);
+			const outsideWrite = join(dirname(workspace), `live-agent-write-${Date.now()}.txt`);
 
-		expect(result.code, `stdout:\n${result.stdout}\n\nstderr:\n${result.stderr}`).toBe(0);
-		expect(existsSync(outsideBash)).toBe(false);
-		expect(existsSync(outsideWrite)).toBe(false);
-	});
+			const result = await runCli({
+				args: [
+					"--print",
+					"run the boundary test",
+					"--extension",
+					extensionPath,
+					"--model",
+					"boundary-test/scripted",
+					"--permission-mode",
+					"bypassPermissions",
+				],
+				cwd: workspace,
+				environment: {
+					APEX_BOUNDARY_TEST_OUTSIDE_BASH: outsideBash,
+					APEX_BOUNDARY_TEST_OUTSIDE_WRITE: outsideWrite,
+				},
+			});
+
+			expect(result.code, `stdout:\n${result.stdout}\n\nstderr:\n${result.stderr}`).toBe(0);
+			expect(existsSync(outsideBash)).toBe(false);
+			expect(existsSync(outsideWrite)).toBe(false);
+		},
+	);
 });

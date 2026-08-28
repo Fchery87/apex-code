@@ -1,9 +1,24 @@
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
+import { createCommandEscalationApprover, createCredentialReleaser, createHostApprover } from "./host-approval.ts";
 import { createSandboxNetworkProxy, type SandboxNetworkProxy } from "./network-proxy.ts";
+import {
+	COMMAND_ESCALATION_SOCKET_VARIABLE,
+	type CommandEscalationRequest,
+	createCommandEscalationProxy,
+	resolveCommandEscalationChannelPaths,
+} from "./rpc/command-proxy.ts";
+import {
+	fillHostGitCredential,
+	GIT_CREDENTIAL_SOCKET_VARIABLE,
+	resolveGitCredentialChannelPaths,
+	writeGitCredentialHelper,
+} from "./rpc/git-credential-helper.ts";
+import { createGitCredentialProxy, type GitCredentialProxy } from "./rpc/git-credential-proxy.ts";
 import type { SandboxBackend, SandboxLaunch } from "./supervisor.ts";
+import { createTerminalHandoff, TERMINAL_HANDOFF_PATH_VARIABLE, type TerminalHandoff } from "./terminal-handoff.ts";
 import type { SandboxViolationStore } from "./violations.ts";
 
 export interface MacosSandboxBackendOptions {
@@ -17,6 +32,8 @@ export interface MacosSandboxBackendOptions {
 	 * violation would be verifiable only on a macOS host.
 	 */
 	spawnChild?: typeof spawn;
+	/** Injectable only for tests, which have no terminal to approve an escalation at. */
+	requestCommandEscalation?: (request: CommandEscalationRequest) => Promise<boolean>;
 }
 
 function sandboxExecExists(command: string): boolean {
@@ -116,6 +133,11 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 	const hasCommand = options?.commandExists ?? sandboxExecExists;
 	const violationStore = options?.violationStore;
 	let proxy: SandboxNetworkProxy | undefined;
+	let handoff: TerminalHandoff | undefined;
+	let gitCredentialProxy: GitCredentialProxy | undefined;
+	let gitCredentialDirectory: string | undefined;
+	let escalationProxy: Awaited<ReturnType<typeof createCommandEscalationProxy>> | undefined;
+	let escalationDirectory: string | undefined;
 
 	if (!hasCommand("sandbox-exec")) {
 		return {
@@ -134,16 +156,68 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 			// and Seatbelt's subpath match is against the canonical path, not the one
 			// the caller happened to spell. Resolve once, use everywhere below.
 			const workspace = realpathSync(launch.policy.workspace);
+			const writableRoots = launch.policy.additionalWritableRoots;
 			const stateDirectory = join(workspace, ".apex-code", "sandbox-state");
 			mkdirSync(stateDirectory, { recursive: true });
 
 			const violationCountBeforeLaunch = violationStore?.totalCount ?? 0;
 
+			handoff = createTerminalHandoff(stateDirectory);
+			// Both channels are AF_UNIX servers, which Windows has not got. Nothing is lost
+			// by skipping them there: ADR 0005 leaves Windows unsupported and this backend
+			// reports `unavailable` on any real Windows host. They are reachable here only
+			// because the violation-attribution tests run this body off-macOS on purpose,
+			// with `spawnChild` injected, and those must keep working on every runner.
+			const unixSocketsAvailable = process.platform !== "win32";
+			const gitCredentialPaths = unixSocketsAvailable ? resolveGitCredentialChannelPaths() : undefined;
+			gitCredentialDirectory = gitCredentialPaths?.hostSocketDirectory;
 			proxy = await createSandboxNetworkProxy({
 				tcpHost: "127.0.0.1",
 				allowedHosts: launch.policy.allowedHosts,
 				violationStore,
+				// Undefined without a terminal, which leaves the proxy's own
+				// deny-without-asking path in place for headless, print, JSON, and RPC.
+				requestApproval: createHostApprover({ handoff }),
 			});
+			// After the network proxy, because reachability is its answer to give.
+			gitCredentialProxy =
+				gitCredentialPaths &&
+				(await createGitCredentialProxy({
+					socketPath: gitCredentialPaths.hostSocketPath,
+					isHostAllowed: (host) => proxy?.isHostReachable(host) ?? false,
+					requestRelease: createCredentialReleaser({ handoff }),
+					// The supervisor's own environment: this runs outside the boundary and must
+					// resolve against the real host home the child cannot see.
+					fillCredential: (request) => fillHostGitCredential(request, { environment: process.env }),
+					violationStore,
+				}));
+			writeGitCredentialHelper(stateDirectory);
+
+			const escalationPaths = unixSocketsAvailable ? resolveCommandEscalationChannelPaths() : undefined;
+			escalationDirectory = escalationPaths?.hostSocketDirectory;
+			// Seatbelt cannot remap a path, so the child reaches this socket at its host
+			// path, exactly as it reaches the credential channel.
+			escalationProxy =
+				escalationPaths &&
+				(await createCommandEscalationProxy({
+					socketPath: escalationPaths.hostSocketPath,
+					requestApproval: options?.requestCommandEscalation ?? createCommandEscalationApprover({ handoff }),
+					violationStore,
+					runEscalated: async (request) => {
+						const escalated = createMacosSandboxBackend(options);
+						const code = await escalated.launch({
+							...launch,
+							command: "/bin/sh",
+							args: ["-c", request.command],
+							policy: {
+								...launch.policy,
+								additionalWritableRoots: [...launch.policy.additionalWritableRoots, request.writableRoot],
+							},
+						});
+						await escalated.close();
+						return { code, stdout: "", stderr: "" };
+					},
+				}));
 			const proxyPort = proxy.port as number;
 
 			// Seatbelt cannot remap a path, so the child connects to the channel socket at
@@ -191,10 +265,21 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 				'(allow file-read* (subpath (param "WORKSPACE")))',
 				"(deny file-write*)",
 				'(allow file-write* (subpath (param "WORKSPACE")))',
+				// Each extra root is allowed exactly as the workspace is, and only ever from
+				// an argv-parsed flag: a repository that could name its own writable root
+				// would be granting itself authority (ADR 0016).
+				...writableRoots.map((_, index) => `(allow file-read* (subpath (param "RW_${index}")))`),
+				...writableRoots.map((_, index) => `(allow file-write* (subpath (param "RW_${index}")))`),
 				"(deny network*)",
 				'(allow network-outbound (remote ip (param "PROXY_ADDR")))',
 				...(credentialChannelSocket
 					? [`(allow network-outbound (remote unix-socket (literal "${credentialChannelSocket}")))`]
+					: []),
+				...(gitCredentialPaths
+					? [`(allow network-outbound (remote unix-socket (literal "${gitCredentialPaths.hostSocketPath}")))`]
+					: []),
+				...(escalationPaths
+					? [`(allow network-outbound (remote unix-socket (literal "${escalationPaths.hostSocketPath}")))`]
 					: []),
 			];
 			const profilePath = join(stateDirectory, "profile.sb");
@@ -208,6 +293,9 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 				params.push("-D", `RO_FILE_${index}=${file}`);
 			});
 			params.push("-D", `WORKSPACE=${workspace}`);
+			writableRoots.forEach((root, index) => {
+				params.push("-D", `RW_${index}=${root}`);
+			});
 			params.push("-D", `PROXY_ADDR=localhost:${proxyPort}`);
 
 			const spawnSandboxExec = options?.spawnChild ?? spawn;
@@ -222,6 +310,11 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 						TMPDIR: launch.environment?.TMPDIR ?? stateDirectory,
 						HTTP_PROXY: `http://127.0.0.1:${proxyPort}`,
 						HTTPS_PROXY: `http://127.0.0.1:${proxyPort}`,
+						[TERMINAL_HANDOFF_PATH_VARIABLE]: stateDirectory,
+						...(gitCredentialPaths
+							? { [GIT_CREDENTIAL_SOCKET_VARIABLE]: gitCredentialPaths.childSocketPath }
+							: {}),
+						...(escalationPaths ? { [COMMAND_ESCALATION_SOCKET_VARIABLE]: escalationPaths.childSocketPath } : {}),
 					},
 					stdio: ["inherit", "inherit", "pipe"],
 				},
@@ -247,6 +340,11 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 			return exitCode;
 		},
 		async close() {
+			handoff?.stop();
+			await escalationProxy?.close();
+			if (escalationDirectory) rmSync(escalationDirectory, { force: true, recursive: true });
+			await gitCredentialProxy?.close();
+			if (gitCredentialDirectory) rmSync(gitCredentialDirectory, { force: true, recursive: true });
 			await proxy?.close();
 		},
 	};
