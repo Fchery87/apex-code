@@ -21,7 +21,10 @@ describe("SettingsSelectorComponent", () => {
 			fullscreenExitOutput: "transcript",
 			fullscreenScrollbar: "auto",
 			warnings: {},
+			defaultModel: "not set",
+			availableDefaultModels: [],
 			availableThinkingLevels: [],
+			modelThinkingLevels: {},
 			availableThemes: [],
 		} as unknown as SettingsConfig;
 		const callbacks = {
@@ -47,6 +50,7 @@ describe("SettingsSelectorComponent", () => {
 				permissionMode: { mode: "default", origin: "user" },
 				fullscreenScrollbar: "auto",
 				warnings: {},
+				availableDefaultModels: [],
 				availableThinkingLevels: [],
 				availableThemes: [],
 			} as unknown as SettingsConfig,
@@ -65,6 +69,7 @@ describe("SettingsSelectorComponent", () => {
 			{
 				fullscreenScrollbar: "auto",
 				warnings: {},
+				availableDefaultModels: [],
 				availableThinkingLevels: [],
 				availableThemes: [],
 			} as unknown as SettingsConfig,

@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.84.3] - 2026-08-24
+
+### Fixed
+
+- Fixed single-object `edit` tool inputs failing validation by accepting them as one-edit arrays ([#7835](https://github.com/earendil-works/pi/issues/7835)).
+- Fixed root Markdown files such as `README.md` and `AGENTS.md` in skill directories being reported as broken skills unless they declare valid skill frontmatter ([#7805](https://github.com/earendil-works/pi/issues/7805)).
+
+## [0.84.2] - 2026-08-14
+
 ## [0.0.1-alpha.8] - 2026-08-27
 
 - Hardened the cross-platform sandbox regression suite: POSIX-only credential-channel lifecycle cases are skipped on Windows, dead-supervisor cleanup uses a genuinely exited process, and macOS session-lease assertions compare canonical paths.

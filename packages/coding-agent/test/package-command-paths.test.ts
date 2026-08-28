@@ -1,8 +1,20 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	utimesSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
+import lockfile from "proper-lockfile";
+import semver from "semver";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ENV_AGENT_DIR, PACKAGE_NAME, VERSION } from "../src/config.ts";
+import { APP_NAME, ENV_AGENT_DIR, PACKAGE_NAME, VERSION } from "../src/config.ts";
 import { ModelRuntime } from "../src/core/model-runtime.ts";
 import type { ResolvedPaths } from "../src/core/package-manager.ts";
 import { InMemorySettingsStorage, SettingsManager } from "../src/core/settings-manager.ts";
@@ -20,13 +32,96 @@ describe("package commands", () => {
 	let originalCwd: string;
 	let originalAgentDir: string | undefined;
 	let originalApexPackageDir: string | undefined;
+	let originalLegacyPiPackageDir: string | undefined;
 	let originalPath: string | undefined;
 	let originalExitCode: typeof process.exitCode;
 	let originalExecPath: string;
 
 	function getNewerPatchVersion(): string {
-		const [major = "0", minor = "0", patch = "0"] = VERSION.split(".");
-		return `${major}.${minor}.${Number.parseInt(patch, 10) + 1}`;
+		// Naive `X.Y.Z` string math breaks on Apex's prerelease VERSION
+		// (`0.0.1-alpha.8`): splitting on "." and incrementing the third segment
+		// parses "1-alpha" as 1 and produces "0.0.2", a version with no real
+		// relationship to VERSION. semver.inc("patch") correctly treats a
+		// prerelease-of-N as not-yet-N, so it releases N itself (`0.0.1`), which
+		// is genuinely newer than `0.0.1-alpha.8` under semver ordering.
+		const next = semver.inc(VERSION, "patch");
+		if (!next) throw new Error(`Could not compute a newer version from ${VERSION}`);
+		return next;
+	}
+
+	function prepareManagedInstall(
+		targetVersion: string,
+		npmExitCode = 0,
+	): { managedRoot: string; npmRecordPath: string } {
+		const managedRoot = join(agentDir, "install");
+		const activeRelease = join(managedRoot, "releases", VERSION);
+		const selfPackageDir = join(activeRelease, "node_modules", ...PACKAGE_NAME.split("/"));
+		mkdirSync(selfPackageDir, { recursive: true });
+		writeFileSync(join(activeRelease, "active.txt"), "active");
+		writeFileSync(join(managedRoot, "current-version"), `${VERSION}\n`);
+		writeFileSync(
+			join(managedRoot, "managed-install.json"),
+			`${JSON.stringify({ kind: "apex-code-managed-install", schemaVersion: 1, layout: "releases-v1" })}\n`,
+		);
+
+		const binDir = join(tempDir, "managed-bin");
+		const fakeNpmPath = join(tempDir, "managed-npm.cjs");
+		const npmRecordPath = join(tempDir, "managed-npm-record.json");
+		mkdirSync(binDir, { recursive: true });
+		writeFileSync(
+			fakeNpmPath,
+			`const fs = require("node:fs");
+const path = require("node:path");
+const args = process.argv.slice(2);
+fs.writeFileSync(${JSON.stringify(npmRecordPath)}, JSON.stringify(args));
+if (${npmExitCode} !== 0) process.exit(${npmExitCode});
+const binDir = path.join(process.cwd(), "node_modules", ".bin");
+fs.mkdirSync(binDir, { recursive: true });
+const piPath = path.join(binDir, process.platform === "win32" ? "${APP_NAME}.cmd" : "${APP_NAME}");
+fs.writeFileSync(
+	piPath,
+	process.platform === "win32"
+		? "@echo off\\r\\necho ${targetVersion}\\r\\n"
+		: "#!/bin/sh\\nprintf '%s\\n' ${targetVersion}\\n",
+);
+if (process.platform !== "win32") fs.chmodSync(piPath, 0o755);
+`,
+		);
+		const npmPath = join(binDir, process.platform === "win32" ? "npm.cmd" : "npm");
+		writeFileSync(
+			npmPath,
+			process.platform === "win32"
+				? `@echo off\r\n"${originalExecPath}" "${fakeNpmPath}" %*\r\n`
+				: `#!/bin/sh\nexec "${originalExecPath}" "${fakeNpmPath}" "$@"\n`,
+		);
+		chmodSync(npmPath, 0o755);
+
+		vi.stubEnv("APEX_CODE_INSTALLER_API_BASE", "https://example.test/api/installer/releases");
+		vi.stubEnv("APEX_CODE_MANAGED_INSTALL_ROOT", managedRoot);
+		process.env.APEX_CODE_PACKAGE_DIR = selfPackageDir;
+		process.env.PATH = `${binDir}${delimiter}${originalPath ?? ""}`;
+		return { managedRoot, npmRecordPath };
+	}
+
+	function mockManagedUpdate(targetVersion: string): void {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (input: string | URL | Request) => {
+				const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+				// getLatestApexCodeRelease hits npm's own per-tag registry endpoint directly
+				// (no separate hosted latest-version service -- see ADR 0013) and parses the
+				// response as npm's package manifest shape: `name`/`version`, not
+				// `packageName`/`version`.
+				if (url === `https://registry.npmjs.org/${PACKAGE_NAME}/next`) {
+					return Response.json({ name: PACKAGE_NAME, version: targetVersion });
+				}
+				const releaseUrl = `https://example.test/api/installer/releases/${targetVersion}`;
+				if (url === `${releaseUrl}/package.json` || url === `${releaseUrl}/package-lock.json`) {
+					return Response.json({});
+				}
+				throw new Error(`Unexpected fetch: ${url}`);
+			}),
+		);
 	}
 
 	async function runPackageCommandDirectly(args: string[]): Promise<void> {
@@ -64,6 +159,7 @@ describe("package commands", () => {
 		originalCwd = process.cwd();
 		originalAgentDir = process.env[ENV_AGENT_DIR];
 		originalApexPackageDir = process.env.APEX_CODE_PACKAGE_DIR;
+		originalLegacyPiPackageDir = process.env.PI_PACKAGE_DIR;
 		originalPath = process.env.PATH;
 		originalExitCode = process.exitCode;
 		originalExecPath = process.execPath;
@@ -82,6 +178,7 @@ describe("package commands", () => {
 
 	afterEach(() => {
 		vi.unstubAllGlobals();
+		vi.unstubAllEnvs();
 		vi.restoreAllMocks();
 		process.chdir(originalCwd);
 		process.exitCode = originalExitCode;
@@ -94,6 +191,11 @@ describe("package commands", () => {
 			delete process.env.APEX_CODE_PACKAGE_DIR;
 		} else {
 			process.env.APEX_CODE_PACKAGE_DIR = originalApexPackageDir;
+		}
+		if (originalLegacyPiPackageDir === undefined) {
+			delete process.env.PI_PACKAGE_DIR;
+		} else {
+			process.env.PI_PACKAGE_DIR = originalLegacyPiPackageDir;
 		}
 		if (originalPath === undefined) {
 			delete process.env.PATH;
@@ -560,10 +662,103 @@ describe("package commands", () => {
 		}
 	});
 
-	it("uses the update check version for forced self updates even when current", async () => {
+	it("updates installer-managed Pi through a staged immutable release", async () => {
+		const targetVersion = getNewerPatchVersion();
+		const { managedRoot, npmRecordPath } = prepareManagedInstall(targetVersion);
+		const abandonedStage = join(managedRoot, "staging", "update-abandoned");
+		mkdirSync(abandonedStage, { recursive: true });
+		writeFileSync(join(abandonedStage, "partial"), "partial");
+		const abandonedLock = join(managedRoot, "update.lock");
+		mkdirSync(abandonedLock);
+		utimesSync(abandonedLock, new Date(0), new Date(0));
+		mockManagedUpdate(targetVersion);
+		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		await expect(runPackageCommandDirectly(["update", "--self"])).resolves.toBeUndefined();
+
+		expect(readFileSync(join(managedRoot, "current-version"), "utf8")).toBe(`${targetVersion}\n`);
+		expect(existsSync(join(managedRoot, "releases", targetVersion))).toBe(true);
+		expect(existsSync(join(managedRoot, "releases", VERSION, "active.txt"))).toBe(true);
+		expect(readdirSync(join(managedRoot, "staging"))).toEqual([]);
+		expect(JSON.parse(readFileSync(npmRecordPath, "utf8")) as string[]).toEqual(
+			expect.arrayContaining(["ci", "--ignore-scripts"]),
+		);
+		expect(logSpy.mock.calls.map(([message]) => String(message)).join("\n")).toContain(
+			`Updated apex-code from ${VERSION} to ${targetVersion}`,
+		);
+		expect(errorSpy).not.toHaveBeenCalled();
+		expect(process.exitCode).toBeUndefined();
+	});
+
+	it("rejects a concurrent managed update", async () => {
+		const targetVersion = getNewerPatchVersion();
+		const { managedRoot, npmRecordPath } = prepareManagedInstall(targetVersion);
+		const releaseLock = await lockfile.lock(join(managedRoot, "update"), { realpath: false });
+		mockManagedUpdate(targetVersion);
+		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		try {
+			await expect(runPackageCommandDirectly(["update", "--self"])).resolves.toBeUndefined();
+		} finally {
+			await releaseLock();
+		}
+
+		expect(readFileSync(join(managedRoot, "current-version"), "utf8")).toBe(`${VERSION}\n`);
+		expect(existsSync(npmRecordPath)).toBe(false);
+		expect(logSpy.mock.calls.map(([message]) => String(message)).join("\n")).not.toContain("Updated apex-code from");
+		expect(errorSpy.mock.calls.map(([message]) => String(message)).join("\n")).toContain(
+			"Another managed Apex Code update is already running.",
+		);
+		expect(process.exitCode).toBe(1);
+	});
+
+	it("rejects forced managed reinstalls", async () => {
+		const targetVersion = getNewerPatchVersion();
+		const { npmRecordPath } = prepareManagedInstall(targetVersion);
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		await expect(runPackageCommandDirectly(["update", "--self", "--force"])).resolves.toBeUndefined();
+
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(existsSync(npmRecordPath)).toBe(false);
+		expect(errorSpy.mock.calls.map(([message]) => String(message)).join("\n")).toContain(
+			"Managed apex-code installations do not support --force",
+		);
+		expect(process.exitCode).toBe(1);
+	});
+
+	it("keeps the managed release active when its update fails", async () => {
+		const targetVersion = getNewerPatchVersion();
+		const { managedRoot } = prepareManagedInstall(targetVersion, 23);
+		mockManagedUpdate(targetVersion);
+		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		await expect(runPackageCommandDirectly(["update", "--self"])).resolves.toBeUndefined();
+
+		expect(readFileSync(join(managedRoot, "current-version"), "utf8")).toBe(`${VERSION}\n`);
+		expect(existsSync(join(managedRoot, "releases", targetVersion))).toBe(false);
+		expect(readdirSync(join(managedRoot, "staging"))).toEqual([]);
+		expect(logSpy.mock.calls.map(([message]) => String(message)).join("\n")).not.toContain("Updated apex-code from");
+		expect(errorSpy.mock.calls.map(([message]) => String(message)).join("\n")).toContain("exited with code 23");
+		expect(process.exitCode).toBe(1);
+	});
+
+	it("keeps npm self-updates non-managed when the managed environment is inherited", async () => {
 		const globalPrefix = join(tempDir, "global-prefix");
 		const projectPrefix = join(tempDir, "project-prefix");
 		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@earendil-works", "pi-coding-agent");
+		const inheritedManagedRoot = join(tempDir, "inherited-managed-install");
+		mkdirSync(join(inheritedManagedRoot, "releases"), { recursive: true });
+		writeFileSync(
+			join(inheritedManagedRoot, "managed-install.json"),
+			JSON.stringify({ kind: "apex-code-managed-install", schemaVersion: 1, layout: "releases-v1" }),
+		);
+		vi.stubEnv("APEX_CODE_MANAGED_INSTALL_ROOT", inheritedManagedRoot);
 		const fakeNpmPath = join(tempDir, "fake-npm.cjs");
 		const recordPath = join(tempDir, "self-update.json");
 		mkdirSync(selfPackageDir, { recursive: true });

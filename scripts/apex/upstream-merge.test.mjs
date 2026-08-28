@@ -49,3 +49,17 @@ test("reads the merged tree without a pipe that can close early", () => {
 	assert.doesNotMatch(code, /merge_output[^\n]*\|\s*head/);
 	assert.match(code, /tree="\$\{merge_output%%/);
 });
+
+test("names a file Apex deleted that upstream resurrects, not just the marker-bearing conflicts", () => {
+	// A modify/delete conflict (upstream touches a path the ADR 0001 boundary commit
+	// deliberately removed, e.g. a .github/ workflow) is resolved by merge-tree with
+	// upstream's content and zero `<<<<<<<` markers, so `hunks` never sees it and a
+	// review that only greps for markers walks straight past a resurrected file. The
+	// v0.84.3 merge did exactly this to .github/APPROVED_CONTRIBUTORS and
+	// .github/workflows/build-binaries.yml, both silently re-added.
+	assert.match(code, /CONFLICT \\\(modify\\\/delete\\\)/); // matches the awk pattern's literal escaping
+	assert.match(code, /resurrected/);
+	// Must be parsed from `messages`, the same text already captured, not a second
+	// re-run of merge-tree.
+	assert.match(code, /resurrected="\$\(printf '%s\\n' "\$\{messages\}"/);
+});

@@ -142,7 +142,7 @@ If you use Apex Code for open source work and want to publish sessions for model
 ## CLI Reference
 
 ```bash
-apex-code [options] [@files...] [messages...]
+apex-code [options] [--] [@files...] [messages...]
 ```
 
 ### Package Commands
@@ -215,7 +215,7 @@ cat README.md | apex-code -p "Summarize this text"
 | `--no-builtin-tools`, `-nbt` | Disable built-in tools but keep extension/custom tools enabled |
 | `--no-tools`, `-nt` | Disable all tools |
 
-Built-in tools: `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`.
+Built-in tools: `read`, `bash`, `powershell` (Windows), `edit`, `write`, `grep`, `find`, `ls`.
 
 ### Resource Options
 
@@ -248,6 +248,7 @@ apex-code --no-extensions -e ./my-extension.ts
 | `--verbose` | Force verbose startup |
 | `-a`, `--approve` | Trust project-local files for this run |
 | `-na`, `--no-approve` | Ignore project-local files for this run |
+| `--` | Stop option parsing; remaining arguments are prompts or `@file` inputs |
 | `-h`, `--help` | Show help |
 | `-v`, `--version` | Show version |
 
@@ -273,6 +274,9 @@ apex-code "List all .ts files in src/"
 
 # Non-interactive
 apex-code -p "Summarize this codebase"
+
+# Prompt beginning with a dash
+pi -p -- "- Summarize these points"
 
 # Non-interactive with piped stdin
 cat README.md | apex-code -p "Summarize this text"
