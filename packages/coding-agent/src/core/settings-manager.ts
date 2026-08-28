@@ -189,6 +189,13 @@ export interface Settings {
 	fullscreenExitOutput?: FullscreenExitOutput; // default: "transcript"; no effect in regular TUI mode
 	fullscreenScrollbar?: ScrollViewScrollbar; // default: "auto"; no effect in regular TUI mode
 	network?: NetworkSettings;
+	/**
+	 * Named OS-boundary profiles, keyed by the name `--permission-profile` selects.
+	 *
+	 * Read only from global scope by `core/sandbox/profiles.ts`; a project-scope copy is
+	 * ignored, per ADR 0016.
+	 */
+	sandboxProfiles?: Record<string, { allowedHosts?: string[]; additionalWritableRoots?: string[] }>;
 	delegationMaxDepth?: number; // Max delegation recursion depth (roadmap Phase 5, task 5.3). default: 2, hard-capped at DELEGATION_MAX_DEPTH_HARD_CAP
 	observability?: ObservabilitySettings;
 	lsp?: LspSettings;
@@ -945,6 +952,10 @@ export class SettingsManager {
 
 	getNetworkSettings(): NetworkSettings | undefined {
 		return this.settings.network;
+	}
+
+	getSandboxProfiles(): Settings["sandboxProfiles"] {
+		return this.settings.sandboxProfiles === undefined ? undefined : structuredClone(this.settings.sandboxProfiles);
 	}
 
 	getLspSettings(): LspSettings | undefined {

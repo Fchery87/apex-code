@@ -380,6 +380,24 @@ for that one host, once you release it. Nothing is written into the workspace. A
 covers one host for the session only, and a host the session cannot reach gets no
 credential at all.
 
+**Profiles.** A named combination of allowed hosts and writable roots, selected with
+`--permission-profile <name>` and defined in global `settings.json`:
+
+```json
+{
+  "sandboxProfiles": {
+    "release": {
+      "allowedHosts": ["github.com", "api.github.com"],
+      "additionalWritableRoots": ["/srv/artifacts"]
+    }
+  }
+}
+```
+
+A profile is read from global scope only; the same block in a project's
+`.apex-code/settings.json` is ignored. It can widen what a session reaches and writes, and
+has no way to express a tool-gate mode or to disable the boundary.
+
 **Widening the boundary.** `--add-dir <path>` makes another directory writable, repeatable.
 `--sandbox danger-full-access` runs with no OS boundary at all, announces itself, and asks
 you to confirm at a terminal. Both are command-line flags only. Neither can be set from

@@ -36,6 +36,8 @@ export interface Args {
 	addDir?: string[];
 	/** OS sandbox posture. `danger-full-access` runs with no boundary at all. */
 	sandbox?: "enforced" | "danger-full-access";
+	/** A named OS-boundary profile from global settings. Never read from project scope. */
+	permissionProfile?: string;
 	session?: string;
 	sessionId?: string;
 	fork?: string;
@@ -144,6 +146,12 @@ export function parseArgs(args: readonly string[]): Args {
 				result.addDir.push(args[++i]);
 			} else {
 				result.diagnostics.push({ type: "error", message: "--add-dir requires a value" });
+			}
+		} else if (arg === "--permission-profile") {
+			if (i + 1 < args.length) {
+				result.permissionProfile = args[++i];
+			} else {
+				result.diagnostics.push({ type: "error", message: "--permission-profile requires a value" });
 			}
 		} else if (arg === "--sandbox") {
 			const value = i + 1 < args.length ? args[++i] : undefined;

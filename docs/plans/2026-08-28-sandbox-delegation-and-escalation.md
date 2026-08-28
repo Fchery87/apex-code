@@ -31,9 +31,9 @@ existing framed Unix-socket protocol.
 | SDE.7 | U4 | Done | `ee4c7dd95` |
 | SDE.8 | U5 | Done | `7c4fdebc4` |
 | SDE.9 | U5 | Done | `7c4fdebc4` |
-| SDE.10 | U6 | Done | pending |
-| SDE.11 | U6 | Done | pending |
-| SDE.12 | U7 | Not started | — |
+| SDE.10 | U6 | Done | `8c53a8001` |
+| SDE.11 | U6 | Done | `8c53a8001` |
+| SDE.12 | U7 | Done | pending |
 | SDE.13 | — | Not started | — |
 
 **Verification run, stated as run.** Root `npm test` on 2026-08-28: 339 test files passed,
