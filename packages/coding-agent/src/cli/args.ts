@@ -26,6 +26,16 @@ export interface Args {
 	name?: string;
 	noSession?: boolean;
 	allowConcurrent?: boolean;
+	/**
+	 * Extra directories the OS sandbox makes writable, repeatable.
+	 *
+	 * Read only from argv and never from settings: a repository that could name its own
+	 * writable root would be granting itself authority, which ADR 0016 forbids for every
+	 * supervisor policy input.
+	 */
+	addDir?: string[];
+	/** OS sandbox posture. `danger-full-access` runs with no boundary at all. */
+	sandbox?: "enforced" | "danger-full-access";
 	session?: string;
 	sessionId?: string;
 	fork?: string;
@@ -128,6 +138,23 @@ export function parseArgs(args: readonly string[]): Args {
 			result.noSession = true;
 		} else if (arg === "--allow-concurrent") {
 			result.allowConcurrent = true;
+		} else if (arg === "--add-dir") {
+			if (i + 1 < args.length) {
+				if (!result.addDir) result.addDir = [];
+				result.addDir.push(args[++i]);
+			} else {
+				result.diagnostics.push({ type: "error", message: "--add-dir requires a value" });
+			}
+		} else if (arg === "--sandbox") {
+			const value = i + 1 < args.length ? args[++i] : undefined;
+			if (value === "enforced" || value === "danger-full-access") {
+				result.sandbox = value;
+			} else {
+				result.diagnostics.push({
+					type: "error",
+					message: "--sandbox requires one of: enforced, danger-full-access",
+				});
+			}
 		} else if (arg === "--session" && i + 1 < args.length) {
 			result.session = args[++i];
 		} else if (arg === "--session-id" && i + 1 < args.length) {

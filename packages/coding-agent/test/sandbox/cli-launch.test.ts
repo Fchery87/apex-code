@@ -44,7 +44,7 @@ describe("sandbox CLI launch", () => {
 		expect(launch).toMatchObject({
 			command: "/usr/bin/node",
 			args: ["cli.js", "--print", "hello"],
-			policy: { workspace: cwd, allowedHosts: [] },
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
 		});
 		expect(launch.environment).toMatchObject({
 			APEX_CODE_CODING_AGENT_DIR: join(cwd, ".apex-code", "sandbox-agent"),

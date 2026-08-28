@@ -27,10 +27,10 @@ existing framed Unix-socket protocol.
 | SDE.3 | U2 | Done | `0867d9e2c` |
 | SDE.4 | U3 | Done | pending |
 | SDE.5 | U3 | Done | pending |
-| SDE.6 | U4 | Done | pending |
-| SDE.7 | U4 | Done | pending |
-| SDE.8 | U5 | Not started | — |
-| SDE.9 | U5 | Not started | — |
+| SDE.6 | U4 | Done | `ee4c7dd95` |
+| SDE.7 | U4 | Done | `ee4c7dd95` |
+| SDE.8 | U5 | Done | pending |
+| SDE.9 | U5 | Done | pending |
 | SDE.10 | U6 | Not started | — |
 | SDE.11 | U6 | Not started | — |
 | SDE.12 | U7 | Not started | — |
@@ -232,8 +232,11 @@ decides.
 - Modify: `packages/coding-agent/src/cli.ts`, `packages/coding-agent/src/cli/args.ts`
 - Modify: `docs/adr/0005-sandbox-boundary-guarantees.md`
 
-1. Migrate `SandboxPolicy.workspace` to `workspaceRoots`, moving every caller in one wave
-   with no compatibility shim, so no caller is left reading a field that still exists.
+1. Keep `SandboxPolicy.workspace` singular and add `additionalWritableRoots` beside it.
+   The spec sketched a flat `workspaceRoots` list; that turned out to be wrong. State,
+   sessions, the concurrency lease, and the child's cwd are all anchored to one directory,
+   and a flat list would have made the first element load-bearing by position. The field is
+   required rather than optional, so every construction site says what it means.
 2. Parse both flags in `cli.ts` from `process.argv` only, before the supervisor exists.
 3. Amend ADR 0005 to retire "an opt-out is not introduced in Phase 2b".
 4. Run `npm test`, then commit and record the SHA.

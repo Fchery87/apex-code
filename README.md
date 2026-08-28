@@ -367,6 +367,24 @@ when the session starts.
 the sandbox hides. Run `/export <file>` inside the session, then
 `gh gist create --public=false <file>` outside it.
 
+**Escalation.** A request to a host the allowlist does not name pauses and asks, naming
+that exact host. Approving it permits that one host for the rest of the session and
+nothing else; it is never written to settings, and declining leaves the host refused.
+Non-interactive modes (`--print`, `--mode json`, `--mode rpc`) deny without asking, since
+there is nobody to ask. The prompt is drawn by the supervisor, not by the session, so an
+approval cannot be forged from inside the boundary.
+
+**Git and GitHub.** Commits carry your identity, and `git push` works: the session asks the
+supervisor for a credential, which reads it from your host credential store and returns it
+for that one host, once you release it. Nothing is written into the workspace. A release
+covers one host for the session only, and a host the session cannot reach gets no
+credential at all.
+
+**Widening the boundary.** `--add-dir <path>` makes another directory writable, repeatable.
+`--sandbox danger-full-access` runs with no OS boundary at all, announces itself, and asks
+you to confirm at a terminal. Both are command-line flags only. Neither can be set from
+project or global settings, so a repository cannot grant itself either one.
+
 For untrusted repositories or unattended generated code, use a container, VM, or micro-VM
 with only the files and credentials the task requires. Read [`SECURITY.md`](SECURITY.md)
 before relying on Apex Code for higher-risk work.

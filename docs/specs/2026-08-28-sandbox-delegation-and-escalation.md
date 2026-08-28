@@ -233,7 +233,7 @@ revisiting it.
 
 | Component | Change | File(s) |
 | --- | --- | --- |
-| Policy shape | `SandboxPolicy.workspace: string` becomes `workspaceRoots: readonly string[]` | `core/sandbox/policy.ts:5` |
+| Policy shape | `SandboxPolicy` gains a required `additionalWritableRoots` beside the singular `workspace` | `core/sandbox/policy.ts:5` |
 | Backends | Emit one `--bind` per root, and the Seatbelt equivalent | `linux-backend.ts`, `macos-backend.ts` |
 | CLI | `--add-dir <path>` (repeatable) and `--sandbox <mode>` | `cli.ts`, `cli/args.ts` |
 | Opt-out | `danger-full-access` skips the supervisor entirely, behind an explicit confirmation and a persistent banner | `cli.ts:30` |
@@ -317,7 +317,7 @@ own ADR rather than being folded into the spec.
 | `docs/roadmap.md:257` "interactive escalation" in the 2b scope cell | doc | Corrected by U2 to state the deferral, then amended by U3 to state it shipped. |
 | ADR 0005's "an opt-out is not introduced in Phase 2b" | doc | Retired by U5's amendment. The sentence is accurate today and must not silently become false. |
 | ADR 0005's escalation deferral and its stated prerequisite | doc | Superseded by U3's amendment, which records that `core/sandbox/rpc/` satisfied the prerequisite on 2026-08-22. |
-| `SandboxPolicy.workspace: string` | code | Replaced by `workspaceRoots: readonly string[]` in U5. Every caller migrates in the same wave; no compatibility shim. |
+| `SandboxPolicy.workspace` as the only writable root | code | Joined by a required `additionalWritableRoots` in U5. The field itself survives: the spec originally proposed a flat `workspaceRoots` list, and implementation showed that was wrong, because state, sessions, the lease, and the child's cwd all need one distinguished directory rather than a positionally-significant first element. |
 | The proxy's captured `allowedHosts` array | code | Replaced by a mutable per-session set in U3. |
 | Repository-scope `user.name` / `user.email` as the documented workaround | behaviour | Retired by U1. It keeps working, because it is ordinary git, but it stops being necessary. |
 

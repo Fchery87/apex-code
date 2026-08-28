@@ -258,6 +258,7 @@ export function buildSandboxedCliLaunch(options: {
 	args: readonly string[];
 	environment: NodeJS.ProcessEnv;
 	allowedHosts?: readonly string[];
+	additionalWritableRoots?: readonly string[];
 	readOnlyPaths?: readonly string[];
 	authPath?: string;
 	/**
@@ -311,7 +312,11 @@ export function buildSandboxedCliLaunch(options: {
 	return {
 		command: options.command,
 		args: [...options.args],
-		policy: { workspace: options.workspace, allowedHosts: options.allowedHosts ?? [] },
+		policy: {
+			workspace: options.workspace,
+			allowedHosts: options.allowedHosts ?? [],
+			additionalWritableRoots: options.additionalWritableRoots ?? [],
+		},
 		readOnlyPaths,
 		readOnlyFiles,
 		readOnlyBinaries,

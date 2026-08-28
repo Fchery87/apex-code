@@ -146,6 +146,7 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 			// and Seatbelt's subpath match is against the canonical path, not the one
 			// the caller happened to spell. Resolve once, use everywhere below.
 			const workspace = realpathSync(launch.policy.workspace);
+			const writableRoots = launch.policy.additionalWritableRoots;
 			const stateDirectory = join(workspace, ".apex-code", "sandbox-state");
 			mkdirSync(stateDirectory, { recursive: true });
 
@@ -220,6 +221,11 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 				'(allow file-read* (subpath (param "WORKSPACE")))',
 				"(deny file-write*)",
 				'(allow file-write* (subpath (param "WORKSPACE")))',
+				// Each extra root is allowed exactly as the workspace is, and only ever from
+				// an argv-parsed flag: a repository that could name its own writable root
+				// would be granting itself authority (ADR 0016).
+				...writableRoots.map((_, index) => `(allow file-read* (subpath (param "RW_${index}")))`),
+				...writableRoots.map((_, index) => `(allow file-write* (subpath (param "RW_${index}")))`),
 				"(deny network*)",
 				'(allow network-outbound (remote ip (param "PROXY_ADDR")))',
 				...(credentialChannelSocket
@@ -237,6 +243,9 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 				params.push("-D", `RO_FILE_${index}=${file}`);
 			});
 			params.push("-D", `WORKSPACE=${workspace}`);
+			writableRoots.forEach((root, index) => {
+				params.push("-D", `RW_${index}=${root}`);
+			});
 			params.push("-D", `PROXY_ADDR=localhost:${proxyPort}`);
 
 			const spawnSandboxExec = options?.spawnChild ?? spawn;

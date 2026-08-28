@@ -289,6 +289,10 @@ server.on("error", (err) => {
 						"--bind",
 						launch.policy.workspace,
 						launch.policy.workspace,
+						// Each extra root is bound exactly as the workspace is, and only ever
+						// from an argv-parsed flag: a repository that could name its own
+						// writable root would be granting itself authority (ADR 0016).
+						...launch.policy.additionalWritableRoots.flatMap((root) => ["--bind", root, root]),
 						// After the workspace bind: these destinations sit inside it, and an
 						// earlier mount would be masked when the workspace is bound over them.
 						...(launch.readOnlyBinaries ?? []).flatMap(({ source, destination }) => [

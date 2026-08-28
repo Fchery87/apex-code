@@ -181,3 +181,39 @@ is no in-place equivalent of holding a CONNECT open while a human decides. That 
 proposed shape for it are recorded in
 `docs/specs/2026-08-28-sandbox-delegation-and-escalation.md`, not settled by this
 amendment.
+
+## Amendment (2026-08-28): an explicit opt-out, and named writable roots
+
+This ADR states that "an opt-out is not introduced in Phase 2b." That sentence is now
+retired, and the reason it can be is the order the work landed rather than a change of
+mind about the risk.
+
+The opt-out was withheld because the boundary could not be worked with. A session could
+not author a commit, could not reach a host it needed, could not push, and could not ask
+for any of those. An escape hatch shipped into that state would not have been an escape
+hatch; it would have become the ordinary way to use the product, and the boundary would
+have been nominal. With the identity projection, network escalation, and the git
+credential channel in place, the reasons to reach for it are gone, so it can exist as what
+it was always meant to be — a deliberate, announced choice for a session that genuinely
+needs no boundary, typically one already contained by something else.
+
+`--sandbox danger-full-access` runs with no OS boundary. It is spelled out in full on the
+command line and is never read from settings of any scope, so no repository and no saved
+configuration can turn containment off; that is the same rule ADR 0016 applies to every
+supervisor policy input, applied to the input where it matters most. It always prints a
+banner naming what stops being enforced, because a session that silently ran unconfined is
+indistinguishable afterwards from one that did not. At a terminal it additionally requires
+an affirmative answer. Where no terminal exists it proceeds unprompted, since prompting
+would hang the run rather than protect anything, and that non-interactive case — CI that
+is already externally sandboxed — is the one the flag legitimately exists for.
+
+`--add-dir` names further writable directories. Each is validated exactly as the workspace
+always was: absolute, existing, a directory, resolved through `realpathSync`, so a backend
+never silently broadens an ambiguous path into host authority. The workspace itself stays
+singular, because state, sessions, and the concurrency lease are anchored to one
+directory; extra roots are additional mounts, not co-equal workspaces. Like the opt-out,
+they come only from argv.
+
+Neither addition changes what the boundary guarantees when it is enforced, and neither is
+reachable from inside the child. The default with no flags is byte for byte the boundary
+this ADR has described throughout.

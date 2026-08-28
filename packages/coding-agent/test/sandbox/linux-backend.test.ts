@@ -44,7 +44,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		const outside = join(dirname(cwd), `outside-${Date.now()}.txt`);
 		const violations = new SandboxViolationStore();
 		const backend = createLinuxSandboxBackend({ violationStore: violations });
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 		const script = `sh -c 'printf allowed > ${join(cwd, "allowed.txt")}' && sh -c 'printf blocked > ${outside}'`;
 
 		await expect(supervisor.launch({ command: "/bin/sh", args: ["-c", script] })).resolves.not.toBe(0);
@@ -63,7 +66,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		writeFileSync(authPath, "host-secret", { mode: 0o600 });
 		writeFileSync(siblingPath, "host-settings", { mode: 0o600 });
 		const backend = createLinuxSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			const script = `test "$(cat ${authPath})" = host-secret && test ! -e ${siblingPath}`;
@@ -95,7 +101,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		writeFileSync(authPath, "host-secret", { mode: 0o600 });
 		writeFileSync(gitConfigPath, "host-identity", { mode: 0o600 });
 		const backend = createLinuxSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			const script = `test "$(cat ${authPath})" = host-secret && test "$(cat ${gitConfigPath})" = host-identity`;
@@ -123,7 +132,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		writeFileSync(authPath, "host-secret", { mode: 0o600 });
 		writeFileSync(gitConfigPath, "host-identity", { mode: 0o600 });
 		const backend = createLinuxSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			const script = `test "$(cat ${authPath})" = host-secret && test "$(cat ${gitConfigPath})" = host-identity`;
@@ -144,7 +156,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		const identity = createProjectedGitConfig({ name: "Ada Lovelace", email: "ada@example.invalid" });
 		temporaryDirectories.push(identity.directory);
 		const backend = createLinuxSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			// No `git config user.*` anywhere: the workspace repository is fresh, and the
@@ -171,7 +186,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 	it("names the terminal handoff directory to the child so it can yield for an escalation prompt", async () => {
 		const cwd = workspace();
 		const backend = createLinuxSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 		const stateDirectory = join(cwd, ".apex-code", "sandbox-state");
 
 		try {
@@ -206,7 +224,7 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		});
 		const supervisor = createSandboxSupervisor({
 			backend,
-			policy: { workspace: cwd, allowedHosts: ["github.com"] },
+			policy: { workspace: cwd, allowedHosts: ["github.com"], additionalWritableRoots: [] },
 		});
 		const output = join(cwd, "credential-output");
 
@@ -246,7 +264,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		});
 		// Empty allowlist: the session could not open a connection to github.com, so a
 		// credential request for it is not git doing its job.
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 		const output = join(cwd, "credential-output");
 
 		try {
@@ -275,7 +296,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		const destination = join(cwd, ".apex-code", "sandbox-agent", "bin", "fd");
 		mkdirSync(dirname(destination), { recursive: true });
 		const backend = createLinuxSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(
@@ -304,7 +328,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		const cwd = workspace();
 		const violations = new SandboxViolationStore();
 		const backend = createLinuxSandboxBackend({ violationStore: violations });
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(
@@ -329,7 +356,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		expect(join(deep, ".apex-code", "sandbox-state", "proxy.sock").length).toBeGreaterThan(108);
 
 		const backend = createLinuxSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: deep, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: deep, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(supervisor.launch({ command: "/bin/sh", args: ["-c", "true"] })).resolves.toBe(0);
@@ -341,7 +371,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 	it("does not expose the invoking account home outside the workspace mount", async () => {
 		const cwd = workspace();
 		const backend = createLinuxSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(
@@ -356,7 +389,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		const cwd = workspace();
 		writeFileSync(join(cwd, "package.json"), JSON.stringify({ type: "module" }));
 		const backend = createLinuxSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(supervisor.launch({ command: "/bin/sh", args: ["-c", "true"] })).resolves.toBe(0);
@@ -369,7 +405,10 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		const cwd = workspace();
 		const violations = new SandboxViolationStore();
 		const backend = createLinuxSandboxBackend({ violationStore: violations });
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(
@@ -427,7 +466,10 @@ describe.skipIf(process.platform !== "linux")("Linux sandbox crash cleanup", () 
 				return fake;
 			}) as unknown as typeof spawn,
 		});
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		await expect(
 			supervisor.launch({ command: "/bin/sh", args: ["-c", "true"], readOnlyFiles: [authPath] }),
@@ -453,7 +495,10 @@ describe.skipIf(!canEnforceLinuxSandboxForChannel())("Linux credential channel p
 		await new Promise<void>((resolve) => listener.listen(hostSocketPath, resolve));
 
 		const backend = createLinuxSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(
@@ -476,7 +521,10 @@ describe.skipIf(!canEnforceLinuxSandboxForChannel())("Linux credential channel p
 	it("adds no channel environment when the supervisor opened no channel", async () => {
 		const cwd = workspace();
 		const backend = createLinuxSandboxBackend();
-		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
 
 		try {
 			await expect(
