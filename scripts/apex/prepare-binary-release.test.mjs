@@ -74,7 +74,20 @@ test("the POSIX installer supports Unix and Git Bash while verifying before extr
 	assert.ok(verifyIndex >= 0 && verifyIndex < extractIndex, "the archive must be verified before extraction");
 });
 
-test("the POSIX installer performs a checksum-verified Linux install without touching the existing PATH", async () => {
+test(
+	"the POSIX installer performs a checksum-verified Linux install without touching the existing PATH",
+	// This exercises install_unix's POSIX filesystem semantics (a symlink, an
+	// appended ~/.profile line) against a fake `curl` prepended onto PATH. On
+	// Windows, `env.PATH` mixes a raw Windows-style path with the inherited
+	// semicolon-separated Windows PATH using a colon separator -- not valid in
+	// either convention -- so bash's PATH resolution silently falls through to
+	// the real curl.exe instead of the fixture, and the test hits the network.
+	// Real Git-Bash-on-Windows users never take this code path anyway: they
+	// match MINGW/MSYS and get install_windows, not install_unix (by design,
+	// see the "supports Unix and Git Bash" test above). Covered end-to-end on
+	// ubuntu-latest and macos-latest, where install_unix is what users get.
+	{ skip: process.platform === "win32" },
+	async () => {
 	const root = await mkdtemp(join(tmpdir(), "apex-code-posix-installer-"));
 	const fixtureDirectory = join(root, "fixtures");
 	const sourceDirectory = join(root, "source", "apex-code");
@@ -122,7 +135,8 @@ test("the POSIX installer performs a checksum-verified Linux install without tou
 	assert.ok((await lstat(command)).isSymbolicLink());
 	assert.equal(await readlink(command), executable);
 	assert.match(await readFile(join(homeDirectory, ".profile"), "utf8"), /apex-code installer path/);
-});
+	},
+);
 
 test("the PowerShell installer verifies a Windows archive and updates only the user PATH", async () => {
 	const installer = await readFile(powershellInstallerUrl, "utf8");
