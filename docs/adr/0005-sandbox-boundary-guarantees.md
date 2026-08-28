@@ -146,3 +146,38 @@ flaw in this repo's design), fixed with one `sysctl` line before `bwrap` runs. S
 the 2026-08-12 spec's third 2026-08-13 amendment and the plan's 2b.7 record. This
 does not change what this ADR claims — it closes the gap between what was claimed
 and what CI actually verified.
+
+## Amendment (2026-08-28): interactive network escalation is no longer deferred
+
+This ADR deferred interactive escalation "until supervisor/child IPC can carry a concrete
+blocked-host request without granting an unrestricted retry." That prerequisite was met on
+2026-08-22 by `core/sandbox/rpc/`, built for supervisor-mediated credential writes
+(ADR 0015's amendment) — ten days after this ADR was accepted, and by work that had no
+reason to notice it was also unblocking this. The deferral outlived its own condition.
+
+Escalation now ships for the network layer, and the shape this ADR asked for is what
+landed. A refusal carries one concrete host and port. A grant covers that host and port and
+nothing else, lasts for the session, and is never persisted; a durable entry remains an
+explicit edit to global `network.allowedHosts`, per ADR 0016. Declining is not remembered,
+so a later attempt asks again rather than presenting a cached refusal as policy.
+Concurrent connections to the same refused host coalesce onto one question. Nothing grants
+an unrestricted retry.
+
+**Headless, print, JSON, and RPC behaviour is unchanged and remains deny**, now for a
+structural reason rather than a deferral: the approver is constructed only when the
+supervisor holds a terminal, and its absence leaves this ADR's original
+deny-without-asking path running untouched. There is no mode check to forget.
+
+One decision inside this work was large enough to need its own record.
+`docs/adr/0023-supervisor-owned-escalation-authority.md` establishes that the supervisor,
+not the child, renders the prompt and reads the answer, because the credential channel
+performs no peer authentication and an approval asserted from inside the boundary would be
+forgeable by exactly the code this boundary exists to contain. This amendment does not
+restate that reasoning; it depends on it.
+
+Filesystem escalation remains deferred and is **not** delivered here. A refused write is
+refused by the kernel inside a namespace whose mounts are fixed for its lifetime, so there
+is no in-place equivalent of holding a CONNECT open while a human decides. That gap and a
+proposed shape for it are recorded in
+`docs/specs/2026-08-28-sandbox-delegation-and-escalation.md`, not settled by this
+amendment.

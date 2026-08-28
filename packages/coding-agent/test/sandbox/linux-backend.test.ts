@@ -167,6 +167,29 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 		}
 	});
 
+	it("names the terminal handoff directory to the child so it can yield for an escalation prompt", async () => {
+		const cwd = workspace();
+		const backend = createLinuxSandboxBackend();
+		const supervisor = createSandboxSupervisor({ backend, policy: { workspace: cwd, allowedHosts: [] } });
+		const stateDirectory = join(cwd, ".apex-code", "sandbox-state");
+
+		try {
+			// The directory must be inside the workspace bind, or the child watches a path
+			// the sandbox never gave it and silently never yields the terminal.
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: [
+						"-c",
+						`test "$APEX_TERMINAL_HANDOFF_PATH" = "${stateDirectory}" && test -d "$APEX_TERMINAL_HANDOFF_PATH"`,
+					],
+				}),
+			).resolves.toBe(0);
+		} finally {
+			await supervisor.close();
+		}
+	});
+
 	it("projects a host tool executable read-only at the child's managed tools path", async () => {
 		const cwd = workspace();
 		const hostToolsDirectory = workspace();

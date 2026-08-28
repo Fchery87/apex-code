@@ -3,8 +3,10 @@ import { randomBytes } from "node:crypto";
 import { closeSync, mkdirSync, openSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { createHostApprover } from "./host-approval.ts";
 import { createSandboxNetworkProxy, type SandboxNetworkProxy } from "./network-proxy.ts";
 import type { SandboxBackend, SandboxLaunch } from "./supervisor.ts";
+import { createTerminalHandoff, TERMINAL_HANDOFF_PATH_VARIABLE, type TerminalHandoff } from "./terminal-handoff.ts";
 import { publishTerminalSize, TERMINAL_SIZE_PATH_VARIABLE } from "./terminal-size.ts";
 import type { SandboxViolationStore } from "./violations.ts";
 
@@ -135,6 +137,7 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 	const hasCommand = options?.commandExists ?? commandExists;
 	const violationStore = options?.violationStore;
 	let proxy: SandboxNetworkProxy | undefined;
+	let handoff: TerminalHandoff | undefined;
 
 	if (!hasCommand("bwrap")) {
 		return {
@@ -154,10 +157,14 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 			const violationCountBeforeLaunch = violationStore?.totalCount ?? 0;
 
 			const { hostSocketPath, childSocketPath } = resolveProxySocketPaths();
+			handoff = createTerminalHandoff(stateDirectory);
 			proxy = await createSandboxNetworkProxy({
 				socketPath: hostSocketPath,
 				allowedHosts: launch.policy.allowedHosts,
 				violationStore,
+				// Undefined without a terminal, which leaves the proxy's own
+				// deny-without-asking path in place for headless, print, JSON, and RPC.
+				requestApproval: createHostApprover({ handoff }),
 			});
 
 			// .cjs forces CommonJS regardless of the target workspace's package.json "type"
@@ -268,6 +275,9 @@ server.on("error", (err) => {
 						"--setenv",
 						TERMINAL_SIZE_PATH_VARIABLE,
 						terminalSizePath,
+						"--setenv",
+						TERMINAL_HANDOFF_PATH_VARIABLE,
+						stateDirectory,
 						"--",
 						process.execPath,
 						relayScriptPath,
@@ -304,6 +314,7 @@ server.on("error", (err) => {
 			}
 		},
 		async close() {
+			handoff?.stop();
 			await proxy?.close();
 		},
 	};

@@ -2,8 +2,10 @@ import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
+import { createHostApprover } from "./host-approval.ts";
 import { createSandboxNetworkProxy, type SandboxNetworkProxy } from "./network-proxy.ts";
 import type { SandboxBackend, SandboxLaunch } from "./supervisor.ts";
+import { createTerminalHandoff, TERMINAL_HANDOFF_PATH_VARIABLE, type TerminalHandoff } from "./terminal-handoff.ts";
 import type { SandboxViolationStore } from "./violations.ts";
 
 export interface MacosSandboxBackendOptions {
@@ -116,6 +118,7 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 	const hasCommand = options?.commandExists ?? sandboxExecExists;
 	const violationStore = options?.violationStore;
 	let proxy: SandboxNetworkProxy | undefined;
+	let handoff: TerminalHandoff | undefined;
 
 	if (!hasCommand("sandbox-exec")) {
 		return {
@@ -139,10 +142,14 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 
 			const violationCountBeforeLaunch = violationStore?.totalCount ?? 0;
 
+			handoff = createTerminalHandoff(stateDirectory);
 			proxy = await createSandboxNetworkProxy({
 				tcpHost: "127.0.0.1",
 				allowedHosts: launch.policy.allowedHosts,
 				violationStore,
+				// Undefined without a terminal, which leaves the proxy's own
+				// deny-without-asking path in place for headless, print, JSON, and RPC.
+				requestApproval: createHostApprover({ handoff }),
 			});
 			const proxyPort = proxy.port as number;
 
@@ -222,6 +229,7 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 						TMPDIR: launch.environment?.TMPDIR ?? stateDirectory,
 						HTTP_PROXY: `http://127.0.0.1:${proxyPort}`,
 						HTTPS_PROXY: `http://127.0.0.1:${proxyPort}`,
+						[TERMINAL_HANDOFF_PATH_VARIABLE]: stateDirectory,
 					},
 					stdio: ["inherit", "inherit", "pipe"],
 				},
@@ -247,6 +255,7 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 			return exitCode;
 		},
 		async close() {
+			handoff?.stop();
 			await proxy?.close();
 		},
 	};
