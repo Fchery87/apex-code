@@ -14,8 +14,27 @@ apex-code --version
 `@next` is the current prerelease channel — this project has not promoted a
 `latest` release yet. Requires Node.js ≥ 22.19.0.
 
-**Supported platforms:** Linux and macOS. Windows is not supported (see
-[ADR 0005](adr/0005-sandbox-boundary-guarantees.md)).
+Or install the standalone binary without Node.js. The POSIX installer supports macOS,
+Linux, and **Git Bash on Windows**:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Fchery87/apex-code/main/install.sh | bash
+```
+
+For PowerShell, including PowerShell in Windows Terminal:
+
+```powershell
+irm https://raw.githubusercontent.com/Fchery87/apex-code/main/install.ps1 | iex
+```
+
+Each installer verifies the downloaded archive against the matching GitHub Release's
+SHA-256 manifest before extraction, adds its per-user command directory to `PATH`, and
+prints the one command to run after you open a new terminal session. The full install
+instructions, including version pinning, are in the [README](../README.md#install-the-standalone-binary-from-github-releases).
+
+**Supported platforms:** Linux and macOS have the supported OS sandbox backends. Windows
+is a supported portability/install target, but sandbox enforcement remains unsupported
+under [ADR 0005](adr/0005-sandbox-boundary-guarantees.md).
 
 ## First run
 

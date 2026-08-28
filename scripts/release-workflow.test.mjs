@@ -143,3 +143,29 @@ test("macOS verification job depends on publish, runs on the other supported pla
 	// were ever loosened.
 	assert.equal((source.match(/npm publish --access public --provenance --tag next/g) ?? []).length, 2);
 });
+
+test("standalone binaries are built and hashed before npm publication, then released only after macOS verification", async () => {
+	const { workflow } = await readWorkflow();
+	const publish = workflow.jobs.publish;
+	const steps = publish.steps;
+	const binaryBuildIndex = steps.findIndex((step) => step.run?.includes("scripts/build-binaries.sh"));
+	const checksumIndex = steps.findIndex((step) => step.run?.includes("scripts/apex/prepare-binary-release.mjs"));
+	const binarySmokeIndex = steps.findIndex((step) => step.run?.includes("binaries/linux-x64/apex-code"));
+	const firstPublishIndex = steps.findIndex((step) => step.run?.includes("npm publish"));
+
+	assert.notEqual(binaryBuildIndex, -1, "expected a standalone binary build");
+	assert.notEqual(checksumIndex, -1, "expected checksum manifest generation");
+	assert.notEqual(binarySmokeIndex, -1, "expected a local binary smoke test");
+	assert.ok(binaryBuildIndex < checksumIndex && checksumIndex < binarySmokeIndex);
+	assert.ok(binarySmokeIndex < firstPublishIndex, "binary verification must precede npm publication");
+
+	const release = workflow.jobs["publish-binaries"];
+	assert.ok(release, "expected a final GitHub Release job");
+	assert.deepEqual(release.needs, ["publish", "verify-macos-install"]);
+	assert.deepEqual(release.permissions, { contents: "write" });
+	assert.match(release.steps.map((step) => step.run).filter(Boolean).join("\n"), /gh release create/);
+	assert.match(release.steps.map((step) => step.run).filter(Boolean).join("\n"), /SHA256SUMS/);
+	for (const step of release.steps.filter((candidate) => candidate.uses)) {
+		assert.match(step.uses, /@[0-9a-f]{40}$/);
+	}
+});

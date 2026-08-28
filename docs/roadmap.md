@@ -94,7 +94,7 @@ capable and measurably worse.
 | 9 | Release hardening | **landed** — 6 of 6 tasks · `a0be145d7` | [spec](specs/2026-08-16-release-hardening.md) | — |
 | 10 | Complete the Apex Code product surface | **landed** — 7 of 7 tasks · `6b602044d` (required three-OS CI run 31940072123) | [spec](specs/2026-08-16-complete-apex-product-surface.md) | — |
 | 11 | Remove unowned hosted-service defaults | **landed** — 5 of 5 tasks · `bfa746d0c` (required three-OS CI run 31945192886) | [spec](specs/2026-08-16-remove-unowned-hosted-service-defaults.md) | — |
-| 12 | Production graduation and release integrity | **landed** — 15 of 15 tasks · `eb6df850d` (corrected `apex-code@0.0.1-alpha.2` published and verified, release.yml run 32030755704) | [spec](specs/2026-08-16-production-graduation-and-release-integrity.md) | — |
+| 12 | Production graduation and release integrity | **landed** — baseline 15 of 15 tasks at `eb6df850d`; standalone GitHub Release installer landed at `ac930a485` | [baseline spec](specs/2026-08-16-production-graduation-and-release-integrity.md) · [installer spec](specs/2026-08-25-standalone-release-installer.md) | — |
 
 ## Product-surface follow-ups
 

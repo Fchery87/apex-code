@@ -59,8 +59,7 @@ bun add --global apex-code@next          # Bun
 apex-code --version
 ```
 
-The command installs the `apex-code` executable globally. Apex Code does not operate a
-shell installer or a separate standalone-binary update channel. To update an existing
+The command installs the `apex-code` executable globally. To update an existing npm
 installation, use the same npm channel:
 
 ```bash
@@ -73,6 +72,47 @@ If your system does not permit global npm writes, use a Node version manager, co
 npm's global prefix, or run Apex Code through a project-local installation. Do not use
 `sudo` unless you understand and intentionally accept the permissions and ownership
 implications for your Node installation.
+
+### Install the standalone binary from GitHub Releases
+
+If you prefer not to install Node.js, Apex Code also publishes standalone archives for
+macOS (Apple Silicon and Intel), Linux (x64 and ARM64), and Windows (x64 and ARM64).
+The installers download the matching GitHub Release archive, verify it against that
+release's SHA-256 manifest before extracting it, install it only for your user account,
+and add its command directory to your user `PATH`.
+
+On macOS, Linux, or **Git Bash on Windows**:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Fchery87/apex-code/main/install.sh | bash
+```
+
+On PowerShell (including Windows Terminal):
+
+```powershell
+irm https://raw.githubusercontent.com/Fchery87/apex-code/main/install.ps1 | iex
+```
+
+Close and reopen the terminal after installation, then verify it:
+
+```bash
+apex-code --version
+```
+
+To install one specific release rather than the latest GitHub Release, set the version
+in the receiving shell:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Fchery87/apex-code/main/install.sh | APEX_CODE_INSTALL_VERSION=0.0.1-alpha.8 bash
+```
+
+```powershell
+$env:APEX_CODE_INSTALL_VERSION = "0.0.1-alpha.8"; irm https://raw.githubusercontent.com/Fchery87/apex-code/main/install.ps1 | iex
+```
+
+The standalone channel does not require Node.js and does not update itself; re-run the
+installer to choose a newer GitHub Release. Windows sandbox enforcement remains
+unsupported even though the CLI and both Windows installers are supported portability paths.
 
 ### Install from this repository
 
