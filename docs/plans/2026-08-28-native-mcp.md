@@ -24,8 +24,8 @@ deletion inventory.
 
 | Task | Unit | Status | Commit |
 | --- | --- | --- | --- |
-| MCP.1 | U1 | Not started | — |
-| MCP.2 | U1 | Not started | — |
+| MCP.1 | U1 | Done | pending |
+| MCP.2 | U1 | Done | pending |
 | MCP.3 | U2 | Not started | — |
 | MCP.4 | U2 | Not started | — |
 | MCP.5 | U3 | Not started | — |
@@ -55,17 +55,21 @@ of a model, so each can land on its own without changing any session's behavior.
 - Read: `packages/coding-agent/src/config.ts`
 - Read: `packages/coding-agent/src/core/settings-manager.ts`
 
-1. Write failing tests for `McpServerConfig` parsing: a stdio entry with command and args,
-   a streamable HTTP entry with a URL, and an entry naming a bearer token environment
-   variable.
-2. Write failing tests for precedence. A project `.mcp.json` key overrides the same key in
+1. Write failing tests that transport is inferred from the ecosystem-standard shape:
+   `command` plus `args` yields stdio, `url` yields HTTP. No `transport` field exists to
+   declare, because no MCP host writes one.
+2. Write a failing test that a verbatim stock entry parses. Use the exact
+   `{"mcpServers":{"chrome-devtools":{"command":"npx","args":["-y","chrome-devtools-mcp@1.6.0"]}}}`
+   a user would paste from another host, with no Apex-specific field present.
+3. Write failing tests for precedence. A project `.mcp.json` key overrides the same key in
    `~/.apex-code/mcp.json`, and a key present in only one file survives.
-3. Write failing tests for the malformed cases, each of which must degrade rather than
-   throw: invalid JSON, an entry with neither `command` nor `url`, an unknown transport,
-   and an unknown lifecycle value.
-4. Write a failing test that an entry declaring no capability set resolves to the full
-   set, preserving the conservative default the spec commits to.
-5. Run `npm --workspace packages/coding-agent test -- mcp/config.test.ts` and confirm every
+4. Write failing tests for the malformed cases, each of which must degrade rather than
+   throw: invalid JSON, an entry with neither `command` nor `url`, an entry with both, and
+   an unknown lifecycle value. A bad entry drops; the file's good entries survive.
+5. Write a failing test that an entry declaring no capability set resolves to the full set.
+   This is the common path, not an edge case, because a pasted config carries no
+   Apex-specific `capabilities` field.
+6. Run `npm --workspace packages/coding-agent test -- mcp/config.test.ts` and confirm every
    test fails because the module does not exist.
 
 ### MCP.2: Implement the config model
@@ -89,6 +93,16 @@ of a model, so each can land on its own without changing any session's behavior.
 5. Make every malformed case return a diagnostic alongside the usable entries. A bad entry
    drops; it never takes the file down.
 6. Run the focused test file until green, then `npx tsgo --noEmit`.
+
+**Outcome.** 13 tests, failing first on the missing module, then green. The
+transport-inference correction was made before the tests were written, not after: the
+reference adapter's `ServerEntry` (`types.ts:409`) has no `transport` field, and its README
+example is a bare `{"command":"npx","args":[…]}`. An earlier draft of this plan tested an
+"unknown transport" case for a field no MCP host writes, which would have produced a parser
+that rejects every config file users already have.
+
+`ALL_CAPABILITIES` is reused from `core/tools/contract.ts` rather than restated, so a new
+capability cannot be valid in a tool contract and invalid in an MCP config.
 
 ### MCP.3: Prove the cache answers without a connection
 

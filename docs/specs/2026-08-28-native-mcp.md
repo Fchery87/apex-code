@@ -71,13 +71,17 @@ One tool, one cache, one connection manager, and a contract projection that make
 
 | Component | Change | File(s) |
 | --- | --- | --- |
-| Config model | Parse `.mcp.json` from the project root and `~/.apex-code/mcp.json`. Project wins per key. Typed server entries with transport, capabilities, and lifecycle. | `packages/coding-agent/src/core/mcp/config.ts` (new) |
+| Config model | Parse the ecosystem-standard `{ "mcpServers": { … } }` shape from the project's `.mcp.json` and `~/.apex-code/mcp.json`. Project wins per key. Transport is inferred, never declared. | `packages/coding-agent/src/core/mcp/config.ts` (new) |
 | Metadata cache | Persist per-server tool metadata under `~/.apex-code/agent`, keyed by a hash of the server's launch spec. Read on startup, refresh after a successful connect. | `packages/coding-agent/src/core/mcp/metadata-cache.ts` (new) |
 | Server manager | Own connect, disconnect, idle timeout, and failure backoff. One state machine per server, never a set of booleans. | `packages/coding-agent/src/core/mcp/server-manager.ts` (new) |
 | Proxy tool | The `mcp` tool. Actions are `search`, `describe`, and call. Declares its own contract with `deferSchema: true`. | `packages/coding-agent/src/core/mcp/mcp-tool.ts` (new) |
 | Contract projection | Build a `ToolContract` per MCP tool from its server's config entry. Capabilities declared, `ruleContent` grammar owned here. | `packages/coding-agent/src/core/mcp/contract.ts` (new) |
 | Registry wiring | Register `mcp` when at least one server is configured, mirroring how `lsp` and `web_search` join the default set. | `packages/coding-agent/src/core/sdk.ts:304`, `packages/coding-agent/src/core/tools/index.ts` |
 | Status surface | Replace the menu handler that points at a command which cannot configure MCP. | `packages/coding-agent/src/modes/interactive/interactive-mode.ts:2660` |
+
+**The config format is the ecosystem's, not ours.** Every MCP host (Claude Desktop, Claude Code, Cursor, `pi-mcp-adapter`) reads `{ "mcpServers": { "<name>": { "command": …, "args": […] } } }`. Transport is inferred from which fields are present, `command` meaning stdio and `url` meaning HTTP. No host declares a `transport` field, so requiring one would reject every config file a user already has. Apex Code reads the standard shape unchanged.
+
+`capabilities` is therefore an Apex-only extension to that shape, and an absent one is the common case rather than an edge case, because users will paste a config that another host wrote. Those servers land on the conservative full capability set. The win in that case is not a narrowed capability set; it is that the tool is classified at all, so `Mcp(server:*)` generalizes and the result participates in Eviction. Narrowing capabilities is an opt-in on top.
 
 **Data shapes first**, per **principle-foundational-thinking**. Three types carry the design and are settled before any logic is written.
 
