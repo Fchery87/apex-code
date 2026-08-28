@@ -57,6 +57,40 @@ describe("terminal handoff", () => {
 		expect(events).toEqual(["suspend", "prompt", "resume"]);
 	});
 
+	it("delivers a state written immediately after the previous one", async () => {
+		// DIAGNOSTIC, macOS. FSEvents coalesces events whose type, path, and PID match the
+		// previous one inside a one-second window, which is exactly what two handoff writes
+		// milliseconds apart look like. If that is the mechanism, the second state never
+		// arrives and this fails however long it waits. If the real problem were latency,
+		// it arrives late and this passes. The two need different fixes, so the wait here
+		// is deliberately long enough to tell them apart.
+		const directory = handoffDirectory();
+		const seen: string[] = [];
+		const handoff = createTerminalHandoff(directory, { acknowledgementTimeoutMs: 50 });
+		stops.push(handoff.stop);
+		const observer = observeTerminalHandoff(directory, {
+			suspend: () => {
+				seen.push("suspend");
+			},
+			resume: () => {
+				seen.push("resume");
+			},
+		});
+		stops.push(observer.stop);
+
+		await handoff.borrowTerminal(async () => undefined);
+
+		const startedAt = Date.now();
+		for (let attempt = 0; attempt < 500; attempt++) {
+			if (seen.includes("resume")) break;
+			await new Promise((r) => setTimeout(r, 10));
+		}
+		console.log(`[handoff-diagnostic] seen=${JSON.stringify(seen)} after ${Date.now() - startedAt}ms`);
+
+		expect(seen).toContain("suspend");
+		expect(seen).toContain("resume");
+	});
+
 	it("waits for the child to acknowledge before running the prompt", async () => {
 		const directory = handoffDirectory();
 		const order: string[] = [];
