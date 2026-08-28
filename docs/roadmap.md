@@ -232,7 +232,8 @@ it. Every tool added before this phase is a retrofit.
   `removeRules` / `setMode`) against explicit destinations.
 - Interception at `beforeToolCall` — the seam Pi's `Agent` already exposes.
 - **OS-level sandbox** underneath: filesystem read/write restriction, network host
-  allowlist, a violation store, and an interactive escalation callback. ADR-0005
+  allowlist, and a violation store. The interactive escalation callback named here was
+  deferred by ADR 0005 when it was accepted, and is not part of what 2b delivered. ADR-0005
   must state plainly what the boundary does and does not guarantee — Pi's own
   security doc is right that a half-sandbox misread as a real one is worse than none.
 
@@ -254,7 +255,7 @@ and is divided at its own seam:
 | Sub-phase | Scope | Exit criterion |
 | --- | --- | --- |
 | **2a — rule model** | Rules, eight-source precedence, modes, `PermissionUpdate`, `beforeToolCall` interception, `ToolContract` backfill for the seven inherited tools. ADR 0004. | Every registered tool passes the gate, registry-derived with no exceptions list. Precedence verified across all eight sources. |
-| **2b — OS sandbox** | Filesystem read/write restriction, network host allowlist, violation store, interactive escalation. ADR 0005. | The sandbox blocks a write outside the workspace and a request to a non-allowlisted host, and both surface as violations rather than silent failures. |
+| **2b — OS sandbox** | Filesystem read/write restriction, network host allowlist, violation store. Interactive escalation is **deferred** by ADR 0005 and tracked in `docs/specs/2026-08-28-sandbox-delegation-and-escalation.md`. ADR 0005. | The sandbox blocks a write outside the workspace and a request to a non-allowlisted host, and both surface as violations rather than silent failures. |
 
 **Phase 4 is gated on 2a only.** What Phase 4 needs is the `ruleContent` grammar its
 fifteen tools declare against; it does not need OS enforcement to exist. Keeping the
@@ -431,6 +432,18 @@ load-flake signature this machine produced before these changes.
 `docs/plans/2026-08-22-pr33-followups.md` is deleted now that the work is landed
 (recoverable via `git show <commit>:docs/plans/2026-08-22-pr33-followups.md`); Phase 2b's
 **landed** state is unchanged.
+
+### Follow-up (2026-08-28): sandbox delegation and escalation
+
+2b delivered containment. It did not deliver the delegation half, and ADR 0005's own
+deferral of interactive escalation named a prerequisite — supervisor/child IPC carrying a
+concrete blocked-host request — that `core/sandbox/rpc/` satisfied on 2026-08-22, ten days
+after the ADR was accepted.
+[`specs/2026-08-28-sandbox-delegation-and-escalation.md`](specs/2026-08-28-sandbox-delegation-and-escalation.md)
+specifies the seven units that close it, and
+[`plans/2026-08-28-sandbox-delegation-and-escalation.md`](plans/2026-08-28-sandbox-delegation-and-escalation.md)
+tracks them. This does not
+change Phase 2b's **landed** state; escalation was never part of what 2b shipped.
 
 ---
 

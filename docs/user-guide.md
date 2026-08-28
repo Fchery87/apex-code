@@ -70,9 +70,13 @@ json`, `--mode rpc`) require an explicit `--permission-mode`. In an interactive 
 `/settings` > **Permission mode** changes it without restarting; the choice is saved to
 `~/.apex-code/agent/permissions.json` and applies to the next tool call.
 
-**Sandbox.** On Linux and macOS, tool execution runs inside an OS-level sandbox
-restricting filesystem writes and network access to what the permission layer has
-allowed — not just an application-level check. See
+**Sandbox.** On Linux and macOS, the whole session runs inside an OS-level sandbox
+restricting filesystem writes to the workspace and network access to an allowlist — not
+just an application-level check. It is a **separate layer from the permission gate**, and
+the one you cannot change from inside a session: its mounts and its allowlist are fixed by
+the supervisor before the session's process starts, so no permission mode, including
+`bypassPermissions`, widens either. A tool call the gate waves through is still refused by
+the boundary if it writes outside the workspace or reaches an unlisted host. See
 [`SECURITY.md`](../SECURITY.md) for exactly what this does and does not guarantee;
 it is not a substitute for container/VM isolation when running fully untrusted work.
 

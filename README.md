@@ -313,6 +313,13 @@ footer, so a session with no prompts is visibly a session in bypass.
 A permission mode is not a substitute for reviewing the requested task, the diff, or the
 commands that will run.
 
+**A permission mode governs the tool gate, not the OS sandbox.** The two are separate
+layers and only one of them can be changed from inside a session. `bypassPermissions`
+stops the gate asking; it does not widen a mount or add a host to the network allowlist,
+because both are fixed by the supervisor before the session's process starts. A tool call
+waved through by `bypassPermissions` is still refused by the boundary if it writes outside
+the workspace or reaches an unlisted host.
+
 ### OS sandbox
 
 On Linux and macOS, every command that can start an agent session runs inside an OS-level
@@ -325,6 +332,13 @@ directory is hidden, so a session cannot read `~/.ssh`, `~/.aws`, or shell histo
 own state lives under `<workspace>/.apex-code/`. Provider credentials are projected in
 read-only from `auth.json`. `fd` and `ripgrep` are resolved on the host and projected in
 read-only, so search works without the session needing to download anything.
+
+**Git identity.** The supervisor reads your global `user.name` and `user.email` before the
+sandbox hides the host home, and projects a synthesized two-key config read-only. Commits
+made inside a session carry your identity without any repository-scope setup. Only those
+two keys are projected: your real `~/.gitconfig` is never mounted, so a `credential.helper`
+or an `insteadOf` rule in it cannot reach the session. Git credentials are not projected,
+so pushing still happens outside the session.
 
 **Network.** All egress passes through an allowlist proxy; the session has no direct route
 out. The built-in model-provider hosts and the npm update check are permitted by default,
@@ -469,9 +483,12 @@ captured output.
 
 ### Share a session deliberately
 
-`/share` first asks for confirmation, then exports the complete session HTML and uses
-your authenticated GitHub CLI to create a **secret Gist**. Secret means unlisted, not
-private or access-controlled; anyone with the URL can read it. The export can contain
+`/share` first asks for confirmation, then exports the complete session HTML and creates
+a **secret Gist** through the GitHub CLI. Secret means unlisted, not private or
+access-controlled; anyone with the URL can read it. Inside a sandboxed session the CLI
+cannot see your host credentials, so run `/export <file>` and then
+`gh gist create --public=false <file>` outside the session, as the sandbox section above
+describes. The export can contain
 prompts, tool calls and results, paths, and file content. Use `/export` to inspect a
 local copy first. By default Apex Code returns the GitHub Gist URL; configure
 `APEX_CODE_SHARE_VIEWER_URL` only for a viewer you explicitly trust.

@@ -27,7 +27,7 @@ See ADR 0002. This is a legal boundary, not a style preference.
 
 ## Validation gates
 
-- Run `npm run typecheck` regularly while editing TypeScript.
+- Run `npx tsgo --noEmit` regularly while editing TypeScript. There is no `typecheck` script; `npm run check` is the full lint, docs, and type pass.
 - Run the narrowest relevant test file before broadening scope.
 - Run `npm test` once at the end of a completed implementation slice.
 - Never claim verification you did not run. Paste the command and its real output.
