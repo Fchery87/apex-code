@@ -433,7 +433,7 @@ load-flake signature this machine produced before these changes.
 (recoverable via `git show <commit>:docs/plans/2026-08-22-pr33-followups.md`); Phase 2b's
 **landed** state is unchanged.
 
-### Follow-up (2026-08-28): sandbox delegation and escalation
+### Follow-up (2026-08-28): sandbox delegation and escalation — landed
 
 2b delivered containment. It did not deliver the delegation half, and ADR 0005's own
 deferral of interactive escalation named a prerequisite — supervisor/child IPC carrying a
@@ -441,9 +441,25 @@ concrete blocked-host request — that `core/sandbox/rpc/` satisfied on 2026-08-
 after the ADR was accepted.
 [`specs/2026-08-28-sandbox-delegation-and-escalation.md`](specs/2026-08-28-sandbox-delegation-and-escalation.md)
 specifies the seven units that close it, and
-[`plans/2026-08-28-sandbox-delegation-and-escalation.md`](plans/2026-08-28-sandbox-delegation-and-escalation.md)
-tracks them. This does not
-change Phase 2b's **landed** state; escalation was never part of what 2b shipped.
+`docs/plans/2026-08-28-sandbox-delegation-and-escalation.md` tracked them, and is deleted now the work is landed
+(recoverable via `git show <commit>:docs/plans/2026-08-28-sandbox-delegation-and-escalation.md`).
+This does not change Phase 2b's **landed** state; escalation was never part of what 2b
+shipped.
+
+All seven units landed on 2026-08-28. A session now authors commits under the host
+identity, asks before reaching an unlisted host, pushes with a host-owned credential that
+never enters the workspace, and can run one approved command in a second child without its
+own boundary widening. `--add-dir`, `--sandbox danger-full-access`, and
+`--permission-profile` are the deliberate widenings, none reachable from project settings.
+Three ADRs record the decisions: 0023 (escalation authority is the supervisor's, because
+the RPC channel has no peer authentication), 0024 (an approved command runs in a second
+child rather than widening the first), and amendments to 0005 and 0015.
+
+Full-suite status, stated as run: `test:scripts` 21 passed; `packages/agent` 419 passed;
+`packages/coding-agent` run in five filtered passes covering every directory and every
+root-level file, 3060 tests passed with 58 skipped and 0 failed, each pass exiting 0. The
+package was split because a single ~22-minute invocation was twice terminated by the
+harness mid-run, not by a failure. `npm run check` passes end to end.
 
 ---
 
