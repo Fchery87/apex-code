@@ -66,7 +66,7 @@ describe.skipIf(process.platform === "win32")("sandboxed public CLI", { timeout:
 		expect(readdirSync(join(workspace, ".apex-code", "sandbox-agent"))).toEqual(
 			expect.arrayContaining(["models-store.json"]),
 		);
-	}, 30_000);
+	});
 
 	it("fails closed before executing a normal agent session when the platform sandbox tool is unavailable", async () => {
 		const workspace = temporaryDirectory("apex-sandbox-cli-unavailable-");
@@ -81,5 +81,5 @@ describe.skipIf(process.platform === "win32")("sandboxed public CLI", { timeout:
 		expect(result.stderr).toContain(
 			process.platform === "darwin" ? "sandbox-exec (Seatbelt) is required" : "Bubblewrap (bwrap) is required",
 		);
-	}, 30_000);
+	});
 });
