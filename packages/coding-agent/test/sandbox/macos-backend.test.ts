@@ -337,7 +337,10 @@ describe("macOS credential channel projection", () => {
 
 		expect(code).toBe(0);
 		const profile = readFileSync(join(cwd, ".apex-code", "sandbox-state", "profile.sb"), "utf8");
-		expect(profile).not.toContain("unix-socket");
+		// The git credential and command escalation channels are always opened, so their
+		// socket rules are always present. What must be absent is the credential channel's,
+		// whose sockets live under an `apex-cred-` directory.
+		expect(profile).not.toContain("apex-cred-");
 		expect(spawnEnvironment?.APEX_CREDENTIAL_PROXY_PATH).toBeUndefined();
 	});
 });

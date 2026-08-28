@@ -36,7 +36,16 @@ async function runCli(options: { args: readonly string[]; cwd: string; environme
 	return { code, stderr };
 }
 
-describe.skipIf(process.platform === "win32")("sandboxed public CLI", () => {
+/**
+ * These tests spawn a whole CLI, which transpiles its module graph in a cold worker before
+ * it does anything. Warm they take seconds; in a parallel suite run on a loaded machine
+ * they have repeatedly crossed the 30s default and then passed in isolation, which is the
+ * load-flake signature Phase 2b's roadmap entry already records for CLI-spawning files.
+ * The cost is real rather than a hang, so the timeout is the thing that was wrong.
+ */
+const CLI_SPAWN_TIMEOUT_MS = 120_000;
+
+describe.skipIf(process.platform === "win32")("sandboxed public CLI", { timeout: CLI_SPAWN_TIMEOUT_MS }, () => {
 	it("runs the normal child entry and keeps agent state inside the workspace", async () => {
 		const workspace = temporaryDirectory("apex-sandbox-cli-process-");
 		const hostAgentDirectory = join(temporaryDirectory("apex-sandbox-host-agent-"), "agent");

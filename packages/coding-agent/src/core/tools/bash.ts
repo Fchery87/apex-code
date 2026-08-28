@@ -19,6 +19,12 @@ import {
 import { setApexEnvironment } from "../environment.ts";
 import { getExperimentalToolSampling } from "../experimental.ts";
 import type { ExtensionContext, ToolRenderResultOptions } from "../extensions/types.ts";
+import {
+	escalationRootFor,
+	extractRefusedPath,
+	looksLikeSandboxRefusal,
+	requestCommandEscalation,
+} from "../sandbox/rpc/command-client.ts";
 import { classifyBashCommand } from "./bash-command-segments.ts";
 import type { ApexToolDefinition, PermissionSpec } from "./contract.ts";
 import { OutputAccumulator } from "./output-accumulator.ts";
@@ -567,6 +573,19 @@ export function createShellToolDefinition(
 				const { text: outputText, details } = formatOutput(snapshot);
 				const resultDetails: BashToolDetails = { ...details, execution };
 				if (exitCode !== 0 && exitCode !== null) {
+					// The OS boundary refuses a write in the kernel, so by the time this runs
+					// the syscall has already failed and nothing inside this namespace can
+					// widen it. Offering the command to the supervisor is the only remaining
+					// move, and it is the supervisor that shows the human the exact command
+					// and root before anything runs -- so a wrong guess at the path is
+					// refused by someone reading it, never granted quietly.
+					const escalated = await escalateRefusedCommand(command, outputText);
+					if (escalated) {
+						return {
+							content: [{ type: "text", text: escalated }],
+							details: resultDetails,
+						};
+					}
 					throw new ToolExecutionError(appendStatus(outputText, `Command exited with code ${exitCode}`), {
 						execution,
 					});
@@ -639,4 +658,24 @@ export function createBashTool(cwd: string, options?: BashToolOptions): AgentToo
 		promptGuidelines: definition.promptGuidelines,
 	});
 	return tool;
+}
+
+/**
+ * Offer a command the sandbox refused to the supervisor, once.
+ *
+ * Returns the escalated output when a human approved it and it ran, and undefined for
+ * every other outcome -- no channel, no recognisable refusal, no path in the message, a
+ * refused prompt -- because the caller's behaviour is the same in all of them: report
+ * what originally happened.
+ */
+async function escalateRefusedCommand(command: string, output: string): Promise<string | undefined> {
+	if (!looksLikeSandboxRefusal(output)) return undefined;
+	const refusedPath = extractRefusedPath(output);
+	if (!refusedPath) return undefined;
+	const outcome = await requestCommandEscalation({ command, writableRoot: escalationRootFor(refusedPath) });
+	if (!outcome || outcome.code !== 0) return undefined;
+	return [outcome.stdout, outcome.stderr]
+		.filter((part) => part.length > 0)
+		.join("\n")
+		.trim();
 }

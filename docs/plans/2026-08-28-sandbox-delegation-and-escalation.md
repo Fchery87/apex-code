@@ -29,10 +29,10 @@ existing framed Unix-socket protocol.
 | SDE.5 | U3 | Done | pending |
 | SDE.6 | U4 | Done | `ee4c7dd95` |
 | SDE.7 | U4 | Done | `ee4c7dd95` |
-| SDE.8 | U5 | Done | pending |
-| SDE.9 | U5 | Done | pending |
-| SDE.10 | U6 | Not started | — |
-| SDE.11 | U6 | Not started | — |
+| SDE.8 | U5 | Done | `7c4fdebc4` |
+| SDE.9 | U5 | Done | `7c4fdebc4` |
+| SDE.10 | U6 | Done | pending |
+| SDE.11 | U6 | Done | pending |
 | SDE.12 | U7 | Not started | — |
 | SDE.13 | — | Not started | — |
 
@@ -264,8 +264,9 @@ decides.
 1. Extract one argv builder per backend so the second child cannot drift from the first,
    which is the divergence ADR 0010 exists to prevent.
 2. Spawn the escalated child from the supervisor; stream output back over the channel.
-3. Write the new ADR before the code lands: two boundaries in one session is a
-   launch-architecture change.
+3. Write the ADR: two boundaries in one session is a launch-architecture change. It is
+   `docs/adr/0024-per-command-sandbox-escalation.md`, not 0023 as this plan first said,
+   because 0023 was taken by the escalation-authority decision U3 surfaced.
 4. Run `npm test`, then commit and record the SHA.
 
 ### SDE.12: OS-boundary permission profiles

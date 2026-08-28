@@ -50,7 +50,16 @@ async function runCli(options: { args: readonly string[]; cwd: string; environme
 	return { code, stdout, stderr };
 }
 
-describe.skipIf(!canEnforceSandbox())("live-agent credential handoff", () => {
+/**
+ * These tests spawn a whole CLI, which transpiles its module graph in a cold worker before
+ * it does anything. Warm they take seconds; in a parallel suite run on a loaded machine
+ * they have repeatedly crossed the 30s default and then passed in isolation, which is the
+ * load-flake signature Phase 2b's roadmap entry already records for CLI-spawning files.
+ * The cost is real rather than a hang, so the timeout is the thing that was wrong.
+ */
+const CLI_SPAWN_TIMEOUT_MS = 120_000;
+
+describe.skipIf(!canEnforceSandbox())("live-agent credential handoff", { timeout: CLI_SPAWN_TIMEOUT_MS }, () => {
 	it("creates and writes the canonical host credential file on the first sandbox credential mutation", async () => {
 		const workspace = temporaryDirectory("apex-sandbox-fresh-credential-workspace-");
 		const hostAgentDir = temporaryDirectory("apex-sandbox-fresh-credential-agent-");

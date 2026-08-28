@@ -109,3 +109,26 @@ export function createCredentialReleaser(
 		refused: `Refused the ${subject} credential.`,
 	}));
 }
+
+/**
+ * Approve one command to run in a separate child with one extra writable root.
+ *
+ * Unlike a host or a credential, nothing is remembered. A command is not a stable subject
+ * to grant against, and a remembered approval would silently cover the next command that
+ * happened to name the same root.
+ */
+export function createCommandEscalationApprover(
+	options: TerminalPromptOptions,
+): ((request: { command: string; writableRoot: string }) => Promise<boolean>) | undefined {
+	const prompt = createTerminalPrompt(options, (subject) => ({
+		question:
+			`The sandboxed session asked to run a command with write access outside its workspace.\n\n` +
+			`  ${subject}\n\n` +
+			`It runs once, in a separate sandbox. The session's own boundary does not change.\n` +
+			`Allow it? [y/N] `,
+		granted: "Ran the command once with that root writable.",
+		refused: "Refused.",
+	}));
+	if (!prompt) return undefined;
+	return (request) => prompt(`${request.command}\n  (writable: ${request.writableRoot})`);
+}
