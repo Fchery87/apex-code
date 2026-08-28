@@ -34,9 +34,9 @@ deletion inventory.
 | MCP.8 | U4 | Done | pending |
 | MCP.9 | U5 | Done | pending |
 | MCP.10 | U5 | Done | pending |
-| MCP.11 | U6 | Not started | — |
-| MCP.12 | U6 | Not started | — |
-| MCP.13 | — | Not started | — |
+| MCP.11 | U6 | Done | pending |
+| MCP.12 | U6 | Done | pending |
+| MCP.13 | — | Done | pending |
 
 Order is load-bearing in one place. MCP.5 and MCP.6 must land before MCP.9 and MCP.10.
 The `ruleContent` grammar appears in users' saved permission rules the moment a tool
@@ -308,6 +308,25 @@ casts at the call boundary.
    itself is unchanged and still serves third-party extension tools.
 3. Run `npm run check`.
 
+**Outcome.** The budget question is answered with a number. Two servers and forty
+cached tools move the production static prefix from **2,891 to 3,076 tokens, a delta of
+185**, against an enforced budget of 3,700. Registering those forty tools directly at the
+150-300 tokens each the spec cites would have cost 6,000 or more, so the proxy's
+justification is now measured rather than asserted. `static-prefix.test.ts` asserts the
+delta stays under 250 and that an unconfigured session's prefix is byte-identical to
+before.
+
+`mcp` is registered only when `options.mcp` is present, mirroring `lsp` exactly, and
+`createMcpRuntime` returns undefined when no server is configured so nothing downstream is
+built at all.
+
+The deletion inventory is settled. `interactive-mode.ts` now reports configured servers and
+their live `ServerState` instead of offering MCP management from `apex-code config`, which
+manages package resources and never could configure a server. The `UNCLASSIFIED` comment in
+`contract.ts` no longer cites MCP servers as its example, because MCP tools now reach the
+model through a proxy that declares a contract; the fallback itself is unchanged and still
+serves third-party extension tools.
+
 ### MCP.13: Verify on the real surface
 
 **Files:**
@@ -324,3 +343,31 @@ casts at the call boundary.
 4. Record the run in this plan under a **Verification run, stated as run** heading, with
    the full-suite numbers, matching the house convention.
 5. Run root `npm test` and `npm run check` and state both results.
+
+**Outcome.** Verified against `@modelcontextprotocol/server-everything` over real stdio,
+spawned by `npx`. 14 of 14 checks pass. `echo` returned `Echo: hello from apex` from the
+live server, state moved `disconnected` to `ready` to `disconnected`, and the tool list was
+cached from the live connection. A second runtime built with a connector that throws then
+answered `search` and `describe` from disk alone, which is the central claim proven outside
+a unit test. The saved rule `Mcp(everything:echo)` authorized a second call carrying
+different arguments, which is exactly the defect the spec's Problem section names.
+
+Two harness corrections were needed and neither was a product fault. Counting processes with
+`pgrep -f` reported phantom servers, because the pattern matches the `sh -c` running it and
+because npx's resolved binary path contains the package name. Counting connector invocations
+asserts the same property against our own code and is not subject to process-table noise. No
+orphaned server process survives a run.
+
+## Verification run, stated as run
+
+`npm run check` passed end to end on 2026-08-28, including `check:docs`,
+`check:pinned-deps`, `check:ts-imports`, `check:scrubber`, `check:shrinkwrap`,
+`check:install-lock`, `tsgo --noEmit`, and `check:browser-smoke`.
+
+The MCP suite is 62 tests across five files. `static-prefix.test.ts` is 12 tests including
+four new ones. The end-to-end script is 14 checks against a real server and is not part of
+the suite, because it downloads and spawns a server over the network.
+
+Measured static prefix: **2,891 tokens with no MCP configured, 3,076 with two servers and
+forty cached tools**, a delta of 185 against an enforced budget of 3,700. Registering those
+forty tools directly at 150-300 tokens each would have cost 6,000 or more.

@@ -97,6 +97,7 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.ts";
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
+import type { McpToolOptions } from "./mcp/mcp-tool.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
@@ -265,6 +266,8 @@ export interface AgentSessionConfig {
 	 * `baseToolsOverride` is set.
 	 */
 	lspOperations?: LspOperations;
+	/** Assembled MCP subsystem, present only when at least one server is configured. */
+	mcpRuntime?: McpToolOptions;
 	/**
 	 * Optional `web_search` backend. Absent leaves the tool on its unconfigured
 	 * operations, which throw a model-readable "not configured" error rather than
@@ -406,6 +409,12 @@ export class AgentSession {
 	private _evidenceSink?: EvidenceSink;
 	private _diagnosticsOperations?: DiagnosticsOperations;
 	private _lspOperations?: LspOperations;
+	private _mcpRuntime?: McpToolOptions;
+
+	/** Configured MCP subsystem, or undefined when no server is configured. */
+	get mcpRuntime(): McpToolOptions | undefined {
+		return this._mcpRuntime;
+	}
 	private _webSearchOperations?: WebSearchOperations;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionMode: ExtensionMode = "print";
@@ -448,6 +457,7 @@ export class AgentSession {
 		this._evidenceSink = config.evidenceSink ?? new SessionEvidenceSink(this.sessionManager);
 		this._diagnosticsOperations = config.diagnosticsOperations;
 		this._lspOperations = config.lspOperations;
+		this._mcpRuntime = config.mcpRuntime;
 		this._webSearchOperations = config.webSearchOperations;
 
 		// Always subscribe to agent events for internal handling
@@ -2882,6 +2892,7 @@ export class AgentSession {
 					edit: { diagnosticsOperations: this._diagnosticsOperations },
 					write: { diagnosticsOperations: this._diagnosticsOperations },
 					...(this._lspOperations ? { lsp: { operations: this._lspOperations } } : {}),
+					...(this._mcpRuntime ? { mcp: this._mcpRuntime } : {}),
 					...(this._webSearchOperations ? { web_search: { operations: this._webSearchOperations } } : {}),
 				});
 		baseToolDefinitions.tool_schema = createToolSchemaToolDefinition({

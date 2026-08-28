@@ -1,9 +1,15 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { projectToolSchemas } from "../../src/core/context/pipeline.ts";
+import { McpMetadataCache } from "../../src/core/mcp/metadata-cache.ts";
+import { McpServerManager } from "../../src/core/mcp/server-manager.ts";
 import { SKILL_CATALOG_PREFIX_BUDGET_TOKENS, type Skill } from "../../src/core/skills.ts";
 import { createSyntheticSourceInfo } from "../../src/core/source-info.ts";
 import { buildSystemPrompt } from "../../src/core/system-prompt.ts";
-import { createAllToolDefinitions } from "../../src/core/tools/index.ts";
+import { ALL_CAPABILITIES } from "../../src/core/tools/contract.ts";
+import { createAllToolDefinitions, type ToolsOptions } from "../../src/core/tools/index.ts";
 
 function productionPrefixTokens(options?: {
 	loadedSchemaNames?: ReadonlySet<string>;
@@ -118,6 +124,49 @@ function lspToolOptions() {
 	return { lsp: { operations: { request: async () => [] } } };
 }
 
+/**
+ * A configured MCP subsystem. Deliberately two servers with several cached tools
+ * each: the whole point of the proxy is that the prefix does not grow with them.
+ */
+function mcpToolOptions(): ToolsOptions {
+	const servers = new Map(
+		["github", "files"].map((name) => [
+			name,
+			{
+				name,
+				transport: { kind: "stdio" as const, command: name, args: [], env: {}, cwd: undefined },
+				capabilities: ALL_CAPABILITIES,
+				lifecycle: "lazy" as const,
+				idleTimeoutMinutes: 10,
+			},
+		]),
+	);
+	const cache = new McpMetadataCache(join(mkdtempSync(join(tmpdir(), "apex-mcp-prefix-")), "metadata.json"));
+	for (const server of servers.values()) {
+		cache.set(
+			server,
+			Array.from({ length: 20 }, (_, index) => ({
+				server: server.name,
+				name: `tool_${index}`,
+				description: `Tool number ${index} on ${server.name}, with a description of realistic length.`,
+				inputSchema: { type: "object", properties: { a: { type: "string" }, b: { type: "number" } } },
+			})),
+		);
+	}
+	return {
+		mcp: {
+			servers,
+			cache,
+			manager: new McpServerManager({
+				servers,
+				connector: async () => {
+					throw new Error("the static prefix must never connect");
+				},
+			}),
+		},
+	};
+}
+
 describe("production static prefix (Phase 4 task 4.1/4.7)", () => {
 	it("measures all registered production tools directly rather than the four-tool replay corpus", () => {
 		const definitions = createAllToolDefinitions("/workspace");
@@ -148,6 +197,32 @@ describe("production static prefix with lsp configured (LSP.7)", () => {
 		expect(productionPrefixTokens({ toolOptions: lspToolOptions() })).toBeLessThanOrEqual(
 			ENFORCED_PRODUCTION_PREFIX_BUDGET,
 		);
+	});
+});
+
+describe("production static prefix with mcp configured", () => {
+	it("registers the mcp tool only when a server is configured", () => {
+		expect(Object.keys(createAllToolDefinitions("/workspace"))).not.toContain("mcp");
+		expect(Object.keys(createAllToolDefinitions("/workspace", mcpToolOptions()))).toContain("mcp");
+	});
+
+	it("leaves the prefix untouched when nothing is configured", () => {
+		expect(productionPrefixTokens({ toolOptions: {} })).toBe(productionPrefixTokens());
+	});
+
+	it("stays under the enforced budget with two servers and forty cached tools", () => {
+		expect(productionPrefixTokens({ toolOptions: mcpToolOptions() })).toBeLessThanOrEqual(
+			ENFORCED_PRODUCTION_PREFIX_BUDGET,
+		);
+	});
+
+	it("costs one announced tool, not one per server tool", () => {
+		const delta = productionPrefixTokens({ toolOptions: mcpToolOptions() }) - productionPrefixTokens();
+		// Forty tools registered directly would cost 150-300 tokens each. The proxy's
+		// whole justification is that this number is a constant instead.
+		// Measured at 185 tokens (2,891 -> 3,076) for two servers and forty cached tools.
+		expect(delta).toBeGreaterThan(0);
+		expect(delta).toBeLessThan(250);
 	});
 });
 

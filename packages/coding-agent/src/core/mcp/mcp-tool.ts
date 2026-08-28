@@ -13,6 +13,7 @@
 
 import type { AgentToolResult } from "apex-code-agent-core";
 import type { ApexToolDefinition } from "../tools/contract.ts";
+import { wrapToolDefinition } from "../tools/tool-definition-wrapper.ts";
 import { createMcpToolContract } from "./contract.ts";
 import type { McpMetadataCache } from "./metadata-cache.ts";
 import { type McpToolDetails, type McpToolParams, mcpToolSchema } from "./schema.ts";
@@ -200,4 +201,8 @@ export function createMcpToolDefinition(
 			};
 		}
 	}
+}
+
+export function createMcpTool(options: McpToolOptions) {
+	return wrapToolDefinition(createMcpToolDefinition(options));
 }

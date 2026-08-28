@@ -9,6 +9,7 @@ import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { createAgentDefinitionResolver } from "./delegation/agents.ts";
 import type { AgentDefinitionResolver, DelegationRuntimeOptions } from "./delegation/runtime.ts";
 import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
+import { createMcpRuntime } from "./mcp/runtime.ts";
 import { convertToLlm } from "./messages.ts";
 import { findInitialModel } from "./model-resolver.ts";
 import { ModelRuntime } from "./model-runtime.ts";
@@ -297,7 +298,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		thinkingLevel = clampThinkingLevel(model, thinkingLevel) as ThinkingLevel;
 	}
 
-	// `web_search` and `lsp` join the core four only when configured. Both stay
+	const mcpRuntime = createMcpRuntime(cwd);
+
+	// `web_search`, `lsp`, and `mcp` join the core four only when configured. All stay
 	// registered either way, so an explicit `--tools` selection still reaches them and an
 	// unconfigured call still explains itself. Activating an unconfigured tool would put a
 	// name in the prompt that can only ever fail.
@@ -305,6 +308,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		...(["read", "bash", "edit", "write"] satisfies ToolName[]),
 		...(options.lspOperations ? ["lsp"] : []),
 		...(options.webSearchOperations ? (["web_search"] satisfies ToolName[]) : []),
+		...(mcpRuntime ? ["mcp"] : []),
 	];
 	const configuredDefaultToolNames = settingsManager.getDefaultTools();
 	const allowedToolNames = options.tools ?? (options.noTools === "all" ? [] : undefined);
@@ -575,6 +579,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		diagnosticsOperations: options.diagnosticsOperations,
 		lspOperations: options.lspOperations,
 		webSearchOperations: options.webSearchOperations,
+		mcpRuntime,
 	});
 	parentSessionRef.current = session;
 	const extensionsResult = resourceLoader.getExtensions();
