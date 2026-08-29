@@ -817,8 +817,8 @@ LSP.1–5 and LSP.7 (registry/client/pool, settings and fail-fast startup, sandb
 inheritance and egress, diagnostics collector wired to `edit`/`write`, the `lsp` tool,
 and closure verification) are done. LSP.6 (a `"diagnostic"` evidence-kind extension,
 gated on an ADR that was never written) is deferred, not dropped — the plan always
-treated it as severable from the rest. **Superseded (2026-08-29):** it is not deferred any
-more. ADR 0020 was accepted on 2026-08-20 and LSP.6 landed with it, as
+treated it as severable from the rest. **Superseded (2026-08-29):** it is no longer
+deferred. ADR 0020 was accepted on 2026-08-20 and LSP.6 landed with it, as
 `specs/2026-08-18-lsp.md` records at its "the evidence extension remains severable"
 paragraph; `core/tools/edit.ts` and `core/tools/write.ts` both declare
 `emits: ["diff", "diagnostic"]` when a diagnostics backend is configured, and
