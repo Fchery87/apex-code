@@ -536,6 +536,10 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					// once (possibly by running a shell command for the key) and a child
 					// that re-resolved nothing would hold a `web_search` that only throws.
 					webSearchOperations: options.webSearchOperations,
+					// `checkpointSettings` is deliberately *not* forwarded. A child shares the
+					// parent's cwd, so it would write refs under its own session id into the
+					// same repository and interleave them with the parent's. The parent's
+					// per-turn capture already covers everything a child does inside that turn.
 					// Forwarded so a child that itself holds `delegate` can delegate again
 					// (bounded by the depth guard above, read fresh from its own session
 					// header on its next createAgentSession call) -- otherwise recursion
@@ -580,6 +584,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		lspOperations: options.lspOperations,
 		webSearchOperations: options.webSearchOperations,
 		mcpRuntime,
+		checkpointSettings: settingsManager.getCheckpointSettings(),
 	});
 	parentSessionRef.current = session;
 	// Eager servers connect here rather than on first use, so their tools are in the

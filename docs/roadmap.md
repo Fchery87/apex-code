@@ -103,7 +103,7 @@ capable and measurably worse.
 | Composer dock surface | **landed** — filled, cursor-safe prompt dock · `2bd3008f1` | [spec](specs/2026-08-23-composer-dock-surface.md) | — |
 | Prime-inspired gold TUI | **landed** — gold-neutral layout and permission-safe tray · `e576190a5` | [spec](specs/2026-08-23-prime-inspired-gold-tui.md) | — |
 | Native MCP support | **landed** — 13 of 13 tasks · `ed3b3a9c1` | [spec](specs/2026-08-28-native-mcp.md) | — |
-| Git-backed session checkpoints | **in progress** — 4 of 6 tasks | [spec](specs/2026-08-28-git-checkpoints.md) | [plan](plans/2026-08-28-git-checkpoints.md) |
+| Git-backed session checkpoints | **in progress** — 6 of 6 tasks, one call site uncovered | [spec](specs/2026-08-28-git-checkpoints.md) | [plan](plans/2026-08-28-git-checkpoints.md) |
 
 ---
 

@@ -52,6 +52,8 @@ import { sleep } from "../utils/sleep.ts";
 import { normalizeToolResultImages } from "../utils/tool-result-images.ts";
 import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from "./auth-guidance.ts";
 import { type BashResult, executeBashWithOperations } from "./bash-executor.ts";
+import type { CheckpointSettings } from "./checkpoints/git-checkpoints.ts";
+import { createSessionCheckpoints, type SessionCheckpoints } from "./checkpoints/session-checkpoints.ts";
 import {
 	type CompactionPreparation,
 	type CompactionResult,
@@ -274,6 +276,11 @@ export interface AgentSessionConfig {
 	 * returning zero results. Ignored when `baseToolsOverride` is set.
 	 */
 	webSearchOperations?: WebSearchOperations;
+	/**
+	 * Git-backed worktree checkpoints. Absent, or present with `enabled` unset, captures
+	 * nothing and runs no `git` subprocess.
+	 */
+	checkpointSettings?: CheckpointSettings;
 }
 
 export interface ExtensionBindings {
@@ -415,6 +422,12 @@ export class AgentSession {
 	get mcpRuntime(): McpRuntime | undefined {
 		return this._mcpRuntime;
 	}
+	private _checkpoints!: SessionCheckpoints;
+
+	/** Worktree checkpoints for this session. Inert unless `checkpoints.enabled` is set. */
+	get checkpoints(): SessionCheckpoints {
+		return this._checkpoints;
+	}
 	private _webSearchOperations?: WebSearchOperations;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionMode: ExtensionMode = "print";
@@ -459,6 +472,11 @@ export class AgentSession {
 		this._lspOperations = config.lspOperations;
 		this._mcpRuntime = config.mcpRuntime;
 		this._webSearchOperations = config.webSearchOperations;
+		this._checkpoints = createSessionCheckpoints({
+			workspace: this._cwd,
+			sessionId: this.sessionManager.getSessionId(),
+			settings: config.checkpointSettings,
+		});
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, extensions, auto-compaction, retry logic)
@@ -888,6 +906,12 @@ export class AgentSession {
 		} else if (event.type === "agent_end") {
 			await this._extensionRunner.emit({ type: "agent_end", messages: event.messages });
 		} else if (event.type === "turn_start") {
+			// Snapshot before the model gets to act, keyed to the entry `/tree` and `/fork`
+			// already navigate to, so the two agree about what an entry means. Not awaited:
+			// a capture must never delay a turn, and a failed one is never fatal.
+			const leafEntryId = this.sessionManager.getLeafEntry()?.id;
+			if (leafEntryId) void this._checkpoints.capture(leafEntryId);
+
 			const extensionEvent: TurnStartEvent = {
 				type: "turn_start",
 				turnIndex: this._turnIndex,

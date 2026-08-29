@@ -27,9 +27,9 @@ on a large worktree would block the event loop and stall the TUI.
 | CP.1 | C1 | Done | `17edae3c6` |
 | CP.2 | C1 | Done | `17edae3c6` |
 | CP.3 | C1 | Done | `17edae3c6` |
-| CP.4 | C2 | Done | `pending` |
-| CP.5 | C3 | Not started | — |
-| CP.6 | C4 | Not started | — |
+| CP.4 | C2 | Done | `aef71d3a9` |
+| CP.5 | C3 | Done, partly verified — see below | `pending` |
+| CP.6 | C4 | Done | `pending` |
 
 Order is load-bearing in one place. CP.4 must land before CP.5, because the settings key is
 what decides whether the engine is constructed at all, and wiring a capture that no setting
@@ -84,16 +84,37 @@ problem exists to justify, and it is what a reviewer should check first.
 
 ### CP.5: Session wiring
 
-Capture at turn start keyed to the current leaf entry. Offer restore when a fork targets an
-entry that has a checkpoint.
+Capture at turn start keyed to the current leaf entry. `checkpointSettings` reaches the
+session the way `mcpRuntime` and `lspOperations` already do, and the session resolves the
+engine lazily because `createGitCheckpoints` is async and session construction is not.
 
-**Done when:** a session with the key set writes a ref per turn, and a session without it
-writes none.
+Restore does **not** move into core. The prompt belongs at the `session_before_fork` seam
+that already exists for it, and pushing a `ui.select` into `AgentSession` would put a
+terminal decision inside a layer that runs headless. CP.6 covers it instead.
+
+A delegated child deliberately does not capture: it shares the parent's cwd, so it would
+interleave refs under its own session id into the same repository, and the parent's
+per-turn capture already covers what the child does inside that turn.
+
+**Done when:** a session with the key set writes a ref, and a session without it writes
+none.
+
+**Verified:** `test/checkpoints/session-wiring.test.ts` drives the real
+`createAgentSession` path and asserts both, keyed to the session manager's own id.
+Mutation-checked by removing the `sdk.ts` passthrough, which fails two of its three cases.
+
+**Not verified:** the `turn_start` call site in `agent-session.ts` itself. Asserting it
+needs a driven turn against a live model, which this suite does not do. The call is two
+lines and the layer beneath it is covered.
 
 ### CP.6: Example and documentation
 
-Rewrite `examples/extensions/git-checkpoint.ts` onto the engine, or delete it if CP.5 makes
-it redundant. Document the setting, the ref namespace, and the one-line removal command in
-`docs/user-guide.md`.
+`examples/extensions/git-checkpoint.ts` is rewritten, not deleted. CP.5 took over capture,
+so the example is now restore only, and it resolves its own engine from the workspace
+rather than being handed one. That works because the registry is git, which is the same
+property that makes a checkpoint survive a restart.
+
+The engine is exported from the package index so an extension can reach it.
+`docs/user-guide.md` documents the setting, the ref namespace, and the removal command.
 
 **Done when:** the spec's deletion inventory is settled and `npm run check` is green.
