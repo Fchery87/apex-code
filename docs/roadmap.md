@@ -468,12 +468,23 @@ Deleted, with `AgentHarness` in `apex-code-agent-core` untouched. Recoverable vi
 `git show <commit>:packages/coding-agent/src/server/create-harness.ts`.
 
 Landed 2026-08-29 across four commits (`d32061c9c`, `3046ec6a6`, `0cc7d2d8b`, `d2cb6ea0f`).
-Two things are recorded rather than closed. ADR 0010's invariant 5, the `ruleContent`
-round-trip as a property across the registry, needs a valid sample `params` per tool and a
-shared stub would exercise none of them, so it is owed rather than faked. And `/tools` and
-`/doctor`, the two surfaces ADR 0010 names as consumers, remain unbuilt on purpose:
-inventing commands nobody asked for to justify the projection would invert the reason for
-building it.
+One thing is recorded rather than closed: `/tools` and `/doctor`, the two surfaces ADR 0010
+names as consumers, remain unbuilt on purpose. Inventing commands nobody asked for to
+justify the projection would invert the reason for building it.
+
+**Correction (2026-08-29).** This section originally recorded ADR 0010's invariant 5 as
+owed, on the reasoning that a registry-wide `matches(ruleForCall(p), p)` needs valid sample
+`params` per tool and that a hand-written table would rot. Both halves were wrong.
+`test/permissions/contract.test.ts:107` has asserted invariant 5 across the whole registry
+since before the projection existed, and the `REPRESENTATIVE_PARAMS` table it uses is keyed
+by tool name precisely so a newly added tool fails loudly instead of being skipped -- which
+answers the rotting objection by construction. That file also owns invariants 1 and 4.
+
+The two registry-wide cases added alongside the projection duplicated invariant 1 and have
+been removed; `test/tools/contract-snapshot.test.ts` covers the projection itself and points
+at `contract.test.ts` for the registry invariants. Recorded here rather than quietly edited,
+because the claim shipped in a merged pull request and the mistake is the same one this
+follow-up existed to fix: a document asserting something about the code that was not true.
 
 The last commit is a self-inflicted one worth naming. Extracting the command assembly broke
 two existing autocomplete tests that built a plain-object `this`, and the targeted subsets
