@@ -150,6 +150,7 @@ export {
 
 import type { AgentTool } from "apex-code-agent-core";
 import type { DelegationRuntimeOptions } from "../delegation/runtime.ts";
+import { createMcpTool, createMcpToolDefinition, type McpToolOptions } from "../mcp/mcp-tool.ts";
 import { createAskUserTool, createAskUserToolDefinition } from "./ask-user.ts";
 import { type BashToolOptions, createBashTool, createBashToolDefinition } from "./bash.ts";
 import type { ApexToolDefinition } from "./contract.ts";
@@ -232,6 +233,13 @@ export interface ToolsOptions {
 	 * keeps an unconfigured session's tool set (and static prompt prefix) unaffected.
 	 */
 	lsp?: LspToolOptions;
+
+	/**
+	 * The `mcp` proxy tool. Same shape as `lsp` above and for the same reason: a
+	 * session with no configured MCP server registers nothing, so its prompt prefix
+	 * is byte-identical to one built before this subsystem existed.
+	 */
+	mcp?: McpToolOptions;
 }
 
 /** Default store when no session/workspace context supplies one (mirrors emptyToolSchemaResolver below). */
@@ -370,7 +378,7 @@ const emptySkillSearchResolver: SkillSearchResolver = {
 export function createAllToolDefinitions(
 	cwd: string,
 	options?: ToolsOptions,
-): Record<ToolName, ToolDef> & { lsp?: ToolDef } {
+): Record<ToolName, ToolDef> & { lsp?: ToolDef; mcp?: ToolDef } {
 	const definitions = {
 		read: createReadToolDefinition(cwd, options?.read),
 		bash: createBashToolDefinition(cwd, options?.bash),
@@ -399,6 +407,7 @@ export function createAllToolDefinitions(
 		// Registered only when configured (LSP.5): an unconfigured session's registry,
 		// and therefore its static prompt prefix, is unaffected by this subsystem.
 		...(options?.lsp ? { lsp: createLspToolDefinition(cwd, options.lsp) } : {}),
+		...(options?.mcp ? { mcp: createMcpToolDefinition(options.mcp) } : {}),
 	};
 }
 
@@ -420,7 +429,10 @@ export function createReadOnlyTools(cwd: string, options?: ToolsOptions): Tool[]
 	];
 }
 
-export function createAllTools(cwd: string, options?: ToolsOptions): Record<ToolName, Tool> & { lsp?: Tool } {
+export function createAllTools(
+	cwd: string,
+	options?: ToolsOptions,
+): Record<ToolName, Tool> & { lsp?: Tool; mcp?: Tool } {
 	const definitions = createAllToolDefinitions(cwd, options);
 	const resolver = options?.tool_schema?.resolver ?? {
 		getTool: (name: string) => definitions[name as ToolName],
@@ -445,5 +457,6 @@ export function createAllTools(cwd: string, options?: ToolsOptions): Record<Tool
 		delegate: createDelegateTool(options?.delegate?.runtime ?? noopDelegationRuntime),
 		test: createTestTool(cwd, options?.test),
 		...(options?.lsp ? { lsp: createLspTool(cwd, options.lsp) } : {}),
+		...(options?.mcp ? { mcp: createMcpTool(options.mcp) } : {}),
 	};
 }

@@ -2658,9 +2658,25 @@ export class InteractiveMode {
 				this.showTrustSelector();
 				break;
 			case "Resources, extensions, and MCP adapters":
-				this.showStatus("Run apex-code config to manage resources, extensions, and MCP adapters.");
+				this.showStatus(this.describeMcpServers());
 				break;
 		}
+	}
+
+	/**
+	 * Report configured MCP servers and their live connection state. Replaces a string
+	 * that offered MCP management from `apex-code config`, which manages package
+	 * resources and has never been able to configure a server.
+	 */
+	private describeMcpServers(): string {
+		const runtime = this.session.mcpRuntime;
+		const servers = runtime ? [...runtime.servers.keys()] : [];
+		if (servers.length === 0) {
+			return "Run apex-code config to manage resources and extensions. No MCP server is configured; add one to .mcp.json.";
+		}
+
+		const states = servers.map((name) => `${name} (${runtime?.manager.state(name).kind ?? "disconnected"})`);
+		return `Run apex-code config to manage resources and extensions. MCP servers: ${states.join(", ")}.`;
 	}
 
 	/**

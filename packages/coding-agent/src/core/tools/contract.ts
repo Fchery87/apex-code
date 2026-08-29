@@ -215,8 +215,10 @@ export interface ApexToolDefinition<TParams extends TSchema = TSchema, TDetails 
 }
 
 /**
- * Conservative contract for a tool registered without one — MCP servers and
- * third-party extensions cannot supply a `contract`. Full capability set (so it can
+ * Conservative contract for a tool registered without one -- third-party extension
+ * tools, which cannot supply a `contract`. MCP tools no longer land here: they reach
+ * the model through the built-in `mcp` proxy, whose contract is declared in
+ * `core/mcp/contract.ts`. Full capability set (so it can
  * never widen a delegation ceiling), `ask` by default, never evicted, schema
  * deferred, emits nothing. Matching is exact-argument only: a foreign tool's rule
  * authorizes exactly the call it was generated from, never a pattern.
