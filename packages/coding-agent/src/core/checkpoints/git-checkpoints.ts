@@ -185,7 +185,11 @@ export async function createGitCheckpoints(
 			...(await refsUnder(`refs/apex-code/checkpoints/${sessionId}`)),
 			...(await refsUnder(preRestoreNamespace)),
 		];
-		return (existing.at(-1)?.ordinal ?? 0) + 1;
+		// The maximum across both namespaces, not the tail of the pair. `refsUnder` sorts
+		// each list on its own, and two sorted lists concatenated are not sorted, so a
+		// restore followed by further captures would otherwise reuse an ordinal already in
+		// the other namespace and `bound` would prune by a broken order.
+		return existing.reduce((highest, entry) => Math.max(highest, entry.ordinal), 0) + 1;
 	}
 
 	async function bound(namespace: string): Promise<void> {
@@ -252,8 +256,12 @@ export async function createGitCheckpoints(
 			const previous = await snapshot(`${SUBJECT_PREFIX} ${ordinal}`);
 			if (!previous) return undefined;
 			// Pinned before the restore runs, so an interrupted restore still leaves the
-			// pre-restore state reachable rather than orphaned.
-			await runGit(workspace, ["update-ref", `${preRestoreNamespace}/${ordinal}`, previous]);
+			// pre-restore state reachable rather than orphaned. The write is checked because
+			// an unpinned snapshot is unreachable and collectable: proceeding past a failure
+			// here would overwrite the worktree with no way back to what it held.
+			if (!(await runGit(workspace, ["update-ref", `${preRestoreNamespace}/${ordinal}`, previous])).ok) {
+				return undefined;
+			}
 			await bound(preRestoreNamespace);
 			if (!(await restoreCommit(checkpoint.commit))) return undefined;
 			return { entryId: "pre-restore", commit: previous };

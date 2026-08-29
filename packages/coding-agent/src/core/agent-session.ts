@@ -907,10 +907,16 @@ export class AgentSession {
 			await this._extensionRunner.emit({ type: "agent_end", messages: event.messages });
 		} else if (event.type === "turn_start") {
 			// Snapshot before the model gets to act, keyed to the entry `/tree` and `/fork`
-			// already navigate to, so the two agree about what an entry means. Not awaited:
-			// a capture must never delay a turn, and a failed one is never fatal.
+			// already navigate to, so the two agree about what an entry means.
+			//
+			// Awaited, despite the turn latency. Detached, the snapshot races the turn it is
+			// supposed to precede: a tool call can edit the worktree while `add -A` is still
+			// walking it, and the ref then holds mid-turn state that no `/fork` should ever
+			// restore. "The state before the model acted" is the whole guarantee, so paying
+			// for it here is the point. The engine's own timeout bounds the wait and a failed
+			// capture is never fatal.
 			const leafEntryId = this.sessionManager.getLeafEntry()?.id;
-			if (leafEntryId) void this._checkpoints.capture(leafEntryId);
+			if (leafEntryId) await this._checkpoints.capture(leafEntryId);
 
 			const extensionEvent: TurnStartEvent = {
 				type: "turn_start",

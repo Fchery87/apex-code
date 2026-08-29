@@ -201,6 +201,29 @@ describe("git checkpoints", () => {
 		expect((await checkpoints?.list())?.map((checkpoint) => checkpoint.entryId)).toEqual(["entry-2", "entry-3"]);
 	});
 
+	it("keeps ordinals unique across the checkpoint and pre-restore namespaces", async () => {
+		const cwd = repository();
+		const checkpoints = await createGitCheckpoints(cwd, "session");
+
+		writeFileSync(join(cwd, "tracked.txt"), "v2\n");
+		const first = await checkpoints?.capture("entry-1");
+		// Restoring early leaves the pre-restore namespace holding a *lower* ordinal than the
+		// checkpoints written afterwards. Two independently sorted lists concatenated are not
+		// sorted, so reading the tail of the pair yields the pre-restore ordinal rather than
+		// the maximum, and the next two captures collide on the same number.
+		await checkpoints?.restore(first!);
+		writeFileSync(join(cwd, "tracked.txt"), "v3\n");
+		await checkpoints?.capture("entry-2");
+		writeFileSync(join(cwd, "tracked.txt"), "v4\n");
+		await checkpoints?.capture("entry-3");
+
+		const subjects = git(cwd, "for-each-ref", "--format=%(contents:subject)", "refs/apex-code/")
+			.split("\n")
+			.filter(Boolean);
+
+		expect(new Set(subjects).size).toBe(subjects.length);
+	});
+
 	it("keeps one session's refs out of another's", async () => {
 		const cwd = repository();
 		writeFileSync(join(cwd, "tracked.txt"), "v2\n");

@@ -105,7 +105,7 @@ not affected by `core.autocrlf`. If your repository declares `text` or `text=aut
 
 Inspect them with ordinary git, and remove every one with:
 
-```
+```bash
 git for-each-ref --format='%(refname)' 'refs/apex-code/**' | xargs -r -n1 git update-ref -d
 ```
 

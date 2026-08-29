@@ -30,7 +30,8 @@ on a large worktree would block the event loop and stall the TUI.
 | CP.4 | C2 | Done | `aef71d3a9` |
 | CP.5 | C3 | Done, partly verified — see below | `fe81da383` |
 | CP.6 | C4 | Done | `fe81da383` |
-| CP.7 | C1 | Done | `pending` |
+| CP.7 | C1 | Done | `ca9bae79f` |
+| CP.8 | C1, C3 | Done | `pending` |
 
 Order is load-bearing in one place. CP.4 must land before CP.5, because the settings key is
 what decides whether the engine is constructed at all, and wiring a capture that no setting
@@ -140,3 +141,33 @@ failure on Linux by setting the config in the fixture repository. Running the fi
 `GIT_CONFIG_GLOBAL` pointed at a config with `autocrlf = true` reproduces CI exactly: three
 failures without the fix, including the same two cases `windows-latest` named, and fifteen
 passes with it.
+
+### CP.8: Act on the automated review of PR #50
+
+Four comments, all four legitimate on inspection, three of them real defects. Recorded
+because two contradicted comments this branch had already written, which is the useful
+signal.
+
+**Capture raced the turn it precedes.** `turn_start` fired the snapshot detached, so a tool
+call could edit the worktree while `add -A` was still walking it and the ref would hold
+mid-turn state. "The state before the model acted" is the entire guarantee, so the capture
+is now awaited. The engine's timeout bounds the wait and a failed capture stays non-fatal.
+
+**`nextOrdinal` did not compute a maximum.** It concatenated two independently sorted lists
+and read the tail, which is not the largest element. A restore early in a session left the
+pre-restore namespace holding a lower ordinal than later checkpoints, so two captures reused
+one number and `bound` pruned by a broken order. Now a real maximum across both namespaces.
+
+**A failed pre-restore pin did not stop the restore.** `update-ref` was issued and its result
+ignored, so an unpinned snapshot stayed unreachable and collectable while the worktree was
+overwritten anyway, losing the state the pin exists to preserve. Checked now, and the restore
+returns before touching the worktree.
+
+The fourth was a missing fence language in `docs/user-guide.md`, fixed as reported.
+
+**Done when:** the ordinal collision has a regression case and the suite is green.
+
+**Verified:** the new case reproduces the collision (four refs, three distinct ordinals) and
+is mutation-checked by restoring the old tail read, which fails it. 28 checkpoint tests pass.
+The pre-restore pin failure is guarded but not covered by a case: forcing `update-ref` to
+fail needs filesystem-level injection that would not resemble the real failure.
