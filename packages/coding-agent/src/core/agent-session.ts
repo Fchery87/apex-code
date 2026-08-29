@@ -119,6 +119,11 @@ import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.ts";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
 import type { ApexToolDefinition, EvidenceSink } from "./tools/contract.ts";
+import {
+	buildToolContractSnapshot,
+	isUnclassifiedTool,
+	type ToolContractSnapshotEntry,
+} from "./tools/contract-snapshot.ts";
 import type { DiagnosticsOperations } from "./tools/diagnostics.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
 import type { LspOperations } from "./tools/lsp.ts";
@@ -1095,6 +1100,14 @@ export class AgentSession {
 	/**
 	 * Get all configured tools with name, description, parameter schema, prompt guidelines, and source metadata.
 	 */
+	/**
+	 * The ADR 0010 projection over this session's registry: the one read every surface
+	 * that *describes* the tool set consumes. Never an authorization input.
+	 */
+	getToolContractSnapshot(): ToolContractSnapshotEntry[] {
+		return buildToolContractSnapshot(Array.from(this._toolDefinitions.values()).map(({ definition }) => definition));
+	}
+
 	getAllTools(): ToolInfo[] {
 		const schemaToolActive = this.getActiveToolNames().includes("tool_schema");
 		return Array.from(this._toolDefinitions.values())
@@ -1105,7 +1118,7 @@ export class AgentSession {
 				parameters: definition.parameters,
 				promptGuidelines: definition.promptGuidelines,
 				sourceInfo,
-				unclassified: !("contract" in definition),
+				unclassified: isUnclassifiedTool(definition),
 			}));
 	}
 

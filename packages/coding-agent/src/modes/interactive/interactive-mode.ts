@@ -710,8 +710,21 @@ export class InteractiveMode {
 			}));
 	}
 
-	private createBaseAutocompleteProvider(): AutocompleteProvider {
-		// Define commands for autocomplete
+	/**
+	 * Every *registered* command: builtin, prompt template, extension, and skill.
+	 *
+	 * One function rather than two because `/help` renders this list and autocomplete
+	 * completes it. Built in two places they would disagree the first time either grew a
+	 * source, and the disagreement would show up as a command a user can complete but not
+	 * find, or find but not run.
+	 *
+	 * A few commands are dispatched without being registered -- `/debug`, and the
+	 * `/arminsayshi` and `/dementedelves` easter eggs. They are absent here on purpose,
+	 * which is also why autocomplete has never offered them. "Registered" is the boundary
+	 * both surfaces share; listing them in `/help` would advertise what completion cannot
+	 * complete.
+	 */
+	private collectSessionCommands(): SlashCommand[] {
 		const slashCommands: SlashCommand[] = BUILTIN_SLASH_COMMANDS.map((command) => ({
 			name: command.name,
 			description: command.description,
@@ -803,11 +816,11 @@ export class InteractiveMode {
 			}
 		}
 
-		return new CombinedAutocompleteProvider(
-			[...slashCommands, ...templateCommands, ...extensionCommands, ...skillCommandList],
-			this.sessionManager.getCwd(),
-			this.fdPath,
-		);
+		return [...slashCommands, ...templateCommands, ...extensionCommands, ...skillCommandList];
+	}
+
+	private createBaseAutocompleteProvider(): AutocompleteProvider {
+		return new CombinedAutocompleteProvider(this.collectSessionCommands(), this.sessionManager.getCwd(), this.fdPath);
 	}
 
 	private setupAutocompleteProvider(): void {
@@ -3184,6 +3197,11 @@ export class InteractiveMode {
 			}
 			if (text === "/hotkeys") {
 				this.handleHotkeysCommand();
+				this.editor.setText("");
+				return;
+			}
+			if (text === "/help") {
+				this.handleHelpCommand();
 				this.editor.setText("");
 				return;
 			}
@@ -6691,6 +6709,30 @@ export class InteractiveMode {
 		this.chatContainer.addChild(new Text(theme.bold(theme.fg("accent", "Keyboard Shortcuts")), 1, 0));
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new Markdown(hotkeys.trim(), 1, 1, this.getMarkdownThemeWithSettings()));
+		this.chatContainer.addChild(new DynamicBorder());
+		this.ui.requestRender();
+	}
+
+	/**
+	 * Renders what `collectSessionCommands` returns, so the list a user reads and the list
+	 * autocomplete offers are the same list rather than two that agree today. Unregistered
+	 * dispatch-only commands are outside that boundary; see the note there.
+	 */
+	private handleHelpCommand(): void {
+		const commands = this.collectSessionCommands();
+		const rows = commands
+			.map((command) => {
+				const invocation = command.argumentHint ? `/${command.name} ${command.argumentHint}` : `/${command.name}`;
+				return `| \`${invocation}\` | ${command.description ?? ""} |`;
+			})
+			.join("\n");
+		const help = `| Command | Description |\n|---------|-------------|\n${rows}\n\nType \`/\` to filter these, or \`/hotkeys\` for keyboard shortcuts.`;
+
+		this.chatContainer.addChild(new Spacer(1));
+		this.chatContainer.addChild(new DynamicBorder());
+		this.chatContainer.addChild(new Text(theme.bold(theme.fg("accent", "Commands")), 1, 0));
+		this.chatContainer.addChild(new Spacer(1));
+		this.chatContainer.addChild(new Markdown(help, 1, 1, this.getMarkdownThemeWithSettings()));
 		this.chatContainer.addChild(new DynamicBorder());
 		this.ui.requestRender();
 	}

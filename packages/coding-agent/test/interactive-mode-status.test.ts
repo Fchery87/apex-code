@@ -439,6 +439,10 @@ describe("InteractiveMode.createBaseAutocompleteProvider", () => {
 			skillCommands: Map<string, string>;
 			sessionManager: { getCwd: () => string };
 			fdPath: null;
+			// `createBaseAutocompleteProvider` delegates the command assembly to
+			// `collectSessionCommands`, which `/help` renders from as well. A partial `this`
+			// has to carry it; borrowing the real one keeps this exercising the real list.
+			collectSessionCommands: () => unknown[];
 		};
 
 		const createBaseAutocompleteProvider = (
@@ -462,6 +466,9 @@ describe("InteractiveMode.createBaseAutocompleteProvider", () => {
 			skillCommands: new Map(),
 			sessionManager: { getCwd: () => "/tmp" },
 			fdPath: null,
+			collectSessionCommands: (
+				InteractiveMode as unknown as { prototype: { collectSessionCommands: () => unknown[] } }
+			).prototype.collectSessionCommands,
 		};
 
 		const provider = createBaseAutocompleteProvider.call(fakeThis);
@@ -490,6 +497,9 @@ describe("InteractiveMode.createBaseAutocompleteProvider", () => {
 			sessionManager: { getCwd: () => string };
 			fdPath: null;
 			getLoginProviderOptions: () => AuthSelectorProvider[];
+			// See the note on the sibling fake: the provider builder delegates to
+			// `collectSessionCommands`, so a partial `this` has to carry it.
+			collectSessionCommands: () => unknown[];
 		};
 
 		const createBaseAutocompleteProvider = (
@@ -514,6 +524,9 @@ describe("InteractiveMode.createBaseAutocompleteProvider", () => {
 				{ id: "anthropic", name: "Anthropic", authType: "api_key" },
 				{ id: "openai", name: "OpenAI", authType: "api_key" },
 			],
+			collectSessionCommands: (
+				InteractiveMode as unknown as { prototype: { collectSessionCommands: () => unknown[] } }
+			).prototype.collectSessionCommands,
 		};
 
 		const provider = createBaseAutocompleteProvider.call(fakeThis);

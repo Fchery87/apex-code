@@ -104,6 +104,7 @@ capable and measurably worse.
 | Prime-inspired gold TUI | **landed** — gold-neutral layout and permission-safe tray · `e576190a5` | [spec](specs/2026-08-23-prime-inspired-gold-tui.md) | — |
 | Native MCP support | **landed** — 13 of 13 tasks · `ed3b3a9c1` | [spec](specs/2026-08-28-native-mcp.md) | — |
 | Git-backed session checkpoints | **landed** — 8 of 8 tasks · `075fac684` | [spec](specs/2026-08-28-git-checkpoints.md) | — |
+| Documented surfaces that do not exist | **landed** — 4 of 4 tasks · `d2cb6ea0f` | [spec](specs/2026-08-29-documented-surfaces-that-do-not-exist.md) | — |
 
 ---
 
@@ -434,6 +435,50 @@ load-flake signature this machine produced before these changes.
 `docs/plans/2026-08-22-pr33-followups.md` is deleted now that the work is landed
 (recoverable via `git show <commit>:docs/plans/2026-08-22-pr33-followups.md`); Phase 2b's
 **landed** state is unchanged.
+
+### Follow-up (2026-08-29): documented surfaces that do not exist — landed
+
+Three things this repository documented were not in it, found by auditing its own claims
+rather than by a bug report.
+
+`README.md:197` taught `/help` as the first entry under "Useful first-session commands" and
+no such command was registered, so a new user's first action failed. `/help` now renders
+every command the session can run. The command assembly that fed autocomplete is extracted
+so both surfaces read one list; two lists that must agree, built in two places, is how this
+rots. The regression test parses README's documented block and checks every entry against
+the registry, because fixing the one name would have left the next one to be found by a
+user.
+
+`buildToolContractSnapshot()` was named in ten documents — including `AGENTS.md`, which is
+read before an agent's first edit — and defined in none. An agent told "never re-derive a
+tool's classification, one projection serves every surface" could not follow the
+instruction, and `docs/specs/2026-08-18-lsp.md:114` already carried the workaround in
+writing. `core/tools/contract-snapshot.ts` implements it with the two consumers that exist:
+the startup unclassified diagnostic and the ADR 0010 drift test. It describes and never
+enforces, and `context/pipeline.ts` and `context/eviction.ts` keep consuming
+`contractLookup` directly, which ADR 0010 permits because they enforce. `getAllTools`
+derived the same `unclassified` fact independently; that predicate is now shared, since two
+derivations of one fact in two files is the drift the ADR names even while they agree.
+
+`src/server/create-harness.ts` was reachable by nothing: absent from `src/index.ts`, absent
+from the package `exports` map, imported only by its own test. It is the "two session
+stores" ambiguity the 2026-08-28 review recorded and left unresolved, and the trace
+resolves to the shipped CLI driving `core/session-manager.ts` while this path drove nothing.
+Deleted, with `AgentHarness` in `apex-code-agent-core` untouched. Recoverable via
+`git show <commit>:packages/coding-agent/src/server/create-harness.ts`.
+
+Landed 2026-08-29 across four commits (`d32061c9c`, `3046ec6a6`, `0cc7d2d8b`, `d2cb6ea0f`).
+Two things are recorded rather than closed. ADR 0010's invariant 5, the `ruleContent`
+round-trip as a property across the registry, needs a valid sample `params` per tool and a
+shared stub would exercise none of them, so it is owed rather than faked. And `/tools` and
+`/doctor`, the two surfaces ADR 0010 names as consumers, remain unbuilt on purpose:
+inventing commands nobody asked for to justify the projection would invert the reason for
+building it.
+
+The last commit is a self-inflicted one worth naming. Extracting the command assembly broke
+two existing autocomplete tests that built a plain-object `this`, and the targeted subsets
+run before committing did not include the tests for the file that changed. The full suite
+caught it.
 
 ### Follow-up (2026-08-28): git-backed session checkpoints — landed
 
