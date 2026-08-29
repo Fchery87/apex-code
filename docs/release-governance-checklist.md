@@ -57,3 +57,16 @@ Re-check this list whenever `.github/workflows/release.yml`'s `environment:` nam
 new maintainer is added (ADR 0014's succession process), or after any incident investigated
 under `docs/release-integrity-runbook.md` — a compromise investigation is exactly when a stale
 external setting is most likely to be found.
+
+
+## npm dist-tags
+
+The release workflow publishes prereleases under `next` and stable versions under `latest` (ADR 0026).
+An authenticated maintainer must move the existing tags once so bare installs stop selecting the deprecated alpha. Run:
+
+```sh
+npm dist-tag add apex-code@0.0.1-alpha.10 latest
+npm dist-tag add apex-code-agent-core@0.0.1-alpha.10 latest
+```
+
+Verify both with `npm view <package> dist-tags --json`. Do not commit npm credentials or tokens.
