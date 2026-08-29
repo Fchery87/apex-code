@@ -85,6 +85,36 @@ structure — you can fork from any earlier point (`/fork`, `/tree`) rather than
 ever continuing linearly. `--continue`/`--resume` pick up a previous session;
 `--session`/`--session-id` target a specific one.
 
+**Checkpoints.** Off by default. Setting `"checkpoints": { "enabled": true }` in
+`~/.apex-code/agent/settings.json` makes Apex Code snapshot your working tree at the start
+of every turn, keyed to the same session entry `/fork` and `/tree` navigate to. Tracked
+edits and untracked files are both captured; anything matched by `.gitignore` is not.
+
+Checkpoints are scoped to the whole repository, not to your working directory. Opening a
+subdirectory of a repository as your workspace still snapshots and restores every file in
+that repository.
+
+A snapshot never touches your index, working tree, `HEAD`, current branch, or stash, and
+runs no git hooks. It is a commit object pinned under
+`refs/apex-code/checkpoints/<sessionId>/<entryId>`, which is why it survives both `git gc`
+and quitting the session. `maxPerSession` (default 50) bounds how many are kept.
+
+A restore writes back exactly the bytes that were captured, including line endings, and is
+not affected by `core.autocrlf`. If your repository declares `text` or `text=auto` in
+`.gitattributes`, restored files follow that policy the same way `git checkout` does.
+
+Inspect them with ordinary git, and remove every one with:
+
+```bash
+git for-each-ref --format='%(refname)' 'refs/apex-code/**' | xargs -r -n1 git update-ref -d
+```
+
+Capturing is all the harness does on its own. To be *offered* a restore when you `/fork`
+back to an earlier entry, enable the `git-checkpoint` extension from
+`examples/extensions/`. A restore puts the working tree back exactly, including removing
+files created after the checkpoint, and pins the pre-restore state first so it can be
+undone.
+
 **Cost and usage.** `apex-code cost` reports recorded spend grouped by model,
 session, or role. `/session` shows the current session's token/cost breakdown
 during a run.

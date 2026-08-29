@@ -24,6 +24,13 @@ export {
 	type SessionStats,
 } from "./core/agent-session.ts";
 export { readStoredCredential } from "./core/auth-storage.ts";
+export {
+	type CheckpointSettings,
+	createGitCheckpoints,
+	type GitCheckpoint,
+	type GitCheckpoints,
+} from "./core/checkpoints/git-checkpoints.ts";
+export { createSessionCheckpoints, type SessionCheckpoints } from "./core/checkpoints/session-checkpoints.ts";
 // Compaction
 export {
 	type BranchPreparation,

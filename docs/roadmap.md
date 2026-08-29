@@ -103,6 +103,7 @@ capable and measurably worse.
 | Composer dock surface | **landed** — filled, cursor-safe prompt dock · `2bd3008f1` | [spec](specs/2026-08-23-composer-dock-surface.md) | — |
 | Prime-inspired gold TUI | **landed** — gold-neutral layout and permission-safe tray · `e576190a5` | [spec](specs/2026-08-23-prime-inspired-gold-tui.md) | — |
 | Native MCP support | **landed** — 13 of 13 tasks · `ed3b3a9c1` | [spec](specs/2026-08-28-native-mcp.md) | — |
+| Git-backed session checkpoints | **landed** — 8 of 8 tasks · `075fac684` | [spec](specs/2026-08-28-git-checkpoints.md) | — |
 
 ---
 
@@ -433,6 +434,44 @@ load-flake signature this machine produced before these changes.
 `docs/plans/2026-08-22-pr33-followups.md` is deleted now that the work is landed
 (recoverable via `git show <commit>:docs/plans/2026-08-22-pr33-followups.md`); Phase 2b's
 **landed** state is unchanged.
+
+### Follow-up (2026-08-28): git-backed session checkpoints — landed
+
+Session rewind was half built. `/tree` and `/fork` navigate the conversation tree, and
+nothing put the working tree back, so accepting a fork left the files from a later turn
+attached to an earlier one. `examples/extensions/git-checkpoint.ts` demonstrated the missing
+half and could not deliver it: checkpoints lived in a process-local map, capture used
+`git stash create` (a commit reachable from no ref, which `git gc` reaps), untracked files
+were never captured, and restore used `git stash apply`, which merges rather than restores.
+
+The registry was the defect, not the four symptoms. Checkpoints are git refs under
+`refs/apex-code/checkpoints/<sessionId>/<entryId>`, so a commit stays reachable and a restart
+resolves it with no Apex-side persistence. Capture and restore each run through a private
+`GIT_INDEX_FILE`, leaving the user's index, worktree, `HEAD`, branch, and stash untouched,
+and `commit-tree`/`update-ref` are plumbing so no hook fires.
+
+No `git` tool was added and `ToolName` is unchanged, so the static prompt prefix is
+unaffected. ADR 0010 requires four contract axes per tool and ADR 0011 prices one at roughly
+77 tokens; `bash` already runs git with the identity U1 projects into the sandbox, so a tool
+would have cost the prefix to duplicate what exists.
+[`specs/2026-08-28-git-checkpoints.md`](specs/2026-08-28-git-checkpoints.md) specifies the
+design and `docs/plans/2026-08-28-git-checkpoints.md` tracked the eight tasks, and is deleted
+now the work is landed (recoverable via
+`git show <commit>:docs/plans/2026-08-28-git-checkpoints.md`).
+
+Two defects reached review rather than the author. `windows-latest` caught a line-ending
+conversion invisible on Linux and macOS: `core.autocrlf` is `true` by default on Windows, so
+a restore silently rewrote line endings across the worktree. Every invocation now pins
+`core.autocrlf=false`, while `.gitattributes` is deliberately honoured because that is the
+repository's policy rather than the machine's. The automated review then caught three more,
+two of which contradicted comments the branch had already written: capture ran detached and
+raced the turn it was meant to precede, `nextOrdinal` read the tail of two concatenated
+sorted lists instead of taking a maximum, and a failed pre-restore pin did not stop the
+restore. The three-OS matrix and an independent reviewer each earned their place here.
+
+Landed 2026-08-28 across six commits (`17edae3c6`, `aef71d3a9`, `fe81da383`, `71bb4cdc2`,
+`ca9bae79f`, `075fac684`). One gap is recorded rather than closed: the `turn_start` call site
+has no test, because asserting it needs a driven turn against a live model.
 
 ### Follow-up (2026-08-28): native MCP support — landed
 

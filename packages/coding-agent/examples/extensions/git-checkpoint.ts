@@ -1,53 +1,41 @@
 /**
  * Git Checkpoint Extension
  *
- * Creates git stash checkpoints at each turn so /fork can restore code state.
- * When forking, offers to restore code to that point in history.
+ * Offers to restore code state when /fork rewinds the conversation to an earlier entry.
+ *
+ * Capture is not here. Setting `"checkpoints": { "enabled": true }` makes the harness
+ * snapshot the worktree at every turn, keyed to the session entry, into
+ * `refs/apex-code/checkpoints/<sessionId>/<entryId>`. This extension only asks the
+ * question, because whether to prompt is a UI decision and the harness stays headless.
+ *
+ * The engine is resolved from the workspace rather than handed over, because the
+ * registry is git itself. That is also why a checkpoint survives a restart.
  */
 
-import type { ExtensionAPI } from "apex-code";
+import { createGitCheckpoints, type ExtensionAPI, type GitCheckpoints } from "apex-code";
 
 export default function (pi: ExtensionAPI) {
-	const checkpoints = new Map<string, string>();
-	let currentEntryId: string | undefined;
-
-	// Track the current entry ID when user messages are saved
-	pi.on("tool_result", async (_event, ctx) => {
-		const leaf = ctx.sessionManager.getLeafEntry();
-		if (leaf) currentEntryId = leaf.id;
-	});
-
-	pi.on("turn_start", async () => {
-		// Create a git stash entry before LLM makes changes
-		const { stdout } = await pi.exec("git", ["stash", "create"]);
-		const ref = stdout.trim();
-		if (ref && currentEntryId) {
-			checkpoints.set(currentEntryId, ref);
-		}
-	});
+	let engine: Promise<GitCheckpoints | undefined> | undefined;
 
 	pi.on("session_before_fork", async (event, ctx) => {
-		const ref = checkpoints.get(event.entryId);
-		if (!ref) return;
+		if (!ctx.hasUI) return;
 
-		if (!ctx.hasUI) {
-			// In non-interactive mode, don't restore automatically
-			return;
-		}
+		engine ??= createGitCheckpoints(ctx.cwd, ctx.sessionManager.getSessionId());
+		const checkpoint = await (await engine)?.lookup(event.entryId);
+		if (!checkpoint) return;
 
 		const choice = await ctx.ui.select("Restore code state?", [
 			"Yes, restore code to that point",
 			"No, keep current code",
 		]);
+		if (!choice?.startsWith("Yes")) return;
 
-		if (choice?.startsWith("Yes")) {
-			await pi.exec("git", ["stash", "apply", ref]);
-			ctx.ui.notify("Code restored to checkpoint", "info");
-		}
-	});
-
-	pi.on("agent_settled", async () => {
-		// Clear checkpoints after the full agent run completes
-		checkpoints.clear();
+		const previous = await (await engine)?.restore(checkpoint);
+		ctx.ui.notify(
+			previous
+				? `Code restored. Previous state kept at ${previous.commit.slice(0, 8)}.`
+				: "Checkpoint restore failed; code is unchanged.",
+			previous ? "info" : "error",
+		);
 	});
 }
