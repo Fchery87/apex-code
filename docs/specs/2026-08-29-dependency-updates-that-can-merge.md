@@ -10,7 +10,7 @@
 | Last updated | `2026-08-29` |
 | Roadmap phase | `none — release-integrity follow-up` |
 | Tracking issue/PR | branch `fix/dependabot-workspaces` |
-| Compatibility posture | Preserves compatibility. No product source, no published artifact, and no lockfile content changes. `.github/dependabot.yml` changes which directories Dependabot scans, which alters the shape of future bot pull requests and nothing a user installs. The nine open Dependabot pull requests are superseded rather than repaired: they carry a lockfile edit this repository cannot accept, so Dependabot must reopen them from the corrected configuration. That is a clean break in the bot's output, deliberately, because the alternative is hand-repairing nine branches that will be regenerated anyway. |
+| Compatibility posture | Preserves compatibility. No product source, no published artifact, and no lockfile content changes. `.github/dependabot.yml` changes which directories Dependabot scans, which alters the shape of future bot pull requests and nothing a user installs. The seventeen open pull requests from the two removed ecosystems are superseded rather than repaired: they carry a lockfile edit this repository cannot accept, so Dependabot reopens them from the corrected configuration on its next run. That is a clean break in the bot's output, deliberately, because the alternative is hand-repairing seventeen branches that will be regenerated anyway. |
 
 ## Executive summary
 
@@ -41,7 +41,9 @@ installs from. A test asserts that configuration, which is why it has stayed wro
 
 Measured on 2026-08-29 against the last twenty CI runs.
 
-- Nine consecutive Dependabot runs failed. No Dependabot pull request in the queue is green.
+- Nine consecutive Dependabot CI runs failed. No Dependabot pull request in the queue is
+  green. The open queue is twenty-nine pull requests: seventeen from the two per-package npm
+  ecosystems, nine from the root npm ecosystem, and three from `github-actions`.
 - **Per-package ecosystems desynchronise the root lockfile.** Pull request #27
   (`bump ignore from 7.0.5 to 7.0.6 in /packages/coding-agent`) changes exactly
   `packages/coding-agent/package.json` and `packages/coding-agent/npm-shrinkwrap.json`. It
@@ -119,9 +121,11 @@ be green, and the comment tells a reader that cannot happen.
       exact shape of a well-known privilege-escalation footgun, and it cannot be verified
       from a local checkout. It is recorded in Rollout as the follow-up, with the evidence
       this change produces.
-- [ ] **Repairing the nine open pull requests by hand.** They carry a lockfile edit this
-      repository cannot accept and Dependabot regenerates them from the corrected
-      configuration. Closing them is cheaper than fixing them.
+- [ ] **Repairing the seventeen superseded pull requests by hand.** They carry a lockfile
+      edit this repository cannot accept, and Dependabot closes them itself once the
+      ecosystems that produced them are gone. Bulk-closing twenty-nine branches by hand
+      risks closing the nine root-ecosystem ones that are still legitimate, which is the
+      mistake this non-goal exists to prevent.
 - [ ] **Changing which packages are frozen, or the byte-identity gate.** ADR 0001 owns that
       boundary. This change makes the bot stop producing pull requests that hit it by
       accident; it does not relax what happens when one does.
@@ -150,7 +154,8 @@ No product source changes. No seam named in `docs/architecture/overview.md` is t
 | `/packages/coding-agent` npm ecosystem entry | config | removed, same reason |
 | `dependabot-config.test.mjs`'s three-directory assertion | code | superseded by a single-root assertion that records the reasoning |
 | The claim that directory scoping keeps Dependabot out of frozen packages | doc | retired. Pull request #11 disproves it; replaced by a description of what the gate does when it happens |
-| The nine open Dependabot pull requests | process | superseded, not repaired. Dependabot reopens them from the corrected configuration |
+| The seventeen open pull requests from `/packages/agent` and `/packages/coding-agent` | process | superseded, not repaired. Removing an ecosystem makes Dependabot close its pull requests on the next run and reopen equivalents from `/` |
+| The nine open root-ecosystem pull requests | process | **not** superseded. `/` is kept, so they stay valid and stay red until the derived shrinkwrap is regenerated on the branch, or, where they touch a frozen manifest, until they are closed |
 
 ## Risks
 
