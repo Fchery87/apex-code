@@ -14,6 +14,12 @@ const validRoadmap = `# Roadmap
 | --- | --- | --- | --- | --- |
 | 4 | Tool surface | **landed** | [spec](specs/phase-4.md) | — |
 | 10 | Reliability | **active** | [spec](specs/phase-10.md) | [plan](plans/phase-10.md) |
+
+## Cross-phase contracts
+
+| Contract | Status | Consumers | Settle by |
+| --- | --- | --- | --- |
+| Session entry schema | **Settled** — ADR 0006 | 1, 5, 6 | — |
 `;
 
 const validContracts = `# Cross-phase contracts
@@ -117,6 +123,29 @@ test("contract summary and sections agree and open deadlines have not passed", a
 			(result) => {
 				assert.equal(result.status, 1);
 				assert.match(result.stderr, /Session entry schema: summary is settled but section is open/);
+			},
+		);
+	});
+
+	await t.test("rejects a roadmap contract row that disagrees with contracts.md", async () => {
+		// The same table is written in two files. The status check above only ever read
+		// one of them, so the roadmap's copy could say Open long after the contract
+		// settled, which is exactly what it did say.
+		await withFixture(
+			{ "docs/roadmap.md": validRoadmap.replace("| Session entry schema | **Settled** — ADR 0006 |", "| Session entry schema | Open |") },
+			(result) => {
+				assert.equal(result.status, 1);
+				assert.match(result.stderr, /Session entry schema: roadmap says open but contracts.md says settled/);
+			},
+		);
+	});
+
+	await t.test("rejects a roadmap contract row naming a contract contracts.md does not", async () => {
+		await withFixture(
+			{ "docs/roadmap.md": validRoadmap.replace("| Session entry schema |", "| Ghost contract |") },
+			(result) => {
+				assert.equal(result.status, 1);
+				assert.match(result.stderr, /Ghost contract: roadmap names a contract absent from contracts.md/);
 			},
 		);
 	});

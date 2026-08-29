@@ -48,27 +48,17 @@ describe("buildToolContractSnapshot", () => {
 	});
 });
 
-describe("ADR 0010 drift invariant", () => {
-	it("every tool in the default registry declares a contract", () => {
-		const undeclared = buildToolContractSnapshot(registry())
-			.filter((entry) => entry.unclassified)
-			.map((entry) => entry.name);
-
-		expect(undeclared).toEqual([]);
-	});
-
-	it("every declared tool answers all four axes", () => {
-		for (const entry of buildToolContractSnapshot(registry())) {
-			expect(entry.capabilities, entry.name).toBeDefined();
-			expect(entry.permission.defaultBehavior, entry.name).toBeDefined();
-			expect(entry.context, entry.name).toBeDefined();
-			expect(entry.evidence.emits, entry.name).toBeDefined();
-		}
-	});
-
-	// ADR 0010's invariant 5 -- `matches(ruleForCall(p), p)` across the whole registry --
-	// is deliberately not asserted here. It needs a valid sample `params` per tool, and
-	// every tool's grammar reads different fields, so a shared stub exercises none of them
-	// and a hand-written table for nineteen tools rots faster than it catches anything. The
-	// spec records it as owed rather than pretending a passing stub covers it.
-});
+/*
+ * The registry-wide ADR 0010 invariants are not re-asserted here.
+ *
+ * `test/permissions/contract.test.ts` already owns them, and has since before this
+ * projection existed: invariant 1 (every registered tool declares a contract with every
+ * sub-field), invariant 4, and invariant 5's `matches(ruleForCall(p), p)` across the whole
+ * registry, driven by a `REPRESENTATIVE_PARAMS` table keyed so an unlisted tool fails
+ * loudly rather than being skipped.
+ *
+ * This file covers the projection itself -- that it reports one entry per tool, reads
+ * rather than mutates, carries the four axes through, and surfaces a foreign tool as
+ * unclassified. Asserting the registry invariants a second time here would be the
+ * duplicate classification ADR 0010 exists to prevent, wearing a test's clothes.
+ */

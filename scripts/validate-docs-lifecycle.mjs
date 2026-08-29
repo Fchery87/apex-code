@@ -53,6 +53,19 @@ function contractSummary(markdown) {
 	return contracts;
 }
 
+/**
+ * The roadmap repeats the cross-phase contract table that `contracts.md` owns. Scoped to
+ * that section so the phase and follow-up tables above it cannot be mistaken for it.
+ */
+function roadmapContracts(markdown) {
+	const heading = markdown.match(/^#+\s+Cross-phase contracts\s*$/im);
+	if (!heading) return new Map();
+	// Past the end of the heading line, or the next `^#+` search re-matches this one.
+	const rest = markdown.slice(heading.index + heading[0].length);
+	const next = rest.search(/^#+\s+/m);
+	return contractSummary(next === -1 ? rest : rest.slice(0, next));
+}
+
 function contractSections(markdown) {
 	const sections = new Map();
 	const matches = [...markdown.matchAll(/^#\s+\d+\.\s+(.+?)\s+[—-]\s+(open|settled)\s*$/gim)];
@@ -130,6 +143,20 @@ for (const [name, summary] of summaries) {
 
 for (const name of sections.keys()) {
 	if (!summaries.has(name)) report(contractsPath, `${name}: contract section is missing from the summary table`);
+}
+
+// The same statuses live in two files, and only `contracts.md` was ever checked. A
+// roadmap row could therefore go on saying a contract was open for as long as nobody
+// happened to read both, which is what it did.
+for (const [name, row] of roadmapContracts(roadmap)) {
+	const authoritative = summaries.get(name);
+	if (!authoritative) {
+		report(roadmapPath, `${name}: roadmap names a contract absent from contracts.md`);
+		continue;
+	}
+	if (row.status !== authoritative.status) {
+		report(roadmapPath, `${name}: roadmap says ${row.status} but contracts.md says ${authoritative.status}`);
+	}
 }
 
 if (errors.length > 0) {
