@@ -104,7 +104,7 @@ capable and measurably worse.
 | Prime-inspired gold TUI | **landed** — gold-neutral layout and permission-safe tray · `e576190a5` | [spec](specs/2026-08-23-prime-inspired-gold-tui.md) | — |
 | Native MCP support | **landed** — 13 of 13 tasks · `ed3b3a9c1` | [spec](specs/2026-08-28-native-mcp.md) | — |
 | Git-backed session checkpoints | **landed** — 8 of 8 tasks · `075fac684` | [spec](specs/2026-08-28-git-checkpoints.md) | — |
-| Dependency updates that can merge | **in progress** | [spec](specs/2026-08-29-dependency-updates-that-can-merge.md) | — |
+| Dependency updates that can merge | **landed** — `262d673cb` | [spec](specs/2026-08-29-dependency-updates-that-can-merge.md) | — |
 | Documented surfaces that do not exist | **landed** — 4 of 4 tasks · `d2cb6ea0f` | [spec](specs/2026-08-29-documented-surfaces-that-do-not-exist.md) | — |
 
 ---
@@ -436,6 +436,52 @@ load-flake signature this machine produced before these changes.
 `docs/plans/2026-08-22-pr33-followups.md` is deleted now that the work is landed
 (recoverable via `git show <commit>:docs/plans/2026-08-22-pr33-followups.md`); Phase 2b's
 **landed** state is unchanged.
+
+### Follow-up (2026-08-29): dependency updates that can merge — landed
+
+Every open Dependabot pull request was red, and had been since it was opened. Nine of nine,
+on all three operating systems, failing before a single test ran. The blocked set included
+`undici` and `hosted-git-info`, in a repository whose Phase 12 release gates require a
+production dependency vulnerability audit.
+
+`.github/dependabot.yml` declared three npm ecosystems: `/`, `/packages/agent`, and
+`/packages/coding-agent`. This is an npm workspaces monorepo with one authoritative
+`package-lock.json` and CI installs with `npm ci` from the root. Dependabot treats a
+per-package directory as an independent project, so it edited that `package.json`, left the
+root lockfile alone, and every such pull request died at install with
+`Missing: <pkg> from lock file`. Reproduced on a clean clone; the error is byte-identical.
+The same pull requests also rewrote `packages/coding-agent/npm-shrinkwrap.json`, which is
+generated from the root lockfile rather than authored.
+
+`scripts/apex/dependabot-config.test.mjs` asserted those three directories exactly, so the
+suite guaranteed the configuration stayed wrong and handed anyone who corrected it a red
+test. That is the part worth remembering: a test can encode a belief the evidence disproves,
+and then defend it.
+
+The configuration's comment separately claimed directory scoping kept Dependabot out of
+frozen packages. Pull request #11 disproved it — a root-scoped `chalk` bump rewrote
+`packages/tui/package.json`, because npm workspaces resolves a shared dependency across the
+whole tree — and failed the byte-identity gate. The gate was working; the comment was not
+true. It now describes what happens instead of asserting it cannot.
+
+One npm ecosystem at `/` now, the test asserts that shape and records why a per-package entry
+cannot work, and `CONTRIBUTING.md` carries the one manual step that remains: a bump reaching
+the published tree leaves the derived shrinkwrap stale and `npm run shrinkwrap:coding-agent`
+fixes it. A mergeable bump changes exactly three files, verified end to end on a clean clone.
+
+Two things are deliberately not closed. Automating the shrinkwrap regeneration needs a
+workflow that commits to a bot branch, which is a real permissions decision and gets its own
+spec. And a bump that touches a frozen manifest still cannot merge, by design; that is now
+the only remaining Dependabot failure category rather than one of three.
+
+**Correction (2026-08-29).** This section first said "the nine superseded pull requests were
+closed". Both halves were wrong. Nine was the number of recent *failing CI runs* sampled, not
+open pull requests, and nothing was closed by hand. The real queue at the time was
+twenty-nine: seventeen from the two removed per-package ecosystems, which Dependabot closes
+itself once those ecosystems are gone; nine from the root ecosystem, which is kept, so they
+stay valid and stay red until their derived shrinkwrap is regenerated on the branch; and three
+`github-actions` pull requests this change does not affect. Bulk-closing the queue by hand
+would have closed the nine legitimate ones too.
 
 ### Follow-up (2026-08-29): documented surfaces that do not exist — landed
 
