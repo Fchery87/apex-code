@@ -20,9 +20,9 @@ than after.
 | Task | Unit | Status | Commit |
 | --- | --- | --- | --- |
 | DS.1 | A1 | Done | `d32061c9c` |
-| DS.2 | A2 | Done | `pending` |
-| DS.3 | A2 | Done, one invariant owed — see below | `pending` |
-| DS.4 | A3 | Not started | — |
+| DS.2 | A2 | Done | `3046ec6a6` |
+| DS.3 | A2 | Done, one invariant owed — see below | `3046ec6a6` |
+| DS.4 | A3 | Done | `pending` |
 
 Order is load-bearing in one place. DS.2 and DS.3 land together: a projection without the
 drift test is the shape ADR 0010 warns about, because nothing then proves the snapshot and the
