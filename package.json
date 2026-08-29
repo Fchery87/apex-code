@@ -29,7 +29,7 @@
 		"check:model-catalog": "node scripts/publish-model-catalog.mjs --input .artifacts/model-catalog --dry-run",
 		"profile:tui": "node scripts/profile-coding-agent-node.mjs --mode tui",
 		"profile:rpc": "node scripts/profile-coding-agent-node.mjs --mode rpc",
-		"test": "npm run test:scripts && npm run test --workspace packages/agent --workspace packages/coding-agent --if-present -- --exclude test/config.test.ts",
+		"test": "npm run test:scripts && npm run test --workspace packages/agent --workspace packages/coding-agent --if-present",
 		"test:scripts": "node --test scripts/*.test.mjs scripts/apex/*.test.mjs && npm run test:scrubber",
 		"test:scrubber": "vitest run --config scripts/vitest.config.ts",
 		"test:corpus": "vitest run --config scripts/vitest.config.ts fixtures/__tests__/corpus-hygiene.test.ts",
