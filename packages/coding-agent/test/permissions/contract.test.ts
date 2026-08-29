@@ -107,6 +107,10 @@ describe("tool contracts", () => {
 	it("holds matches(ruleForCall(p), p) across the registry (invariant 5)", () => {
 		for (const [name, tool] of Object.entries(registry())) {
 			const params = REPRESENTATIVE_PARAMS[name];
+			// The exact-key check above catches a missing entry, but `Object.keys` counts a
+			// key mapped to `undefined`, and a tool whose grammar ignores its parameter
+			// would then satisfy this loop vacuously.
+			expect(params, `${name} representative params`).toBeDefined();
 			const rule = tool.contract.permission.ruleForCall(params);
 			if (rule === null) {
 				// A null rule is a deliberate "this call is not generalizable". Assert it
