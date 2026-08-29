@@ -1,31 +1,30 @@
 # Scheduled dependency vulnerability scanning (ADR 0018, task 12.11).
 #
-# Scoped to the root (devDependencies and the shared lockfile) and the two
-# Apex-owned packages only -- never the six frozen, consumed Pi packages
-# (ADR 0001, scripts/apex/frozen-packages.mjs). A Dependabot PR that edited a
-# frozen package's package.json would immediately fail
-# scripts/apex/check-frozen-packages.mjs's byte-identity check; upstream Pi
-# owns those packages' own dependency versions, not this repository.
+# One npm entry, at the root. This is an npm workspaces monorepo with a single
+# authoritative package-lock.json, and CI installs with `npm ci` from the root, so
+# the root ecosystem is the only one that can produce a pull request that installs.
+#
+# Per-package entries were tried and removed on 2026-08-29. Dependabot treats each
+# such directory as an independent project: it edits that package.json, leaves the
+# root lockfile untouched, and every resulting pull request dies at install with
+# "Missing: <pkg> from lock file" on all three operating systems before a test runs.
+# Nine consecutive pull requests failed that way.
+#
+# Frozen packages (ADR 0001, scripts/apex/frozen-packages.mjs) are not scanned, and
+# that is enforced by scripts/apex/dependabot-config.test.mjs. Scanning is not the
+# same as never touching them: when a frozen package and an Apex-owned package share
+# a dependency, a root-scoped bump rewrites both manifests, because npm workspaces
+# resolves the dependency across the whole tree. Such a pull request fails the
+# "Frozen packages match upstream" byte-identity gate and must be closed rather than
+# merged -- upstream Pi owns those versions. That is the gate working, not a leak.
+#
+# A bump that reaches the published tree also leaves packages/coding-agent/npm-shrinkwrap.json
+# stale, because it is generated from the root lockfile rather than authored. Run
+# `npm run shrinkwrap:coding-agent` on the branch; CONTRIBUTING.md records this.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: "/"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-    labels:
-      - dependencies
-
-  - package-ecosystem: npm
-    directory: "/packages/agent"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-    labels:
-      - dependencies
-
-  - package-ecosystem: npm
-    directory: "/packages/coding-agent"
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
