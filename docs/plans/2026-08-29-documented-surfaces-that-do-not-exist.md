@@ -19,9 +19,9 @@ than after.
 
 | Task | Unit | Status | Commit |
 | --- | --- | --- | --- |
-| DS.1 | A1 | Done | `pending` |
-| DS.2 | A2 | Not started | — |
-| DS.3 | A2 | Not started | — |
+| DS.1 | A1 | Done | `d32061c9c` |
+| DS.2 | A2 | Done | `pending` |
+| DS.3 | A2 | Done, one invariant owed — see below | `pending` |
 | DS.4 | A3 | Not started | — |
 
 Order is load-bearing in one place. DS.2 and DS.3 land together: a projection without the
@@ -68,3 +68,23 @@ The verification for a deletion is that nothing else breaks, so this one is prov
 suite rather than by a new test.
 
 **Done when:** `npm run check` and the full suite are green with both files gone.
+
+### Order change
+
+DS.2 grew one step the plan did not anticipate, and it is the step that makes the projection
+worth having. `getAllTools` derived `unclassified` with its own `!("contract" in definition)`
+check. Pointing only `main.ts` at the snapshot would have left two derivations of the same
+fact in two files, which is the drift ADR 0010 names even while they agree. The predicate is
+now exported from the snapshot module and both call it.
+
+### Owed: ADR 0010 invariant 5
+
+The ADR describes a registry-wide property test for `ruleContent`: the tool owns both
+matching a rule and generating one, "so the two cannot drift, which invariant 5 tests as a
+property across the whole registry". That test is **not** delivered here.
+
+It needs a valid sample `params` per tool. Every tool's grammar reads different fields, so a
+shared stub exercises none of them, and a hand-written table for nineteen tools rots faster
+than it catches anything. The honest version is a generator over each tool's typebox schema,
+which is its own change. Recorded rather than faked: a passing stub here would have read as
+coverage and been worse than the gap.

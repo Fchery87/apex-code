@@ -104,7 +104,7 @@ capable and measurably worse.
 | Prime-inspired gold TUI | **landed** — gold-neutral layout and permission-safe tray · `e576190a5` | [spec](specs/2026-08-23-prime-inspired-gold-tui.md) | — |
 | Native MCP support | **landed** — 13 of 13 tasks · `ed3b3a9c1` | [spec](specs/2026-08-28-native-mcp.md) | — |
 | Git-backed session checkpoints | **landed** — 8 of 8 tasks · `075fac684` | [spec](specs/2026-08-28-git-checkpoints.md) | — |
-| Documented surfaces that do not exist | **in progress** — 1 of 4 tasks | [spec](specs/2026-08-29-documented-surfaces-that-do-not-exist.md) | [plan](plans/2026-08-29-documented-surfaces-that-do-not-exist.md) |
+| Documented surfaces that do not exist | **in progress** — 3 of 4 tasks | [spec](specs/2026-08-29-documented-surfaces-that-do-not-exist.md) | [plan](plans/2026-08-29-documented-surfaces-that-do-not-exist.md) |
 
 ---
 

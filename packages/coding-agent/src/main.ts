@@ -65,6 +65,7 @@ import { assertValidSessionId, getDefaultSessionDirPath, SessionManager } from "
 import { collectSettingsDiagnostics, deduplicateDiagnostics } from "./core/settings-diagnostics.ts";
 import { SettingsManager } from "./core/settings-manager.ts";
 import { printTimings, resetTimings, time } from "./core/timings.ts";
+import { unclassifiedToolNames } from "./core/tools/contract-snapshot.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "./core/trust-manager.ts";
 import { builtInExtensions } from "./extensions/index.ts";
 import { runMigrations, showDeprecationWarnings } from "./migrations.ts";
@@ -877,14 +878,13 @@ export async function main(args: string[], options?: MainOptions) {
 					resolveEffectiveMode(parsed.permissionMode, (await permissionStore.snapshot()).modesBySource),
 			},
 		});
-		const unclassifiedToolNames = created.session
-			.getAllTools()
-			.filter((tool) => tool.unclassified)
-			.map((tool) => tool.name);
-		if (unclassifiedToolNames.length > 0) {
+		// ADR 0010: a conservative default nobody can see is indistinguishable from a bug,
+		// so the projection is what reports it rather than a filter written here.
+		const undeclared = unclassifiedToolNames(created.session.getToolContractSnapshot());
+		if (undeclared.length > 0) {
 			diagnostics.push({
 				type: "warning",
-				message: `Unclassified tool contracts (approval required): ${unclassifiedToolNames.join(", ")}`,
+				message: `Unclassified tool contracts (approval required): ${undeclared.join(", ")}`,
 			});
 		}
 		const cliThinkingOverride = parsed.thinking !== undefined || cliThinkingFromModel;
