@@ -51,7 +51,7 @@
 		"@modelcontextprotocol/core": "2.0.0",
 		"@silvia-odwyer/photon-node": "0.3.4",
 		"apex-code-agent-core": "0.0.1-alpha.10",
-		"chalk": "5.6.2",
+		"chalk": "6.0.0",
 		"cross-spawn": "7.0.6",
 		"diff": "8.0.4",
 		"grok-mermaid": "0.2.2",
