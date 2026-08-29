@@ -72,6 +72,32 @@ asserted byte-identical to the upstream tag by CI ([ADR 0001](docs/adr/0001-fork
 - Genuine improvements to `pi-ai` or `pi-tui` should go upstream to Pi, not into a
   local patch.
 
+## Dependency updates
+
+This is an npm workspaces monorepo with a single authoritative `package-lock.json`, and CI
+installs with `npm ci` from the root. A bump is only mergeable when the root lockfile moves
+with the manifest, so update from the root:
+
+```bash
+npm install -w packages/coding-agent <package>@<version>
+```
+
+`packages/coding-agent/npm-shrinkwrap.json` is **generated** from that lockfile, not
+authored. A bump that reaches the published dependency tree leaves it stale, and
+`npm run check` says so. Regenerate it on the branch:
+
+```bash
+npm run shrinkwrap:coding-agent
+```
+
+A green dependency bump therefore changes three files: the root `package-lock.json`, the
+workspace `package.json`, and the regenerated `npm-shrinkwrap.json`.
+
+Dependabot opens these from the root ecosystem only ([`.github/dependabot.yml`](.github/dependabot.yml)).
+When a frozen package shares a dependency with an Apex-owned one, a bump rewrites the frozen
+manifest too and fails the byte-identity gate. Close that pull request; upstream Pi owns
+those versions.
+
 ## Documentation
 
 Apex Code uses four document types with different lifecycles. Put content in the right
