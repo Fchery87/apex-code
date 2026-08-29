@@ -1216,7 +1216,7 @@ recorded, decision deferred to the phase that first writes to it).
 | --- | --- | --- | --- |
 | Tool contract | Settled — ADR 0010 | 2, 3, 4, 5, 7 | done |
 | Context pipeline order | **Settled** 2026-08-13 | 3, 7 | — |
-| Session entry schema | Open | 1, 5, 6, 7, 9 | start of Phase 6 (entries logged as they land from Phase 1) |
+| Session entry schema | **Settled** — ADR 0006 | 1, 5, 6, 7, 9 | settled at Phase 6 (`baf5e5302`) |
 
 ---
 
