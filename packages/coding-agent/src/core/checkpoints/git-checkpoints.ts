@@ -45,6 +45,22 @@ const CHECKPOINT_IDENTITY = {
 
 const SUBJECT_PREFIX = "apex-code checkpoint";
 
+/**
+ * Applied to every invocation below, which is why it lives here rather than on the two
+ * commands that read and write worktree content.
+ *
+ * `core.autocrlf` is a property of the machine, not of the repository, and it is `true` by
+ * default on Windows. Left alone it decides what a checkpoint restores: capture and restore
+ * both run content through git's clean and smudge filters, so a file the agent wrote with
+ * LF endings comes back with CRLF and a restore silently rewrites line endings across the
+ * worktree. Pinning it off makes the round trip byte-exact.
+ *
+ * `.gitattributes` is deliberately *not* overridden. That is the repository's own declared
+ * policy, git applies it to every ordinary checkout, and a restore that ignored it would
+ * disagree with `git checkout` on the same files.
+ */
+const IGNORE_MACHINE_EOL_PREFERENCE = ["-c", "core.autocrlf=false"];
+
 interface GitResult {
 	readonly stdout: string;
 	readonly ok: boolean;
@@ -57,7 +73,7 @@ async function runGit(
 	timeout?: number,
 ): Promise<GitResult> {
 	return new Promise((resolve) => {
-		const child = spawn("git", args, {
+		const child = spawn("git", [...IGNORE_MACHINE_EOL_PREFERENCE, ...args], {
 			cwd,
 			shell: false,
 			stdio: ["ignore", "pipe", "pipe"],

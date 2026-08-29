@@ -216,6 +216,27 @@ describe("git checkpoints", () => {
 		expect(await theirs?.lookup("entry-1")).toBeDefined();
 	});
 
+	it("round-trips bytes exactly when the machine sets core.autocrlf", async () => {
+		const cwd = repository();
+		// What every Windows checkout configures by default. It is a preference of the
+		// machine, not of the repository, and it must not decide what a checkpoint restores:
+		// left on, capture and restore run the worktree through git's clean/smudge filters
+		// and an agent-written LF file comes back CRLF.
+		git(cwd, "config", "core.autocrlf", "true");
+		writeFileSync(join(cwd, "lf.txt"), "one\ntwo\n");
+		writeFileSync(join(cwd, "crlf.txt"), "one\r\ntwo\r\n");
+
+		const checkpoints = await createGitCheckpoints(cwd, "session");
+		const captured = await checkpoints?.capture("entry-1");
+
+		writeFileSync(join(cwd, "lf.txt"), "changed\n");
+		writeFileSync(join(cwd, "crlf.txt"), "changed\r\n");
+		await checkpoints?.restore(captured!);
+
+		expect(readFileSync(join(cwd, "lf.txt"), "utf8")).toBe("one\ntwo\n");
+		expect(readFileSync(join(cwd, "crlf.txt"), "utf8")).toBe("one\r\ntwo\r\n");
+	});
+
 	it("refuses an entry id that is not a safe ref component", async () => {
 		const cwd = repository();
 		const checkpoints = await createGitCheckpoints(cwd, "session");

@@ -99,6 +99,10 @@ runs no git hooks. It is a commit object pinned under
 `refs/apex-code/checkpoints/<sessionId>/<entryId>`, which is why it survives both `git gc`
 and quitting the session. `maxPerSession` (default 50) bounds how many are kept.
 
+A restore writes back exactly the bytes that were captured, including line endings, and is
+not affected by `core.autocrlf`. If your repository declares `text` or `text=auto` in
+`.gitattributes`, restored files follow that policy the same way `git checkout` does.
+
 Inspect them with ordinary git, and remove every one with:
 
 ```

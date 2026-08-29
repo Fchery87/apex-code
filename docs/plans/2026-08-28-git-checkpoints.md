@@ -28,8 +28,9 @@ on a large worktree would block the event loop and stall the TUI.
 | CP.2 | C1 | Done | `17edae3c6` |
 | CP.3 | C1 | Done | `17edae3c6` |
 | CP.4 | C2 | Done | `aef71d3a9` |
-| CP.5 | C3 | Done, partly verified — see below | `pending` |
-| CP.6 | C4 | Done | `pending` |
+| CP.5 | C3 | Done, partly verified — see below | `fe81da383` |
+| CP.6 | C4 | Done | `fe81da383` |
+| CP.7 | C1 | Done | `pending` |
 
 Order is load-bearing in one place. CP.4 must land before CP.5, because the settings key is
 what decides whether the engine is constructed at all, and wiring a capture that no setting
@@ -118,3 +119,24 @@ The engine is exported from the package index so an extension can reach it.
 `docs/user-guide.md` documents the setting, the ref namespace, and the removal command.
 
 **Done when:** the spec's deletion inventory is settled and `npm run check` is green.
+
+### CP.7: Ignore the machine's line-ending preference
+
+Added after `windows-latest` failed on PR #50. `core.autocrlf` is `true` by default on
+Windows, so capture normalised an agent-written LF file and restore wrote it back as CRLF.
+The restore was silently rewriting line endings across the worktree, which contradicts this
+plan's own goal of a byte-exact round trip.
+
+Every checkpoint invocation now runs with `-c core.autocrlf=false`, applied in `runGit` so a
+future command cannot forget it. `.gitattributes` is left alone on purpose: that is the
+repository's policy rather than the machine's, git applies it to every checkout, and
+overriding it would make a restore disagree with `git checkout` on the same files.
+
+**Done when:** a repository with `core.autocrlf=true` round-trips both an LF file and a CRLF
+file unchanged.
+
+**Verified:** the new case in `test/checkpoints/git-checkpoints.test.ts` reproduces the
+failure on Linux by setting the config in the fixture repository. Running the file under
+`GIT_CONFIG_GLOBAL` pointed at a config with `autocrlf = true` reproduces CI exactly: three
+failures without the fix, including the same two cases `windows-latest` named, and fifteen
+passes with it.

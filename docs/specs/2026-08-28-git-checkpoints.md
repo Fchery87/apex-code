@@ -85,6 +85,9 @@ checkpoint at all after a restart.
 - [ ] A checkpoint captured on a dirty worktree and restored after further edits leaves
       the worktree byte-identical to its state at capture, asserted by comparing
       `git status --porcelain` and every file's contents before and after.
+- [ ] A machine that configures `core.autocrlf` does not change what a restore writes,
+      asserted by a repository with `core.autocrlf=true` round-tripping both an LF file and
+      a CRLF file unchanged.
 - [ ] Capturing a checkpoint does not modify the index, the worktree, `HEAD`, the current
       branch, or the stash, asserted by comparing `git status --porcelain`,
       `git rev-parse HEAD`, and `git stash list` across a capture.
@@ -239,6 +242,27 @@ turn, and a failed capture is never fatal.
 `commit-tree` and `update-ref` are plumbing and run no hooks, which is a second reason to
 prefer them over `git commit` or `git stash`.
 
+**Line-ending conversion rewrites the worktree on restore.** Capture and restore both move
+content through git's clean and smudge filters, so anything that converts line endings
+applies twice and not necessarily symmetrically. Two settings can do it, and they are not
+the same kind of thing.
+
+`core.autocrlf` belongs to the machine and is `true` by default on Windows. Left alone, a
+file the agent wrote with LF endings is captured as LF and restored as CRLF, so accepting a
+restore silently rewrites line endings across the worktree. Every checkpoint invocation
+therefore runs with `-c core.autocrlf=false`, which makes the round trip byte-exact. This is
+not hypothetical: it failed `windows-latest` on the first CI run for this branch, on the two
+restore tests, and it reproduces on Linux by setting `core.autocrlf=true` in the repository
+or by pointing `GIT_CONFIG_GLOBAL` at a config that does.
+
+`.gitattributes` belongs to the repository and is deliberately left alone. A repository
+declaring `* text=auto` gets platform-native endings from every ordinary `git checkout`, and
+a restore that ignored that would disagree with git itself on the same files. The
+consequence, stated rather than hidden: in such a repository on Windows, restoring a file
+the agent wrote with LF endings yields CRLF, exactly as `git checkout` would. The signal is
+a user reporting whole-file line-ending diffs after a restore, and the check is whether the
+repository declares `text` for those paths.
+
 **A workspace that is a subdirectory of a repository captures the whole repository.**
 `rev-parse --git-dir` succeeds from any depth, and `add -A` and `read-tree -u` both operate
 on the enclosing worktree rather than the current directory. So opening `repo/packages/web`
@@ -251,6 +275,9 @@ than prevented.
 
 ## Verification
 
+- Three-OS CI is load-bearing for this change, not a formality. The engine shells out to
+  `git`, and the one defect that reached CI was a Windows-only line-ending conversion that
+  Linux and macOS both passed.
 - `packages/coding-agent/test/checkpoints/git-checkpoints.test.ts` — the engine against a
   real git repository created with `mkdtemp`, never the repo under test, per `AGENTS.md`.
   Every goal above maps to a case in this file.
