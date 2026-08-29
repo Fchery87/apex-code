@@ -422,7 +422,7 @@ export class AgentSession {
 	get mcpRuntime(): McpRuntime | undefined {
 		return this._mcpRuntime;
 	}
-	private _checkpoints!: SessionCheckpoints;
+	private readonly _checkpoints: SessionCheckpoints;
 
 	/** Worktree checkpoints for this session. Inert unless `checkpoints.enabled` is set. */
 	get checkpoints(): SessionCheckpoints {

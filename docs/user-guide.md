@@ -90,6 +90,10 @@ ever continuing linearly. `--continue`/`--resume` pick up a previous session;
 of every turn, keyed to the same session entry `/fork` and `/tree` navigate to. Tracked
 edits and untracked files are both captured; anything matched by `.gitignore` is not.
 
+Checkpoints are scoped to the whole repository, not to your working directory. Opening a
+subdirectory of a repository as your workspace still snapshots and restores every file in
+that repository.
+
 A snapshot never touches your index, working tree, `HEAD`, current branch, or stash, and
 runs no git hooks. It is a commit object pinned under
 `refs/apex-code/checkpoints/<sessionId>/<entryId>`, which is why it survives both `git gc`

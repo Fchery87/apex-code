@@ -239,6 +239,16 @@ turn, and a failed capture is never fatal.
 `commit-tree` and `update-ref` are plumbing and run no hooks, which is a second reason to
 prefer them over `git commit` or `git stash`.
 
+**A workspace that is a subdirectory of a repository captures the whole repository.**
+`rev-parse --git-dir` succeeds from any depth, and `add -A` and `read-tree -u` both operate
+on the enclosing worktree rather than the current directory. So opening `repo/packages/web`
+as the workspace snapshots and restores all of `repo`. This is left as-is deliberately:
+there is one repository and one worktree, and scoping a restore to a subtree would leave
+the index disagreeing with the worktree for every path outside it. The signal is a user
+reporting that a restore reverted files outside their workspace, and the mitigation is the
+`pre-restore` ref, which makes that recoverable. Documented in `docs/user-guide.md` rather
+than prevented.
+
 ## Verification
 
 - `packages/coding-agent/test/checkpoints/git-checkpoints.test.ts` — the engine against a
