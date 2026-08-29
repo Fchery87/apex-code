@@ -9,5 +9,8 @@ test("root test command includes all Apex-owned workspace tests", async () => {
 	const packageJson = JSON.parse(await readFile(packagePath, "utf8"));
 	assert.match(packageJson.scripts.test, /--workspace packages\/agent/);
 	assert.match(packageJson.scripts.test, /--workspace packages\/coding-agent/);
-	assert.doesNotMatch(packageJson.scripts.test, /--exclude test\/config\.test\.ts/);
+	// Any exclusion, not the one that was found. `test/config.test.ts` sat outside CI for
+	// twenty days because nothing objected to dropping a file, and naming that file here
+	// would leave the next one to be found the same way.
+	assert.doesNotMatch(packageJson.scripts.test, /--exclude\b/);
 });

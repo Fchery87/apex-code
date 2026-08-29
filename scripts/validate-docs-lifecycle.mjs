@@ -42,17 +42,30 @@ function roadmapPhases(markdown) {
 	return phases;
 }
 
+// The state always sits in the cell before the spec link, in both the phase table
+// (Phase, Name, State, Spec, Plan) and the follow-up table (Follow-up, State, Spec,
+// Plan). Reading the position rather than searching for the words "landed" or
+// "active" keeps a row with any other state readable instead of invisible.
 function roadmapSpecLinks(markdown) {
 	const links = new Map();
 	for (const line of markdown.split(/\r?\n/)) {
 		const cells = line.split("|").slice(1, -1).map((cell) => cell.trim());
 		if (cells.length < 4) continue;
-		const specCell = cells.find((cell) => /\(specs\/[^)]+\.md\)/.test(cell));
-		const match = specCell?.match(/\((specs\/[^)]+\.md)\)/);
-		const stateCell = cells.find((cell, index) => index > 0 && /\blanded\b|\bactive\b/i.test(cell));
-		if (match && stateCell) links.set(match[1], { phase: cells[0], state: stateCell.replaceAll("*", "").toLowerCase() });
+		const specIndex = cells.findIndex((cell) => /\(specs\/[^)]+\.md\)/.test(cell));
+		if (specIndex < 1) continue;
+		const state = cells[specIndex - 1].replaceAll("*", "").toLowerCase();
+		// Phase 12 links two specs from one cell, so every link in it takes the row's state.
+		for (const [, spec] of cells[specIndex].matchAll(/\((specs\/[^)]+\.md)\)/g)) {
+			links.set(spec, { phase: cells[0], state });
+		}
 	}
 	return links;
+}
+
+// One direction only. The roadmap states that a row without a written file is a
+// reservation, so a row with no ADR is legitimate and an ADR with no row is not.
+function roadmapAdrNumbers(markdown) {
+	return new Set([...markdown.matchAll(/^\|\s*(\d{4})\s*\|/gm)].map((match) => match[1]));
 }
 
 function specStatus(markdown) {
@@ -139,10 +152,32 @@ for (const path of (await markdownFiles(specsDir)).filter((path) => basename(pat
 		report(path, "expected exactly one canonical **Status:** line (Draft, Active, Landed, or Superseded)");
 		continue;
 	}
-	const relativeSpec = `specs/${basename(path)}`;
-	const roadmapLink = specLinks.get(relativeSpec);
-	if (roadmapLink && /landed/.test(roadmapLink.state) && status !== "Landed") {
-		report(path, `roadmap marks its phase landed but spec is ${status}`);
+	// Supersession says a later spec replaced this one, which is orthogonal to whether
+	// the work shipped, so it agrees with any row state.
+	if (status === "Superseded") continue;
+
+	const roadmapLink = specLinks.get(`specs/${basename(path)}`);
+	if (!roadmapLink) {
+		report(path, "no docs/roadmap.md row links this spec, so nothing checks its status");
+		continue;
+	}
+	// Both directions. A spec understating landed work is the noisier failure; a spec
+	// claiming Landed for work in progress is the one that misleads a reader into
+	// skipping it, which is the failure this gate exists to prevent.
+	const landed = /landed/.test(roadmapLink.state);
+	if (landed && status !== "Landed") {
+		report(path, `roadmap marks its row landed but spec is ${status}`);
+	}
+	if (!landed && status === "Landed") {
+		report(path, `spec is Landed but its roadmap row is ${roadmapLink.state}`);
+	}
+}
+
+const registeredAdrs = roadmapAdrNumbers(roadmap);
+for (const path of await markdownFiles(join(docsDir, "adr"))) {
+	const number = basename(path).match(/^(\d{4})-/)?.[1];
+	if (number && !registeredAdrs.has(number)) {
+		report(roadmapPath, `ADR ${number} is written but absent from the roadmap's allocation table`);
 	}
 }
 

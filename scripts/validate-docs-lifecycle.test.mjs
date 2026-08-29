@@ -39,7 +39,7 @@ async function writeFixture(overrides = {}) {
 		"docs/roadmap.md": validRoadmap,
 		"docs/plans/phase-10.md": "# Phase 10 plan\n\n**Status:** Active — 1 of 2 tasks\n",
 		"docs/specs/phase-4.md": "# Phase 4 spec\n\n**Status:** Landed\n\n## Deletion inventory\n\nNothing.\n",
-		"docs/specs/phase-10.md": "# Phase 10 spec\n\n**Status:** Landed\n\n## Deletion inventory\n\nNothing.\n",
+		"docs/specs/phase-10.md": "# Phase 10 spec\n\n**Status:** Active\n\n## Deletion inventory\n\nNothing.\n",
 		"docs/architecture/contracts.md": validContracts,
 		...overrides,
 	};
@@ -180,7 +180,7 @@ test("spec statuses use the canonical terminal value", async (t) => {
 	await t.test("rejects a landed roadmap phase linked to an active spec", async () => {
 		await withFixture({ "docs/specs/phase-4.md": "# Phase 4 spec\n\n**Status:** Active\n\n## Deletion inventory\n\nNothing.\n" }, (result) => {
 			assert.equal(result.status, 1);
-			assert.match(result.stderr, /phase-4\.md: roadmap marks its phase landed but spec is Active/);
+			assert.match(result.stderr, /phase-4\.md: roadmap marks its row landed but spec is Active/);
 		});
 	});
 });
@@ -198,7 +198,52 @@ test("checks landed follow-up rows against their linked spec status", async () =
 		},
 		(result) => {
 			assert.equal(result.status, 1);
-			assert.match(result.stderr, /phase-10\.md: roadmap marks its phase landed but spec is Active/);
+			assert.match(result.stderr, /phase-10\.md: roadmap marks its row landed but spec is Active/);
 		},
 	);
+});
+
+test("a spec cannot overstate its roadmap row", async () => {
+	await withFixture(
+		{ "docs/specs/phase-10.md": "# Phase 10 spec\n\n**Status:** Landed\n\n## Deletion inventory\n\nNothing.\n" },
+		(result) => {
+			assert.equal(result.status, 1);
+			assert.match(result.stderr, /phase-10\.md: spec is Landed but its roadmap row is active/);
+		},
+	);
+});
+
+test("supersession agrees with any roadmap row state", async () => {
+	await withFixture(
+		{ "docs/specs/phase-4.md": "# Phase 4 spec\n\n**Status:** Superseded\n\n## Deletion inventory\n\nNothing.\n" },
+		(result) => {
+			assert.equal(result.status, 0);
+		},
+	);
+});
+
+test("every spec is reachable from a roadmap row", async () => {
+	await withFixture(
+		{ "docs/specs/orphan.md": "# Orphan spec\n\n**Status:** Landed\n\n## Deletion inventory\n\nNothing.\n" },
+		(result) => {
+			assert.equal(result.status, 1);
+			assert.match(result.stderr, /orphan\.md: no docs\/roadmap\.md row links this spec/);
+		},
+	);
+});
+
+test("a written ADR must appear in the roadmap allocation table", async (t) => {
+	await t.test("rejects an ADR with no row", async () => {
+		await withFixture({ "docs/adr/0031-a-decision.md": "# ADR 0031\n" }, (result) => {
+			assert.equal(result.status, 1);
+			assert.match(result.stderr, /ADR 0031 is written but absent from the roadmap's allocation table/);
+		});
+	});
+
+	await t.test("accepts a row with no ADR, which the roadmap calls a reservation", async () => {
+		const reserved = `${validRoadmap}\n| 0031 | A decision not yet written | 12 | |\n`;
+		await withFixture({ "docs/roadmap.md": reserved }, (result) => {
+			assert.equal(result.status, 0);
+		});
+	});
 });
