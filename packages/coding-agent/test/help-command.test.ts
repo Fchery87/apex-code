@@ -35,6 +35,8 @@ function fakeMode(options: {
 				},
 			},
 		},
+		sessionManager: { value: { getCwd: () => "/tmp" } },
+		fdPath: { value: null },
 		chatContainer: { value: new Container(), writable: true },
 		outputPad: { value: 0 },
 		ui: { value: { requestRender: () => {} } },
@@ -68,6 +70,30 @@ describe("/help", () => {
 		expect(names).toContain("review");
 		expect(names).toContain("deploy");
 		expect(names).toContain("skill:debugging");
+	});
+
+	it("renders the same commands the real autocomplete provider offers", async () => {
+		// The contract this change claims is that `/help` and completion cannot disagree.
+		// Asserting it means going through the provider a user actually types into, not
+		// comparing two reads of the collection, which would agree by construction.
+		const mode = fakeMode({
+			prompts: [{ name: "review", description: "a prompt template" }],
+			extensionCommands: [{ name: "deploy", invocationName: "deploy", description: "an extension command" }],
+			skills: [{ name: "Debugging", description: "a skill" }],
+		});
+
+		const provider = mode.createBaseAutocompleteProvider();
+		const line = "/";
+		const suggestions = await provider.getSuggestions([line], 0, line.length, {
+			signal: new AbortController().signal,
+		});
+		const offered = (suggestions?.items ?? []).map((item: { value: string }) => item.value.replace(/^\//, "").trim());
+
+		mode.handleHelpCommand();
+		const output = render(mode.chatContainer);
+
+		expect(offered.length).toBeGreaterThan(0);
+		expect(offered.filter((name: string) => !output.includes(`/${name}`))).toEqual([]);
 	});
 
 	it("renders every command the collection returns", () => {

@@ -711,12 +711,18 @@ export class InteractiveMode {
 	}
 
 	/**
-	 * Every command this session can run: builtin, prompt template, extension, and skill.
+	 * Every *registered* command: builtin, prompt template, extension, and skill.
 	 *
 	 * One function rather than two because `/help` renders this list and autocomplete
 	 * completes it. Built in two places they would disagree the first time either grew a
 	 * source, and the disagreement would show up as a command a user can complete but not
 	 * find, or find but not run.
+	 *
+	 * A few commands are dispatched without being registered -- `/debug`, and the
+	 * `/arminsayshi` and `/dementedelves` easter eggs. They are absent here on purpose,
+	 * which is also why autocomplete has never offered them. "Registered" is the boundary
+	 * both surfaces share; listing them in `/help` would advertise what completion cannot
+	 * complete.
 	 */
 	private collectSessionCommands(): SlashCommand[] {
 		const slashCommands: SlashCommand[] = BUILTIN_SLASH_COMMANDS.map((command) => ({
@@ -6709,7 +6715,8 @@ export class InteractiveMode {
 
 	/**
 	 * Renders what `collectSessionCommands` returns, so the list a user reads and the list
-	 * autocomplete offers are the same list rather than two that agree today.
+	 * autocomplete offers are the same list rather than two that agree today. Unregistered
+	 * dispatch-only commands are outside that boundary; see the note there.
 	 */
 	private handleHelpCommand(): void {
 		const commands = this.collectSessionCommands();
