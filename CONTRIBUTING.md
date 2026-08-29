@@ -82,16 +82,20 @@ with the manifest, so update from the root:
 npm install -w packages/coding-agent <package>@<version>
 ```
 
-`packages/coding-agent/npm-shrinkwrap.json` is **generated** from that lockfile, not
-authored. A bump that reaches the published dependency tree leaves it stale, and
-`npm run check` says so. Regenerate it on the branch:
+Two artifacts under `packages/coding-agent/` are **generated** from that lockfile, not
+authored, and a bump reaching the published dependency tree leaves both stale.
+`npm run check` fails on each in turn and names its own remedy. Regenerate both on the
+branch:
 
 ```bash
 npm run shrinkwrap:coding-agent
+npm run install-lock:coding-agent
 ```
 
-A green dependency bump therefore changes three files: the root `package-lock.json`, the
-workspace `package.json`, and the regenerated `npm-shrinkwrap.json`.
+A green dependency bump therefore changes four files: the root `package-lock.json`, the
+workspace `package.json`, `npm-shrinkwrap.json`, and `install-lock/package-lock.json`.
+Running only the first regeneration is the easy mistake -- `check:shrinkwrap` passes and
+`check:install-lock:coding-agent` then fails immediately after it.
 
 Dependabot opens these from the root ecosystem only ([`.github/dependabot.yml`](.github/dependabot.yml)).
 When a frozen package shares a dependency with an Apex-owned one, a bump rewrites the frozen

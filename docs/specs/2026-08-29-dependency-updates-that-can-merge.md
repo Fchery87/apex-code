@@ -166,10 +166,12 @@ prevent it and does not claim to; it stops the *other* eight failures and makes 
 only remaining category. The signal is a Dependabot pull request whose only failing job is
 "Frozen packages match upstream".
 
-**The derived shrinkwrap goes stale on every bump that reaches the published tree.** Verified:
-after syncing the root lockfile, `generate-coding-agent-shrinkwrap.mjs --check` reports
-`packages/coding-agent/npm-shrinkwrap.json is out of date` and names the remedy,
-`npm run shrinkwrap:coding-agent`. Running it makes both derived gates pass. Until the
+**Two derived artifacts go stale on every bump that reaches the published tree**, not one.
+`npm-shrinkwrap.json` and `install-lock/package-lock.json` are both generated from the root
+lockfile. `check:shrinkwrap` fails first and names its remedy, and running only that one
+leaves `check:install-lock:coding-agent` failing immediately after -- confirmed on
+Dependabot pull request #8, where regenerating the shrinkwrap alone moved the failure rather
+than clearing it. Both commands are needed and `CONTRIBUTING.md` lists both. Until the
 follow-up workflow exists this is a manual step, which is why it is documented rather than
 left to be rediscovered.
 
