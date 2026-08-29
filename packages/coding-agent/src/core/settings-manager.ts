@@ -7,6 +7,7 @@ import { dirname, join } from "path";
 import { CONFIG_DIR_NAME, getAgentDir } from "../config.ts";
 import { normalizePath, resolvePath } from "../utils/paths.ts";
 import { stripBom } from "../utils/text.ts";
+import type { CheckpointSettings } from "./checkpoints/git-checkpoints.ts";
 import { getApexEnvironment } from "./environment.ts";
 import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-dispatcher.ts";
 import type { LspSettings } from "./lsp/registry.ts";
@@ -200,6 +201,11 @@ export interface Settings {
 	observability?: ObservabilitySettings;
 	lsp?: LspSettings;
 	webSearch?: WebSearchSettings;
+	/**
+	 * Git-backed worktree checkpoints. Absent by default; an absent key constructs no
+	 * engine, so an unconfigured session runs no `git` subprocess and writes no ref.
+	 */
+	checkpoints?: CheckpointSettings;
 }
 
 /**
@@ -964,6 +970,10 @@ export class SettingsManager {
 
 	getWebSearchSettings(): WebSearchSettings | undefined {
 		return this.settings.webSearch === undefined ? undefined : structuredClone(this.settings.webSearch);
+	}
+
+	getCheckpointSettings(): CheckpointSettings | undefined {
+		return this.settings.checkpoints === undefined ? undefined : structuredClone(this.settings.checkpoints);
 	}
 
 	getBranchSummarySkipPrompt(): boolean {

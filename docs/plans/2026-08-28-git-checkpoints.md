@@ -16,16 +16,18 @@ schema only. C3 is the first unit that changes a running session's behaviour. C4
 the spec's deletion inventory.
 
 **Tech stack:** TypeScript, Vitest, `git` plumbing (`read-tree`, `write-tree`,
-`commit-tree`, `update-ref`, `for-each-ref`) over `spawnSync`.
+`commit-tree`, `update-ref`, `for-each-ref`) over an async `spawn` with a timeout. Async
+rather than `spawnSync` because capture runs at turn start, where a synchronous `add -A`
+on a large worktree would block the event loop and stall the TUI.
 
 ## Task table
 
 | Task | Unit | Status | Commit |
 | --- | --- | --- | --- |
-| CP.1 | C1 | Done | `pending` |
-| CP.2 | C1 | Done | `pending` |
-| CP.3 | C1 | Done | `pending` |
-| CP.4 | C2 | Not started | — |
+| CP.1 | C1 | Done | `17edae3c6` |
+| CP.2 | C1 | Done | `17edae3c6` |
+| CP.3 | C1 | Done | `17edae3c6` |
+| CP.4 | C2 | Done | `pending` |
 | CP.5 | C3 | Not started | — |
 | CP.6 | C4 | Not started | — |
 
@@ -63,9 +65,10 @@ engine instance, captures untracked files, and removes a file created after the 
 
 ### CP.3: The engine
 
-`core/checkpoints/git-checkpoints.ts` plus a barrel. Public surface: `createGitCheckpoints`
-returning `undefined` outside a repository, and `capture`, `lookup`, `list`, `restore`,
-`prune` on the value it returns.
+`core/checkpoints/git-checkpoints.ts`. Public surface: `createGitCheckpoints` returning
+`undefined` outside a repository, and `capture`, `lookup`, `list`, `restore`, `prune` on
+the value it returns. No barrel: the one consumer imports the module directly, and an
+`index.ts` re-exporting a single file earns nothing.
 
 The registry is git refs, never a process-local map. That is the choice the spec's § The
 problem exists to justify, and it is what a reviewer should check first.

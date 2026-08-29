@@ -252,3 +252,15 @@ export async function createGitCheckpoints(
 		},
 	};
 }
+
+/**
+ * Opt-in configuration for the engine above.
+ *
+ * Absent by default, and an absent key constructs no engine, so an unconfigured session
+ * runs no `git` subprocess and writes no ref.
+ */
+export interface CheckpointSettings {
+	enabled?: boolean;
+	/** Oldest refs beyond this count are deleted on capture. Defaults to 50. */
+	maxPerSession?: number;
+}
