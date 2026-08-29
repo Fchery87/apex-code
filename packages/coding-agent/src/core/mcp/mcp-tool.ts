@@ -126,7 +126,7 @@ export function createMcpToolDefinition(
 			content: text(
 				tools.length > 0
 					? renderList(tools)
-					: `No cached tools for "${name}". They are cached the first time the server is called.`,
+					: `No cached tools for "${name}" yet. Tools are cached the first time the server is called, so call a known tool on it, or set "lifecycle": "eager" for this server in .mcp.json to have them cached at startup.`,
 			),
 			details: { action: "list", server: name, tool: undefined },
 		};
@@ -176,11 +176,11 @@ export function createMcpToolDefinition(
 
 		try {
 			const result = await manager.withConnection(serverName, async (connection) => {
+				// An empty list is a fact about the server, not a failed read. Keeping the
+				// previous entry would leave search advertising tools that no longer exist.
 				const fresh = await connection.listTools();
-				if (fresh.length > 0) {
-					cache.set(servers.get(serverName) as McpServerConfig, fresh);
-					cache.save();
-				}
+				cache.set(servers.get(serverName) as McpServerConfig, fresh);
+				cache.save();
 				return connection.callTool(toolName, args);
 			});
 

@@ -582,6 +582,10 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		mcpRuntime,
 	});
 	parentSessionRef.current = session;
+	// Eager servers connect here rather than on first use, so their tools are in the
+	// cache before the model's first search. Detached: a slow or broken server delays
+	// nothing, and `warmEagerServers` already swallows its own failures.
+	void mcpRuntime?.warm();
 	const extensionsResult = resourceLoader.getExtensions();
 
 	return {

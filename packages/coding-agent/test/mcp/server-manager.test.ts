@@ -164,6 +164,46 @@ describe("MCP server manager", () => {
 		expect(manager.state("a").kind).toBe("failed");
 	});
 
+	it("warms only eager servers, leaving lazy ones untouched", async () => {
+		const connected: string[] = [];
+		const manager = new McpServerManager({
+			servers: new Map([
+				["eagerly", server("eagerly", { lifecycle: "eager" })],
+				["lazily", server("lazily", { lifecycle: "lazy" })],
+			]),
+			connector: async (config) => {
+				connected.push(config.name);
+				return fakeConnection([{ server: config.name, name: "t", description: "d", inputSchema: {} }]);
+			},
+		});
+
+		const cached: string[] = [];
+		await manager.warmEagerServers((config) => cached.push(config.name));
+
+		expect(connected).toEqual(["eagerly"]);
+		expect(cached).toEqual(["eagerly"]);
+		expect(manager.state("lazily")).toEqual({ kind: "disconnected" });
+	});
+
+	it("does not let one broken eager server stop the rest of startup", async () => {
+		const manager = new McpServerManager({
+			servers: new Map([
+				["broken", server("broken", { lifecycle: "eager" })],
+				["fine", server("fine", { lifecycle: "eager" })],
+			]),
+			connector: async (config) => {
+				if (config.name === "broken") throw new Error("exited immediately");
+				return fakeConnection();
+			},
+		});
+
+		const warmed: string[] = [];
+		await expect(manager.warmEagerServers((config) => warmed.push(config.name))).resolves.toBeUndefined();
+
+		expect(warmed).toEqual(["fine"]);
+		expect(manager.state("broken").kind).toBe("failed");
+	});
+
 	it("rejects a server that is not configured", async () => {
 		const manager = new McpServerManager({ servers: new Map(), connector: async () => fakeConnection() });
 

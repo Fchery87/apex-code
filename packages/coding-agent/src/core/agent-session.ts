@@ -97,7 +97,7 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.ts";
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
-import type { McpToolOptions } from "./mcp/mcp-tool.ts";
+import type { McpRuntime } from "./mcp/runtime.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
@@ -267,7 +267,7 @@ export interface AgentSessionConfig {
 	 */
 	lspOperations?: LspOperations;
 	/** Assembled MCP subsystem, present only when at least one server is configured. */
-	mcpRuntime?: McpToolOptions;
+	mcpRuntime?: McpRuntime;
 	/**
 	 * Optional `web_search` backend. Absent leaves the tool on its unconfigured
 	 * operations, which throw a model-readable "not configured" error rather than
@@ -409,10 +409,10 @@ export class AgentSession {
 	private _evidenceSink?: EvidenceSink;
 	private _diagnosticsOperations?: DiagnosticsOperations;
 	private _lspOperations?: LspOperations;
-	private _mcpRuntime?: McpToolOptions;
+	private _mcpRuntime?: McpRuntime;
 
 	/** Configured MCP subsystem, or undefined when no server is configured. */
-	get mcpRuntime(): McpToolOptions | undefined {
+	get mcpRuntime(): McpRuntime | undefined {
 		return this._mcpRuntime;
 	}
 	private _webSearchOperations?: WebSearchOperations;
@@ -1009,6 +1009,9 @@ export class AgentSession {
 		);
 		this._disconnectFromAgent();
 		this._eventListeners = [];
+		// Every connected MCP server is a child process this session started. Without
+		// this, one leaks per server per session, because nothing else owns them.
+		this._mcpRuntime?.close().catch(() => undefined);
 		cleanupSessionResources(this.sessionId);
 	}
 

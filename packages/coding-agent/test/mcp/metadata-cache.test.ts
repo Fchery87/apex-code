@@ -98,6 +98,31 @@ describe("MCP metadata cache", () => {
 		}
 	});
 
+	it("does not let two servers sharing a command collide", () => {
+		agentDir();
+		const first = stdioServer("staging", "npx", ["-y", "shared-mcp"]);
+		const second = stdioServer("production", "npx", ["-y", "shared-mcp"]);
+
+		expect(serverCacheKey(first)).not.toBe(serverCacheKey(second));
+
+		const cache = new McpMetadataCache();
+		cache.set(first, [tool("staging", "a")]);
+		cache.set(second, [tool("production", "b")]);
+
+		expect(cache.get(first).map((entry) => entry.name)).toEqual(["a"]);
+		expect(cache.get(second).map((entry) => entry.name)).toEqual(["b"]);
+	});
+
+	it("keys on env values, not just env names", () => {
+		agentDir();
+		const a = stdioServer("s", "cmd");
+		const b = stdioServer("s", "cmd");
+		a.transport = { ...a.transport, kind: "stdio", env: { MODE: "read" } } as typeof a.transport;
+		b.transport = { ...b.transport, kind: "stdio", env: { MODE: "write" } } as typeof b.transport;
+
+		expect(serverCacheKey(a)).not.toBe(serverCacheKey(b));
+	});
+
 	it("treats a corrupt cache file as empty rather than failing", () => {
 		const dir = agentDir();
 		fs.mkdirSync(path.join(dir, "mcp"), { recursive: true });

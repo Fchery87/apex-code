@@ -29,9 +29,14 @@ A third extension, `pi-agent-browser-native`, was considered and set aside. It w
 
 `getAliases()` and `VIRTUAL_MODULES` in `packages/coding-agent/src/core/extensions/loader.ts` map `apex-code`, `apex-code-agent-core`, `@earendil-works/pi-tui`, the four `@earendil-works/pi-ai` entry points, and the whole legacy `@mariozechner/*` scope. They do not map `@earendil-works/pi-coding-agent`, which is the scope every current registry extension imports.
 
-Three probe extensions, each importing `getMarkdownTheme` from a different specifier, were loaded through `loadExtensions()` from the built `packages/coding-agent/dist/core/extensions/loader.js`:
+Three probe extensions were written, identical but for the specifier each imports `getMarkdownTheme` from: `apex-code`, `@mariozechner/pi-coding-agent`, and `@earendil-works/pi-coding-agent`. Each is a two-line module with a default-export factory. They were loaded through the built loader:
 
+```js
+import { loadExtensions } from "packages/coding-agent/dist/core/extensions/loader.js";
+const { errors } = await loadExtensions(probePaths, process.cwd());
 ```
+
+```text
 LOAD  ext-apex.ts
 LOAD  ext-mariozechner.ts
 FAIL  ext-earendil.ts  Cannot find module '@earendil-works/pi-coding-agent'
@@ -87,7 +92,7 @@ The adapter registers a single `mcp()` tool. `mcp({ search: "..." })` ranks cach
 
 This is the design `docs/roadmap.md` line 480 already commits Apex Code to, which reads "MCP tools deferred by default with an always-load override."
 
-### Two thirds of the adapter is optional for a first version
+### A third of the adapter is deferrable, and the core is a quarter of it
 
 Counts regenerate with this command, run at the pinned commit:
 

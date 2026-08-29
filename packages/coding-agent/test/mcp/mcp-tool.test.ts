@@ -154,6 +154,21 @@ describe("mcp proxy tool", () => {
 		expect(textOf(result)).toContain("issue #1 created");
 	});
 
+	it("clears cached tools when a server reports it now has none", async () => {
+		const { definition } = setup({
+			connector: async () => ({
+				listTools: async () => [],
+				callTool: async () => ({ content: [{ type: "text", text: "ok" }] }),
+				close: async () => undefined,
+			}),
+		});
+
+		await run(definition, { tool: "github:create_issue", args: {} });
+		const after = await run(definition, { server: "github" });
+
+		expect(textOf(after)).not.toContain("github:create_issue");
+	});
+
 	it("names close matches instead of failing opaquely on an unknown tool", async () => {
 		const { definition } = setup();
 

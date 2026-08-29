@@ -10,7 +10,7 @@
 | Last updated | 2026-08-28 |
 | Roadmap phase | Product-surface follow-up (post Phase 12) |
 | Tracking issue/PR | none |
-| Compatibility posture | **Preserves compatibility.** Additive in full. Apex Code has no MCP support today, so no caller, config file, or session can break. The change adds one tool name (`mcp`), one optional config file (`.mcp.json`), and one cache directory. A session with no MCP server configured registers the tool but never activates it, so the static prompt prefix and the default tool set are byte-identical to today. A clean break was never available, because there is nothing to break. |
+| Compatibility posture | **Preserves compatibility.** Additive in full. Apex Code has no MCP support today, so no caller, config file, or session can break. The change adds one tool name (`mcp`), one optional config file (`.mcp.json`), and one cache directory. A session with no MCP server configured builds no MCP runtime and registers no `mcp` tool at all, so `getAllTools()`, the default tool set, and the static prompt prefix are byte-identical to today. A clean break was never available, because there is nothing to break. |
 
 ## Executive summary
 
@@ -92,6 +92,15 @@ One tool, one cache, one connection manager, and a contract projection that make
 `CachedTool` is what the disk cache holds: server name, tool name, description, and input schema. Search and describe read only this. That is the property that makes them work with no live connection, so it is a type-level guarantee rather than a convention.
 
 **`buildToolContractSnapshot()` does not exist, so this spec does not cite it.** `AGENTS.md:108`, `CONTEXT.md:35`, and `docs/architecture/contracts.md:236` all specify it, and a repo-wide search returns zero hits in any `.ts` file. `docs/specs/2026-08-18-lsp.md:114` recorded the same gap and declined to cite it for the same reason. This spec follows that precedent. The classification surface that does exist is `ToolInfo.unclassified` at `packages/coding-agent/src/core/extensions/types.ts:1619`, reached through `getAllTools()`, and the goals and verification above name that instead. This is a pre-existing gap between `contracts.md` and the implementation, not one this spec introduces or closes.
+
+**Cold-cache behavior is defined, not left to chance.** A newly configured server has no
+cached metadata, so `search` and listing return an explicit miss naming what to do rather
+than silently connecting. Two things populate the cache. Any successful tool call caches
+that server's full tool list as a side effect, and a server declared `"lifecycle": "eager"`
+connects once at session start and caches its tools before the model's first turn. Lazy
+stays the default, so nothing connects unbidden; a user who wants a server discoverable
+from a cold start opts in. Eager warm-up is detached from session startup and swallows its
+own failures, so a broken server delays nothing and stops nothing.
 
 **The rule grammar is settled by [ADR 0025](../adr/0025-mcp-permission-rule-grammar.md).** It names a server and a tool, permits `*` in the tool position only, and gives the metadata actions their own `Mcp(metadata)` rule that cannot authorize a call. Written before the tool shipped, because a rule grammar lands in users' saved settings and can be extended later but never re-spelled.
 

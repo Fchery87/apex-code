@@ -17,6 +17,8 @@ import type { McpConfigDiagnostic, McpConnector } from "./types.ts";
 
 export interface McpRuntime extends McpToolOptions {
 	diagnostics: readonly McpConfigDiagnostic[];
+	/** Connect `eager` servers and cache their tools, so they are discoverable cold. */
+	warm(): Promise<void>;
 	close(): Promise<void>;
 }
 
@@ -36,6 +38,10 @@ export function createMcpRuntime(cwd: string, connector: McpConnector = connectM
 		cache,
 		manager,
 		diagnostics,
+		warm: async () => {
+			await manager.warmEagerServers((server, tools) => cache.set(server, tools));
+			cache.save();
+		},
 		close: () => manager.closeAll(),
 	};
 }

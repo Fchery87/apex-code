@@ -27,20 +27,35 @@ export function mcpCachePath(): string {
 }
 
 /**
- * Identity is the launch spec alone. A server upgraded to a new version produces a
- * different key and therefore reads no stale entries, while a change to something
- * that cannot affect the tool list (capabilities, idle timeout) leaves the key alone.
+ * Everything that can change which tools a server publishes, and nothing that cannot.
+ * A version bump in `args` produces a new key and therefore reads no stale entries,
+ * while `capabilities` or `idleTimeoutMinutes` leave the key alone.
  */
 function transportIdentity(transport: McpTransport): string {
 	if (transport.kind === "stdio") {
-		const env = Object.keys(transport.env).sort().join(",");
+		// Env values, not just keys: a server that switches which token or mode it runs
+		// under can publish a different tool list under the same command line.
+		const env = Object.entries(transport.env)
+			.sort(([a], [b]) => a.localeCompare(b))
+			.map(([key, value]) => `${key}=${value}`)
+			.join(",");
 		return ["stdio", transport.command, transport.args.join(" "), env, transport.cwd ?? ""].join(SEPARATOR);
 	}
-	return ["http", transport.url].join(SEPARATOR);
+	const headers = Object.entries(transport.headers)
+		.sort(([a], [b]) => a.localeCompare(b))
+		.map(([key, value]) => `${key}=${value}`)
+		.join(",");
+	return ["http", transport.url, headers, transport.bearerTokenEnv ?? ""].join(SEPARATOR);
 }
 
+/**
+ * The name is part of the key, not only the launch spec. Two servers can share a
+ * command (the same binary run twice under different names) and would otherwise
+ * collide, the second silently overwriting the first's cached tools.
+ */
 export function serverCacheKey(server: McpServerConfig): string {
-	return createHash("sha256").update(transportIdentity(server.transport)).digest("hex").slice(0, 32);
+	const identity = [server.name, transportIdentity(server.transport)].join(SEPARATOR);
+	return createHash("sha256").update(identity).digest("hex").slice(0, 32);
 }
 
 export class McpMetadataCache {

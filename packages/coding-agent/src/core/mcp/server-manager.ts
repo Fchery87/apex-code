@@ -7,7 +7,7 @@
  * spawn) and all of it is testable against a fake.
  */
 
-import type { McpConnection, McpConnector, McpServerConfig, ServerState } from "./types.ts";
+import type { CachedTool, McpConnection, McpConnector, McpServerConfig, ServerState } from "./types.ts";
 
 const DEFAULT_CONNECT_TIMEOUT_MS = 30_000;
 const FAILURE_BACKOFF_MS = 60_000;
@@ -115,6 +115,28 @@ export class McpServerManager {
 		const entry = this.entry(name);
 		if (entry.state.kind === "ready") entry.state = { ...entry.state, lastUsed: this.now() };
 		return result;
+	}
+
+	/**
+	 * Connect every `eager` server and cache what it publishes.
+	 *
+	 * This is the answer to the cold-cache problem. A lazily configured server has no
+	 * cached tools until something calls one, so it cannot be discovered by search; a
+	 * user who wants a server discoverable from the first turn declares it `eager`.
+	 * Failures are swallowed on purpose, because a broken server must not stop a
+	 * session from starting.
+	 */
+	async warmEagerServers(onTools: (server: McpServerConfig, tools: CachedTool[]) => void): Promise<void> {
+		for (const server of this.servers.values()) {
+			if (server.lifecycle !== "eager") continue;
+			try {
+				await this.withConnection(server.name, async (connection) => {
+					onTools(server, await connection.listTools());
+				});
+			} catch {
+				// Recorded as `failed` by `connect`; the next call reports it.
+			}
+		}
 	}
 
 	/** Close every `ready` server whose idle window has passed, unless it is kept alive. */
