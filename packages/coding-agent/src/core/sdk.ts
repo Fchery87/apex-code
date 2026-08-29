@@ -540,6 +540,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					// parent's cwd, so it would write refs under its own session id into the
 					// same repository and interleave them with the parent's. The parent's
 					// per-turn capture already covers everything a child does inside that turn.
+
 					// Forwarded so a child that itself holds `delegate` can delegate again
 					// (bounded by the depth guard above, read fresh from its own session
 					// header on its next createAgentSession call) -- otherwise recursion
