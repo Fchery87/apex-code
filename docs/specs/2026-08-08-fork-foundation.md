@@ -1,11 +1,12 @@
 # Spec: fork foundation
 
+**Status:** Landed
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | Fchery87 |
-| Status | `Active` — landed; original CI and merge-ceiling goals were amended on the record |
 | Created | 2026-08-08 |
 | Last updated | 2026-08-10 |
 | Roadmap phase | 0 — Fork foundation |

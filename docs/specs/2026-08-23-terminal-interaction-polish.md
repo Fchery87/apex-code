@@ -1,11 +1,12 @@
 # Spec: Terminal interaction polish
 
+**Status:** Landed
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | `Apex Code` |
-| Status | `Complete` |
 | Created | `2026-08-23` |
 | Last updated | `2026-08-23` |
 | Roadmap phase | `none — product-surface follow-up after Phase 12` |

@@ -1,11 +1,12 @@
 # Spec: Supervisor-mediated credential writes
 
+**Status:** Landed
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | `fchery87` |
-| Status | `Complete` |
 | Created | `2026-08-22` |
 | Last updated | `2026-08-23` |
 | Roadmap phase | `none — follow-up to Phase 2b (OS sandbox)` |

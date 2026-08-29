@@ -1,11 +1,12 @@
 # Spec: Remove unowned hosted-service defaults
 
+**Status:** Landed
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | Apex Code |
-| Status | `Landed` |
 | Created | 2026-08-16 |
 | Last updated | 2026-08-16 |
 | Roadmap phase | `11 — Remove unowned hosted-service defaults` |

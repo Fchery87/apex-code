@@ -1,11 +1,12 @@
 # Spec: Release hardening
 
+**Status:** Landed
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | Apex Code |
-| Status | `Active` |
 | Created | 2026-08-16 |
 | Last updated | 2026-08-16 |
 | Roadmap phase | `9 — Release hardening` |

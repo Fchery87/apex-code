@@ -1,11 +1,12 @@
 # Spec: Standalone release installer
 
+**Status:** Landed
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | Apex Code |
-| Status | `Implemented` |
 | Created | 2026-08-25 |
 | Last updated | 2026-08-25 |
 | Roadmap phase | `12 — Production graduation and release integrity` |

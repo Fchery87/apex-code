@@ -42,6 +42,24 @@ function roadmapPhases(markdown) {
 	return phases;
 }
 
+function roadmapSpecLinks(markdown) {
+	const links = new Map();
+	for (const line of markdown.split(/\r?\n/)) {
+		const cells = line.split("|").slice(1, -1).map((cell) => cell.trim());
+		if (cells.length < 4) continue;
+		const specCell = cells.find((cell) => /\(specs\/[^)]+\.md\)/.test(cell));
+		const match = specCell?.match(/\((specs\/[^)]+\.md)\)/);
+		const stateCell = cells.find((cell, index) => index > 0 && /\blanded\b|\bactive\b/i.test(cell));
+		if (match && stateCell) links.set(match[1], { phase: cells[0], state: stateCell.replaceAll("*", "").toLowerCase() });
+	}
+	return links;
+}
+
+function specStatus(markdown) {
+	const matches = [...markdown.matchAll(/^\*\*Status:\*\*\s*(Draft|Active|Landed|Superseded)\s*$/gim)];
+	return matches.length === 1 ? matches[0][1] : null;
+}
+
 function contractSummary(markdown) {
 	const contracts = new Map();
 	for (const line of markdown.split(/\r?\n/)) {
@@ -110,10 +128,21 @@ for (const livePlan of livePlans) {
 	if (!links.has(livePlan)) report(join(docsDir, livePlan), "live plan is not linked from docs/roadmap.md");
 }
 
-for (const path of await markdownFiles(specsDir)) {
+const specLinks = roadmapSpecLinks(roadmap);
+for (const path of (await markdownFiles(specsDir)).filter((path) => basename(path) !== "TEMPLATE.md")) {
 	const markdown = await readFile(path, "utf8");
 	if (!/^##\s+Deletion inventory\s*$/im.test(markdown)) {
 		report(path, "expected a Deletion inventory section");
+	}
+	const status = specStatus(markdown);
+	if (!status) {
+		report(path, "expected exactly one canonical **Status:** line (Draft, Active, Landed, or Superseded)");
+		continue;
+	}
+	const relativeSpec = `specs/${basename(path)}`;
+	const roadmapLink = specLinks.get(relativeSpec);
+	if (roadmapLink && /landed/.test(roadmapLink.state) && status !== "Landed") {
+		report(path, `roadmap marks its phase landed but spec is ${status}`);
 	}
 }
 

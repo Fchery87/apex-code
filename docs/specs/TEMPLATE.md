@@ -4,6 +4,8 @@
 > `docs/research/`, not numbered like `docs/adr/`. A spec is written *before* the
 > change; delete this blockquote when you copy the template.
 
+**Status:** Draft
+
 A spec sits between an ADR and a plan, and substitutes for neither. An ADR
 (`docs/adr/`) records one settled decision, in a few paragraphs, with no lifecycle of
 its own. A plan (`docs/plans/`) is a task-by-task execution breakdown with a
@@ -19,7 +21,6 @@ and cite it from Rollout; do not fold it in here.
 | Field | Value |
 | --- | --- |
 | Author | `<name>` |
-| Status | `Draft` \| `Active` \| `Superseded` |
 | Created | `YYYY-MM-DD` |
 | Last updated | `YYYY-MM-DD` |
 | Roadmap phase | `<phase number and name, or "none">` |
@@ -33,6 +34,11 @@ and why that posture beat the other one. Apex Code is distributed, so anything t
 the session format, settings schema, or CLI surface carries a real obligation to
 users; say what it is. A spec with no stated posture forces every reader to
 reverse-engineer it from the diff.
+
+A spec must contain exactly one standalone `**Status:**` line near its main heading. Use `Draft` while the design is under review, `Active` while it is being
+implemented, `Landed` once the change is shipped, and `Superseded` only when a later
+spec replaces it. The lifecycle validator enforces this vocabulary and checks that
+roadmap rows marked landed link only to `Landed` specs.
 
 ## Executive summary
 

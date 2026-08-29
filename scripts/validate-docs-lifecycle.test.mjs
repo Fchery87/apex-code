@@ -38,8 +38,8 @@ async function writeFixture(overrides = {}) {
 	const files = {
 		"docs/roadmap.md": validRoadmap,
 		"docs/plans/phase-10.md": "# Phase 10 plan\n\n**Status:** Active — 1 of 2 tasks\n",
-		"docs/specs/phase-4.md": "# Phase 4 spec\n\n## Deletion inventory\n\nNothing.\n",
-		"docs/specs/phase-10.md": "# Phase 10 spec\n\n## Deletion inventory\n\nNothing.\n",
+		"docs/specs/phase-4.md": "# Phase 4 spec\n\n**Status:** Landed\n\n## Deletion inventory\n\nNothing.\n",
+		"docs/specs/phase-10.md": "# Phase 10 spec\n\n**Status:** Landed\n\n## Deletion inventory\n\nNothing.\n",
 		"docs/architecture/contracts.md": validContracts,
 		...overrides,
 	};
@@ -166,4 +166,39 @@ test("contract summary and sections agree and open deadlines have not passed", a
 			assert.match(result.stderr, /Session entry schema: open deadline has passed \(Phase 6 is landed\)/);
 		});
 	});
+});
+
+
+test("spec statuses use the canonical terminal value", async (t) => {
+	await t.test("rejects a spec without a canonical status line", async () => {
+		await withFixture({ "docs/specs/phase-4.md": "# Phase 4 spec\n\n## Deletion inventory\n\nNothing.\n" }, (result) => {
+			assert.equal(result.status, 1);
+			assert.match(result.stderr, /phase-4\.md: expected exactly one canonical \*\*Status:\*\* line/);
+		});
+	});
+
+	await t.test("rejects a landed roadmap phase linked to an active spec", async () => {
+		await withFixture({ "docs/specs/phase-4.md": "# Phase 4 spec\n\n**Status:** Active\n\n## Deletion inventory\n\nNothing.\n" }, (result) => {
+			assert.equal(result.status, 1);
+			assert.match(result.stderr, /phase-4\.md: roadmap marks its phase landed but spec is Active/);
+		});
+	});
+});
+
+
+test("checks landed follow-up rows against their linked spec status", async () => {
+	const followUpRoadmap = validRoadmap.replace(
+		"| 10 | Reliability | **active** | [spec](specs/phase-10.md) | [plan](plans/phase-10.md) |",
+		"| Composer dock surface | **landed** | [spec](specs/phase-10.md) | — |",
+	);
+	await withFixture(
+		{
+			"docs/roadmap.md": followUpRoadmap,
+			"docs/specs/phase-10.md": "# Phase 10 spec\n\n**Status:** Active\n\n## Deletion inventory\n\nNothing.\n",
+		},
+		(result) => {
+			assert.equal(result.status, 1);
+			assert.match(result.stderr, /phase-10\.md: roadmap marks its phase landed but spec is Active/);
+		},
+	);
 });

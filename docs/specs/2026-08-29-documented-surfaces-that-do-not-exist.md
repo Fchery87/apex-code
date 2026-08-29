@@ -1,11 +1,12 @@
 # Spec: Documented surfaces that do not exist
 
+**Status:** Landed
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | `fchery87` |
-| Status | `Active` |
 | Created | `2026-08-29` |
 | Last updated | `2026-08-29` |
 | Roadmap phase | `none — correctness follow-up` |

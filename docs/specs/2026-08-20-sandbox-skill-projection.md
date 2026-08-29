@@ -1,5 +1,7 @@
 # Spec: Skills reach the model — sandbox mounts plus a budget-bounded catalog
 
+**Status:** Landed
+
 > **Term note.** `CONTEXT.md` defines **Projection** as `buildToolContractSnapshot()`.
 > This document uses "mount" for the sandbox operation to avoid overloading that term.
 > The filename retains `sandbox-skill-projection` because it was already circulated;
@@ -11,7 +13,6 @@
 | Field | Value |
 | --- | --- |
 | Author | Apex Code |
-| Status | `Complete` |
 | Created | `2026-08-20` |
 | Last updated | `2026-08-20` |
 | Roadmap phase | `none` — defect fix against Phase 2b's boundary, plus a Phase 3 context-engineering follow-through |

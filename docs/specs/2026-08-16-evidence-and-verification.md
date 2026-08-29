@@ -1,6 +1,7 @@
 # Spec: Evidence & verification
 
-**Status:** Active — ADR 0007 accepted
+**Status:** Landed
+
 
 ## Metadata
 
