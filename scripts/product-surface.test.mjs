@@ -8,7 +8,9 @@ const read = (path) => readFile(new URL(path, root), "utf8");
 test("the npm front door installs and runs Apex Code through npm", async () => {
 	const readme = await read("packages/coding-agent/README.md");
 	assert.match(readme, /^# Apex Code/m);
-	assert.match(readme, /npm install --global apex-code@next/);
+	assert.match(readme, /npm install --global apex-code$/m);
+	// The packed README must not teach a tag a release no longer writes (ADR 0026).
+	assert.doesNotMatch(readme, /apex-code@next/);
 	assert.match(readme, /apex-code --version/);
 	assert.doesNotMatch(readme, /pi\.dev\/install\.sh/);
 	assert.doesNotMatch(readme, /^pi(?:\s|$)/m);

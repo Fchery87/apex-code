@@ -30,13 +30,15 @@ test("release workflow is tag-triggered, least-privilege, and publishes only Ape
 	assert.match(publish.steps.find((step) => step.name === "Publish Apex Code CLI").run, /tag "\$\{\{ steps\.release\.outputs\.tag \}\}"/);
 });
 
-test("release derives npm dist-tag from semver, using next only for prereleases", async () => {
+test("release derives the npm dist-tag through the tested selector, not inline shell", async () => {
+	// Inline shell in a workflow is the one thing here no test can exercise, and a
+	// release is the one place a mistake is unrecoverable. The rule lives in
+	// scripts/apex/select-dist-tag.mjs, which has its own unit tests.
 	const { workflow } = await readWorkflow();
 	const releaseStep = workflow.jobs.publish.steps.find((step) => step.id === "release");
-	assert.match(releaseStep.run, /if \[{2} "\$version" == .*\]\]; then/);
-	assert.match(releaseStep.run, /tag=next/);
-	assert.match(releaseStep.run, /tag=latest/);
+	assert.match(releaseStep.run, /node scripts\/apex\/select-dist-tag\.mjs "\$version" apex-code apex-code-agent-core/);
 	assert.match(releaseStep.run, /echo "tag=\$\{tag\}"/);
+	assert.doesNotMatch(releaseStep.run, /tag=next/);
 });
 
 test("release environment reference is present for external deployment-protection configuration (task 12.13)", async () => {
@@ -66,8 +68,7 @@ test("release workflow validates tag identity and clean-installs the published C
 	const commands = workflow.jobs.publish.steps.map((step) => step.run).filter(Boolean).join("\n");
 
 	assert.match(commands, /node scripts\/apex\/validate-release-tag\.mjs/);
-	assert.match(commands, /tag=latest/);
-	assert.match(commands, /\$version" == \*-\*/);
+	assert.match(commands, /select-dist-tag\.mjs/);
 	assert.match(commands, /npm ci --ignore-scripts/);
 	assert.match(commands, /apt-get install .*fd-find ripgrep/s);
 	assert.match(commands, /ln -s .*fdfind.*\/usr\/local\/bin\/fd/);

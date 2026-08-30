@@ -7,12 +7,13 @@ not a full reference. For what's built and what's still planned, see
 ## Install
 
 ```bash
-npm install --global apex-code@next
+npm install --global apex-code
 apex-code --version
 ```
 
-`@next` is the current prerelease channel — this project has not promoted a
-`latest` release yet. Requires Node.js ≥ 22.19.0.
+This project has published no stable version yet, so `latest` names the newest
+verified prerelease and a plain install resolves it (ADR 0026). Requires Node.js
+≥ 22.19.0.
 
 Or install the standalone binary without Node.js. The POSIX installer supports macOS,
 Linux, and **Git Bash on Windows**:

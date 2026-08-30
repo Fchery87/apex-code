@@ -6,11 +6,13 @@ import { fetchWithRetry } from "./management-http.ts";
 
 /**
  * npm's own per-tag registry endpoint, not a custom API this project would need to
- * host and operate. Compares against the "next" dist-tag rather than "latest": the
- * README documents `npm install --global apex-code@next` as the install channel
- * this pre-alpha project actually ships through.
+ * host and operate. Compares against "latest", which is the tag a release publishes
+ * under and the tag a bare `npm install apex-code` resolves (ADR 0026). While no
+ * stable version exists that is the newest prerelease; afterwards it is the newest
+ * stable. Querying "next" instead would report no update available for the whole
+ * pre-stable period, because "next" does not advance until a stable line exists.
  */
-const LATEST_VERSION_URL = `https://registry.npmjs.org/${PACKAGE_NAME}/next`;
+const LATEST_VERSION_URL = `https://registry.npmjs.org/${PACKAGE_NAME}/latest`;
 /** Exported so the sandbox's default allowlist cannot drift from the URL used here. */
 export const VERSION_CHECK_HOST = new URL(LATEST_VERSION_URL).host;
 const DEFAULT_VERSION_CHECK_TIMEOUT_MS = 10000;

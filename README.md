@@ -46,15 +46,15 @@ verification evidence, and operational visibility.
 
 ### Install the prerelease from npm
 
-Apex Code currently uses npm's `next` prerelease channel rather than the stable
-`latest` tag. It installs the same way with npm, pnpm, Yarn, or Bun — all resolve it
-from the same npm registry:
+Apex Code is pre-alpha and has published no stable version, so `latest` names the
+newest verified prerelease and a plain install resolves it (ADR 0026). It installs the
+same way with npm, pnpm, Yarn, or Bun — all resolve it from the same npm registry:
 
 ```bash
-npm install --global apex-code@next      # npm
-pnpm add --global apex-code@next         # pnpm
-yarn global add apex-code@next           # Yarn
-bun add --global apex-code@next          # Bun
+npm install --global apex-code      # npm
+pnpm add --global apex-code         # pnpm
+yarn global add apex-code           # Yarn
+bun add --global apex-code          # Bun
 
 apex-code --version
 ```
@@ -63,7 +63,7 @@ The command installs the `apex-code` executable globally. To update an existing 
 installation, use the same npm channel:
 
 ```bash
-npm install --global apex-code@next
+npm install --global apex-code
 # or from an existing installation:
 apex-code update --self
 ```
@@ -569,7 +569,7 @@ for lifecycle events, tools, UI, packages, and examples.
 ## Network and privacy
 
 Apex Code sends no project-directed usage telemetry. At startup it may query npm for the
-`apex-code@next` version; disable that request with:
+`apex-code` version; disable that request with:
 
 ```bash
 APEX_CODE_SKIP_VERSION_CHECK=1 apex-code
