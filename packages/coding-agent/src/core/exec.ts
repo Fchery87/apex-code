@@ -53,12 +53,15 @@ export async function execCommand(
 			if (!killed) {
 				killed = true;
 				proc.kill("SIGTERM");
-				// Force kill after 5 seconds if SIGTERM doesn't work
-				setTimeout(() => {
+				// Force kill after 5 seconds if SIGTERM doesn't work.
+				// unref'd: an aborted command must not hold the process open
+				// for the escalation window on normal exit.
+				const forceKillTimer = setTimeout(() => {
 					if (!proc.killed) {
 						proc.kill("SIGKILL");
 					}
 				}, 5000);
+				forceKillTimer.unref();
 			}
 		};
 

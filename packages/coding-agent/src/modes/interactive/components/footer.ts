@@ -107,6 +107,9 @@ export class FooterComponent implements Component {
 
 	setSession(session: AgentSession): void {
 		this.session = session;
+		// The usage totals are cached against the previous session's entry
+		// version; a session switch must not reuse them.
+		this.usageCache = undefined;
 	}
 
 	setAutoCompactEnabled(enabled: boolean): void {
@@ -133,16 +136,27 @@ export class FooterComponent implements Component {
 		// Git watcher cleanup handled by provider
 	}
 
-	render(width: number): string[] {
-		const state = this.session.state;
-		const symbolPreset = this.accessibilitySettings.getSymbolPreset();
-		const colorBlindMode = this.accessibilitySettings.getColorBlindMode();
-		const tokenUsageDisplay = this.accessibilitySettings.getTokenUsageDisplay();
-		const upSymbol = symbolPreset === "ascii" ? "^" : "↑";
-		const downSymbol = symbolPreset === "ascii" ? "v" : "↓";
-		const bulletSymbol = symbolPreset === "ascii" ? "-" : "•";
+	/**
+	 * Usage totals walked from all session entries. getEntries() copies the
+	 * whole entry list, so this is cached against the session manager's
+	 * entries version: without the cache the footer re-walked the entire
+	 * transcript on every rendered frame.
+	 */
+	private usageCache?: {
+		version: number;
+		totals: ReturnType<typeof createUsageTotals>;
+		latestCacheHitRate?: number;
+	};
 
-		// Calculate cumulative usage from ALL session entries (not just post-compaction messages)
+	private computeUsage(): {
+		totals: ReturnType<typeof createUsageTotals>;
+		latestCacheHitRate?: number;
+	} {
+		const version = this.session.sessionManager.getEntriesVersion();
+		if (this.usageCache && this.usageCache.version === version) {
+			return { totals: this.usageCache.totals, latestCacheHitRate: this.usageCache.latestCacheHitRate };
+		}
+
 		const usageTotals = createUsageTotals();
 		let latestCacheHitRate: number | undefined;
 
@@ -160,6 +174,23 @@ export class FooterComponent implements Component {
 				addUsageToTotals(usageTotals, entry.usage);
 			}
 		}
+
+		this.usageCache = { version, totals: usageTotals, latestCacheHitRate };
+		return { totals: usageTotals, latestCacheHitRate };
+	}
+
+	render(width: number): string[] {
+		const state = this.session.state;
+		const symbolPreset = this.accessibilitySettings.getSymbolPreset();
+		const colorBlindMode = this.accessibilitySettings.getColorBlindMode();
+		const tokenUsageDisplay = this.accessibilitySettings.getTokenUsageDisplay();
+		const upSymbol = symbolPreset === "ascii" ? "^" : "↑";
+		const downSymbol = symbolPreset === "ascii" ? "v" : "↓";
+		const bulletSymbol = symbolPreset === "ascii" ? "-" : "•";
+
+		// Calculate cumulative usage from ALL session entries (not just post-compaction messages),
+		// cached against the session's entry version (see computeUsage).
+		const { totals: usageTotals, latestCacheHitRate } = this.computeUsage();
 
 		// Calculate context usage from session (handles compaction correctly).
 		// After compaction, tokens are unknown until the next LLM response.

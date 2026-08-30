@@ -515,6 +515,11 @@ export class InteractiveMode {
 
 	// Track current bash execution component
 	private bashComponent: BashExecutionComponent | undefined = undefined;
+	// Reentrancy guard: session.isBashRunning only turns true inside
+	// executeBash, so a second `!cmd` submitted during the extension
+	// emitUserBash await would otherwise overwrite the in-flight component
+	// and orphan the first command's output callback.
+	private isHandlingBashCommand = false;
 
 	// Track pending bash components (shown in pending area, moved to chat on submit)
 	private pendingBashComponents: BashExecutionComponent[] = [];
@@ -2135,6 +2140,14 @@ export class InteractiveMode {
 		this.compactionQueuedMessages = [];
 		this.streamingComponent = undefined;
 		this.streamingMessage = undefined;
+		// The clears above detach children without stopping their animation
+		// timers. Bash components embed an animated loader; dispose them
+		// explicitly so an in-flight `!cmd` cannot keep rendering (or get
+		// flushed back into a fresh session by flushPendingBashComponents).
+		for (const component of this.pendingBashComponents) component.dispose();
+		this.pendingBashComponents = [];
+		this.bashComponent?.dispose();
+		this.bashComponent = undefined;
 		this.clearPendingTools();
 		this.renderInitialMessages();
 	}
@@ -6810,6 +6823,19 @@ export class InteractiveMode {
 	}
 
 	private async handleBashCommand(command: string, excludeFromContext = false): Promise<void> {
+		if (this.isHandlingBashCommand) {
+			this.showWarning("A bash command is already running; wait for it to finish");
+			return;
+		}
+		this.isHandlingBashCommand = true;
+		try {
+			await this.runBashCommand(command, excludeFromContext);
+		} finally {
+			this.isHandlingBashCommand = false;
+		}
+	}
+
+	private async runBashCommand(command: string, excludeFromContext = false): Promise<void> {
 		const extensionRunner = this.session.extensionRunner;
 
 		// Emit user_bash event to let extensions intercept

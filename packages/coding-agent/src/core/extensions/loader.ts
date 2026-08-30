@@ -14,7 +14,12 @@ import * as _bundledPiAiProviders from "@earendil-works/pi-ai/providers/all";
 import type { KeyId } from "@earendil-works/pi-tui";
 import * as _bundledPiTui from "@earendil-works/pi-tui";
 import * as _bundledPiAgentCore from "apex-code-agent-core";
-import { createJiti } from "jiti/static";
+// jiti is loaded lazily in loadExtensionModule(): a static import here pulls
+// jiti + babel into the module graph of every startup, including sessions
+// that never load an extension. Same pattern as the supervisor-imports
+// lazy-loading (settings-manager no longer statically imports
+// proper-lockfile/undici on the pre-child path). The specifier stays a
+// literal so Bun's bundler still embeds it for compiled binaries.
 // Static imports of packages that extensions may use.
 // These MUST be static so Bun bundles them into the compiled binary.
 // The virtualModules option then makes them available to extensions.
@@ -495,6 +500,7 @@ async function loadExtensionModule(extensionPath: string, cacheToken?: Extension
 		}
 	}
 
+	const { createJiti } = await import("jiti/static");
 	const jiti = createJiti(import.meta.url, {
 		moduleCache: false,
 		// Compiled binaries and the bundled Node distribution use embedded modules.
