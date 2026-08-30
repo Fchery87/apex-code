@@ -356,7 +356,7 @@ export function getSelfUpdateUnavailableInstruction(
 	const method = detectInstallMethod();
 	const target = normalizeSelfUpdatePackageTarget(updatePackageTarget);
 	if (method === "bun-binary") {
-		return `This standalone binary is not connected to an Apex Code update channel. Install the supported npm package instead: npm install --global apex-code@next`;
+		return `This standalone binary is not connected to an Apex Code update channel. Install the supported npm package instead: npm install --global apex-code`;
 	}
 	const command = getSelfUpdateCommandForMethod(method, packageName, target, npmCommand);
 	if (command) {

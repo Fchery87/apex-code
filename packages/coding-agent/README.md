@@ -6,15 +6,16 @@ a broader tool surface, delegation, durable execution, evidence, and cost visibi
 
 ## Install
 
-Apex Code is currently published on npm's prerelease `next` channel and requires
-Node.js 22.19 or newer. It installs the same way with npm, pnpm, Yarn, or Bun — all
+Apex Code is pre-alpha and has published no stable version, so `latest` names the
+newest verified prerelease and a plain install resolves it. It requires Node.js 22.19
+or newer. It installs the same way with npm, pnpm, Yarn, or Bun — all
 resolve it from the same npm registry:
 
 ```bash
-npm install --global apex-code@next      # npm
-pnpm add --global apex-code@next         # pnpm
-yarn global add apex-code@next           # Yarn
-bun add --global apex-code@next          # Bun
+npm install --global apex-code      # npm
+pnpm add --global apex-code         # pnpm
+yarn global add apex-code           # Yarn
+bun add --global apex-code          # Bun
 
 apex-code --version
 apex-code
@@ -25,7 +26,7 @@ release channel — a package manager install is the only distribution channel. 
 it the same way:
 
 ```bash
-npm install --global apex-code@next
+npm install --global apex-code
 # or, from an existing installation:
 apex-code update --self
 ```
@@ -59,7 +60,7 @@ questions, planning, and bounded subagent delegation.
 ## Network and privacy
 
 Apex Code sends no install or update telemetry to this project. At startup it may make
-a single version request to the npm registry for `apex-code@next`; set
+a single version request to the npm registry for `apex-code`; set
 `APEX_CODE_SKIP_VERSION_CHECK=1` to disable it. `APEX_CODE_OFFLINE=1` disables startup
 network operations. Model requests go to the provider you configure. Optional OTLP
 traces are exported only when you explicitly configure your own collector.

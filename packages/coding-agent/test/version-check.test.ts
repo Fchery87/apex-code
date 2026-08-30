@@ -49,7 +49,7 @@ describe("version checks", () => {
 
 		await expect(getLatestApexCodeVersion("1.2.3")).resolves.toBe("1.2.4");
 		expect(fetchMock).toHaveBeenCalledWith(
-			`https://registry.npmjs.org/${PACKAGE_NAME}/next`,
+			`https://registry.npmjs.org/${PACKAGE_NAME}/latest`,
 			expect.objectContaining({
 				headers: expect.objectContaining({
 					"User-Agent": expect.stringMatching(/^apex-code\/1\.2\.3 /),

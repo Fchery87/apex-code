@@ -112,7 +112,7 @@ if (process.platform !== "win32") fs.chmodSync(piPath, 0o755);
 				// (no separate hosted latest-version service -- see ADR 0013) and parses the
 				// response as npm's package manifest shape: `name`/`version`, not
 				// `packageName`/`version`.
-				if (url === `https://registry.npmjs.org/${PACKAGE_NAME}/next`) {
+				if (url === `https://registry.npmjs.org/${PACKAGE_NAME}/latest`) {
 					return Response.json({ name: PACKAGE_NAME, version: targetVersion });
 				}
 				const releaseUrl = `https://example.test/api/installer/releases/${targetVersion}`;

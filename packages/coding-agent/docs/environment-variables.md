@@ -12,7 +12,7 @@ subprocess metadata. Provider API-key variables remain documented in
 | `APEX_CODE_CODING_AGENT_SESSION_DIR` | Override session storage |
 | `APEX_CODE_PACKAGE_DIR` | Override package assets (for Nix/Guix paths) |
 | `APEX_CODE_OFFLINE` | Disable startup network operations |
-| `APEX_CODE_SKIP_VERSION_CHECK` | Disable the npm `apex-code@next` version request |
+| `APEX_CODE_SKIP_VERSION_CHECK` | Disable the npm `apex-code` version request |
 | `APEX_CODE_EXPERIMENTAL` | Enable experimental features when set to `1` |
 | `APEX_CODE_STARTUP_BENCHMARK` | Enable startup benchmarking |
 | `APEX_CODE_TIMING` | Enable timing diagnostics when set to `1` |
