@@ -1,13 +1,13 @@
 # Spec: Observability & cost
 
-**Status:** Active — ADR 0012 accepted
+**Status:** Landed
+
 
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | Apex Code |
-| Status | `Active` |
 | Created | 2026-08-15 |
 | Last updated | 2026-08-15 |
 | Roadmap phase | `8 — Observability & cost` |

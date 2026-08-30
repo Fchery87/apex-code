@@ -1,11 +1,12 @@
 # Spec: Context engineering — tool-result eviction, deferred schemas, and the context pipeline order
 
+**Status:** Landed
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | Apex Code |
-| Status | `Draft` |
 | Created | `2026-08-13` |
 | Last updated | `2026-08-13` |
 | Roadmap phase | `3 — Context engineering` |

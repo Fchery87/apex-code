@@ -1,11 +1,12 @@
 # Spec: OS sandbox boundary
 
+**Status:** Landed
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | Fchery87 |
-| Status | `Active` |
 | Created | 2026-08-12 |
 | Last updated | 2026-08-12 |
 | Roadmap phase | 2b — Permissions (OS sandbox) |

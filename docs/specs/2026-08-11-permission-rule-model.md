@@ -1,11 +1,12 @@
 # Spec: permission rule model
 
+**Status:** Landed
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | Fchery87 |
-| Status | `Landed` — gate constructed for every CLI runtime path; see roadmap Phase 2a closure. |
 | Created | 2026-08-11 |
 | Last updated | 2026-08-11 |
 | Roadmap phase | 2a — Permissions (rule model half of Phase 2) |

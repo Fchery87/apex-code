@@ -1,11 +1,12 @@
 # Spec: provider and model layer
 
+**Status:** Landed
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | Fchery87 |
-| Status | `Active` — landed |
 | Created | 2026-08-10 |
 | Last updated | 2026-08-11 |
 | Roadmap phase | 1 — Provider & model layer |

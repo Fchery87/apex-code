@@ -1,6 +1,7 @@
 # Spec: Durable state & daemon
 
-**Status:** Active — ADR 0006 accepted for Phase 6 persistence boundaries
+**Status:** Landed
+
 
 ## Metadata
 

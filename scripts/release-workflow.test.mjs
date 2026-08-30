@@ -25,7 +25,18 @@ test("release workflow is tag-triggered, least-privilege, and publishes only Ape
 		assert.match(step.uses, /@[0-9a-f]{40}$/);
 	}
 	assert.deepEqual(directories, ["packages/agent", "packages/coding-agent"]);
-	assert.equal((source.match(/npm publish --access public --provenance --tag next/g) ?? []).length, 2);
+	assert.equal((source.match(/npm publish --access public --provenance --tag "\$\{\{ steps.release.outputs.tag \}\}"/g) ?? []).length, 2);
+	assert.match(publish.steps.find((step) => step.name === "Publish Apex Code agent core").run, /tag "\$\{\{ steps\.release\.outputs\.tag \}\}"/);
+	assert.match(publish.steps.find((step) => step.name === "Publish Apex Code CLI").run, /tag "\$\{\{ steps\.release\.outputs\.tag \}\}"/);
+});
+
+test("release derives npm dist-tag from semver, using next only for prereleases", async () => {
+	const { workflow } = await readWorkflow();
+	const releaseStep = workflow.jobs.publish.steps.find((step) => step.id === "release");
+	assert.match(releaseStep.run, /if \[{2} "\$version" == .*\]\]; then/);
+	assert.match(releaseStep.run, /tag=next/);
+	assert.match(releaseStep.run, /tag=latest/);
+	assert.match(releaseStep.run, /echo "tag=\$\{tag\}"/);
 });
 
 test("release environment reference is present for external deployment-protection configuration (task 12.13)", async () => {
@@ -55,6 +66,8 @@ test("release workflow validates tag identity and clean-installs the published C
 	const commands = workflow.jobs.publish.steps.map((step) => step.run).filter(Boolean).join("\n");
 
 	assert.match(commands, /node scripts\/apex\/validate-release-tag\.mjs/);
+	assert.match(commands, /tag=latest/);
+	assert.match(commands, /\$version" == \*-\*/);
 	assert.match(commands, /npm ci --ignore-scripts/);
 	assert.match(commands, /apt-get install .*fd-find ripgrep/s);
 	assert.match(commands, /ln -s .*fdfind.*\/usr\/local\/bin\/fd/);
@@ -141,7 +154,7 @@ test("macOS verification job depends on publish, runs on the other supported pla
 	// steps; assert it holds for the whole file too, so a publish call hidden in
 	// the new job would fail this test even if the publish-job-scoped one above
 	// were ever loosened.
-	assert.equal((source.match(/npm publish --access public --provenance --tag next/g) ?? []).length, 2);
+	assert.equal((source.match(/npm publish --access public --provenance --tag "\$\{\{ steps.release.outputs.tag \}\}"/g) ?? []).length, 2);
 });
 
 test("standalone binaries are built and hashed before npm publication, then released only after macOS verification", async () => {

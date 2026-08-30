@@ -1,6 +1,6 @@
 # Spec: Mid-run auto-compaction
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 
@@ -8,7 +8,7 @@
 | --- | --- |
 | Author | Apex Code maintainers |
 | Created | 2026-08-29 |
-| Last updated | 2026-08-29 |
+| Last updated | 2026-08-30 |
 | Roadmap phase | Product-surface follow-up |
 | Tracking issue/PR | [upstream Pi issue #6879](https://github.com/earendil-works/pi/issues/6879) |
 | Compatibility posture | Preserves compatibility. Existing settings, session files, extension events, and final-response compaction keep their current shape. The only behavior change is that an over-threshold tool loop pauses at a completed tool-batch boundary, compacts, and resumes before sending another oversized provider request. |
@@ -38,10 +38,10 @@ The existing tests cover the private threshold calculation and provider-overflow
 
 ## Goals
 
-- [ ] A public `AgentSession.prompt()` regression proves threshold compaction occurs after a completed tool batch and before the next provider request.
-- [ ] Successful mid-run compaction resumes the unfinished tool-driven run without a new user prompt.
-- [ ] Failed or impossible mid-run compaction does not send the same known-over-threshold next request.
-- [ ] Existing final-response threshold compaction, overflow recovery, queues, and host stop hooks retain their behavior.
+- [x] A public `AgentSession.prompt()` regression proves threshold compaction occurs after a completed tool batch and before the next provider request. (`test/suite/regressions/6879-mid-run-auto-compaction.test.ts`, landed on main at `61be67e27`)
+- [x] Successful mid-run compaction resumes the unfinished tool-driven run without a new user prompt.
+- [x] Failed or impossible mid-run compaction does not send the same known-over-threshold next request.
+- [x] Existing final-response threshold compaction, overflow recovery, queues, and host stop hooks retain their behavior.
 
 ## Non-goals
 

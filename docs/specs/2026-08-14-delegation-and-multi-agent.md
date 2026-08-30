@@ -1,11 +1,12 @@
 # Spec: Delegation — a child agent whose authority is derived from its parent's, never reconstructed
 
+**Status:** Landed
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | Apex Code |
-| Status | `Active` |
 | Created | `2026-08-14` |
 | Last updated | `2026-08-14` (ADR 0008 accepted) |
 | Roadmap phase | `5 — Delegation & multi-agent` |

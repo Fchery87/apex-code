@@ -1,11 +1,12 @@
 # Spec: Tool surface — second-wave tools, their rule grammars, and the deferred-schema load path
 
+**Status:** Landed
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | Apex Code |
-| Status | `Active` |
 | Created | `2026-08-13` |
 | Last updated | `2026-08-13` |
 | Roadmap phase | `4 — Tool surface` |

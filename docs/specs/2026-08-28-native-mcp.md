@@ -1,11 +1,12 @@
 # Spec: Native MCP support
 
+**Status:** Landed
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | fchery87 |
-| Status | `Draft` |
 | Created | 2026-08-28 |
 | Last updated | 2026-08-28 |
 | Roadmap phase | Product-surface follow-up (post Phase 12) |

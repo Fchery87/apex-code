@@ -20,6 +20,7 @@ function createSession(options: { percent?: number; sessionName?: string; usage?
 		},
 		sessionManager: {
 			getEntries: () => entries,
+			getEntriesVersion: () => 1,
 			getSessionName: () => options.sessionName,
 			getCwd: () => "/tmp/project",
 		},

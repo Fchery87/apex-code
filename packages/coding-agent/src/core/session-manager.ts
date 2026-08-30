@@ -10,6 +10,8 @@ import {
 	openSync,
 	readdirSync,
 	readSync,
+	renameSync,
+	rmSync,
 	statSync,
 	writeFileSync,
 } from "fs";
@@ -229,6 +231,7 @@ export type ReadonlySessionManager = Pick<
 	| "buildContextEntries"
 	| "getHeader"
 	| "getEntries"
+	| "getEntriesVersion"
 	| "getTree"
 	| "getSessionName"
 	| "getEvidenceRecords"
@@ -907,6 +910,12 @@ export class SessionManager {
 	private persist: boolean;
 	private flushed: boolean = false;
 	private fileEntries: FileEntry[] = [];
+	/**
+	 * Bumped on every change to fileEntries. O(1) staleness check for callers
+	 * that walk all entries per frame (the footer's usage totals) and would
+	 * otherwise re-copy the whole list on every render.
+	 */
+	private entriesVersion: number = 0;
 	private byId: Map<string, SessionEntry> = new Map();
 	private labelsById: Map<string, string> = new Map();
 	private labelTimestampsById: Map<string, string> = new Map();
@@ -943,6 +952,7 @@ export class SessionManager {
 		this.sessionFile = resolvePath(sessionFile);
 		if (existsSync(this.sessionFile)) {
 			this.fileEntries = preloadedFileEntries ?? loadEntriesFromFile(this.sessionFile);
+			this.entriesVersion++;
 
 			// If file was empty, initialize it with a valid session header. If it was
 			// non-empty but did not parse as a pi session, fail without modifying it.
@@ -990,6 +1000,7 @@ export class SessionManager {
 			delegationDepth: options?.delegationDepth,
 		};
 		this.fileEntries = [header];
+		this.entriesVersion++;
 		this.byId.clear();
 		this.labelsById.clear();
 		this.labelTimestampsById.clear();
@@ -1026,14 +1037,22 @@ export class SessionManager {
 
 	private _rewriteFile(): void {
 		if (!this.persist || !this.sessionFile) return;
-		const fd = openSync(this.sessionFile, "w");
+		// Write to a temp file in the same directory and rename over the
+		// target. Opening the target with "w" truncates it first, so a crash
+		// or disk-full mid-write would destroy the only copy of the session.
+		const tempFile = `${this.sessionFile}.rewrite-${process.pid}-${randomUUID().slice(0, 8)}`;
+		const fd = openSync(tempFile, "w");
 		try {
 			for (const entry of this.fileEntries) {
 				writeFileSync(fd, `${JSON.stringify(entry)}\n`);
 			}
-		} finally {
 			closeSync(fd);
+		} catch (error) {
+			closeSync(fd);
+			rmSync(tempFile, { force: true });
+			throw error;
 		}
+		renameSync(tempFile, this.sessionFile);
 	}
 
 	isPersisted(): boolean {
@@ -1091,6 +1110,7 @@ export class SessionManager {
 
 	private _appendEntry(entry: SessionEntry): void {
 		this.fileEntries.push(entry);
+		this.entriesVersion++;
 		this.byId.set(entry.id, entry);
 		this.leafId = entry.id;
 		this._persist(entry);
@@ -1393,6 +1413,14 @@ export class SessionManager {
 	getEntries(): SessionEntry[] {
 		return this.fileEntries.filter((e): e is SessionEntry => e.type !== "session");
 	}
+	/**
+	 * Monotonic counter bumped on every change to the entry list. Compare
+	 * across frames to detect new/removed entries without calling
+	 * getEntries() (which copies the whole list).
+	 */
+	getEntriesVersion(): number {
+		return this.entriesVersion;
+	}
 
 	/**
 	 * Get the session as a tree structure. Returns a shallow defensive copy of all entries.
@@ -1563,6 +1591,7 @@ export class SessionManager {
 			}
 
 			this.fileEntries = [header, ...pathWithoutLabels, ...labelEntries];
+			this.entriesVersion++;
 			this.sessionId = newSessionId;
 			this.sessionFile = newSessionFile;
 			this._buildIndex();
@@ -1599,6 +1628,7 @@ export class SessionManager {
 			parentId = labelEntry.id;
 		}
 		this.fileEntries = [header, ...pathWithoutLabels, ...labelEntries];
+		this.entriesVersion++;
 		this.sessionId = newSessionId;
 		this._buildIndex();
 		return undefined;

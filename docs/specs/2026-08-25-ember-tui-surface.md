@@ -1,11 +1,12 @@
 # Spec: Ember TUI surface
 
+**Status:** Landed
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | `Apex Code` |
-| Status | `Complete` |
 | Created | `2026-08-25` |
 | Last updated | `2026-08-26` |
 | Roadmap phase | `product-surface follow-up after the composer dock` |

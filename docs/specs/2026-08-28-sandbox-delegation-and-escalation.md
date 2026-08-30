@@ -1,11 +1,12 @@
 # Spec: Sandbox delegation and escalation
 
+**Status:** Landed
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | `fchery87` |
-| Status | `Active` |
 | Created | `2026-08-28` |
 | Last updated | `2026-08-28` |
 | Roadmap phase | `none — follow-up to Phase 2b (OS sandbox)` |

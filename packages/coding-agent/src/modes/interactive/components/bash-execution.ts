@@ -28,6 +28,9 @@ export class BashExecutionComponent extends Container {
 	private fullOutputPath?: string;
 	private expanded = false;
 	private contentContainer: Container;
+	// Display rebuild cache: appendOutput and invalidate() fire far more often
+	// than the displayed state changes, and the rebuild is allocation-heavy.
+	private displayState?: { key: string };
 
 	constructor(command: string, ui: TUI, excludeFromContext = false) {
 		super();
@@ -117,6 +120,15 @@ export class BashExecutionComponent extends Container {
 	}
 
 	private updateDisplay(): void {
+		// Skip the rebuild when nothing observable changed: appendOutput runs
+		// per output chunk and invalidate() runs per TUI invalidation, while
+		// the display only depends on line count, expansion, and completion
+		// state. The last line's length moves with intra-line appends.
+		const lastLineLength = this.outputLines[this.outputLines.length - 1]?.length ?? 0;
+		const key = `${this.outputLines.length}:${lastLineLength}:${this.expanded}:${this.status}:${this.exitCode ?? "none"}:${this.truncationResult !== undefined}:${this.fullOutputPath !== undefined}`;
+		if (this.displayState?.key === key) return;
+		this.displayState = { key };
+
 		// Apply truncation for LLM context limits (same limits as bash tool)
 		const fullOutput = this.outputLines.join("\n");
 		const contextTruncation = truncateTail(fullOutput, {
@@ -216,5 +228,14 @@ export class BashExecutionComponent extends Container {
 	 */
 	getCommand(): string {
 		return this.command;
+	}
+
+	/**
+	 * Stop the animated loader. Session swaps clear containers wholesale,
+	 * which detaches children without stopping their timers; an in-flight
+	 * component left uncompleted would otherwise animate forever.
+	 */
+	dispose(): void {
+		this.loader.stop();
 	}
 }

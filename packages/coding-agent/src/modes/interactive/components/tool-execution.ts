@@ -49,6 +49,12 @@ export class ToolExecutionComponent extends Container {
 	private elapsedTimer?: ReturnType<typeof setInterval>;
 	private argsComplete = false;
 	private symbolPreset: ToolSymbolPreset;
+	// Composed-line cache. Recomposing the panel (ANSI-aware truncation, width
+	// measurement, background paint per content line) on every frame made
+	// per-frame cost grow with the number of tools on screen; see
+	// test/tool-execution-render-cache.test.ts.
+	private displayVersion = 0;
+	private cachedRender?: { key: string; width: number; lines: string[] };
 	private result?: {
 		content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
 		isError: boolean;
@@ -209,6 +215,7 @@ export class ToolExecutionComponent extends Container {
 
 	dispose(): void {
 		this.stopElapsedTimer();
+		this.cachedRender = undefined;
 	}
 
 	private startElapsedTimer(): void {
@@ -307,7 +314,30 @@ export class ToolExecutionComponent extends Container {
 
 	override render(width: number): string[] {
 		if (this.hideComponent || width <= 0) return [];
+		const key = this.renderCacheKey();
+		const cached = this.cachedRender;
+		if (cached && cached.key === key && cached.width === width) return cached.lines;
+		const lines = this.compose(width);
+		this.cachedRender = { key, width, lines };
+		return lines;
+	}
 
+	/**
+	 * Cache key for the composed lines. Every state change funnels through
+	 * updateDisplay(), which bumps displayVersion; the elapsed readout is the
+	 * one input that advances without a state change, so it is bucketed at
+	 * 250 ms while running (matching the 1 s elapsed timer's cadence closely
+	 * enough that the readout never looks stale, while bounding recomposition
+	 * to at most four per second for the one running tool).
+	 */
+	private renderCacheKey(): string {
+		const lifecycle = this.getLifecycle();
+		const durationMs = this.getDurationMs();
+		const durationKey = lifecycle === "running" ? Math.floor((durationMs ?? 0) / 250) : (durationMs ?? -1);
+		return `${this.displayVersion}:${lifecycle}:${durationKey}`;
+	}
+
+	private compose(width: number): string[] {
 		const shell = this.hasRendererDefinition()
 			? this.getRenderShell() === "self"
 				? this.selfRenderContainer
@@ -346,6 +376,7 @@ export class ToolExecutionComponent extends Container {
 	}
 
 	private updateDisplay(): void {
+		this.displayVersion += 1;
 		let hasContent = false;
 		this.hideComponent = false;
 		if (this.hasRendererDefinition()) {

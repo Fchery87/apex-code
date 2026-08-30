@@ -69,6 +69,13 @@ export async function executeBashWithOperations(
 		const id = randomBytes(8).toString("hex");
 		tempFilePath = join(tmpdir(), `apex-code-bash-${id}.log`);
 		tempFileStream = createWriteStream(tempFilePath);
+		// A stream 'error' event (ENOSPC, EACCES) with no listener crashes the
+		// whole process mid-command; full-output capture is best-effort, so
+		// drop the capture and the reported path together.
+		tempFileStream.on("error", () => {
+			tempFileStream = undefined;
+			tempFilePath = undefined;
+		});
 		for (const chunk of outputChunks) {
 			tempFileStream.write(chunk);
 		}

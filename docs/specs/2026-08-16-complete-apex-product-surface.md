@@ -1,11 +1,12 @@
 # Spec: Complete the Apex Code product surface
 
+**Status:** Landed
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | Apex Code |
-| Status | `Landed` |
 | Created | 2026-08-16 |
 | Last updated | 2026-08-16 |
 | Roadmap phase | `10 — Complete the Apex Code product surface` |

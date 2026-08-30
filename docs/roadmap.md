@@ -100,13 +100,20 @@ capable and measurably worse.
 
 | Follow-up | State | Spec | Plan |
 | --- | --- | --- | --- |
+| LSP diagnostics | **landed** — LSP.1 through LSP.6, ADR 0020 accepted | [spec](specs/2026-08-18-lsp.md) | — |
+| Sandbox skill projection | **landed** — SKILL.1 through SKILL.9 · `cac7e49f8` | [spec](specs/2026-08-20-sandbox-skill-projection.md) | — |
+| Supervisor-mediated credential writes | **landed** — `4016794c3` | [spec](specs/2026-08-22-supervisor-mediated-credential-writes.md) | — |
+| Terminal interaction polish | **landed** — `697746b94` | [spec](specs/2026-08-23-terminal-interaction-polish.md) | — |
+| Sandbox delegation and escalation | **landed** — U1 through U7 · `6b628677a` | [spec](specs/2026-08-28-sandbox-delegation-and-escalation.md) | — |
 | Composer dock surface | **landed** — filled, cursor-safe prompt dock · `2bd3008f1` | [spec](specs/2026-08-23-composer-dock-surface.md) | — |
 | Prime-inspired gold TUI | **landed** — gold-neutral layout and permission-safe tray · `e576190a5` | [spec](specs/2026-08-23-prime-inspired-gold-tui.md) | — |
+| Ember TUI surface | **landed** — ember palette, counted startup, brand mark · `215801bfb` | [spec](specs/2026-08-25-ember-tui-surface.md) | — |
 | Native MCP support | **landed** — 13 of 13 tasks · `ed3b3a9c1` | [spec](specs/2026-08-28-native-mcp.md) | — |
 | Git-backed session checkpoints | **landed** — 8 of 8 tasks · `075fac684` | [spec](specs/2026-08-28-git-checkpoints.md) | — |
 | Dependency updates that can merge | **landed** — `262d673cb` | [spec](specs/2026-08-29-dependency-updates-that-can-merge.md) | — |
 | Documented surfaces that do not exist | **landed** — 4 of 4 tasks · `d2cb6ea0f` | [spec](specs/2026-08-29-documented-surfaces-that-do-not-exist.md) | — |
-| Mid-run auto-compaction | **active** — implementation in progress | [spec](specs/2026-08-29-mid-run-auto-compaction.md) | — |
+| Release tags and the spec status gate | **landed** — pull request #63 | [spec](specs/2026-08-29-claims-the-repository-cannot-check.md) | — |
+| Mid-run auto-compaction | **landed** — `61be67e27` | [spec](specs/2026-08-29-mid-run-auto-compaction.md) | — |
 
 ---
 
@@ -538,6 +545,53 @@ The last commit is a self-inflicted one worth naming. Extracting the command ass
 two existing autocomplete tests that built a plain-object `this`, and the targeted subsets
 run before committing did not include the tests for the file that changed. The full suite
 caught it.
+
+### Follow-up (2026-08-29): claims the repository cannot check — landed
+
+Three of this repository's own claims were false. Each had a mechanism that should have
+caught it, and in each case the mechanism either did not exist or asserted the wrong thing.
+
+`npm install apex-code` served `0.0.1-alpha.0`, a version this project had itself
+deprecated with the message "Stale prerelease. Use apex-code@next (0.0.1-alpha.2) or
+later." Both publish steps in `release.yml` carried `--tag next` unconditionally, so
+nothing ever moved `latest` off the first publication. `scripts/release-workflow.test.mjs`
+asserted that literal command string twice. That is the second test in one week found
+defending the configuration it was meant to guard, after
+`scripts/apex/dependabot-config.test.mjs`, which is enough to call it a pattern rather
+than an accident. The publish job now derives the tag from the validated version, a
+prerelease going to `next` and a stable version to `latest`, under ADR 0026.
+
+Sixteen tests in `packages/coding-agent` had not run in CI since 2026-08-09.
+`npm test` carried `--exclude test/config.test.ts`, added by `93d5074da` whose subject is
+"test only Apex-owned packages" — and `packages/coding-agent` is one. The file passes, 16
+of 16. `scripts/package-test-config.test.mjs` now rejects any exclusion rather than that
+one, because naming the file found would leave the next one to be found the same way.
+
+Sixteen of twenty specs reported a lifecycle status their own roadmap contradicted, Phase
+3's spec reading `Draft` for a landed phase and the native MCP spec reading the same. The
+cause was a missing value: `TEMPLATE.md` offered `Draft`, `Active`, and `Superseded`, none
+meaning the work shipped, so three replacements were invented independently. `Landed` is
+now defined, every spec carries exactly one standalone `**Status:**` line, and
+`validate-docs-lifecycle.mjs` rejects disagreement with the roadmap row in **either**
+direction. The reverse check is the one that matters: a spec understating landed work
+wastes a reader's time, while a spec claiming `Landed` for work in progress is what makes
+a reader skip it.
+
+Extending that gate found two things the audit had not. Every spec must now be reachable
+from a roadmap table row, because a row is the only place a state is declared, and six
+specs were reachable only from prose or from nothing: LSP, sandbox skill projection,
+supervisor-mediated credential writes, terminal interaction polish, sandbox delegation and
+escalation, and the ember TUI surface. All six now have rows. And **seven written ADRs
+were missing from this document's own allocation table** — 0019 through 0024, plus 0026.
+The roadmap states that numbers are allocated when an ADR is written, which makes that
+table the ledger answering "which number is free", and it had been wrong since 0019. The
+validator now rejects a written ADR with no row. It deliberately accepts a row with no
+ADR, because this document defines such a row as a reservation.
+
+**Not closed.** The live registry is unrepaired. The workflow governs future publications
+only, so `latest` still resolves to the deprecated alpha until an authenticated maintainer
+runs the two `npm dist-tag add` commands in `docs/release-governance-checklist.md`.
+`npm view apex-code dist-tags --json` is the one-line check that says whether it happened.
 
 ### Follow-up (2026-08-28): git-backed session checkpoints — landed
 
@@ -1257,7 +1311,14 @@ takes the next free number instead of a reserved one.
 | 0016 | Trust-first supervisor policy inputs | 12 | ✅ |
 | 0017 | Downloaded tool artifact integrity: pinned metadata, bounded/verified/atomic install | 12 | ✅ |
 | 0018 | Apex-only release/version authority and artifact contract | 12 | ✅ |
+| 0019 | Brand mark, palette, and input chrome | follow-up | ✅ |
+| 0020 | Diagnostic evidence kind, emitted by the tool that produced the diagnostic | follow-up | ✅ |
+| 0021 | Skill catalog is name-only and budget-bounded; descriptions resolve through a model-callable tool | follow-up | ✅ |
+| 0022 | Ember palette, a mark that does not shrink, and a counted startup | follow-up | ✅ |
+| 0023 | Escalation authority belongs to the supervisor, not the child | follow-up | ✅ |
+| 0024 | Per-command escalation runs a second child, never widens the first | follow-up | ✅ |
 | 0025 | MCP rule grammar: `Mcp(server:tool)`, wildcard in the tool position only, metadata separate | follow-up | ✅ |
+| 0026 | npm dist-tags derive from the release version: prerelease to `next`, stable to `latest` | follow-up | ✅ |
 
 ## Cross-phase contracts
 

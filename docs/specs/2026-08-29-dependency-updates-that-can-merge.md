@@ -1,11 +1,12 @@
 # Spec: Dependency updates that can merge
 
+**Status:** Landed
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Author | `fchery87` |
-| Status | `Active` |
 | Created | `2026-08-29` |
 | Last updated | `2026-08-29` |
 | Roadmap phase | `none — release-integrity follow-up` |

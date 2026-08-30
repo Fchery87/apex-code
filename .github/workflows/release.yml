@@ -37,7 +37,13 @@ jobs:
         run: |
           set -Eeuo pipefail
           version="$(node scripts/apex/validate-release-tag.mjs "${GITHUB_REF_NAME}")"
+          if [[ "$version" == *-* ]]; then
+            tag=next
+          else
+            tag=latest
+          fi
           echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
       # Mirrors ci.yml's own Linux system-dependencies step (canvas/image libs,
       # fd/ripgrep, and bubblewrap for OS sandbox enforcement). This step had
@@ -171,7 +177,7 @@ jobs:
       # in the registry before apex-code is published.
       - name: Publish Apex Code agent core
         working-directory: packages/agent
-        run: npm publish --access public --provenance --tag next --ignore-scripts
+        run: npm publish --access public --provenance --tag "${{ steps.release.outputs.tag }}" --ignore-scripts
 
       - name: Wait for agent core registry visibility
         shell: bash
@@ -192,7 +198,7 @@ jobs:
 
       - name: Publish Apex Code CLI
         working-directory: packages/coding-agent
-        run: npm publish --access public --provenance --tag next --ignore-scripts
+        run: npm publish --access public --provenance --tag "${{ steps.release.outputs.tag }}" --ignore-scripts
 
       - name: Verify clean registry install
         shell: bash
