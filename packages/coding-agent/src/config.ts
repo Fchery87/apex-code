@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { accessSync, constants, existsSync, readFileSync, realpathSync } from "fs";
 import { homedir } from "os";
 import { basename, dirname, join, resolve, sep, win32 } from "path";
@@ -188,15 +189,35 @@ function getSelfUpdateCommandForMethod(
 	}
 }
 
+/**
+ * Quote one argument for a cmd.exe command line: only arguments containing
+ * whitespace need quotes, and embedded quotes are doubled, which is the
+ * convention cmd.exe itself documents for `if` comparisons.
+ */
+function quoteWindowsCommandLineArgument(arg: string): string {
+	return /\s/.test(arg) ? `"${arg.replaceAll('"', '""')}"` : arg;
+}
+
 function readCommandOutput(
 	command: string,
 	args: string[],
 	options: { requireSuccess?: boolean } = {},
 ): string | undefined {
-	const result = spawnProcessSync(command, args, {
-		encoding: "utf-8",
-		stdio: ["ignore", "pipe", "pipe"],
-	});
+	// crossSpawn's win32 argument escaping drops positional args when the
+	// command resolves to a .cmd shim: the shim runs, sees no %1/%2, and exits
+	// 0 with no output (observed on windows-latest), which starves the
+	// managed-install check of the global root it needs. Route win32 through
+	// cmd.exe explicitly, where the shim receives its arguments intact.
+	const result =
+		process.platform === "win32"
+			? spawnSync("cmd.exe", ["/d", "/s", "/c", [command, ...args].map(quoteWindowsCommandLineArgument).join(" ")], {
+					encoding: "utf-8",
+					stdio: ["ignore", "pipe", "pipe"],
+				})
+			: spawnProcessSync(command, args, {
+					encoding: "utf-8",
+					stdio: ["ignore", "pipe", "pipe"],
+				});
 	if (result.status === 0) return result.stdout.trim() || undefined;
 	if (options.requireSuccess) {
 		const reason = result.error?.message || result.stderr.trim() || `exit code ${result.status ?? "unknown"}`;

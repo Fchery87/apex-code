@@ -62,6 +62,15 @@ collect.sh
 .apex-code/sandbox-agent/
 .apex-code/sandbox-sessions/
 .apex-code/sandbox-state/
+# Same sandbox runtime state, one level down: the sandbox test suite runs the
+# CLI with packages/coding-agent as the workspace, so the backends create the
+# same directories inside the package's own .apex-code.
+packages/coding-agent/.apex-code/sandbox-agent/
+packages/coding-agent/.apex-code/sandbox-sessions/
+packages/coding-agent/.apex-code/sandbox-state/
+# Agent-harness telemetry (spec-extraction timeouts, pre-critical snapshot
+# outcomes). Machine state from an AI agent session, never project source.
+.harness/
 .apex-code_config/
 apex-code-*.html
 
