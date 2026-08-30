@@ -1,10 +1,10 @@
 {
 	"name": "apex-code-install",
-	"version": "0.0.1-alpha.10",
+	"version": "0.0.1-alpha.11",
 	"private": true,
 	"description": "Lockfile root used by the Pi installer and updater.",
 	"dependencies": {
-		"apex-code": "0.0.1-alpha.10"
+		"apex-code": "0.0.1-alpha.11"
 	},
 	"overrides": {
 		"protobufjs": "7.6.5",
