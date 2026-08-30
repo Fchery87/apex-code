@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `hasMoreToolCalls` to turn-boundary hook context so hosts can distinguish a completed final response from a tool run that would otherwise make another provider request.
+
 ## [0.0.1-alpha.10] - 2026-08-28
 
 ## [0.0.1-alpha.9] - 2026-08-28

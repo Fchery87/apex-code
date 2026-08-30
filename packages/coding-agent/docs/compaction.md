@@ -34,6 +34,8 @@ contextTokens > contextWindow - reserveTokens
 
 By default, `reserveTokens` is 16384 tokens (configurable in `~/.apex-code/agent/settings.json` or `<project-dir>/.apex-code/settings.json`). This leaves room for the LLM's response.
 
+Apex Code checks this threshold after every completed tool batch that would otherwise start another provider request. If a long tool run crosses the threshold, it compacts at that safe boundary and resumes the unfinished run.
+
 You can also trigger manually with `/compact [instructions]`, where optional instructions focus the summary.
 
 ### How It Works

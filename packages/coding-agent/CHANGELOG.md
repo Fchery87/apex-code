@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed long tool-calling runs bypassing the auto-compaction threshold until provider overflow. Apex Code now compacts and resumes between completed tool batches before sending another over-threshold request.
+
 ## [0.0.1-alpha.10] - 2026-08-28
 
 - Commits made inside a session now carry your identity. `--tmpfs /home` leaves git's global

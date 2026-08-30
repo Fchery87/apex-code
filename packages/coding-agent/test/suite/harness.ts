@@ -72,6 +72,7 @@ export interface HarnessOptions {
 	resourceLoader?: ResourceLoader;
 	extensionFactories?: Array<InlineExtension | CreateTestExtensionsResultInput>;
 	permissionGate?: Omit<PermissionGateOptions, "getContract">;
+	shouldStopAfterTurn?: Agent["shouldStopAfterTurn"];
 	withConfiguredAuth?: boolean;
 	modelsJson?: Record<string, unknown>;
 }
@@ -203,6 +204,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 	const agent = new Agent({
 		getApiKey: () => (withConfiguredAuth ? "faux-key" : undefined),
 		streamFn: streamSimple,
+		shouldStopAfterTurn: options.shouldStopAfterTurn,
 		initialState: {
 			model,
 			systemPrompt: options.systemPrompt ?? "You are a test assistant.",

@@ -229,6 +229,7 @@ async function runLoop(
 				toolResults,
 				context: currentContext,
 				newMessages,
+				hasMoreToolCalls,
 			};
 			const nextTurnSnapshot = await config.prepareNextTurn?.(nextTurnContext);
 			if (nextTurnSnapshot) {
@@ -247,10 +248,8 @@ async function runLoop(
 
 			if (
 				await config.shouldStopAfterTurn?.({
-					message,
-					toolResults,
+					...nextTurnContext,
 					context: currentContext,
-					newMessages,
 				})
 			) {
 				await emit({ type: "agent_end", messages: newMessages });
