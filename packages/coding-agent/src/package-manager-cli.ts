@@ -1068,14 +1068,6 @@ export async function handlePackageCommand(
 					}
 
 					const installMethod = detectInstallMethod();
-					if (process.platform === "win32" && installMethod !== "npm" && installMethod !== "pnpm") {
-						console.error(
-							chalk.red(`${APP_NAME} self-update on Windows is only supported for npm and pnpm installs.`),
-						);
-						console.error(chalk.dim(`Detected install method: ${installMethod}. Update ${APP_NAME} manually.`));
-						process.exitCode = 1;
-						return true;
-					}
 					const selfUpdateTarget = {
 						packageName: selfUpdatePlan.packageName,
 						installSpec: selfUpdatePlan.installSpec,

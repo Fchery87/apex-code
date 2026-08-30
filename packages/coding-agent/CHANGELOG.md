@@ -2,9 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Windows self-update now supports pnpm, bun, and yarn installs. It previously refused everything except npm and pnpm because global-install detection was broken on Windows; that detection is fixed, so the restriction is lifted.
+
 ### Fixed
 
 - Fixed long tool-calling runs bypassing the auto-compaction threshold until provider overflow. Apex Code now compacts and resumes between completed tool batches before sending another over-threshold request.
+- Fixed Windows global-install detection reading no output from package-manager shims: crossSpawn dropped the arguments of `.cmd` shims, so `readCommandOutput("pnpm", ["root", "-g"])` and its bun and yarn equivalents returned nothing and self-update reported no supported install method.
 
 ## [0.0.1-alpha.10] - 2026-08-28
 
