@@ -183,3 +183,19 @@ test("standalone binaries are built and hashed before npm publication, then rele
 		assert.match(step.uses, /@[0-9a-f]{40}$/);
 	}
 });
+
+test("the standalone release job names the repository, having never checked it out", async () => {
+	// It downloads an artifact and nothing else, so `gh` has no git remote to infer
+	// from. Three consecutive releases failed here with "fatal: not a git repository"
+	// after their npm publish had already succeeded.
+	const { workflow } = await readWorkflow();
+	const job = workflow.jobs["publish-binaries"];
+	assert.ok(job, "expected a publish-binaries job");
+	assert.equal(
+		job.steps.some((step) => step.uses?.startsWith("actions/checkout")),
+		false,
+		"this assertion only matters while the job has no checkout",
+	);
+	const create = job.steps.find((step) => step.run?.includes("gh release create"));
+	assert.match(create.run, /--repo "\$\{GITHUB_REPOSITORY\}"/);
+});

@@ -318,7 +318,12 @@ jobs:
         run: |
           set -Eeuo pipefail
           test -s release-assets/SHA256SUMS
+          # This job downloads an artifact and never checks the repository out, so
+          # `gh` has no git remote to infer the repository from and exits with
+          # "fatal: not a git repository". Naming it is smaller than adding a
+          # checkout for one flag's worth of context.
           gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
             --title "Apex Code v${VERSION}" \
             --generate-notes \
             release-assets/SHA256SUMS \
