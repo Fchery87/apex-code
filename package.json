@@ -72,5 +72,8 @@
 		"gaxios": {
 			"rimraf": "6.1.2"
 		}
+	},
+	"dependencies": {
+		"grok-mermaid": "0.2.2"
 	}
 }
