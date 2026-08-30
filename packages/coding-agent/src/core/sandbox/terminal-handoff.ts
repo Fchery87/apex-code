@@ -66,7 +66,15 @@ export function createTerminalHandoff(
 ): TerminalHandoff {
 	const statePath = join(directory, STATE_FILE);
 	const acknowledgementPath = join(directory, ACKNOWLEDGEMENT_FILE);
-	const timeout = options?.acknowledgementTimeoutMs ?? DEFAULT_ACKNOWLEDGEMENT_TIMEOUT_MS;
+	// Floored at two poll intervals. The state file is a latch the child samples, so a
+	// supervisor that gives up before the child can sample writes `resume` over its own
+	// `suspend` and the child observes neither: it reads one value equal to what it
+	// already held. Two intervals guarantee a sampling opportunity even when the
+	// watcher never fires, which is the macOS case POLL_INTERVAL_MS exists for.
+	const timeout = Math.max(
+		options?.acknowledgementTimeoutMs ?? DEFAULT_ACKNOWLEDGEMENT_TIMEOUT_MS,
+		POLL_INTERVAL_MS * 2,
+	);
 	// Every borrow chains onto the last, which is what keeps two escalations that arrive
 	// together from drawing over each other.
 	let queue: Promise<unknown> = Promise.resolve();
