@@ -106,6 +106,7 @@ capable and measurably worse.
 | Git-backed session checkpoints | **landed** — 8 of 8 tasks · `075fac684` | [spec](specs/2026-08-28-git-checkpoints.md) | — |
 | Dependency updates that can merge | **landed** — `262d673cb` | [spec](specs/2026-08-29-dependency-updates-that-can-merge.md) | — |
 | Documented surfaces that do not exist | **landed** — 4 of 4 tasks · `d2cb6ea0f` | [spec](specs/2026-08-29-documented-surfaces-that-do-not-exist.md) | — |
+| Mid-run auto-compaction | **active** — implementation in progress | [spec](specs/2026-08-29-mid-run-auto-compaction.md) | — |
 
 ---
 

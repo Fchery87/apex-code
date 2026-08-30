@@ -44,6 +44,7 @@ import type {
 	AgentTool,
 	BeforeToolCallResult,
 	PrepareNextTurnContext,
+	ShouldStopAfterTurnContext,
 	ThinkingLevel,
 } from "apex-code-agent-core";
 import { getThemeByName, theme } from "../modes/interactive/theme/theme.ts";
@@ -391,6 +392,7 @@ export class AgentSession {
 	private _compactionAbortController: AbortController | undefined = undefined;
 	private _autoCompactionAbortController: AbortController | undefined = undefined;
 	private _overflowRecoveryAttempted = false;
+	private _midRunCompactionNeeded = false;
 
 	// Branch summarization state
 	private _branchSummaryAbortController: AbortController | undefined = undefined;
@@ -488,6 +490,7 @@ export class AgentSession {
 		this._unsubscribeAgent = this.agent.subscribe(this._handleAgentEvent);
 		this._installAgentToolHooks();
 		this._installAgentNextTurnRefresh();
+		this._installMidRunCompactionHook();
 		this._installContextPipeline();
 
 		this._buildRuntime({
@@ -685,6 +688,41 @@ export class AgentSession {
 				thinkingLevel: this.agent.state.thinkingLevel,
 			};
 		};
+	}
+
+	/** Stop an over-threshold tool loop before it sends another provider request. */
+	private _installMidRunCompactionHook(): void {
+		const previousShouldStopAfterTurn = this.agent.shouldStopAfterTurn;
+		this.agent.shouldStopAfterTurn = async (turn, signal) => {
+			if (await previousShouldStopAfterTurn?.(turn, signal)) {
+				return true;
+			}
+			return this._shouldStopForMidRunCompaction(turn);
+		};
+	}
+
+	private _shouldStopForMidRunCompaction(turn: ShouldStopAfterTurnContext): boolean {
+		if (!turn.hasMoreToolCalls || turn.toolResults.length === 0) {
+			return false;
+		}
+
+		const settings = this.settingsManager.getCompactionSettings();
+		if (!settings.enabled) {
+			return false;
+		}
+
+		const contextWindow = this.model?.contextWindow ?? 0;
+		if (contextWindow <= 0) {
+			return false;
+		}
+
+		const contextTokens = estimateContextTokens(turn.context.messages).tokens;
+		if (!shouldCompact(contextTokens, contextWindow, settings)) {
+			return false;
+		}
+
+		this._midRunCompactionNeeded = true;
+		return true;
 	}
 
 	/**
@@ -1282,6 +1320,11 @@ export class AgentSession {
 	}
 
 	private async _handlePostAgentRun(): Promise<boolean> {
+		if (this._midRunCompactionNeeded) {
+			this._midRunCompactionNeeded = false;
+			return await this._runAutoCompaction("threshold", true);
+		}
+
 		const msg = this._lastAssistantMessage;
 		this._lastAssistantMessage = undefined;
 		if (!msg) {

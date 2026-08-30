@@ -35,11 +35,12 @@ const RISKY_PARAM_NAME = "riskyUndisclosedParameter";
 // fire deterministically rather than sitting on a boundary.
 const BIG_RESULT_TEXT = "x".repeat(3000);
 
-// contextWindow=4000, reserveTokens=3200 (via settings override below) makes
-// _evictionBudget() = floor((4000 - 3200) / 2) = 400 estimated tokens (1600 chars).
-// BIG_RESULT_TEXT (~750 tokens) is well over that, so it evicts; the marker itself
-// (~19 tokens) is well under it, so eviction stops after one message.
-const CONTEXT_WINDOW = 4000;
+// contextWindow=4500, reserveTokens=3200 (via settings override below) makes
+// _evictionBudget() = floor((4500 - 3200) / 2) = 650 estimated tokens (2600 chars).
+// BIG_RESULT_TEXT (~750 tokens) is over that budget, so it evicts. The resulting
+// context stays below the auto-compaction threshold (4500 - 3200 = 1300 tokens),
+// which keeps this test focused on the request pipeline rather than compaction.
+const CONTEXT_WINDOW = 4500;
 const RESERVE_TOKENS = 3200;
 
 function buildEvictableTool(): ApexToolDefinition {
