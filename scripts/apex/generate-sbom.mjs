@@ -23,17 +23,48 @@ import { getPublicWorkspacePackages } from "../release-packages.mjs";
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const DEFAULT_OUT_DIR = join(REPO_ROOT, ".artifacts");
 
+/**
+ * npm's `ESBOMPROBLEMS ... invalid: <name>@<installed>, <required> required by
+ * <parent>` means node_modules is stale relative to package-lock.json -- seen
+ * live when a lockfile-only dependabot bump landed before `npm install` did.
+ * Left raw, that error aborts `npm test` at the first script test with no hint
+ * that a plain install fixes it, so translate it into the remedy.
+ *
+ * Returns the diagnosis, or undefined when stderr is some other npm failure.
+ */
+export function describeTreeLockfileMismatch(stderr) {
+	if (!stderr || !stderr.includes("ESBOMPROBLEMS")) return undefined;
+	const invalidLine = stderr.split("\n").find((line) => line.includes("invalid:"));
+	if (!invalidLine) return undefined;
+	const match = invalidLine.match(/invalid:\s*(\S+)@(\S+),\s*(\S+)\s+required by\s+(\S+)/);
+	if (!match) {
+		return `node_modules is out of sync with package-lock.json. Run \`npm install\`, then retry. npm said: ${invalidLine.trim()}`;
+	}
+	const [, name, installed, required, parent] = match;
+	return `node_modules is out of sync with package-lock.json (${name}: installed ${installed}, required ${required} by ${parent}). Run \`npm install\`, then retry.`;
+}
+
 /** Generate one package's SBOM. Throws if npm sbom fails or the output is empty/malformed. */
 export function generateSbomFor(pkg, cwd = REPO_ROOT) {
 	// npm resolves --workspace against its own internally realpath'd workspace
 	// list; on macOS /tmp is itself a symlink (-> /private/tmp), so an
 	// unresolved path can fail to match with "No workspaces found" even though
 	// it is the correct directory. Resolve both sides the same way.
-	const output = execFileSync(
-		"npm",
-		npmSpawnArgs(["sbom", "--workspace", realpathSync(pkg.directory), "--omit", "dev", "--sbom-format", "cyclonedx"]),
-		npmSpawnOptions({ cwd: realpathSync(cwd), encoding: "utf8" }),
-	);
+	let output;
+	try {
+		output = execFileSync(
+			"npm",
+			npmSpawnArgs(["sbom", "--workspace", realpathSync(pkg.directory), "--omit", "dev", "--sbom-format", "cyclonedx"]),
+			npmSpawnOptions({ cwd: realpathSync(cwd), encoding: "utf8" }),
+		);
+	} catch (error) {
+		const stderr = typeof error?.stderr === "string" ? error.stderr : error?.stderr?.toString() ?? "";
+		const diagnosis = describeTreeLockfileMismatch(stderr);
+		if (diagnosis) {
+			throw new Error(`npm sbom for ${pkg.name} failed: ${diagnosis}`);
+		}
+		throw error;
+	}
 	let document;
 	try {
 		document = JSON.parse(output);

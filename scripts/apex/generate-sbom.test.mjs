@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { getPublicWorkspacePackages } from "../release-packages.mjs";
-import { generateAllSboms, generateSbomFor } from "./generate-sbom.mjs";
+import { describeTreeLockfileMismatch, generateAllSboms, generateSbomFor } from "./generate-sbom.mjs";
 import { npmSpawnArgs, npmSpawnOptions } from "./npm-command.mjs";
 
 const bothOwnedPackagesAreBuilt = getPublicWorkspacePackages().every((pkg) => existsSync(join(pkg.directory, "dist")));
@@ -61,4 +61,21 @@ test("generateSbomFor refuses to treat an empty component list as evidence", asy
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
+});
+
+test("describeTreeLockfileMismatch names the stale tree and the remedy", () => {
+	// Real stderr captured from `npm sbom` after a lockfile-only dependabot bump
+	// landed while node_modules still held the old version.
+	const stderr = ["npm error code ESBOMPROBLEMS", "npm error invalid: esbuild@0.28.1, 0.28.2 required by pi-monorepo@0.0.3"].join("\n");
+	const message = describeTreeLockfileMismatch(stderr);
+	assert.ok(message, "expected a diagnosis for an ESBOMPROBLEMS tree");
+	assert.match(message, /esbuild/);
+	assert.match(message, /0\.28\.1/);
+	assert.match(message, /0\.28\.2/);
+	assert.match(message, /npm install/);
+});
+
+test("describeTreeLockfileMismatch returns undefined for unrelated npm failures", () => {
+	assert.equal(describeTreeLockfileMismatch("npm error code E404\nnpm error 404 Not Found - GET https://registry.example.org/x"), undefined);
+	assert.equal(describeTreeLockfileMismatch(""), undefined);
 });
