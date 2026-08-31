@@ -85,7 +85,7 @@
 		"glob": "13.0.6",
 		"shx": "0.4.0",
 		"typescript": "5.9.3",
-		"vitest": "4.1.9"
+		"vitest": "4.1.11"
 	},
 	"keywords": [
 		"coding-agent",
