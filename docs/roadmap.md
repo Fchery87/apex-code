@@ -114,6 +114,7 @@ capable and measurably worse.
 | Documented surfaces that do not exist | **landed** — 4 of 4 tasks · `d2cb6ea0f` | [spec](specs/2026-08-29-documented-surfaces-that-do-not-exist.md) | — |
 | Release tags and the spec status gate | **landed** — pull request #63 | [spec](specs/2026-08-29-claims-the-repository-cannot-check.md) | — |
 | Mid-run auto-compaction | **landed** — `61be67e27` | [spec](specs/2026-08-29-mid-run-auto-compaction.md) | — |
+| Declarative hooks | **in progress** — HOOKS.1 through HOOKS.7 | [spec](specs/2026-08-31-declarative-hooks.md) | [plan](plans/2026-08-31-declarative-hooks.md) |
 
 ---
 

@@ -9,6 +9,7 @@ import { normalizePath, resolvePath } from "../utils/paths.ts";
 import { stripBom } from "../utils/text.ts";
 import type { CheckpointSettings } from "./checkpoints/git-checkpoints.ts";
 import { getApexEnvironment } from "./environment.ts";
+import type { HooksSettings } from "./hooks/types.ts";
 import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-dispatcher.ts";
 import type { LspSettings } from "./lsp/registry.ts";
 
@@ -209,6 +210,14 @@ export interface Settings {
 	 * engine, so an unconfigured session runs no `git` subprocess and writes no ref.
 	 */
 	checkpoints?: CheckpointSettings;
+	/**
+	 * Declarative hooks over the extension event catalog (spec
+	 * 2026-08-31-declarative-hooks). Absent by default; an absent key constructs
+	 * no runtime, spawns no subprocess, and changes no behavior. Project-scope
+	 * entries load only after the project-trust decision, like every project
+	 * extension source -- untrusted project settings are not loaded at all.
+	 */
+	hooks?: HooksSettings;
 	fullscreenCopyOnSelect?: boolean; // default: true; no effect in regular TUI mode
 }
 
@@ -978,6 +987,9 @@ export class SettingsManager {
 
 	getCheckpointSettings(): CheckpointSettings | undefined {
 		return this.settings.checkpoints === undefined ? undefined : structuredClone(this.settings.checkpoints);
+	}
+	getHookSettings(): HooksSettings | undefined {
+		return this.settings.hooks === undefined ? undefined : structuredClone(this.settings.hooks);
 	}
 
 	getBranchSummarySkipPrompt(): boolean {

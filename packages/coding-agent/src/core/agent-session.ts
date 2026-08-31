@@ -101,6 +101,7 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.ts";
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
+import type { HookRuntime } from "./hooks/types.ts";
 import type { McpRuntime } from "./mcp/runtime.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
@@ -288,6 +289,13 @@ export interface AgentSessionConfig {
 	 * nothing and runs no `git` subprocess.
 	 */
 	checkpointSettings?: CheckpointSettings;
+	/**
+	 * Declarative hooks (spec 2026-08-31-declarative-hooks). Absent constructs
+	 * nothing: no subprocess, no behavior change. Assembled by `createAgentSession`
+	 * from the merged settings -- project-scope entries only appear once trusted,
+	 * because untrusted project settings are not loaded at all.
+	 */
+	hookRuntime?: HookRuntime;
 }
 
 export interface ExtensionBindings {
@@ -433,6 +441,7 @@ export class AgentSession {
 		return this._mcpRuntime;
 	}
 	private readonly _checkpoints: SessionCheckpoints;
+	private readonly _hookRuntime: HookRuntime | undefined;
 
 	/** Worktree checkpoints for this session. Inert unless `checkpoints.enabled` is set. */
 	get checkpoints(): SessionCheckpoints {
@@ -487,6 +496,7 @@ export class AgentSession {
 			sessionId: this.sessionManager.getSessionId(),
 			settings: config.checkpointSettings,
 		});
+		this._hookRuntime = config.hookRuntime;
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, extensions, auto-compaction, retry logic)
@@ -495,6 +505,16 @@ export class AgentSession {
 		this._installAgentNextTurnRefresh();
 		this._installMidRunCompactionHook();
 		this._installContextPipeline();
+
+		// Declarative hooks: session_start is observe-only and must neither delay
+		// nor fail construction, so it fires detached (emitObserve swallows
+		// handler failures already).
+		if (this._hookRuntime?.hasHandlers("session_start")) {
+			void this._hookRuntime.emitObserve("session_start", {
+				type: "session_start",
+				reason: this._sessionStartEvent.reason,
+			});
+		}
 
 		this._buildRuntime({
 			activeToolNames: this._initialActiveToolNames,
@@ -600,6 +620,20 @@ export class AgentSession {
 				if (extensionResult?.block === true) return extensionResult;
 			}
 
+			// Declarative hooks (spec 2026-08-31-declarative-hooks) ride the same
+			// seam, after extensions and before the gate. Restriction-only: a block
+			// short-circuits, allow and ask fall through, and the gate below still
+			// evaluates the call, so a hook can narrow authority but never widen it.
+			if (this._hookRuntime?.hasHandlers("tool_call")) {
+				const hookBlock = await this._hookRuntime.decideToolCall(toolCall.name, {
+					type: "tool_call",
+					toolName: toolCall.name,
+					toolCallId: toolCall.id,
+					input: args as Record<string, unknown>,
+				});
+				if (hookBlock) return { block: true, reason: hookBlock.reason };
+			}
+
 			// Permission gate (roadmap Phase 2a, ADR 0004). Off by default — see
 			// AgentSessionConfig.permissionGate. When present, every registered tool
 			// call passes through it (contracts.md invariant 2): this is the seam,
@@ -650,6 +684,17 @@ export class AgentSession {
 						usage: result.usage,
 					})
 				: undefined;
+
+			// Declarative hooks observe tool results after extension rewrites and
+			// before image normalization; no decision is read from them (spec).
+			if (this._hookRuntime?.hasHandlers("tool_result")) {
+				await this._hookRuntime.emitObserve("tool_result", {
+					type: "tool_result",
+					toolName: toolCall.name,
+					toolCallId: toolCall.id,
+					input: args as Record<string, unknown>,
+				});
+			}
 
 			const content = hookResult?.content ?? result.content ?? [];
 			// Runs after the extension hook so images injected or replaced by extensions are normalized too.
@@ -1007,6 +1052,9 @@ export class AgentSession {
 				toolResults: event.toolResults,
 			};
 			await this._extensionRunner.emit(extensionEvent);
+			if (this._hookRuntime?.hasHandlers("turn_end")) {
+				await this._hookRuntime.emitObserve("turn_end", { type: "turn_end" });
+			}
 			this._turnIndex++;
 		} else if (event.type === "message_start") {
 			const extensionEvent: MessageStartEvent = {
@@ -2239,6 +2287,12 @@ export class AgentSession {
 
 			let extensionCompaction: CompactionResult | undefined;
 
+			if (this._hookRuntime?.hasHandlers("session_before_compact")) {
+				await this._hookRuntime.emitObserve("session_before_compact", {
+					type: "session_before_compact",
+					reason: "manual",
+				});
+			}
 			if (this._extensionRunner.hasHandlers("session_before_compact")) {
 				const result = (await this._extensionRunner.emit({
 					type: "session_before_compact",
@@ -2538,6 +2592,9 @@ export class AgentSession {
 
 			let extensionCompaction: CompactionResult | undefined;
 
+			if (this._hookRuntime?.hasHandlers("session_before_compact")) {
+				await this._hookRuntime.emitObserve("session_before_compact", { type: "session_before_compact", reason });
+			}
 			if (this._extensionRunner.hasHandlers("session_before_compact")) {
 				const extensionResult = (await this._extensionRunner.emit({
 					type: "session_before_compact",

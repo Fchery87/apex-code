@@ -9,6 +9,8 @@ import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { createAgentDefinitionResolver } from "./delegation/agents.ts";
 import type { AgentDefinitionResolver, DelegationRuntimeOptions } from "./delegation/runtime.ts";
 import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
+import { loadHookRuntime } from "./hooks/loader.ts";
+import type { HookRuntime } from "./hooks/types.ts";
 import { createMcpRuntime } from "./mcp/runtime.ts";
 import { convertToLlm } from "./messages.ts";
 import { findInitialModel } from "./model-resolver.ts";
@@ -94,6 +96,8 @@ export interface CreateAgentSessionOptions {
 	sessionStartEvent?: SessionStartEvent;
 	/** Authorization configuration for every registered tool call. */
 	permissionGate?: AgentSessionConfig["permissionGate"];
+	/** Pre-assembled declarative hooks. Absent by default; `createAgentSession` assembles them from the settings manager when not supplied. */
+	hookRuntime?: HookRuntime;
 	/** Optional destination for source-level evidence; defaults to the durable session sink. */
 	evidenceSink?: EvidenceSink;
 	/** Optional post-mutation diagnostics injected into `edit`/`write` (LSP.4). */
@@ -586,6 +590,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		webSearchOperations: options.webSearchOperations,
 		mcpRuntime,
 		checkpointSettings: settingsManager.getCheckpointSettings(),
+		// Declarative hooks (spec 2026-08-31-declarative-hooks): assembled from the
+		// merged settings -- project-scope entries only appear once trusted. A
+		// malformed hooks key throws here, failing closed at wiring. Deliberately
+		// not forwarded to delegation children (see the spec's boundary note).
+		hookRuntime: options.hookRuntime ?? loadHookRuntime(settingsManager.getHookSettings()),
 	});
 	parentSessionRef.current = session;
 	// Eager servers connect here rather than on first use, so their tools are in the
