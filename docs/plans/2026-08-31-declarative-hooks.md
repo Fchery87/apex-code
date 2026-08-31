@@ -1,20 +1,19 @@
 # Plan: Declarative hooks (spec 2026-08-31-declarative-hooks)
 
-**Status:** In progress -- all tasks verified; awaiting commit. The plan is
-deleted on landing (AGENTS.md), so it stays on disk until the work is committed
-and the roadmap row carries real SHAs.
+**Status:** In progress -- all tasks committed at `a9675e1ce`; landing (roadmap
+row landed, spec `Landed`, this plan deleted) waits on a green CI run.
 
 Task numbers are identifiers, not a sequence. State sits in the table; a task is
 **done** only when its check has actually run and passed.
 
 | Task | State | Commit SHA |
 | --- | --- | --- |
-| HOOKS.1 -- Settings schema: `hooks` key + `getHookSettings()` accessor | **done** -- verified by `test/hooks/settings.test.ts` (3/3) | -- (uncommitted) |
-| HOOKS.2 -- `core/hooks/loader.ts`: strict validation (fail closed), matchers, runtime assembly | **done** -- verified by `test/hooks/loader.test.ts` (13/13) | -- (uncommitted) |
-| HOOKS.3 -- `core/hooks/command-handler.ts`: stdin JSON, exit-code table, timeout fail-closed, PowerShell on Windows | **done** -- verified by `test/hooks/command-handler.test.ts` (7/7, POSIX-guarded) | -- (uncommitted) |
-| HOOKS.4 -- `core/hooks/http-handler.ts`: POST decision, timeout fail-closed, no env interpolation | **done** -- verified by `test/hooks/http-handler.test.ts` (5/5) | -- (uncommitted) |
-| HOOKS.5 -- `core/hooks/runtime.ts`: matcher filtering, restriction-only `tool_call` decisions, observe-only lifecycle | **done** -- verified by `test/hooks/runtime.test.ts` (9/9) | -- (uncommitted) |
-| HOOKS.6 -- Session bridge: `_installAgentToolHooks` order extensions -> hooks -> gate; `createAgentSession` wiring; children do not inherit | **done** -- verified by `test/hooks/session-wiring.test.ts` (3/3) | -- (uncommitted) |
+| HOOKS.1 -- Settings schema: `hooks` key + `getHookSettings()` accessor | **done** -- verified by `test/hooks/settings.test.ts` (3/3) | `a9675e1ce` |
+| HOOKS.2 -- `core/hooks/loader.ts`: strict validation (fail closed), matchers, runtime assembly | **done** -- verified by `test/hooks/loader.test.ts` (13/13) | `a9675e1ce` |
+| HOOKS.3 -- `core/hooks/command-handler.ts`: stdin JSON, exit-code table, timeout fail-closed, PowerShell on Windows | **done** -- verified by `test/hooks/command-handler.test.ts` (7/7, POSIX-guarded) | `a9675e1ce` |
+| HOOKS.4 -- `core/hooks/http-handler.ts`: POST decision, timeout fail-closed, no env interpolation | **done** -- verified by `test/hooks/http-handler.test.ts` (5/5) | `a9675e1ce` |
+| HOOKS.5 -- `core/hooks/runtime.ts`: matcher filtering, restriction-only `tool_call` decisions, observe-only lifecycle | **done** -- verified by `test/hooks/runtime.test.ts` (9/9) | `a9675e1ce` |
+| HOOKS.6 -- Session bridge: `_installAgentToolHooks` order extensions -> hooks -> gate; `createAgentSession` wiring; children do not inherit | **done** -- verified by `test/hooks/session-wiring.test.ts` (3/3) | `a9675e1ce` |
 | HOOKS.7 -- Spec sync (delegation boundary), full `npm test`, plan closure | **done** -- spec boundary note recorded; tsgo clean, biome clean, `check:docs` passed; **full `npm test` exit 0: 3,153 passed / 58 skipped across 373 files** | -- |
 
 ## Decisions taken during execution
