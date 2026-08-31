@@ -87,7 +87,7 @@ capable and measurably worse.
 | 2b | Permissions — OS sandbox | **landed** — Linux + macOS backends verified in CI · `b9a7bb337` | [spec](specs/2026-08-12-os-sandbox.md) | — |
 | 3 | Context engineering | **landed** — eviction + deferred schemas verified against the replay corpus · `72a2fefe4` | [spec](specs/2026-08-13-context-engineering.md) | — |
 | 4 | Tool surface | **landed** — all 7 tasks (4.1–4.7) done, budget fixed at 2,150/2,300 tokens · `faffaa79e` | [spec](specs/2026-08-13-tool-surface.md) | — |
-| 5 | Delegation & multi-agent | **landed** — 7 of 7 tasks · `edb760ff4` | [spec](specs/2026-08-14-delegation-and-multi-agent.md) | — |
+| 5 | Delegation & multi-agent | **landed** — 7 of 7 tasks · `be00e1ab0` | [spec](specs/2026-08-14-delegation-and-multi-agent.md) | — |
 | 6 | Durable state & daemon | **landed** — 6 of 6 tasks · `baf5e5302` (full-suite audit recorded) | [spec](specs/2026-08-15-durable-state-and-daemon.md) | — |
 | 7 | Evidence & verification | **landed** — 7 of 7 tasks · `c82584312` (clean Node 22 verification) | [spec](specs/2026-08-16-evidence-and-verification.md) | — |
 | 8 | Observability & cost | **landed** — 7 of 7 tasks, exit criterion amended before implementation · `9c7c9e9aa` | [spec](specs/2026-08-15-observability-and-cost.md) | — |
@@ -114,7 +114,7 @@ capable and measurably worse.
 | Documented surfaces that do not exist | **landed** — 4 of 4 tasks · `d2cb6ea0f` | [spec](specs/2026-08-29-documented-surfaces-that-do-not-exist.md) | — |
 | Release tags and the spec status gate | **landed** — pull request #63 | [spec](specs/2026-08-29-claims-the-repository-cannot-check.md) | — |
 | Mid-run auto-compaction | **landed** — `61be67e27` | [spec](specs/2026-08-29-mid-run-auto-compaction.md) | — |
-| Declarative hooks | **in progress** — HOOKS.1 through HOOKS.7 | [spec](specs/2026-08-31-declarative-hooks.md) | [plan](plans/2026-08-31-declarative-hooks.md) |
+| Declarative hooks | **landed** — HOOKS.1 through HOOKS.7 · `a9675e1ce` (three-OS CI run 33451005458) | [spec](specs/2026-08-31-declarative-hooks.md) | — |
 
 ---
 

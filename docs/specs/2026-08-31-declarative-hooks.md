@@ -1,6 +1,6 @@
 # Spec: Declarative hooks over the extension event catalog
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 
