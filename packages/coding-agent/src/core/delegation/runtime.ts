@@ -5,9 +5,10 @@
  * agent whose authority can never exceed its parent's.
  *
  * Agent definitions and child-session construction are both injected rather than
- * built in here: agent discovery is a test fixture in this task and becomes real
- * markdown/frontmatter discovery in task 5.5 (`core/delegation/agents.ts`, not yet
- * written); child-session construction is injected so this module stays free of
+ * built in here: production agent discovery lives in `core/delegation/agents.ts`
+ * (markdown + frontmatter, parsed on lookup) and plugs in through the same
+ * resolver interface a test fixture implements; child-session construction is
+ * injected so this module stays free of
  * `AgentSession`/`createAgentSession` and therefore free of the import cycle that
  * would create (`sdk.ts` already imports `agent-session.ts`).
  */
@@ -18,7 +19,7 @@ import { join, resolve } from "node:path";
 import type { Capability } from "../tools/contract.ts";
 import { computeCapabilityCeiling } from "./ceiling.ts";
 
-/** A delegatable agent's static configuration. Markdown + frontmatter in production (task 5.5); a plain object in tests until then. */
+/** A delegatable agent's static configuration. Markdown + frontmatter in production (`agents.ts`); a plain object in tests. */
 export interface AgentDefinition {
 	name: string;
 	description: string;
@@ -29,7 +30,7 @@ export interface AgentDefinition {
 	systemPrompt: string;
 }
 
-/** Resolve an agent type to its definition, or `undefined` if unknown. A plain function fixture in this task; real markdown/frontmatter discovery (task 5.5) is just a different implementation of the same shape. */
+/** Resolve an agent type to its definition, or `undefined` if unknown. Production implements this over markdown/frontmatter (`agents.ts`); tests inject plain functions with the same shape. */
 export type AgentDefinitionResolver = (agentType: string) => AgentDefinition | undefined;
 
 /** A running or completed child, as far as the runtime needs to know. */

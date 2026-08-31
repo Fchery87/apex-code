@@ -50,9 +50,11 @@ function formatDelegateResult(details: DelegateDetails, expanded: boolean, theme
  * real child through the injected `DelegationRuntimeOptions` -- capability ceiling,
  * derived permission store, and child-session construction all live behind that
  * injection (ADR 0008), matching the `todo_write`/`tool_schema` convention of
- * injecting collaborators rather than reaching for global state. Recursion depth
- * (task 5.3), artifact isolation (task 5.4), and real agent discovery (task 5.5,
- * replacing the resolver a test or caller injects here) are not yet wired.
+ * injecting collaborators rather than reaching for global state. Recursion
+ * depth, artifact isolation, and real agent discovery are wired:
+ * `../delegation/runtime.ts` bounds depth and roots per-child artifact
+ * directories, and `../delegation/agents.ts` supplies production markdown
+ * discovery through the injected resolver.
  */
 export function createDelegateToolDefinition(
 	runtime: DelegationRuntimeOptions,
