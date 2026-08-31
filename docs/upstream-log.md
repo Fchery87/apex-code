@@ -78,6 +78,8 @@ three merges that follow Phase 2, not from a Phase 0 rehearsal.
 | 2026-08-08 | `v0.84.0` | — | — | — | Fork point. Full-tree graft, 1,353 files. |
 | 2026-08-09 | `v0.84.1` | **1** | 1 (`AGENTS.md`) | 57 (+1,770 / −279) | First real rehearsal. **0 conflicts in forked code.** Total merge: 136 files, +3,976 / −992. |
 | 2026-08-27 | `v0.84.2` | **53** | 49 (27 in forked paths) | 100 (+5,654 / −4,198) | First merge since the graft that actually ran; see "The merge path was broken" below. Total: 191 files, +14,555 / −4,541. |
+| 2026-08-27 | `v0.84.3` | — | — | — | Taken at `89424bcb7`; see the v0.84.3 section below. This row was missing until 2026-08-30, which made the table read one release behind `.upstream-tag`. |
+| 2026-08-30 | `v0.84.4` | **15** | 16 (11 in forked paths) | 69 (+1,683 / −232) | Total: 112 files, +2,786 / −378. Zero conflicts in frozen packages. |
 | 2026-08-09 | Apex Code identity rename | — (fork divergence, not a merge) | — | 218 files (+736 / −744), 602 diff hunks | Renamed the two forked package identities, active imports/docs/examples, binary, and global config root. Recorded separately from upstream merge conflicts. |
 
 ### Two kinds of merge cost, tracked separately
@@ -218,6 +220,112 @@ upstream's own history.
 contains `e8c632ef6`. The gate enforces this rather than trusting anyone to remember: a
 backport the baseline already carries fails with an instruction to delete it.
 
+
+## v0.84.4 — taken 2026-08-30
+
+The cheapest release taken so far, and the first where the cost was not in the merge.
+
+| Signal | Value |
+| --- | --- |
+| Conflicted hunks | 15 |
+| Conflicted files | 16 (11 in forked paths) |
+| Churn, forked paths | 69 files, +1,683 / −232 |
+| Churn, total | 112 files, +2,786 / −378 |
+| Conflicts in frozen packages | **0** |
+
+`.upstream-backports` line 12 retired itself. The `e8c632ef6` Cloudflare gateway backport
+is contained in v0.84.4, and `frozen-pin.mjs` said so by name rather than leaving a stale
+entry to be noticed. That is the mechanism working exactly as its comment promised.
+
+### Two prior merges had silently restored deleted packages
+
+`packages/evals` and `packages/session-backends` were removed on 2026-08-09 because they
+depend on `@earendil-works/pi-coding-agent` and `@earendil-works/pi-agent-core`, the two
+names Task 0.3 renamed. The v0.84.2 merge (`009c32d63`) brought them back and nobody
+noticed for three days.
+
+The failure mode is the one this document already described and is worth restating,
+because it happened: those names do not exist in the workspace after the rename, so **npm
+resolves them from the registry instead**, and the build silently compiles and tests
+against upstream's published packages while CI reports green. It blocked this merge only
+by accident, when `npm install` could not satisfy
+`@earendil-works/pi-coding-agent@^0.84.4` under `min-release-age=2`.
+
+Both are deleted again. A merge that restores a deleted path is not visible in the
+conflict count, because there is nothing to conflict with; the deletion is simply absent
+from upstream's tree and reappears. **Check `ls packages/` against the frozen set after
+every merge.**
+
+### The frozen gate says nothing about the build beside it
+
+`check-frozen-packages.mjs` compares source byte-identity and passed immediately after
+the merge. The first full test run then failed 20 tests across 12 files, 17 of them on
+one error: `'@earendil-works/pi-tui' does not provide an export named
+'setCapabilityOverrides'`.
+
+The export was present in `packages/tui/src/index.ts:113`, exactly as the gate said. It
+was absent from `packages/tui/dist/index.js`, which was built before the merge.
+`node_modules/@earendil-works/pi-tui` is a symlink to the workspace package, so the suite
+resolved the stale artifact. `npm run build` cleared all 17.
+
+`npm install --package-lock-only` updates the lockfile and installs nothing, which is what
+left the tree in that state. **Run `npm run build` after a merge, before drawing any
+conclusion from a test run.**
+
+### Where the cost actually is
+
+Three of the fifteen hunks needed a decision rather than a rule.
+
+- **`agent-loop.ts`** — v0.84.4 refactors `shouldStopAfterTurn` for
+  [#6879](https://github.com/earendil-works/pi/issues/6879) to take `lastCompletedTurn`.
+  Apex had changed the same call site for the same issue, passing `{...nextTurnContext,
+  context: currentContext}`. Taking ours would not have compiled: `nextTurnContext` is a
+  variable upstream's refactor deleted. Upstream's `lastCompletedTurn` already carries
+  Apex's `hasMoreToolCalls` addition, so nothing was lost by taking theirs.
+
+- **`settings-manager.ts`** — a three-way union of independently added settings, except
+  `randomUUID`. Upstream imports it to generate `globalSettings.trackingId`. Apex has no
+  `trackingId`, by ADR 0009. The merge dropped the code and left the import orphaned;
+  removing it honours the ADR rather than tidying up after biome.
+
+- **`interactive-mode.ts`** — upstream still calls `this.pendingTools.clear()`. Apex's
+  `clearPendingTools()` disposes each component first, so ours strictly subsumes theirs.
+
+### Divergence recorded: two implementations of #6879
+
+**Upstream now ships mid-run auto-compaction natively.** Apex implemented the same feature
+locally in `0.0.1-alpha.11`. Both work and both cite #6879. They differ in one observable
+way: upstream compacts inside the agent run, Apex resumes by restarting it, so Apex emits a
+second `agent_start`.
+
+v0.84.4's `agent-session-compaction.test.ts` characterization test asserts one
+`agent_start`. It is adapted here to Apex's behaviour, with a comment pointing at this
+section rather than a bare number change.
+
+A second effect was found only by running the suite. Apex's threshold compaction no longer
+fires during a manual compaction of an active response, because upstream's refactor
+changed when `shouldStopAfterTurn` runs relative to the queued-message check. The
+`7253` regression test was first resolved keeping Apex's `["threshold", "manual"]`
+expectation on the assumption the behaviour survived. It did not, and upstream's
+`["manual"]` is what the merged code does. Apex's own
+`6879-mid-run-auto-compaction.test.ts` still passes, so the general feature is intact.
+
+**Follow-up, not settled here.** Apex now carries a second implementation of a feature
+upstream ships, and pays for it in `agent-session.ts` and `agent-loop.ts` on every future
+merge. Whether to drop Apex's and adopt upstream's is a real decision with its own
+verification cost, and mixing it into an upstream merge would make both harder to review
+and to revert. It needs its own change, and the evidence is here rather than in someone's
+memory.
+
+### New upstream test files needed Apex fixture fixes, not source changes
+
+The same pattern v0.84.3 recorded. `8611-thinking-toggle-pending-bash-output.test.ts`
+arrives with a `fakeThis` literal that upstream's `toggleThinkingBlockVisibility` satisfies
+and Apex's does not, because Apex's calls `offerFirstUseHint`, which upstream has no
+equivalent of. `model-resolver.test.ts` and
+`8537-custom-message-tool-result-ordering.test.ts` import
+`@earendil-works/pi-agent-core`, which does not exist in this workspace; both are the
+rename tax and neither indicates a real problem.
 
 ## The merge path was broken from the graft until 2026-08-27
 

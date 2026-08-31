@@ -36,6 +36,8 @@ By default, `reserveTokens` is 16384 tokens (configurable in `~/.apex-code/agent
 
 Apex Code checks this threshold after every completed tool batch that would otherwise start another provider request. If a long tool run crosses the threshold, it compacts at that safe boundary and resumes the unfinished run.
 
+During a multi-turn agent run, Pi checks this threshold after tools finish and their results are appended, before starting the next assistant response. If the threshold is crossed, Pi compacts inside the same agent run and resumes with the summary and retained messages. It skips this between-turn check when the completed tool batch terminates the run and no queued message requires another response. Pi also checks the threshold before a new user prompt and after a low-level agent run ends.
+
 You can also trigger manually with `/compact [instructions]`, where optional instructions focus the summary.
 
 ### How It Works
