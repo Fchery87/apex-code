@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import type { Transport } from "@earendil-works/pi-ai";
-import type { TuiMode as RendererTuiMode, ScrollViewScrollbar } from "@earendil-works/pi-tui";
+import type { TuiMode as RendererTuiMode, ScrollViewScrollbar, TerminalCapabilities } from "@earendil-works/pi-tui";
 import type { ThinkingLevel } from "apex-code-agent-core";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
@@ -65,6 +65,9 @@ export interface TerminalSettings {
 	symbolPreset?: "unicode" | "ascii"; // default: "unicode" (roadmap Phase 8: footer glyph fallback)
 	colorBlindMode?: boolean; // default: false (roadmap Phase 8: adjusts footer palette; the underlying signal is never color-only regardless of this setting)
 	tokenUsageDisplay?: "off" | "compact" | "full"; // default: "compact" (roadmap Phase 8: footer token/cost stats verbosity)
+	hyperlinks?: boolean | "auto";
+	images?: "kitty" | "iterm2" | "auto" | false;
+	trueColor?: boolean | "auto";
 }
 
 export interface ImageSettings {
@@ -206,6 +209,7 @@ export interface Settings {
 	 * engine, so an unconfigured session runs no `git` subprocess and writes no ref.
 	 */
 	checkpoints?: CheckpointSettings;
+	fullscreenCopyOnSelect?: boolean; // default: true; no effect in regular TUI mode
 }
 
 /**
@@ -1236,6 +1240,16 @@ export class SettingsManager {
 		return this.settings.thinkingBudgets;
 	}
 
+	getTerminalCapabilityOverrides(): Partial<TerminalCapabilities> {
+		const terminal = this.settings.terminal;
+		const images = terminal?.images;
+		return {
+			...(images === "kitty" || images === "iterm2" ? { images } : images === false ? { images: null } : {}),
+			...(typeof terminal?.trueColor === "boolean" ? { trueColor: terminal.trueColor } : {}),
+			...(typeof terminal?.hyperlinks === "boolean" ? { hyperlinks: terminal.hyperlinks } : {}),
+		};
+	}
+
 	getShowImages(): boolean {
 		return this.settings.terminal?.showImages ?? true;
 	}
@@ -1336,6 +1350,16 @@ export class SettingsManager {
 	setFullscreenScrollbar(mode: ScrollViewScrollbar): void {
 		this.globalSettings.fullscreenScrollbar = mode;
 		this.markModified("fullscreenScrollbar");
+		this.save();
+	}
+
+	getFullscreenCopyOnSelect(): boolean {
+		return this.settings.fullscreenCopyOnSelect ?? true;
+	}
+
+	setFullscreenCopyOnSelect(enabled: boolean): void {
+		this.globalSettings.fullscreenCopyOnSelect = enabled;
+		this.markModified("fullscreenCopyOnSelect");
 		this.save();
 	}
 
