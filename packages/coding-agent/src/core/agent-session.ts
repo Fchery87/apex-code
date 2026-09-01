@@ -107,6 +107,7 @@ import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
 import { evaluateToolCall, type PermissionGateOptions } from "./permissions/gate.ts";
+import type { PermissionResponder } from "./permissions/responder.ts";
 import { createInteractiveResponder } from "./permissions/responder.ts";
 import { type EffectiveModeResolution, resolveEffectiveModeWithOrigin } from "./permissions/startup.ts";
 import type { PermissionMode } from "./permissions/store.ts";
@@ -303,6 +304,12 @@ export interface AgentSessionConfig {
 	 * disposed with the session, so background children never outlive it.
 	 */
 	backgroundShellRegistry?: BackgroundShellRegistry;
+	/**
+	 * Optional headless permission bridge (ACP, spec 2026-08-31-acp-adapter.md):
+	 * consulted before the interactive TUI responder. Absent keeps today's
+	 * behavior -- asks without a responder fail closed.
+	 */
+	permissionResponderFactory?: () => PermissionResponder | undefined;
 }
 
 export interface ExtensionBindings {
@@ -450,6 +457,7 @@ export class AgentSession {
 	private readonly _checkpoints: SessionCheckpoints;
 	private readonly _hookRuntime: HookRuntime | undefined;
 	private readonly _backgroundShellRegistry: BackgroundShellRegistry | undefined;
+	private readonly _permissionResponderFactory: (() => PermissionResponder | undefined) | undefined;
 
 	/** Worktree checkpoints for this session. Inert unless `checkpoints.enabled` is set. */
 	get checkpoints(): SessionCheckpoints {
@@ -506,6 +514,7 @@ export class AgentSession {
 		});
 		this._hookRuntime = config.hookRuntime;
 		this._backgroundShellRegistry = config.backgroundShellRegistry;
+		this._permissionResponderFactory = config.permissionResponderFactory;
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, extensions, auto-compaction, retry logic)
@@ -653,9 +662,10 @@ export class AgentSession {
 					getContract: (name) =>
 						(this.getToolDefinition(name) as Partial<ApexToolDefinition> | undefined)?.contract,
 					getResponder: () =>
-						this._extensionMode === "tui" && this._extensionUIContext
+						this._permissionResponderFactory?.() ??
+						(this._extensionMode === "tui" && this._extensionUIContext
 							? createInteractiveResponder(this._extensionUIContext)
-							: undefined,
+							: undefined),
 				});
 				if (decision.block) return { block: true, reason: decision.reason };
 			}

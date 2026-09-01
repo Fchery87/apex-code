@@ -12,7 +12,9 @@ export function createProjectTrustContext(options: {
 }): ProjectTrustContext {
 	return {
 		cwd: options.cwd,
-		mode: options.mode === "interactive" ? "tui" : options.mode,
+		// Extensions see ACP as a headless rpc-like mode (v1; no ACP-specific
+		// extension surface exists yet).
+		mode: options.mode === "interactive" ? "tui" : options.mode === "acp" ? "rpc" : options.mode,
 		hasUI: options.hasUI,
 		ui: {
 			select: async (title, selectOptions) => {

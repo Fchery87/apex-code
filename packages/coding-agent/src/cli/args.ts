@@ -9,7 +9,7 @@ import type { ExtensionFlag } from "../core/extensions/types.ts";
 import { PERMISSION_MODES, type PermissionMode } from "../core/permissions/store.ts";
 import type { TuiMode } from "../core/settings-manager.ts";
 
-export type Mode = "text" | "json" | "rpc";
+export type Mode = "text" | "json" | "rpc" | "acp";
 
 export interface Args {
 	provider?: string;
@@ -112,7 +112,7 @@ export function parseArgs(args: readonly string[]): Args {
 			result.version = true;
 		} else if (arg === "--mode" && i + 1 < args.length) {
 			const mode = args[++i];
-			if (mode === "text" || mode === "json" || mode === "rpc") {
+			if (mode === "text" || mode === "json" || mode === "rpc" || mode === "acp") {
 				result.mode = mode;
 			}
 		} else if (arg === "--continue" || arg === "-c") {

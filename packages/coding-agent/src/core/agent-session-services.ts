@@ -10,6 +10,7 @@ import { resolveLspRegistry } from "./lsp/registry.ts";
 import { LspStatusStore } from "./lsp/status.ts";
 import { ModelRuntime } from "./model-runtime.ts";
 import type { PermissionGateOptions } from "./permissions/gate.ts";
+import type { PermissionResponder } from "./permissions/responder.ts";
 import {
 	DefaultResourceLoader,
 	type DefaultResourceLoaderOptions,
@@ -81,6 +82,8 @@ export interface CreateAgentSessionFromServicesOptions {
 	noTools?: CreateAgentSessionOptions["noTools"];
 	customTools?: ToolDefinition[];
 	permissionGate?: Omit<PermissionGateOptions, "getContract">;
+	/** Optional headless permission bridge (ACP, spec 2026-08-31-acp-adapter.md). */
+	permissionResponderFactory?: () => PermissionResponder | undefined;
 }
 
 /**
@@ -388,6 +391,7 @@ export async function createAgentSessionFromServices(
 		customTools: options.customTools,
 		sessionStartEvent: options.sessionStartEvent,
 		permissionGate: options.permissionGate,
+		permissionResponderFactory: options.permissionResponderFactory,
 		diagnosticsOperations,
 		lspOperations,
 		webSearchOperations,

@@ -70,7 +70,8 @@ import { unclassifiedToolNames } from "./core/tools/contract-snapshot.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "./core/trust-manager.ts";
 import { builtInExtensions } from "./extensions/index.ts";
 import { runMigrations, showDeprecationWarnings } from "./migrations.ts";
-import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.ts";
+import type { AcpServer } from "./modes/acp/server.ts";
+import { InteractiveMode, runAcpMode, runPrintMode, runRpcMode } from "./modes/index.ts";
 import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme.ts";
 import { cleanupManagedInstall, handleConfigCommand, handlePackageCommand } from "./package-manager-cli.ts";
 import { isLocalPath, normalizePath, resolvePath } from "./utils/paths.ts";
@@ -118,6 +119,9 @@ function resolveAppMode(parsed: Args, stdinIsTTY: boolean, stdoutIsTTY: boolean)
 	if (parsed.mode === "rpc") {
 		return "rpc";
 	}
+	if (parsed.mode === "acp") {
+		return "acp";
+	}
 	if (parsed.mode === "json") {
 		return "json";
 	}
@@ -127,7 +131,7 @@ function resolveAppMode(parsed: Args, stdinIsTTY: boolean, stdoutIsTTY: boolean)
 	return "interactive";
 }
 
-function toPrintOutputMode(appMode: AppMode): Exclude<Mode, "rpc"> {
+function toPrintOutputMode(appMode: AppMode): Exclude<Mode, "rpc" | "acp"> {
 	return appMode === "json" ? "json" : "text";
 }
 
@@ -872,6 +876,25 @@ export async function main(args: string[], options?: MainOptions) {
 			excludeTools: sessionOptions.excludeTools,
 			noTools: sessionOptions.noTools,
 			customTools: sessionOptions.customTools,
+			// ACP bridge (spec 2026-08-31-acp-adapter.md): permission asks route to
+			// the ACP client through the server created by runAcpMode; absent
+			// server (non-ACP modes) leaves today's fail-closed behavior.
+			permissionResponderFactory:
+				parsed.mode === "acp"
+					? () => {
+							const server = acpServerRef.current;
+							if (!server) return undefined;
+							return {
+								async ask(request) {
+									return server.askPermission(
+										server.currentSessionId ?? "",
+										request.toolName,
+										request.description,
+									);
+								},
+							};
+						}
+					: undefined,
 			permissionGate: {
 				store: permissionStore,
 				flagMode: parsed.permissionMode,
@@ -899,6 +922,9 @@ export async function main(args: string[], options?: MainOptions) {
 			diagnostics,
 		};
 	};
+	// ACP bridge (spec 2026-08-31-acp-adapter.md): runAcpMode installs the live
+	// server here once the mode dispatch creates it.
+	const acpServerRef: { current?: AcpServer } = { current: undefined };
 	time("createRuntime");
 	const runtime = await createAgentSessionRuntime(createRuntime, {
 		cwd: sessionManager.getCwd(),
@@ -990,6 +1016,9 @@ export async function main(args: string[], options?: MainOptions) {
 	if (appMode === "rpc") {
 		printTimings();
 		await runRpcMode(runtime);
+	} else if (appMode === "acp") {
+		printTimings();
+		await runAcpMode(runtime, acpServerRef);
 	} else if (appMode === "interactive") {
 		const interactiveMode = new InteractiveMode(runtime, {
 			migratedProviders,

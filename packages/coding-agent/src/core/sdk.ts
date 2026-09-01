@@ -97,6 +97,8 @@ export interface CreateAgentSessionOptions {
 	sessionStartEvent?: SessionStartEvent;
 	/** Authorization configuration for every registered tool call. */
 	permissionGate?: AgentSessionConfig["permissionGate"];
+	/** Optional headless permission bridge (ACP, spec 2026-08-31-acp-adapter.md): consulted before the interactive TUI responder. */
+	permissionResponderFactory?: AgentSessionConfig["permissionResponderFactory"];
 	/** Pre-assembled declarative hooks. Absent by default; `createAgentSession` assembles them from the settings manager when not supplied. */
 	hookRuntime?: HookRuntime;
 	/** Background-shell registry. Absent by default; `createAgentSession` creates one and disposes it with the session. */
@@ -588,6 +590,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		extensionRunnerRef,
 		sessionStartEvent: options.sessionStartEvent,
 		permissionGate: options.permissionGate,
+		permissionResponderFactory: options.permissionResponderFactory,
 		evidenceSink: options.evidenceSink,
 		diagnosticsOperations: options.diagnosticsOperations,
 		lspOperations: options.lspOperations,
