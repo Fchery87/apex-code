@@ -109,7 +109,7 @@ capable and measurably worse.
 | Prime-inspired gold TUI | **landed** — gold-neutral layout and permission-safe tray · `e576190a5` | [spec](specs/2026-08-23-prime-inspired-gold-tui.md) | — |
 | Ember TUI surface | **landed** — ember palette, counted startup, brand mark · `215801bfb` | [spec](specs/2026-08-25-ember-tui-surface.md) | — |
 | Native MCP support | **landed** — 13 of 13 tasks · `ed3b3a9c1` | [spec](specs/2026-08-28-native-mcp.md) | — |
-| MCP OAuth, host-owned | **active** | [spec](specs/2026-09-01-mcp-oauth.md) | [plan](plans/2026-09-01-mcp-oauth.md) |
+| MCP OAuth, host-owned | **landed** — OAUTH.1 through OAUTH.8 · `4a63d0615` (three-OS CI run 33567719304) | [spec](specs/2026-09-01-mcp-oauth.md) | — |
 | Git-backed session checkpoints | **landed** — 8 of 8 tasks · `075fac684` | [spec](specs/2026-08-28-git-checkpoints.md) | — |
 | Dependency updates that can merge | **landed** — `262d673cb` | [spec](specs/2026-08-29-dependency-updates-that-can-merge.md) | — |
 | Documented surfaces that do not exist | **landed** — 4 of 4 tasks · `d2cb6ea0f` | [spec](specs/2026-08-29-documented-surfaces-that-do-not-exist.md) | — |
