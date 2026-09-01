@@ -28,7 +28,14 @@ export interface SessionCheckpoints {
  * into a turn.
  */
 export function createSessionCheckpoints(options: SessionCheckpointsOptions): SessionCheckpoints {
-	const enabled = options.settings?.enabled === true;
+	/**
+	 * Absent settings mean ON (spec 2026-09-01-checkpoints-default-on.md): the
+	 * rewind safety net must not require discovering a settings key. The explicit
+	 * opt-out is `{ enabled: false }`. Outside a git repository the engine
+	 * resolves to undefined -- one swallowed `git rev-parse` at the first capture
+	 * attempt -- so a non-repo workspace stays a supported no-subsystem state.
+	 */
+	const enabled = options.settings?.enabled !== false;
 	let resolved: Promise<GitCheckpoints | undefined> | undefined;
 
 	const engine = (): Promise<GitCheckpoints | undefined> => {

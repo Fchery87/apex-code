@@ -206,8 +206,11 @@ export interface Settings {
 	lsp?: LspSettings;
 	webSearch?: WebSearchSettings;
 	/**
-	 * Git-backed worktree checkpoints. Absent by default; an absent key constructs no
-	 * engine, so an unconfigured session runs no `git` subprocess and writes no ref.
+	 * Git-backed worktree checkpoints. On by default inside git repositories
+	 * (spec 2026-09-01-checkpoints-default-on.md); `{ enabled: false }` opts
+	 * out. Engine construction is lazy: nothing runs until a capture is
+	 * attempted, and a workspace that is not a repository stays a supported
+	 * no-op.
 	 */
 	checkpoints?: CheckpointSettings;
 	/**

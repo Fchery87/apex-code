@@ -69,8 +69,17 @@ describe("checkpoint session wiring", () => {
 		agentSession.dispose();
 	});
 
-	it("captures nothing when the settings key is absent", async () => {
-		const { cwd, session: agentSession } = await session({}, "wiring-off");
+	it("captures by default when the settings key is absent", async () => {
+		const { cwd, session: agentSession } = await session({}, "wiring-default");
+		writeFileSync(join(cwd, "tracked.txt"), "v2\n");
+
+		expect((await agentSession.checkpoints.capture("entry-1"))?.commit).toMatch(/^[0-9a-f]{40}$/);
+		expect(refs(cwd)).toEqual(["refs/apex-code/checkpoints/wiring-default/entry-1"]);
+		agentSession.dispose();
+	});
+
+	it("captures nothing when checkpoints are explicitly disabled", async () => {
+		const { cwd, session: agentSession } = await session({ checkpoints: { enabled: false } }, "wiring-off");
 		writeFileSync(join(cwd, "tracked.txt"), "v2\n");
 
 		expect(await agentSession.checkpoints.capture("entry-1")).toBeUndefined();

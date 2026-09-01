@@ -34,12 +34,13 @@ function refs(cwd: string): string[] {
 }
 
 describe("session checkpoints", () => {
-	it("writes no ref and runs no git when the setting is absent", async () => {
+	it("captures by default when the setting is absent", async () => {
 		const cwd = repository();
 		const checkpoints = createSessionCheckpoints({ workspace: cwd, sessionId: "session", settings: undefined });
+		writeFileSync(join(cwd, "tracked.txt"), "v2\n");
 
-		expect(await checkpoints.capture("entry-1")).toBeUndefined();
-		expect(refs(cwd)).toEqual([]);
+		expect((await checkpoints.capture("entry-1"))?.commit).toMatch(/^[0-9a-f]{40}$/);
+		expect(refs(cwd)).toEqual(["refs/apex-code/checkpoints/session/entry-1"]);
 	});
 
 	it("writes no ref when the setting is present but disabled", async () => {
