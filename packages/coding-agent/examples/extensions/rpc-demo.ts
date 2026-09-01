@@ -46,7 +46,7 @@ export default function (pi: ExtensionAPI) {
 	pi.on("tool_call", async (event, ctx) => {
 		if (event.toolName !== "bash") return undefined;
 
-		const command = event.input.command as string;
+		const command = (event.input as Record<string, unknown>).command as string;
 		const isDangerous = /\brm\s+(-rf?|--recursive)/i.test(command) || /\bsudo\b/i.test(command);
 
 		if (isDangerous) {

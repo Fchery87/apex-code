@@ -13,7 +13,7 @@ export default function (pi: ExtensionAPI) {
 	pi.on("tool_call", async (event, ctx) => {
 		if (event.toolName !== "bash") return undefined;
 
-		const command = event.input.command as string;
+		const command = (event.input as Record<string, unknown>).command as string;
 		const isDangerous = dangerousPatterns.some((p) => p.test(command));
 
 		if (isDangerous) {

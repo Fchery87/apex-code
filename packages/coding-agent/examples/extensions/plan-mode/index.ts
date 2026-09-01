@@ -164,7 +164,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	pi.on("tool_call", async (event) => {
 		if (!planModeEnabled || event.toolName !== "bash") return;
 
-		const command = event.input.command as string;
+		const command = (event.input as Record<string, unknown>).command as string;
 		if (!isSafeCommand(command)) {
 			return {
 				block: true,

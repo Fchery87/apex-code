@@ -44,12 +44,13 @@ describe("offline session replay", () => {
 		// fixtures/corpus/README.md). Now that the context pipeline is wired into
 		// replay(), that result is evicted before it reaches the outbound request:
 		// the pre-wiring value here was >8,000 (the full unevicted result); the real,
-		// measured post-eviction value is 985, the static prefix plus a handful of
+		// measured post-eviction value is 1113, the static prefix plus a handful of
 		// small messages plus the eviction marker, well under REPLAY_EVICTION_BUDGET.
 		// Was 748 while a custom system prompt discarded the tool snippets and
 		// guidelines this runner passes; restoring them adds a flat 237 tokens to
-		// every measurement in this file.
-		expect(result.metrics.contextTokensByTurn[0]).toBe(985);
+		// every measurement in this file. Was 985 before the background-shell schema
+		// union (2026-08-31), which adds a flat 128 tokens to every measurement here.
+		expect(result.metrics.contextTokensByTurn[0]).toBe(1113);
 		const [turnContext] = result.contextsByTurn;
 		expect(
 			turnContext?.some(
@@ -81,7 +82,7 @@ describe("offline session replay", () => {
 		expect(result.requests).toBe(22);
 		expect(result.metrics.contextTokensByTurn).toHaveLength(22);
 		expect(result.metrics.contextTokensByTurn[18]).toBeLessThan(result.metrics.contextTokensByTurn[17]);
-		expect(result.metrics.contextTokensByTurn.slice(18)).toEqual([971, 989, 1007, 1025]);
+		expect(result.metrics.contextTokensByTurn.slice(18)).toEqual([1099, 1117, 1135, 1153]);
 	});
 
 	it("evicts stale recoverable tool results from the outbound context by turn 20 (long-tool-heavy)", async () => {
@@ -237,8 +238,8 @@ describe("offline session replay", () => {
 
 		expect(JSON.stringify(second)).toBe(JSON.stringify(first));
 		expect(first.metrics).toEqual({
-			contextTokensByTurn: [996],
-			systemPromptTokens: 944,
+			contextTokensByTurn: [1124],
+			systemPromptTokens: 1072,
 			cacheHitRate: 0,
 			toolCallsByName: { read: 2 },
 			wallTimeMs: 0,

@@ -128,8 +128,8 @@ export default function (pi: ExtensionAPI) {
 		},
 
 		renderCall(args, theme, _context) {
-			const command = args.command || "...";
-			const timeout = args.timeout as number | undefined;
+			const command = "command" in args ? args.command : "…";
+			const timeout = "command" in args ? (args.timeout as number | undefined) : undefined;
 			const timeoutSuffix = timeout ? theme.fg("muted", ` (timeout ${timeout}s)`) : "";
 
 			return new Text(theme.fg("toolTitle", theme.bold(`$ ${command}`)) + timeoutSuffix, 0, 0);

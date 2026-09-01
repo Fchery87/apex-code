@@ -35,6 +35,15 @@ export interface PermissionSpec<TParams extends TSchema = TSchema> {
 	/** Behavior when no rule matches. Read-only tools may default to "allow". */
 	defaultBehavior: PermissionBehavior;
 
+	/**
+	 * Per-call behavior when no rule matches, for tools whose calls differ in
+	 * nature (bash: launching a command is "ask", retrieving or killing an
+	 * already-approved background command is "allow"). Return undefined to fall
+	 * back to `defaultBehavior`. Floors and matching rules still outrank it --
+	 * this only replaces the fallthrough, never a rule or a mode floor.
+	 */
+	defaultBehaviorFor?(params: Static<TParams>): PermissionBehavior | undefined;
+
 	/** Does this call match this rule's content? The tool owns the grammar. */
 	matches(ruleContent: string, params: Static<TParams>): boolean;
 

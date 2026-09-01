@@ -95,5 +95,7 @@ export function resolvePermission<TParams extends TSchema>(
 			winner = candidate;
 		}
 	}
-	return winner ? { behavior: winner.behavior, rule: winner } : { behavior: spec.defaultBehavior };
+	return winner
+		? { behavior: winner.behavior, rule: winner }
+		: { behavior: spec.defaultBehaviorFor?.(params) ?? spec.defaultBehavior };
 }

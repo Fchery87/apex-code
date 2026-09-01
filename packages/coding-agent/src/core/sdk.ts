@@ -22,6 +22,7 @@ import { DefaultResourceLoader } from "./resource-loader.ts";
 import { getDefaultSessionDir, SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
 import { time } from "./timings.ts";
+import { type BackgroundShellRegistry, createBackgroundShellRegistry } from "./tools/background-shell.ts";
 import type { ApexToolDefinition, Capability, EvidenceSink } from "./tools/contract.ts";
 import {
 	createAllToolDefinitions,
@@ -98,6 +99,8 @@ export interface CreateAgentSessionOptions {
 	permissionGate?: AgentSessionConfig["permissionGate"];
 	/** Pre-assembled declarative hooks. Absent by default; `createAgentSession` assembles them from the settings manager when not supplied. */
 	hookRuntime?: HookRuntime;
+	/** Background-shell registry. Absent by default; `createAgentSession` creates one and disposes it with the session. */
+	backgroundShellRegistry?: BackgroundShellRegistry;
 	/** Optional destination for source-level evidence; defaults to the durable session sink. */
 	evidenceSink?: EvidenceSink;
 	/** Optional post-mutation diagnostics injected into `edit`/`write` (LSP.4). */
@@ -230,6 +233,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
 	const sessionManager = options.sessionManager ?? SessionManager.create(cwd, getDefaultSessionDir(cwd, agentDir));
+	const backgroundShellRegistry = options.backgroundShellRegistry ?? createBackgroundShellRegistry();
 
 	if (!resourceLoader) {
 		resourceLoader = new DefaultResourceLoader({ cwd, agentDir, settingsManager });
@@ -595,6 +599,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		// malformed hooks key throws here, failing closed at wiring. Deliberately
 		// not forwarded to delegation children (see the spec's boundary note).
 		hookRuntime: options.hookRuntime ?? loadHookRuntime(settingsManager.getHookSettings()),
+		backgroundShellRegistry,
 	});
 	parentSessionRef.current = session;
 	// Eager servers connect here rather than on first use, so their tools are in the

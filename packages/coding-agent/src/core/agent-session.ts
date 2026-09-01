@@ -120,6 +120,7 @@ import { slugifySkillCommandName } from "./skills.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.ts";
+import type { BackgroundShellRegistry } from "./tools/background-shell.ts";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
 import type { ApexToolDefinition, EvidenceSink } from "./tools/contract.ts";
 import {
@@ -296,6 +297,12 @@ export interface AgentSessionConfig {
 	 * because untrusted project settings are not loaded at all.
 	 */
 	hookRuntime?: HookRuntime;
+	/**
+	 * Background-shell registry (spec 2026-08-31-background-shell.md). Absent
+	 * constructs nothing. Created by `createAgentSession` when not supplied and
+	 * disposed with the session, so background children never outlive it.
+	 */
+	backgroundShellRegistry?: BackgroundShellRegistry;
 }
 
 export interface ExtensionBindings {
@@ -442,6 +449,7 @@ export class AgentSession {
 	}
 	private readonly _checkpoints: SessionCheckpoints;
 	private readonly _hookRuntime: HookRuntime | undefined;
+	private readonly _backgroundShellRegistry: BackgroundShellRegistry | undefined;
 
 	/** Worktree checkpoints for this session. Inert unless `checkpoints.enabled` is set. */
 	get checkpoints(): SessionCheckpoints {
@@ -497,6 +505,7 @@ export class AgentSession {
 			settings: config.checkpointSettings,
 		});
 		this._hookRuntime = config.hookRuntime;
+		this._backgroundShellRegistry = config.backgroundShellRegistry;
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, extensions, auto-compaction, retry logic)
@@ -1153,6 +1162,9 @@ export class AgentSession {
 			this.abortBranchSummary();
 			this.abortBash();
 			this.agent.abort();
+			// Background shell children (spec 2026-08-31-background-shell.md) must
+			// never outlive the session that launched them.
+			this._backgroundShellRegistry?.dispose();
 		} catch {
 			// Dispose must succeed even if an abort hook throws.
 		}
@@ -3110,7 +3122,11 @@ export class AgentSession {
 				)
 			: createAllToolDefinitions(this._cwd, {
 					read: { autoResizeImages },
-					bash: { commandPrefix: shellCommandPrefix, shellPath },
+					bash: {
+						commandPrefix: shellCommandPrefix,
+						shellPath,
+						backgroundRegistry: this._backgroundShellRegistry,
+					},
 					edit: { diagnosticsOperations: this._diagnosticsOperations },
 					write: { diagnosticsOperations: this._diagnosticsOperations },
 					...(this._lspOperations ? { lsp: { operations: this._lspOperations } } : {}),

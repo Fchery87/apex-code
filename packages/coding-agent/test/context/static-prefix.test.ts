@@ -117,8 +117,17 @@ const LARGE_SKILL_LIBRARY: Skill[] = Array.from({ length: 200 }, (_, i) => synth
  * still holds. The budget is raised to 3,700, a ~5.5% margin over the new measured
  * worst case, the same proportional margin every prior revision of this budget used.
  * It does not budge for the next tool the same way this one didn't.
+ *
+ * Re-measured for background shell (spec 2026-08-31-background-shell.md): the bash
+ * tool's schema becomes a three-variant union (launch with `background: true`,
+ * retrieve by handle, kill by handle), and the anyOf structure plus descriptions
+ * cost 39 tokens over the 3,700 budget after trimming (measured worst case 3,739;
+ * the no-skill and MCP-proxy deltas still clear their own assertions). The budget
+ * is raised to 3,945, a ~5.5% margin over the new measured worst case, the same
+ * proportional margin every prior revision of this budget used. It does not budge
+ * for the next change the same way this one didn't.
  */
-const ENFORCED_PRODUCTION_PREFIX_BUDGET = 3_700;
+const ENFORCED_PRODUCTION_PREFIX_BUDGET = 3_945;
 
 function lspToolOptions() {
 	return { lsp: { operations: { request: async () => [] } } };

@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { access as fsAccess } from "node:fs/promises";
 import { Container, Text, truncateToWidth } from "@earendil-works/pi-tui";
-import { type AgentTool, ToolExecutionError } from "apex-code-agent-core";
+import { type AgentTool, type AgentToolResult, ToolExecutionError } from "apex-code-agent-core";
 import { spawn } from "child_process";
 import { type Static, Type } from "typebox";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
@@ -25,6 +25,7 @@ import {
 	looksLikeSandboxRefusal,
 	requestCommandEscalation,
 } from "../sandbox/rpc/command-client.ts";
+import { type BackgroundShellRegistry, createBackgroundShellRegistry } from "./background-shell.ts";
 import { classifyBashCommand } from "./bash-command-segments.ts";
 import type { ApexToolDefinition, PermissionSpec } from "./contract.ts";
 import { OutputAccumulator } from "./output-accumulator.ts";
@@ -48,10 +49,25 @@ function resolveTimeoutMs(timeout: number | undefined): number | undefined {
 	return timeoutMs;
 }
 
-const bashSchema = Type.Object({
-	command: Type.String({ description: "Shell command to execute" }),
-	timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (optional, no default timeout)" })),
-});
+const bashSchema = Type.Union([
+	Type.Object({
+		command: Type.String({ description: "Shell command to execute" }),
+		timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (optional, no default timeout)" })),
+		background: Type.Optional(
+			Type.Boolean({
+				description:
+					"Run in the background and return a handle immediately. Retrieve with { handle }; kill with { handle, kill: true }.",
+			}),
+		),
+	}),
+	Type.Object({
+		handle: Type.String({ description: "Handle from a background launch; returns accumulated output and status." }),
+	}),
+	Type.Object({
+		handle: Type.String({ description: "Handle to terminate." }),
+		kill: Type.Literal(true),
+	}),
+]);
 
 export const bashToolSystemPromptContribution = {
 	snippet: "Execute bash commands (ls, grep, find, etc.)",
@@ -94,18 +110,39 @@ function segmentMatchesRule(segment: string, ruleContent: string): boolean {
  * one would either over-authorize (if loose) or be indistinguishable from an exact
  * match (if not) — `null` correctly forces `ask` for "always allow this" on a chain.
  */
+/**
+ * Reserved rule content for retrieve/kill calls on background handles. These
+ * perform no new execution -- the command they operate on was already gated at
+ * launch -- so `defaultBehaviorFor` allows them when no rule matches, while a
+ * `Bash(background-handle)` rule (allow *or* deny) still governs them
+ * explicitly.
+ */
+const BACKGROUND_HANDLE_RULE = "background-handle";
+
 export function createBashPermissionSpec(): PermissionSpec<typeof bashSchema> {
 	return {
 		defaultBehavior: "ask",
+		defaultBehaviorFor(params) {
+			return "command" in params ? undefined : "allow";
+		},
 		matches(ruleContent, params) {
+			if (!("command" in params)) {
+				return ruleContent === BACKGROUND_HANDLE_RULE;
+			}
 			const classification = classifyBashCommand(params.command);
 			if (classification.type !== "segments") return false;
 			return classification.segments.every((segment) => segmentMatchesRule(segment, ruleContent));
 		},
 		describe(ruleContent) {
+			if (ruleContent === BACKGROUND_HANDLE_RULE) {
+				return "Retrieve or kill background shell commands";
+			}
 			return `Run bash commands matching "${ruleContent}"`;
 		},
 		ruleForCall(params) {
+			if (!("command" in params)) {
+				return BACKGROUND_HANDLE_RULE;
+			}
 			const classification = classifyBashCommand(params.command);
 			if (classification.type !== "segments" || classification.segments.length !== 1) return null;
 			return normalizeSegment(classification.segments[0]);
@@ -149,6 +186,25 @@ export interface BashOperations {
 			env?: NodeJS.ProcessEnv;
 		},
 	) => Promise<{ exitCode: number | null; executable?: string; argv?: string[] }>;
+	/**
+	 * Optional. Spawn a command that outlives the call, returning as soon as the
+	 * process exists. Backends that cannot background leave this undefined, and
+	 * the bash tool then rejects `background: true` with a model-readable error
+	 * rather than degrading (spec 2026-08-31-background-shell.md).
+	 */
+	spawnBackground?: (
+		command: string,
+		cwd: string,
+		options: {
+			onData: (data: Buffer) => void;
+			env?: NodeJS.ProcessEnv;
+		},
+	) => Promise<BashBackgroundProcess>;
+}
+
+export interface BashBackgroundProcess {
+	pid: number | undefined;
+	exited: Promise<number | null>;
 }
 
 /** Shared process execution used by the built-in shell tools. */
@@ -221,6 +277,33 @@ export function createLocalShellOperations(shellName: string, resolveShellConfig
 				if (signal) signal.removeEventListener("abort", onAbort);
 			}
 		},
+		spawnBackground: async (command, cwd, { onData, env }) => {
+			const shellConfig = resolveShellConfig();
+			try {
+				await fsAccess(cwd, constants.F_OK);
+			} catch {
+				throw new Error(`Working directory does not exist: ${cwd}\nCannot execute ${shellName} commands.`);
+			}
+			const commandFromStdin = shellConfig.commandTransport === "stdin";
+			const child = spawn(shellConfig.shell, commandFromStdin ? shellConfig.args : [...shellConfig.args, command], {
+				cwd,
+				detached: process.platform !== "win32",
+				env: env ?? getShellEnv(),
+				stdio: [commandFromStdin ? "pipe" : "ignore", "pipe", "pipe"],
+				windowsHide: true,
+			});
+			if (commandFromStdin) {
+				child.stdin?.on("error", () => {});
+				child.stdin?.end(command);
+			}
+			if (child.pid) trackDetachedChildPid(child.pid);
+			child.stdout?.on("data", onData);
+			child.stderr?.on("data", onData);
+			const exited = waitForChildProcess(child).finally(() => {
+				if (child.pid) untrackDetachedChildPid(child.pid);
+			});
+			return { pid: child.pid, exited };
+		},
 	};
 }
 
@@ -281,6 +364,12 @@ export interface BashToolOptions {
 	exposeSessionEnvironment?: boolean;
 	/** Hook to adjust command, cwd, or env before execution */
 	spawnHook?: BashSpawnHook;
+	/**
+	 * Background-shell registry (spec 2026-08-31-background-shell.md). Absent
+	 * gets a per-definition registry; the session passes its own so background
+	 * children are killed when the session disposes.
+	 */
+	backgroundRegistry?: BackgroundShellRegistry;
 }
 
 const BASH_PREVIEW_LINES = 5;
@@ -310,8 +399,16 @@ function formatDuration(ms: number): string {
 	return `${(ms / 1000).toFixed(1)}s`;
 }
 
-function formatShellCall(args: { command?: string; timeout?: number } | undefined, prompt: string): string {
+function formatShellCall(
+	args: { command?: string; timeout?: number; handle?: string; kill?: boolean } | undefined,
+	prompt: string,
+): string {
 	const command = str(args?.command);
+	const handle = str(args?.handle);
+	if (!command && handle) {
+		const suffix = args?.kill === true ? " · kill" : "";
+		return theme.fg("toolTitle", theme.bold(`${prompt} ${handle}${suffix}`));
+	}
 	const timeout = args?.timeout as number | undefined;
 	const timeoutSuffix = timeout ? theme.fg("muted", ` (timeout ${timeout}s)`) : "";
 	const commandDisplay = command === null ? invalidArgText(theme) : command ? command : theme.fg("toolOutput", "...");
@@ -419,6 +516,56 @@ export function createShellToolDefinition(
 	const commandPrefix = options?.commandPrefix;
 	const exposeSessionEnvironment = options?.exposeSessionEnvironment ?? true;
 	const spawnHook = options?.spawnHook;
+	const registry = options?.backgroundRegistry ?? createBackgroundShellRegistry();
+
+	// Background handle calls (retrieve and kill) never touch the foreground
+	// execution path, so the post-hoc escalation offer below is unreachable from
+	// them by construction; the refusal note in `executeHandleCall` tells the
+	// model a foreground rerun gets the offer (spec, Non-goals).
+	const unknownHandleError = (handle: string) => {
+		const known = registry.handles();
+		return new ToolExecutionError(
+			`Unknown background handle: ${handle}.${known.length > 0 ? ` Known handles: ${known.join(", ")}` : " No background commands have been launched."}`,
+			undefined,
+		);
+	};
+	const executeHandleCall = async (
+		handleInput: { handle: string } | { handle: string; kill: true },
+	): Promise<AgentToolResult<BashToolDetails | undefined>> => {
+		if ("kill" in handleInput && handleInput.kill) {
+			const status = registry.kill(handleInput.handle);
+			if (!status) throw unknownHandleError(handleInput.handle);
+			const state = status.running ? "kill signal sent" : `already exited (code ${status.exitCode})`;
+			return {
+				content: [{ type: "text", text: `[background] ${handleInput.handle}: ${state}` }],
+				details: undefined,
+			};
+		}
+		const retrieved = await registry.retrieve(handleInput.handle);
+		if (!retrieved) throw unknownHandleError(handleInput.handle);
+		const { status, snapshot } = retrieved;
+		const elapsed = ((Date.now() - status.startedAt) / 1000).toFixed(1);
+		const header = status.running
+			? `[background] ${handleInput.handle}: running ${elapsed}s`
+			: `[background] ${handleInput.handle}: ${status.killed ? "killed" : "exited"} (code ${status.exitCode}) after ${elapsed}s`;
+		let text = `${header}\n\n${snapshot.content || "(no output)"}`;
+		const truncation = snapshot.truncation;
+		if (truncation.truncated && snapshot.fullOutputPath) {
+			const startLine = truncation.totalLines - truncation.outputLines + 1;
+			text += `\n\n[Showing lines ${startLine}-${truncation.totalLines} of ${truncation.totalLines}. Full output: ${snapshot.fullOutputPath}]`;
+		}
+		if (!status.running && looksLikeSandboxRefusal(snapshot.content)) {
+			text += `\n\n[Sandbox refusal: background runs are not offered escalation. Rerun this command in the foreground to get the escalation offer.]`;
+		}
+		return {
+			content: [{ type: "text", text }],
+			details: {
+				truncation: truncation.truncated ? truncation : undefined,
+				fullOutputPath: snapshot.fullOutputPath,
+				execution: { cwd, exitCode: status.exitCode ?? null },
+			} satisfies BashToolDetails,
+		};
+	};
 	return {
 		name: config.name,
 		label: config.label,
@@ -434,22 +581,53 @@ export function createShellToolDefinition(
 				emits: new Set(["command"]),
 				capture: (params, result) => {
 					const execution = result.details?.execution;
-					return execution
-						? [{ kind: "command", command: params.command, ...execution }]
-						: [{ kind: "command", command: params.command }];
+					// Retrieve and kill calls carry a handle; resolve it back to the
+					// command that produced the output so the record shows what ran.
+					const command =
+						"command" in params ? params.command : (registry.commandFor(params.handle) ?? params.handle);
+					return execution ? [{ kind: "command", command, ...execution }] : [{ kind: "command", command }];
 				},
 			},
 		},
 		constrainedSampling: getExperimentalToolSampling(),
-		async execute(
-			_toolCallId,
-			{ command, timeout }: { command: string; timeout?: number },
-			signal?: AbortSignal,
-			onUpdate?,
-			ctx?,
-		) {
+		async execute(_toolCallId, input: BashToolInput, signal?: AbortSignal, onUpdate?, ctx?) {
+			if ("handle" in input) {
+				return await executeHandleCall(input);
+			}
+			const { command, timeout, background } = input;
 			const resolvedCommand = commandPrefix ? `${commandPrefix}\n${command}` : command;
 			const spawnContext = resolveSpawnContext(resolvedCommand, cwd, spawnHook, exposeSessionEnvironment, ctx);
+
+			if (background) {
+				const spawnBg = ops.spawnBackground;
+				if (!spawnBg) {
+					throw new ToolExecutionError(
+						"This shell backend does not support background execution. Run the command in the foreground instead.",
+						undefined,
+					);
+				}
+				const output = new OutputAccumulator({ tempFilePrefix: config.tempFilePrefix });
+				const launched = await spawnBg(spawnContext.command, spawnContext.cwd, {
+					env: spawnContext.env,
+					onData: (data) => output.append(data),
+				});
+				const handle = registry.launch({
+					command: spawnContext.command,
+					pid: launched.pid,
+					output,
+					exited: launched.exited,
+				});
+				return {
+					content: [
+						{
+							type: "text",
+							text: `[background] launched with handle ${handle}\nRetrieve its output: { "handle": "${handle}" }\nKill it: { "handle": "${handle}", "kill": true }`,
+						},
+					],
+					details: { execution: { cwd: spawnContext.cwd, exitCode: null } },
+				};
+			}
+
 			const output = new OutputAccumulator({ tempFilePrefix: config.tempFilePrefix });
 			let acceptingOutput = true;
 			let updateTimer: NodeJS.Timeout | undefined;
