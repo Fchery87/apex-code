@@ -43,7 +43,10 @@ export {
 export * from "./agent.ts";
 // Loop functions
 export * from "./agent-loop.ts";
-export * from "./harness/agent-harness.ts";
+// AgentHarness (ADR 0027) is deliberately not re-exported: it is upstream
+// scaffolding, not Apex Code's public API. The module and upstream's design
+// document (docs/harness.md) stay in the tree for merge hygiene and future
+// evaluation.
 export {
 	type BranchPreparation,
 	type BranchSummaryDetails,

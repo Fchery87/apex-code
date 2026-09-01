@@ -1323,6 +1323,7 @@ takes the next free number instead of a reserved one.
 | 0024 | Per-command escalation runs a second child, never widens the first | follow-up | ✅ |
 | 0025 | MCP rule grammar: `Mcp(server:tool)`, wildcard in the tool position only, metadata separate | follow-up | ✅ |
 | 0026 | npm dist-tags derive from the release version: prerelease to `next`, stable to `latest` | follow-up | ✅ |
+| 0027 | `AgentHarness` is not Apex Code's public API: the scaffold stays in-tree, unexported | follow-up | ✅ |
 
 ## Cross-phase contracts
 

@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Removed
+
+- `AgentHarness` (and its `HarnessNotImplemented` error and lane/operation
+  error classes) is no longer exported from `apex-code-agent-core`. The
+  inherited upstream scaffold rejected nearly every operation it exposed —
+  twenty-two methods threw `HarnessNotImplemented` and its `hooks` and
+  `events` registries threw on subscribe — so exporting it invited misuse of
+  an API that does not work. The module stays in the package for upstream
+  merge hygiene; see ADR 0027. If you were importing it, nothing you could
+  have called worked.
+
 ## [0.0.1-alpha.11] - 2026-08-30
 
 ### Changed
