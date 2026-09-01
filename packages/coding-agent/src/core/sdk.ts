@@ -1,16 +1,19 @@
 import { join } from "node:path";
+import type { CredentialStore } from "@earendil-works/pi-ai";
 import { clampThinkingLevel, type Message, type Model, streamSimple } from "@earendil-works/pi-ai/compat";
 import { Agent, type AgentMessage, setDefaultStreamFn, type ThinkingLevel } from "apex-code-agent-core";
 import { getAgentDir } from "../config.ts";
 import { resolvePath } from "../utils/paths.ts";
 import { AgentSession, type AgentSessionConfig } from "./agent-session.ts";
 import { formatNoModelsAvailableMessage } from "./auth-guidance.ts";
+import { AuthStorage } from "./auth-storage.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { createAgentDefinitionResolver } from "./delegation/agents.ts";
 import type { AgentDefinitionResolver, DelegationRuntimeOptions } from "./delegation/runtime.ts";
 import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
 import { loadHookRuntime } from "./hooks/loader.ts";
 import type { HookRuntime } from "./hooks/types.ts";
+import { createSessionMcpConnector } from "./mcp/connector.ts";
 import { createMcpRuntime } from "./mcp/runtime.ts";
 import { convertToLlm } from "./messages.ts";
 import { findInitialModel } from "./model-resolver.ts";
@@ -19,6 +22,7 @@ import { DerivedPermissionRuleStore } from "./permissions/store.ts";
 import { mergeProviderAttributionHeaders } from "./provider-attribution.ts";
 import type { ResourceLoader } from "./resource-loader.ts";
 import { DefaultResourceLoader } from "./resource-loader.ts";
+import { createSandboxCredentialStore } from "./sandbox/rpc/credential-client.ts";
 import { getDefaultSessionDir, SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
 import { time } from "./timings.ts";
@@ -121,6 +125,12 @@ export interface CreateAgentSessionOptions {
 	 * child's authority has nothing to derive from otherwise.
 	 */
 	delegation?: { resolveAgent?: AgentDefinitionResolver };
+	/**
+	 * Credential store the MCP OAuth connector uses (spec 2026-09-01-mcp-oauth).
+	 * Default: the sandbox channel store in a sandboxed child, else the host
+	 * AuthStorage — the same fallback chain the model runtime applies.
+	 */
+	mcpCredentials?: CredentialStore;
 }
 
 /** Result from createAgentSession */
@@ -308,7 +318,16 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		thinkingLevel = clampThinkingLevel(model, thinkingLevel) as ThinkingLevel;
 	}
 
-	const mcpRuntime = createMcpRuntime(cwd);
+	// OAuth-capable MCP servers resolve tokens through the session's own credential
+	// seam: direct and lock-serialized on the host, supervisor-mediated in a sandboxed
+	// child, fail-closed when neither applies (spec 2026-09-01-mcp-oauth). Servers
+	// without `auth: "oauth"` never touch it.
+	const mcpRuntime = createMcpRuntime(
+		cwd,
+		createSessionMcpConnector({
+			credentials: options.mcpCredentials ?? createSandboxCredentialStore() ?? AuthStorage.create(authPath),
+		}),
+	);
 
 	// `web_search`, `lsp`, and `mcp` join the core four only when configured. All stay
 	// registered either way, so an explicit `--tools` selection still reaches them and an

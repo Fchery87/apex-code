@@ -16,6 +16,7 @@ import type { ApexToolDefinition } from "../tools/contract.ts";
 import { wrapToolDefinition } from "../tools/tool-definition-wrapper.ts";
 import { createMcpToolContract } from "./contract.ts";
 import type { McpMetadataCache } from "./metadata-cache.ts";
+import { McpOAuthRefreshError, McpOAuthRequiredError } from "./oauth/mcp-token.ts";
 import { type McpToolDetails, type McpToolParams, mcpToolSchema } from "./schema.ts";
 import type { McpServerManager } from "./server-manager.ts";
 import type { CachedTool, McpServerConfig } from "./types.ts";
@@ -191,6 +192,11 @@ export function createMcpToolDefinition(
 				: result.content;
 			return { content, details };
 		} catch (error) {
+			// OAuth failures already carry the one action that helps (`apex-code mcp auth
+			// <server>`); the generic "unavailable" wrapper would bury it.
+			if (error instanceof McpOAuthRequiredError || error instanceof McpOAuthRefreshError) {
+				return { content: text(error.message), details };
+			}
 			// A failed server is reported, not retried: the manager holds it in `failed`
 			// with a backoff window so one broken server cannot cost every call a spawn.
 			return {

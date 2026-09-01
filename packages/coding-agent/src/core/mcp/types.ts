@@ -24,7 +24,7 @@ export type McpTransport =
 			kind: "http";
 			url: string;
 			headers: Record<string, string>;
-			/** Environment variable holding a bearer token. OAuth is a spec non-goal (ADR 0015). */
+			/** Environment variable holding a static bearer token. OAuth lives in the credential store (spec 2026-09-01-mcp-oauth). */
 			bearerTokenEnv: string | undefined;
 	  };
 
@@ -41,6 +41,8 @@ export const DEFAULT_IDLE_TIMEOUT_MINUTES = 10;
 export interface McpServerConfig {
 	name: string;
 	transport: McpTransport;
+	/** Set when the user opted this HTTP server into OAuth (spec 2026-09-01-mcp-oauth). Server-level, so metadata cache keys ignore it. */
+	auth?: "oauth";
 	capabilities: ReadonlySet<Capability>;
 	lifecycle: McpLifecycle;
 	idleTimeoutMinutes: number;

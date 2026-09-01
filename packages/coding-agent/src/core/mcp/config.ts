@@ -111,6 +111,22 @@ function parseIdleTimeout(entry: Record<string, unknown>): number {
 	return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : DEFAULT_IDLE_TIMEOUT_MINUTES;
 }
 
+function parseAuth(
+	entry: Record<string, unknown>,
+	transport: McpTransport,
+	report: (message: string) => void,
+): "oauth" | undefined {
+	const value = entry.auth;
+	if (value === undefined) return undefined;
+	if (transport.kind !== "http") {
+		report("auth is only supported on HTTP servers; ignoring");
+		return undefined;
+	}
+	if (value === "oauth") return "oauth";
+	report(`unknown auth ${JSON.stringify(value)}; only "oauth" is supported; ignoring`);
+	return undefined;
+}
+
 function readServers(path: string, diagnostics: McpConfigDiagnostic[]): Map<string, McpServerConfig> {
 	const servers = new Map<string, McpServerConfig>();
 	if (!existsSync(path)) return servers;
@@ -146,6 +162,7 @@ function readServers(path: string, diagnostics: McpConfigDiagnostic[]): Map<stri
 		servers.set(name, {
 			name,
 			transport,
+			auth: parseAuth(raw, transport, report),
 			capabilities: parseCapabilities(raw, report),
 			lifecycle: parseLifecycle(raw, report),
 			idleTimeoutMinutes: parseIdleTimeout(raw),

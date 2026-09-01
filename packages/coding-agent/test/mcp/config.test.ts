@@ -3,7 +3,19 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadMcpConfig } from "../../src/core/mcp/config.ts";
+import { serverCacheKey } from "../../src/core/mcp/metadata-cache.ts";
+import type { McpServerConfig } from "../../src/core/mcp/types.ts";
 import { ALL_CAPABILITIES } from "../../src/core/tools/contract.ts";
+
+function httpServer(name: string, url: string): McpServerConfig {
+	return {
+		name,
+		transport: { kind: "http", url, headers: {}, bearerTokenEnv: undefined },
+		capabilities: ALL_CAPABILITIES,
+		lifecycle: "lazy",
+		idleTimeoutMinutes: 10,
+	};
+}
 
 describe("MCP config", () => {
 	const tempDirs: string[] = [];
@@ -210,6 +222,69 @@ describe("MCP config", () => {
 
 			expect(servers.get("s")?.capabilities).toEqual(new Set(["net"]));
 			expect(diagnostics).toHaveLength(1);
+		});
+	});
+
+	describe("auth field", () => {
+		it("parses auth: oauth on an HTTP server", () => {
+			const dir = createDir();
+			const file = write(
+				dir,
+				".mcp.json",
+				JSON.stringify({ mcpServers: { remote: { url: "https://example.com/mcp", auth: "oauth" } } }),
+			);
+
+			const { servers, diagnostics } = load(file);
+
+			expect(servers.get("remote")?.auth).toBe("oauth");
+			expect(diagnostics).toEqual([]);
+		});
+
+		it("leaves auth unset when absent", () => {
+			const dir = createDir();
+			const file = write(
+				dir,
+				".mcp.json",
+				JSON.stringify({ mcpServers: { remote: { url: "https://example.com/mcp" } } }),
+			);
+
+			expect(load(file).servers.get("remote")?.auth).toBeUndefined();
+		});
+
+		it("reports and ignores an unknown auth value", () => {
+			const dir = createDir();
+			const file = write(
+				dir,
+				".mcp.json",
+				JSON.stringify({ mcpServers: { remote: { url: "https://example.com/mcp", auth: "kerberos" } } }),
+			);
+
+			const { servers, diagnostics } = load(file);
+
+			expect(servers.get("remote")?.auth).toBeUndefined();
+			expect(diagnostics).toHaveLength(1);
+			expect(diagnostics[0]?.message).toContain('unknown auth "kerberos"');
+		});
+
+		it("reports auth on a stdio server and ignores it", () => {
+			const dir = createDir();
+			const file = write(
+				dir,
+				".mcp.json",
+				JSON.stringify({ mcpServers: { local: { command: "x", auth: "oauth" } } }),
+			);
+
+			const { servers, diagnostics } = load(file);
+
+			expect(servers.get("local")?.auth).toBeUndefined();
+			expect(diagnostics).toHaveLength(1);
+			expect(diagnostics[0]?.message).toContain("only supported on HTTP servers");
+		});
+
+		it("does not change the metadata cache key, so existing caches stay valid", () => {
+			const withoutAuth = httpServer("srv", "https://example.com/mcp");
+			const withAuth = { ...withoutAuth, auth: "oauth" as const };
+			expect(serverCacheKey(withAuth)).toBe(serverCacheKey(withoutAuth));
 		});
 	});
 });

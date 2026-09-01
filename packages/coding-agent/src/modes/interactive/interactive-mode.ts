@@ -85,6 +85,7 @@ import type {
 import { FooterDataProvider, type ReadonlyFooterDataProvider } from "../../core/footer-data-provider.ts";
 import { configureHttpDispatcher, formatHttpIdleTimeoutMs } from "../../core/http-dispatcher.ts";
 import { type AppKeybinding, KeybindingsManager } from "../../core/keybindings.ts";
+import { authorizeConfiguredServer } from "../../core/mcp/oauth/authorize.ts";
 import { createCompactionSummaryMessage } from "../../core/messages.ts";
 import {
 	defaultModelPerProvider,
@@ -3266,6 +3267,12 @@ export class InteractiveMode {
 				this.editor.setText("");
 				return;
 			}
+			if (text === "/mcp" || text.startsWith("/mcp ")) {
+				const mcpArgs = text.slice(4).trim().split(/\s+/).filter(Boolean);
+				this.editor.setText("");
+				await this.handleMcpAuthCommand(mcpArgs);
+				return;
+			}
 			if (text === "/new") {
 				this.editor.setText("");
 				await this.handleClearCommand();
@@ -5741,6 +5748,27 @@ export class InteractiveMode {
 				provider.id.toLowerCase() === normalizedProviderRef ||
 				provider.name.toLowerCase() === normalizedProviderRef,
 		);
+	}
+
+	/** `/mcp auth <server>`: runs the same OAuth flow as the CLI, printing into the chat. */
+	private async handleMcpAuthCommand(mcpArgs: string[]): Promise<void> {
+		const show = (line: string, kind: "dim" | "error" = "dim") => {
+			this.chatContainer.addChild(new Text(theme.fg(kind, line), 1, 0));
+			this.ui.requestRender();
+		};
+		if (mcpArgs[0] !== "auth" || !mcpArgs[1] || mcpArgs.length > 2) {
+			show("Usage: /mcp auth <server>", "error");
+			return;
+		}
+		try {
+			await authorizeConfiguredServer({
+				serverName: mcpArgs[1],
+				openBrowser: (url) => openBrowser(url),
+				log: (line) => show(line),
+			});
+		} catch (error) {
+			show(`Error: ${error instanceof Error ? error.message : String(error)}`, "error");
+		}
 	}
 
 	private async handleLoginCommand(providerRef?: string): Promise<void> {

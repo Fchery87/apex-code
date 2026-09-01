@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ENV_AGENT_DIR } from "../../src/config.ts";
 import { createMcpToolDefinition, MCP_TOOL_NAME } from "../../src/core/mcp/mcp-tool.ts";
 import { McpMetadataCache } from "../../src/core/mcp/metadata-cache.ts";
+import { authRequired } from "../../src/core/mcp/oauth/mcp-token.ts";
 import { McpServerManager } from "../../src/core/mcp/server-manager.ts";
 import type { CachedTool, McpConnection, McpServerConfig } from "../../src/core/mcp/types.ts";
 
@@ -200,6 +201,20 @@ describe("mcp proxy tool", () => {
 		expect(textOf(first)).toContain("server exited immediately");
 		expect(textOf(second)).toContain("server exited immediately");
 		expect(attempts).toBe(1);
+	});
+
+	it("passes an OAuth failure through unwrapped, naming the command that fixes it", async () => {
+		const { definition } = setup({
+			connector: async () => {
+				throw authRequired("github");
+			},
+		});
+
+		const result = await run(definition, { tool: "github:create_issue", args: {} });
+
+		expect(textOf(result)).toContain('MCP server "github" requires OAuth');
+		expect(textOf(result)).toContain("apex-code mcp auth github");
+		expect(textOf(result)).not.toContain("is unavailable");
 	});
 
 	it("rejects a call naming no action", async () => {
