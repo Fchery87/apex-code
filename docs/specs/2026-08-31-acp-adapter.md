@@ -1,6 +1,6 @@
 # Spec: ACP adapter (`--mode acp`)
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 
