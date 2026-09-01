@@ -117,7 +117,7 @@ capable and measurably worse.
 | Declarative hooks | **landed** — HOOKS.1 through HOOKS.7 · `a9675e1ce` (three-OS CI run 33451005458) | [spec](specs/2026-08-31-declarative-hooks.md) | — |
 | Background shell | **landed** — SHELL.1 through SHELL.5 · `9d086353d` (three-OS CI run 33462273866) | [spec](specs/2026-08-31-background-shell.md) | — |
 | ACP adapter | **landed** — ACP.1 through ACP.5 · `6b76caa3b` (three-OS CI run 33469742558) | [spec](specs/2026-08-31-acp-adapter.md) | — |
-| Checkpoints on by default | **in progress** — CP.1 through CP.3 | [spec](specs/2026-09-01-checkpoints-default-on.md) | [plan](plans/2026-09-01-checkpoints-default-on.md) |
+| Checkpoints on by default | **landed** — CP.1 through CP.3 · `7f6e5800b` (three-OS CI run 33474171722) | [spec](specs/2026-09-01-checkpoints-default-on.md) | — |
 
 ---
 

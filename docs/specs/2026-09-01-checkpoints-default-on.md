@@ -1,6 +1,6 @@
 # Spec: Checkpoints on by default
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 
