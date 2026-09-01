@@ -115,7 +115,7 @@ capable and measurably worse.
 | Release tags and the spec status gate | **landed** — pull request #63 | [spec](specs/2026-08-29-claims-the-repository-cannot-check.md) | — |
 | Mid-run auto-compaction | **landed** — `61be67e27` | [spec](specs/2026-08-29-mid-run-auto-compaction.md) | — |
 | Declarative hooks | **landed** — HOOKS.1 through HOOKS.7 · `a9675e1ce` (three-OS CI run 33451005458) | [spec](specs/2026-08-31-declarative-hooks.md) | — |
-| Background shell | **in progress** — SHELL.1 through SHELL.5 | [spec](specs/2026-08-31-background-shell.md) | [plan](plans/2026-08-31-background-shell.md) |
+| Background shell | **landed** — SHELL.1 through SHELL.5 · `9d086353d` (three-OS CI run 33462273866) | [spec](specs/2026-08-31-background-shell.md) | — |
 
 ---
 

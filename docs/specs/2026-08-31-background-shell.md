@@ -1,6 +1,6 @@
 # Spec: Background shell execution with a handle
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 
