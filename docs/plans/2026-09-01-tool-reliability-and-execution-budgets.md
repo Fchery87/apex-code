@@ -10,9 +10,9 @@
 | --- | --- | --- | --- | --- |
 | TR.1 | Capture bounded output from the standalone `test` tool | Done | `4d03e750c` | New public-tool tests for pass, fail, timeout, cancellation, signal, spawn failure, UTF-8 boundaries, high volume, artifact policy, and ledger exclusion; `npx tsgo --noEmit` |
 | TR.2 | Add bounded advisory edit-failure diagnostics | Done | `3c2af739c` | New public edit-tool tests for missing, duplicate, CRLF, tabs, Unicode, repeated text, cap exceeded, stable line mapping, and no approximate application; `npx tsgo --noEmit` |
-| TR.3 | Measure run behavior and select the budget compatibility/default policy | Not started | — | Replay corpus and representative driven-loop report checked into the spec or research note; settings/default tests pin the chosen policy before implementation |
-| TR.4 | Implement the agent-core run budget and structured stop reason | Not started | — | `packages/agent/test/agent-loop.test.ts` covers provider requests, tool calls, wall time, retries, tool batches, cancellation precedence, exact boundaries, steering, follow-up, and continuation semantics |
-| TR.5 | Wire budgets through settings and every execution mode | Not started | — | Focused SDK/session, interactive, print, JSON, RPC, and ACP tests prove one policy and one structured outcome across callers; existing mid-run compaction suites remain green |
+| TR.3 | Measure run behavior and select the budget compatibility/default policy | Done | `7ca5f179c` | Replay corpus and representative driven-loop report checked into the spec or research note; settings/default tests pin the chosen policy before implementation |
+| TR.4 | Implement the agent-core run budget and structured stop reason | Done | `f67fb6cb3` | `packages/agent/test/agent-loop.test.ts` covers provider requests, tool calls, wall time, retries, tool batches, cancellation precedence, exact boundaries, steering, follow-up, and continuation semantics |
+| TR.5 | Wire budgets through settings and every execution mode | Done | `1339436ab` | Focused SDK/session, interactive, print, JSON, RPC, and ACP tests prove one policy and one structured outcome across callers; existing mid-run compaction suites remain green |
 | TR.6 | Add permission-safe `workspace_symbol` | Not started | — | LSP and permission suites cover workspace-root authorization, normalization, caps, malformed/empty responses, unsupported servers, cancellation, outside-root results, and canonical contract projection |
 | TR.7 | Update documentation and close the gates | Not started | — | Focused suites above, `npx tsgo --noEmit`, `npm test`, `npm run check`, `node scripts/validate-docs-lifecycle.mjs .`, and required CI evidence |
 
@@ -79,3 +79,7 @@ None.
 TR.1 and TR.2 are independent and may be implemented in either order. TR.3 must finish before TR.4. TR.4 must land before TR.5. TR.6 is independent after the contract review.
 
 Tests that run commands or sessions use scratch directories and may not write Apex's own session or evidence state.
+
+TR.3's pinning test was written and observed red (`getRunBudget` missing, 6 failures) before the settings implementation landed, as test-first requires. The red state itself was not committed: the pre-commit gate runs `tsgo --noEmit` over the whole tree, so a test referencing a not-yet-existing getter cannot compile in any commit. The red observation and its reason are recorded here instead. The same applies to the TR.3 "fails under the old unbounded behavior" requirement: the enforcement test in TR.5 (`run-budget-wiring.test.ts`) fails without the sdk.ts budget wire, which was verified during debugging when the rebuilt-agent-dist mismatch left the wire ineffective (runBudget undefined, test red).
+
+One environment fact worth keeping: the coding-agent vitest suite resolves `apex-code-agent-core` through the workspace link to built `dist/` (the vitest alias list only covers the old upstream `@earendil-works/*` names), so agent-core source changes require `npm --prefix packages/agent run build` before coding-agent tests exercise them.
