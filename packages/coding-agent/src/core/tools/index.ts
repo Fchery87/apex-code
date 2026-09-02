@@ -100,7 +100,10 @@ export {
 	createTestToolDefinition,
 	type TestOperationResult,
 	type TestOperations,
+	type TestProcessOutcome,
 	type TestRunDetails,
+	type TestStreamCapture,
+	type TestStreamDetails,
 	type TestToolInput,
 	type TestToolOptions,
 } from "./test.ts";

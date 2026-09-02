@@ -30,9 +30,17 @@ describe("test runner source evidence", () => {
 		const params = { executable: "npm", args: ["test", "--", "unit"] };
 		const result = await wrapToolDefinition(definition).execute("test-call", params);
 
-		expect(result.details).toMatchObject({ exitCode: 1 });
+		expect(result.details).toMatchObject({ exitCode: 1, outcome: "exit" });
 		expect(definition.contract.evidence.capture(params, result)).toEqual([
-			{ kind: "test", executable: "npm", argv: ["test", "--", "unit"], cwd, exitCode: 1 },
+			{
+				kind: "test",
+				executable: "npm",
+				argv: ["test", "--", "unit"],
+				cwd,
+				exitCode: 1,
+				outcome: "exit",
+				outputTruncated: false,
+			},
 		]);
 	});
 	it("observes a real non-zero test-process result without treating it as an execution exception", async () => {
@@ -42,8 +50,17 @@ describe("test runner source evidence", () => {
 		const result = await wrapToolDefinition(definition).execute("real-nonzero", params);
 
 		expect(result.details.exitCode).toBe(1);
+		expect(result.details.outcome).toBe("exit");
 		expect(definition.contract.evidence.capture(params, result)).toEqual([
-			{ kind: "test", executable: process.execPath, argv: ["-e", "process.exit(1)"], cwd, exitCode: 1 },
+			{
+				kind: "test",
+				executable: process.execPath,
+				argv: ["-e", "process.exit(1)"],
+				cwd,
+				exitCode: 1,
+				outcome: "exit",
+				outputTruncated: false,
+			},
 		]);
 	});
 });

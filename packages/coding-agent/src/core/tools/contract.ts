@@ -139,13 +139,20 @@ export type DiagnosticEvidenceRecord =
 			unavailableKind: DiagnosticUnavailableKind;
 	  };
 
-/** Normalized argv-based test execution facts. */
+/** How a `test` run actually ended. */
+export type TestProcessOutcome = "exit" | "signal" | "timeout" | "cancelled" | "spawn-failed";
+
+/** Bounded argv-based test execution facts. Full output never enters evidence; it lives in artifacts. */
 export interface TestEvidenceRecord {
 	kind: "test";
 	cwd: string;
 	executable: string;
 	argv: string[];
 	exitCode: number | null;
+	/** How the run ended. Unset means a legacy record; derive from `exitCode` when reading. */
+	outcome?: TestProcessOutcome;
+	/** True when the model-facing view omitted part of a stream (full output lives in artifacts). */
+	outputTruncated?: boolean;
 }
 
 /** Explicit human attestation; policy decides how, or whether, it is sufficient. */
