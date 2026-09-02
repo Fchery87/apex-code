@@ -42,6 +42,7 @@ import type {
 	AgentEvent,
 	AgentMessage,
 	AgentState,
+	AgentStopReason,
 	AgentTool,
 	BeforeToolCallResult,
 	PrepareNextTurnContext,
@@ -173,6 +174,8 @@ export type AgentSessionEvent =
 			type: "agent_end";
 			messages: AgentMessage[];
 			willRetry: boolean;
+			/** Structured terminal outcome of the run (budget exhaustion, abort, error, completion). */
+			stopReason?: AgentStopReason;
 	  }
 	| { type: "agent_settled" }
 	| {
@@ -2250,6 +2253,11 @@ export class AgentSession {
 		env: Record<string, string> | undefined,
 		reason: "manual" | "threshold" | "overflow",
 	): Promise<CompactionResult> {
+		// Maintenance budget (spec 2026-09-01-tool-reliability-and-execution-budgets.md):
+		// a compaction summarization is context maintenance, not task progress. It is
+		// recorded on the run's budget for observability and never consumes
+		// maxProviderRequests.
+		this.agent.recordMaintenanceRequest();
 		return compact(
 			preparation,
 			requestModel,

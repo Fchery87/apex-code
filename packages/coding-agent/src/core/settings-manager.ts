@@ -55,6 +55,47 @@ export interface RetrySettings {
 	provider?: ProviderRetrySettings;
 }
 
+/**
+ * Agent-loop run budget (spec 2026-09-01-tool-reliability-and-execution-budgets.md).
+ * Absent fields fall back to the measured defaults; the explicit `"unlimited"`
+ * value opts a single field out. Defaults come from
+ * docs/research/2026-09-02-run-budget-measurements.md.
+ */
+export interface RunBudgetSettings {
+	maxProviderRequests?: number | "unlimited"; // default: 200 per logical run
+	maxToolCalls?: number | "unlimited"; // default: 2000 per logical run
+	maxWallTimeMs?: number | "unlimited"; // default: no wall-time limit this release
+}
+
+/** The resolved per-run policy consumed by the agent core. */
+export interface ResolvedRunBudget {
+	maxProviderRequests?: number;
+	maxToolCalls?: number;
+	maxWallTimeMs?: number;
+}
+
+/**
+ * Measured run-budget defaults (docs/research/2026-09-02-run-budget-measurements.md,
+ * recorded in the spec before implementation): ~60x the heaviest corpus run and
+ * ~18x the scripted 10-step tool loop for requests; 100 full 20-call batches for
+ * tool calls. No measured basis exists for a wall-time default, so there is none.
+ */
+export const DEFAULT_MAX_PROVIDER_REQUESTS = 200;
+export const DEFAULT_MAX_TOOL_CALLS = 2000;
+
+function resolveRunBudgetLimit(
+	value: number | "unlimited" | undefined,
+	fallback: number | undefined,
+	name: string,
+): number | undefined {
+	if (value === undefined) return fallback;
+	if (value === "unlimited") return undefined;
+	if (typeof value !== "number" || !Number.isInteger(value) || !Number.isFinite(value) || value < 0) {
+		throw new Error(`Invalid ${name} setting: ${String(value)}`);
+	}
+	return value;
+}
+
 export type TuiMode = RendererTuiMode;
 export type FullscreenExitOutput = "transcript" | "resume-hint";
 
@@ -154,6 +195,7 @@ export interface Settings {
 	compaction?: CompactionSettings;
 	branchSummary?: BranchSummarySettings;
 	retry?: RetrySettings;
+	runBudget?: RunBudgetSettings;
 	hideThinkingBlock?: boolean;
 	showCacheMissNotices?: boolean; // default: false - show prompt-cache miss and compaction cost notices
 	externalEditor?: string; // Command for Ctrl+G external editor; takes precedence over VISUAL/EDITOR
@@ -1042,6 +1084,26 @@ export class SettingsManager {
 			timeoutMs: this.settings.retry?.provider?.timeoutMs,
 			maxRetries: this.settings.retry?.provider?.maxRetries,
 			maxRetryDelayMs: this.settings.retry?.provider?.maxRetryDelayMs ?? 60000,
+		};
+	}
+
+	/**
+	 * Resolve the run-budget policy actually enforced by the agent core (spec
+	 * 2026-09-01-tool-reliability-and-execution-budgets.md). Absent fields take
+	 * the measured defaults; the explicit `"unlimited"` value resolves to
+	 * "no limit" for that field; malformed values throw so a broken policy is
+	 * rejected before any session runs.
+	 */
+	getRunBudget(): ResolvedRunBudget {
+		const settings = this.settings.runBudget;
+		return {
+			maxProviderRequests: resolveRunBudgetLimit(
+				settings?.maxProviderRequests,
+				DEFAULT_MAX_PROVIDER_REQUESTS,
+				"runBudget.maxProviderRequests",
+			),
+			maxToolCalls: resolveRunBudgetLimit(settings?.maxToolCalls, DEFAULT_MAX_TOOL_CALLS, "runBudget.maxToolCalls"),
+			maxWallTimeMs: resolveRunBudgetLimit(settings?.maxWallTimeMs, undefined, "runBudget.maxWallTimeMs"),
 		};
 	}
 

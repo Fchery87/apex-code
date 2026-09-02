@@ -7,6 +7,7 @@
  */
 
 import type { AssistantMessage, ImageContent } from "@earendil-works/pi-ai";
+import type { AgentStopReason } from "apex-code-agent-core";
 import type { AgentSessionRuntime } from "../core/agent-session-runtime.ts";
 import { flushRawStdout, waitForRawStdoutBackpressure, writeRawStdout } from "../core/output-guard.ts";
 import { killTrackedDetachedChildren } from "../utils/shell.ts";
@@ -38,6 +39,9 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 	let unsubscribeBackpressure: (() => void) | undefined;
 	let disposed = false;
 	const signalCleanupHandlers: Array<() => void> = [];
+	// Structured terminal outcome of the last run (spec 2026-09-01-tool-reliability-
+	// and-execution-budgets.md); surfaced in this mode's native form below.
+	let lastStopReason: AgentStopReason | undefined;
 
 	const disposeRuntime = async (): Promise<void> => {
 		if (disposed) return;
@@ -106,6 +110,9 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 		unsubscribe?.();
 		unsubscribeBackpressure?.();
 		unsubscribe = session.subscribe((event) => {
+			if (event.type === "agent_end") {
+				lastStopReason = event.stopReason;
+			}
 			if (mode === "json") {
 				writeRawStdout(`${JSON.stringify(toJsonEvent(event))}\n`);
 			}
@@ -137,18 +144,28 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 		}
 
 		if (mode === "text") {
-			const state = session.state;
-			const lastMessage = state.messages[state.messages.length - 1];
+			// A budget stop can settle after a tool result with no assistant message,
+			// so it is reported from the structured stop reason rather than inferred
+			// from the last message.
+			if (lastStopReason?.kind === "budget-exhausted") {
+				console.error(
+					`Run stopped: the ${lastStopReason.limit.replace(/-/g, " ")} budget was exhausted (runBudget settings).`,
+				);
+				exitCode = 1;
+			} else {
+				const state = session.state;
+				const lastMessage = state.messages[state.messages.length - 1];
 
-			if (lastMessage?.role === "assistant") {
-				const assistantMsg = lastMessage as AssistantMessage;
-				if (assistantMsg.stopReason === "error" || assistantMsg.stopReason === "aborted") {
-					console.error(assistantMsg.errorMessage || `Request ${assistantMsg.stopReason}`);
-					exitCode = 1;
-				} else {
-					for (const content of assistantMsg.content) {
-						if (content.type === "text") {
-							writeRawStdout(`${content.text}\n`);
+				if (lastMessage?.role === "assistant") {
+					const assistantMsg = lastMessage as AssistantMessage;
+					if (assistantMsg.stopReason === "error" || assistantMsg.stopReason === "aborted") {
+						console.error(assistantMsg.errorMessage || `Request ${assistantMsg.stopReason}`);
+						exitCode = 1;
+					} else {
+						for (const content of assistantMsg.content) {
+							if (content.type === "text") {
+								writeRawStdout(`${content.text}\n`);
+							}
 						}
 					}
 				}

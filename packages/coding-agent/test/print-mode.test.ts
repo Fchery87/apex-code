@@ -139,4 +139,42 @@ describe("runPrintMode", () => {
 		expect(session.extensionRunner.emit).toHaveBeenCalledTimes(1);
 		expect(session.extensionRunner.emit).toHaveBeenCalledWith({ type: "session_shutdown", reason: "quit" });
 	});
+
+	it("reports a budget-exhausted stop from the structured stop reason", async () => {
+		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "done" }));
+		const { session } = runtimeHost;
+		// A budget stop settles after a tool result: no assistant message carries
+		// it, so print mode must surface it from the agent_end stop reason.
+		let agentEndHandler:
+			| ((event: {
+					type: string;
+					messages: unknown[];
+					willRetry: boolean;
+					stopReason?: unknown;
+			  }) => Promise<void> | void)
+			| undefined;
+		session.subscribe = vi.fn((handler: (event: { type: string; stopReason?: unknown }) => Promise<void> | void) => {
+			agentEndHandler = handler as typeof agentEndHandler;
+			return () => {};
+		});
+		session.prompt = vi.fn(async () => {
+			await agentEndHandler?.({
+				type: "agent_end",
+				messages: [],
+				willRetry: false,
+				stopReason: { kind: "budget-exhausted", limit: "provider-requests" },
+			});
+		});
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+			mode: "text",
+			initialMessage: "run tools",
+		});
+
+		expect(exitCode).toBe(1);
+		expect(errorSpy).toHaveBeenCalledWith(
+			"Run stopped: the provider requests budget was exhausted (runBudget settings).",
+		);
+	});
 });

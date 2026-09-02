@@ -395,6 +395,10 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			thinkingLevel,
 			tools: [],
 		},
+		// One normalized budget policy from settings; every execution mode (interactive,
+		// print, JSON, RPC, ACP, SDK) runs through this session, so none counts on its
+		// own (spec 2026-09-01-tool-reliability-and-execution-budgets.md).
+		runBudget: settingsManager.getRunBudget(),
 		convertToLlm: convertToLlmWithBlockImages,
 		streamFn: async (model, context, options) => {
 			const providerRetrySettings = settingsManager.getProviderRetrySettings();

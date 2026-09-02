@@ -330,6 +330,16 @@ export class Agent {
 		return this.steeringQueue.hasItems() || this.followUpQueue.hasItems();
 	}
 
+	/**
+	 * Record a maintenance request (e.g. a local compaction summarization) on the
+	 * current logical run's budget. Maintenance never consumes the run's
+	 * provider-request budget; it is recorded for observability only. No-op when
+	 * no budget policy is configured or no logical run is active.
+	 */
+	recordMaintenanceRequest(): void {
+		this.budgetController?.recordMaintenanceRequest();
+	}
+
 	/** Active abort signal for the current run, if any. */
 	get signal(): AbortSignal | undefined {
 		return this.activeRun?.abortController.signal;
