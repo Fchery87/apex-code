@@ -119,6 +119,9 @@ capable and measurably worse.
 | Background shell | **landed** — SHELL.1 through SHELL.5 · `9d086353d` (three-OS CI run 33462273866) | [spec](specs/2026-08-31-background-shell.md) | — |
 | ACP adapter | **landed** — ACP.1 through ACP.5 · `6b76caa3b` (three-OS CI run 33469742558) | [spec](specs/2026-08-31-acp-adapter.md) | — |
 | Checkpoints on by default | **landed** — CP.1 through CP.3 · `7f6e5800b` (three-OS CI run 33474171722) | [spec](specs/2026-09-01-checkpoints-default-on.md) | — |
+| Workspace-aware compaction and checkpoint navigation | **active** — implementation planned | [spec](specs/2026-09-01-harness-correctness-and-workspace-state.md) | [plan](plans/2026-09-01-harness-correctness-and-workspace-state.md) |
+| Tool reliability and execution budgets | **active** — implementation planned | [spec](specs/2026-09-01-tool-reliability-and-execution-budgets.md) | [plan](plans/2026-09-01-tool-reliability-and-execution-budgets.md) |
+| Configured verification and formatting | **active** — implementation planned | [spec](specs/2026-09-01-configured-verification-and-formatting.md) | [plan](plans/2026-09-01-configured-verification-and-formatting.md) |
 
 ---
 
