@@ -125,6 +125,24 @@ When a tool batch reaches a budget boundary, already-started calls finish or can
 
 Add a distinct `workspace_symbol` operation that sends `workspace/symbol` only after workspace-root permission checks. Normalize every returned URI/path and range through the existing LSP helpers. Apply result count, output byte, and serialized-details caps. Return explicit notices for omitted or truncated results, empty responses, malformed items, unsupported servers, cancellation, and server errors. Do not broaden the permission root merely because a symbol result points outside it.
 
+## Settled budget policy (2026-09-02, TR.3)
+
+The defaults and unit decisions below are selected from measured evidence and
+are binding for TR.4/TR.5. Measurements and their derivation:
+[docs/research/2026-09-02-run-budget-measurements.md](../research/2026-09-02-run-budget-measurements.md).
+
+- Default `maxProviderRequests`: **200** per logical run.
+- Default `maxToolCalls`: **2000** per logical run.
+- Default `maxWallTimeMs`: **none this release** (unset means unlimited; the
+  field stays configurable).
+- Continuations share the logical run's budget. Steering, follow-up,
+  post-run continuations, and provider-failure retries are the same run; a new
+  run starts at each user prompt.
+- Compaction summarization uses a **separate maintenance budget**: it does not
+  consume `maxProviderRequests` and is recorded separately for observability.
+- Unbounded behavior is an explicit per-field `"unlimited"` opt-in in settings;
+  there is no implicit unlimited path.
+
 ## Deletion inventory
 
 | Item | Type | Disposition |
