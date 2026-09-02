@@ -1,3 +1,4 @@
+import { isAbsolute, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { AgentTool } from "apex-code-agent-core";
 import { type Static, Type } from "typebox";
@@ -9,6 +10,8 @@ import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
 const MAX_LOCATIONS = 1_000;
 const MAX_SYMBOLS = 2_000;
+/** Cap on the serialized symbol details so a result can never grow unbounded (spec § 4). */
+const MAX_DETAILS_BYTES = 256 * 1024;
 
 const lspNavigationSchema = Type.Object({
 	operation: Type.Union([Type.Literal("definition"), Type.Literal("references")], {
@@ -24,7 +27,12 @@ const lspDocumentSymbolsSchema = Type.Object({
 	path: Type.String({ description: "Path to the file (relative or absolute)." }),
 });
 
-const lspSchema = Type.Union([lspNavigationSchema, lspDocumentSymbolsSchema]);
+const lspWorkspaceSymbolsSchema = Type.Object({
+	operation: Type.Literal("workspace_symbol", { description: "Search the whole workspace for symbols by name." }),
+	query: Type.String({ description: "The symbol name query to search for." }),
+});
+
+const lspSchema = Type.Union([lspNavigationSchema, lspDocumentSymbolsSchema, lspWorkspaceSymbolsSchema]);
 
 export type LspToolInput = Static<typeof lspSchema>;
 
@@ -54,9 +62,26 @@ export interface LspSymbol {
 	readonly detail?: string;
 }
 
+/** A workspace-wide symbol (LSP SymbolInformation) normalized like {@link LspSymbol} without a selection range. */
+export interface LspWorkspaceSymbol {
+	readonly name: string;
+	readonly kind: number;
+	readonly path: string;
+	readonly range: LspRange;
+	readonly containerName?: string;
+}
+
 export type LspToolDetails =
 	| { operation: "definition" | "references"; locations: LspLocation[]; omitted: number; truncated: number }
-	| { operation: "document_symbols"; symbols: LspSymbol[]; omitted: number; truncated: number };
+	| { operation: "document_symbols"; symbols: LspSymbol[]; omitted: number; truncated: number }
+	| {
+			operation: "workspace_symbol";
+			symbols: LspWorkspaceSymbol[];
+			omitted: number;
+			truncated: number;
+			outsideRoot: number;
+			unsupported?: boolean;
+	  };
 
 /**
  * Pluggable transport for the `lsp` tool. The executable, its arguments, and the
@@ -192,6 +217,115 @@ function capSymbols(symbols: LspSymbol[], max: number): { symbols: LspSymbol[]; 
 	return { symbols: capped, truncated: sorted.length - capped.length };
 }
 
+function isInsideRoot(absolutePath: string, root: string): boolean {
+	const rel = relative(root, absolutePath);
+	return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function rawWorkspaceSymbol(value: unknown): { name: string; kind: number; containerName?: string } | undefined {
+	if (!isRecord(value) || typeof value.name !== "string") return undefined;
+	return {
+		name: value.name,
+		kind: typeof value.kind === "number" ? value.kind : 0,
+		...(typeof value.containerName === "string" ? { containerName: value.containerName } : {}),
+	};
+}
+
+/**
+ * Normalize `workspace/symbol` SymbolInformation results: file URIs to
+ * workspace-relative paths, zero-based ranges to one-based, and every result
+ * outside the authorized root dropped with an honest count (spec § 4: the
+ * root is never widened because a result points outside it).
+ */
+function normalizeWorkspaceSymbols(
+	raw: unknown,
+	cwd: string,
+): { symbols: LspWorkspaceSymbol[]; omitted: number; outsideRoot: number } {
+	const items = Array.isArray(raw) ? raw : raw === undefined || raw === null ? [] : [raw];
+	const symbols: LspWorkspaceSymbol[] = [];
+	let omitted = 0;
+	let outsideRoot = 0;
+	for (const item of items) {
+		const parsed = rawLocationUriAndRange(isRecord(item) ? (item.location ?? item) : undefined);
+		const absolutePath = parsed ? fileUriToAbsolutePath(parsed.uri) : undefined;
+		const info = rawWorkspaceSymbol(item);
+		if (!parsed || !absolutePath || !info) {
+			omitted++;
+			continue;
+		}
+		if (!isInsideRoot(absolutePath, cwd)) {
+			outsideRoot++;
+			continue;
+		}
+		symbols.push({
+			...info,
+			path: formatPathRelativeToCwdOrAbsolute(absolutePath, cwd),
+			range: toOneBasedRange(parsed.range),
+		});
+	}
+	return { symbols, omitted, outsideRoot };
+}
+
+function compareWorkspaceSymbols(a: LspWorkspaceSymbol, b: LspWorkspaceSymbol): number {
+	if (a.path !== b.path) return a.path < b.path ? -1 : 1;
+	if (a.range.start.line !== b.range.start.line) return a.range.start.line - b.range.start.line;
+	return a.name === b.name ? 0 : a.name < b.name ? -1 : 1;
+}
+
+function capWorkspaceSymbolsByCount(
+	symbols: LspWorkspaceSymbol[],
+	max: number,
+): { symbols: LspWorkspaceSymbol[]; truncated: number } {
+	const sorted = [...symbols].sort(compareWorkspaceSymbols);
+	const capped = sorted.slice(0, max);
+	return { symbols: capped, truncated: sorted.length - capped.length };
+}
+
+function capWorkspaceSymbolsByBytes(
+	symbols: LspWorkspaceSymbol[],
+	maxBytes: number,
+): { symbols: LspWorkspaceSymbol[]; truncated: number } {
+	let used = 2; // "[]"
+	for (let i = 0; i < symbols.length; i++) {
+		const cost = Buffer.byteLength(JSON.stringify(symbols[i]), "utf-8") + 1;
+		if (used + cost > maxBytes) {
+			return { symbols: symbols.slice(0, i), truncated: symbols.length - i };
+		}
+		used += cost;
+	}
+	return { symbols, truncated: 0 };
+}
+
+function isUnsupportedMethodError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return message.includes("-32601") || /method not found/i.test(message);
+}
+
+function formatWorkspaceSymbolsNotices(omitted: number, truncated: number, outsideRoot: number): string {
+	const notices: string[] = [];
+	if (omitted > 0) notices.push(`${omitted} non-file result(s) omitted`);
+	if (outsideRoot > 0) notices.push(`${outsideRoot} result(s) outside the workspace root omitted`);
+	if (truncated > 0) notices.push(`${truncated} result(s) truncated`);
+	return notices.length > 0 ? `\n\n[${notices.join(", ")}]` : "";
+}
+
+function formatWorkspaceSymbolsText(
+	symbols: LspWorkspaceSymbol[],
+	omitted: number,
+	truncated: number,
+	outsideRoot: number,
+): string {
+	if (symbols.length === 0) {
+		const base = "No symbols found.";
+		const notices = formatWorkspaceSymbolsNotices(omitted, truncated, outsideRoot);
+		return notices ? `${base}${notices}` : base;
+	}
+	const lines = symbols.map(
+		(symbol) => `${symbol.path}:${symbol.range.start.line}:${symbol.range.start.character} ${symbol.name}`,
+	);
+	return `${lines.join("\n")}${formatWorkspaceSymbolsNotices(omitted, truncated, outsideRoot)}`;
+}
+
 function formatNotices(omitted: number, truncated: number): string {
 	const notices: string[] = [];
 	if (omitted > 0) notices.push(`${omitted} non-file result(s) omitted`);
@@ -243,12 +377,59 @@ export function createLspToolDefinition(
 				cwd,
 				defaultBehavior: "allow",
 				verb: "Query",
-				getPath: (params) => params.path,
+				// A workspace_symbol call has no path; returning undefined normalizes to
+				// the workspace root, so the same gate authorizes the root before the
+				// request is sent and `ruleForCall` stays inside one grammar.
+				getPath: (params) => ("path" in params ? params.path : undefined),
 			}),
 			context: { resultRecoverable: true, deferSchema: true },
 			evidence: { emits: new Set(), capture: () => [] },
 		},
 		async execute(_toolCallId, input: LspToolInput, signal?: AbortSignal) {
+			if (input.operation === "workspace_symbol") {
+				// The permission gate has already authorized the workspace root by the
+				// time execute runs; only now does the request go out.
+				try {
+					const raw = await operations.request(cwd, "workspace/symbol", { query: input.query }, signal);
+					const { symbols, omitted, outsideRoot } = normalizeWorkspaceSymbols(raw, cwd);
+					const { symbols: countCapped, truncated: countTruncated } = capWorkspaceSymbolsByCount(
+						symbols,
+						MAX_SYMBOLS,
+					);
+					const { symbols: capped, truncated: byteTruncated } = capWorkspaceSymbolsByBytes(
+						countCapped,
+						MAX_DETAILS_BYTES,
+					);
+					const truncated = countTruncated + byteTruncated;
+					return {
+						content: [
+							{ type: "text", text: formatWorkspaceSymbolsText(capped, omitted, truncated, outsideRoot) },
+						],
+						details: { operation: "workspace_symbol", symbols: capped, omitted, truncated, outsideRoot },
+					};
+				} catch (error) {
+					if (isUnsupportedMethodError(error)) {
+						return {
+							content: [
+								{
+									type: "text",
+									text: "workspace_symbol is not supported by the configured language server.",
+								},
+							],
+							details: {
+								operation: "workspace_symbol",
+								symbols: [],
+								omitted: 0,
+								truncated: 0,
+								outsideRoot: 0,
+								unsupported: true,
+							},
+						};
+					}
+					throw error;
+				}
+			}
+
 			const absolutePath = resolveToCwd(input.path, cwd);
 			const uri = pathToFileURL(absolutePath).href;
 
