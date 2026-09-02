@@ -1,6 +1,6 @@
 # Plan: Tool reliability and execution budgets
 
-**Status:** Not started
+**Status:** In progress
 
 **Spec:** [Tool reliability and execution budgets](../specs/2026-09-01-tool-reliability-and-execution-budgets.md)
 
@@ -8,7 +8,7 @@
 
 | # | Task | State | SHA | Verified by |
 | --- | --- | --- | --- | --- |
-| TR.1 | Capture bounded output from the standalone `test` tool | Not started | — | New public-tool tests for pass, fail, timeout, cancellation, signal, spawn failure, UTF-8 boundaries, high volume, artifact policy, and ledger exclusion; `npx tsgo --noEmit` |
+| TR.1 | Capture bounded output from the standalone `test` tool | Done | `4d03e750c` | New public-tool tests for pass, fail, timeout, cancellation, signal, spawn failure, UTF-8 boundaries, high volume, artifact policy, and ledger exclusion; `npx tsgo --noEmit` |
 | TR.2 | Add bounded advisory edit-failure diagnostics | Not started | — | New public edit-tool tests for missing, duplicate, CRLF, tabs, Unicode, repeated text, cap exceeded, stable line mapping, and no approximate application; `npx tsgo --noEmit` |
 | TR.3 | Measure run behavior and select the budget compatibility/default policy | Not started | — | Replay corpus and representative driven-loop report checked into the spec or research note; settings/default tests pin the chosen policy before implementation |
 | TR.4 | Implement the agent-core run budget and structured stop reason | Not started | — | `packages/agent/test/agent-loop.test.ts` covers provider requests, tool calls, wall time, retries, tool batches, cancellation precedence, exact boundaries, steering, follow-up, and continuation semantics |
