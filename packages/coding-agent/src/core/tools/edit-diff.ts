@@ -250,6 +250,249 @@ function countOccurrences(content: string, oldText: string): number {
 	return fuzzyContent.split(fuzzyOldText).length - 1;
 }
 
+/**
+ * Explicit budgets for the advisory edit-failure diagnostics below. Diagnostics
+ * are a best-effort hint, never an apply path, so every dimension of the scan
+ * is bounded and the ordinary failure is returned untouched when a bound is
+ * exceeded (spec 2026-09-01-tool-reliability-and-execution-budgets.md § 2).
+ */
+export const EDIT_DIAGNOSTIC_MAX_FILE_BYTES = 1_048_576;
+export const EDIT_DIAGNOSTIC_MAX_TARGET_BYTES = 65_536;
+export const EDIT_DIAGNOSTIC_MAX_CANDIDATES = 3;
+export const EDIT_DIAGNOSTIC_MAX_SCAN_WINDOWS = 20_000;
+export const EDIT_DIAGNOSTIC_MAX_OCCURRENCES = 5;
+export const EDIT_DIAGNOSTIC_SNIPPET_LINE_CHARS = 160;
+
+const EDIT_DIAGNOSTIC_MIN_SIMILARITY = 0.2;
+const EDIT_DIAGNOSTIC_SCAN_BUDGET_MS = 50;
+const EDIT_DIAGNOSTIC_MAX_OCCURRENCE_STEPS = 10_000;
+
+export interface EditCandidateLocation {
+	/** 1-based, inclusive. */
+	startLine: number;
+	/** 1-based, inclusive. */
+	endLine: number;
+	/** Bigram Dice similarity against the failed target, rounded to two decimals. */
+	similarity: number;
+	/** Bounded snippet of the candidate source lines, each line-numbered. */
+	snippet: string;
+}
+
+/**
+ * Advisory diagnostics attached to a failed edit match. These describe where a
+ * target almost matched or where duplicates live; they are never a replacement
+ * location and must never be applied.
+ */
+export interface EditFailureDiagnostics {
+	kind: "missing-match" | "duplicate-match";
+	candidates: EditCandidateLocation[];
+	/** 1-based source lines of up to EDIT_DIAGNOSTIC_MAX_OCCURRENCES duplicates. */
+	occurrenceLines: number[];
+	omittedOccurrences: number;
+	/** True when the scan stopped at a work or time bound before finishing. */
+	scanTruncated: boolean;
+	/** Set when scanning was unsafe or oversized; no candidates are reported. */
+	unavailableReason?: string;
+}
+
+function unavailableDiagnostics(kind: EditFailureDiagnostics["kind"], reason: string): EditFailureDiagnostics {
+	return {
+		kind,
+		candidates: [],
+		occurrenceLines: [],
+		omittedOccurrences: 0,
+		scanTruncated: false,
+		unavailableReason: reason,
+	};
+}
+
+function isDiagnosticScannable(
+	kind: EditFailureDiagnostics["kind"],
+	content: string,
+	target: string,
+): EditFailureDiagnostics | undefined {
+	if (Buffer.byteLength(content, "utf-8") > EDIT_DIAGNOSTIC_MAX_FILE_BYTES) {
+		return unavailableDiagnostics(
+			kind,
+			`advisory diagnostic scan skipped: file exceeds the ${EDIT_DIAGNOSTIC_MAX_FILE_BYTES}-byte diagnostic budget`,
+		);
+	}
+	if (Buffer.byteLength(target, "utf-8") > EDIT_DIAGNOSTIC_MAX_TARGET_BYTES) {
+		return unavailableDiagnostics(
+			kind,
+			`advisory diagnostic scan skipped: oldText exceeds the ${EDIT_DIAGNOSTIC_MAX_TARGET_BYTES}-byte diagnostic budget`,
+		);
+	}
+	return undefined;
+}
+
+function bigrams(text: string): Set<string> {
+	const result = new Set<string>();
+	for (let i = 0; i < text.length - 1; i++) {
+		result.add(text.slice(i, i + 2));
+	}
+	return result;
+}
+
+function diceSimilarity(a: Set<string>, b: Set<string>): number {
+	if (a.size === 0 && b.size === 0) return 1;
+	if (a.size === 0 || b.size === 0) return 0;
+	let intersection = 0;
+	for (const gram of a) {
+		if (b.has(gram)) intersection++;
+	}
+	return (2 * intersection) / (a.size + b.size);
+}
+
+function truncateSnippetLine(line: string): string {
+	if (line.length <= EDIT_DIAGNOSTIC_SNIPPET_LINE_CHARS) return line;
+	return `${line.slice(0, EDIT_DIAGNOSTIC_SNIPPET_LINE_CHARS)}…`;
+}
+
+function buildSnippet(lines: string[], startLine: number, lineCount: number): string {
+	const shown = Math.min(lineCount, 5);
+	const parts: string[] = [];
+	for (let i = 0; i < shown; i++) {
+		parts.push(`${startLine + i + 1} | ${truncateSnippetLine(lines[startLine + i] ?? "")}`);
+	}
+	return parts.join("\n");
+}
+
+/**
+ * Find the closest line windows to a failed target. Purely advisory: the result
+ * names locations so the caller can retry with better context, and is never a
+ * replacement specification.
+ */
+function scanMissingMatchCandidates(content: string, target: string): EditFailureDiagnostics {
+	const blocked = isDiagnosticScannable("missing-match", content, target);
+	if (blocked) return blocked;
+
+	const lines = content.split("\n");
+	const windowSize = Math.max(1, target.split("\n").length);
+	const windowCount = lines.length - windowSize + 1;
+	const deadline = Date.now() + EDIT_DIAGNOSTIC_SCAN_BUDGET_MS;
+	const targetGrams = bigrams(target);
+
+	const best: Array<{ startLine: number; similarity: number }> = [];
+	let windowsScanned = 0;
+	let scanTruncated = false;
+	for (let start = 0; start < windowCount; start++) {
+		if (windowsScanned >= EDIT_DIAGNOSTIC_MAX_SCAN_WINDOWS || (start % 512 === 0 && Date.now() > deadline)) {
+			scanTruncated = true;
+			break;
+		}
+		windowsScanned++;
+		const windowGrams = bigrams(lines.slice(start, start + windowSize).join("\n"));
+		const similarity = diceSimilarity(targetGrams, windowGrams);
+		if (similarity < EDIT_DIAGNOSTIC_MIN_SIMILARITY) continue;
+		if (best.length < EDIT_DIAGNOSTIC_MAX_CANDIDATES || similarity > best[best.length - 1].similarity) {
+			best.push({ startLine: start, similarity });
+			best.sort((a, b) => b.similarity - a.similarity);
+			if (best.length > EDIT_DIAGNOSTIC_MAX_CANDIDATES) best.pop();
+		}
+	}
+
+	return {
+		kind: "missing-match",
+		candidates: best.map((entry) => ({
+			startLine: entry.startLine + 1,
+			endLine: entry.startLine + windowSize,
+			similarity: Math.round(entry.similarity * 100) / 100,
+			snippet: buildSnippet(lines, entry.startLine, windowSize),
+		})),
+		occurrenceLines: [],
+		omittedOccurrences: 0,
+		scanTruncated,
+	};
+}
+
+function lineNumberForOffset(lineStarts: number[], offset: number): number {
+	let low = 0;
+	let high = lineStarts.length - 1;
+	while (low < high) {
+		const mid = Math.ceil((low + high) / 2);
+		if (lineStarts[mid] <= offset) low = mid;
+		else high = mid - 1;
+	}
+	return low + 1;
+}
+
+/** List bounded 1-based source lines for duplicate occurrences. Advisory only. */
+function scanDuplicateOccurrences(content: string, target: string): EditFailureDiagnostics {
+	const blocked = isDiagnosticScannable("duplicate-match", content, target);
+	if (blocked) return blocked;
+
+	const lines = content.split("\n");
+	const lineStarts: number[] = [];
+	let offset = 0;
+	for (const line of lines) {
+		lineStarts.push(offset);
+		offset += line.length + 1;
+	}
+
+	const occurrenceLines: number[] = [];
+	let total = 0;
+	let truncated = false;
+	let searchFrom = 0;
+	while (target.length > 0) {
+		const index = content.indexOf(target, searchFrom);
+		if (index === -1) break;
+		total++;
+		if (occurrenceLines.length < EDIT_DIAGNOSTIC_MAX_OCCURRENCES) {
+			occurrenceLines.push(lineNumberForOffset(lineStarts, index));
+		}
+		searchFrom = index + target.length;
+		if (total >= EDIT_DIAGNOSTIC_MAX_OCCURRENCE_STEPS) {
+			truncated = true;
+			break;
+		}
+	}
+
+	return {
+		kind: "duplicate-match",
+		candidates: [],
+		occurrenceLines,
+		omittedOccurrences: Math.max(0, total - occurrenceLines.length),
+		scanTruncated: truncated,
+	};
+}
+
+/** Render advisory diagnostics as an error-message appendix. Empty when there is nothing to say. */
+export function formatEditFailureDiagnostics(diagnostics: EditFailureDiagnostics | undefined): string {
+	if (!diagnostics) return "";
+	if (diagnostics.unavailableReason) {
+		return `\n\n(${diagnostics.unavailableReason}.)`;
+	}
+	const sections: string[] = [];
+	if (diagnostics.kind === "duplicate-match" && diagnostics.occurrenceLines.length > 0) {
+		const more = diagnostics.omittedOccurrences > 0 ? ` (+${diagnostics.omittedOccurrences} more)` : "";
+		sections.push(`Advisory occurrence lines (not applied): ${diagnostics.occurrenceLines.join(", ")}${more}`);
+	}
+	if (diagnostics.kind === "missing-match" && diagnostics.candidates.length > 0) {
+		const parts = ["Advisory closest matches (not applied):"];
+		for (const candidate of diagnostics.candidates) {
+			parts.push(
+				`  lines ${candidate.startLine}-${candidate.endLine} (${Math.round(candidate.similarity * 100)}% similar)`,
+			);
+			for (const line of candidate.snippet.split("\n")) {
+				parts.push(`    ${line}`);
+			}
+		}
+		sections.push(parts.join("\n"));
+	}
+	if (diagnostics.scanTruncated) {
+		sections.push(
+			`(Advisory location scan truncated after ${EDIT_DIAGNOSTIC_MAX_SCAN_WINDOWS} windows; remaining locations were not examined.)`,
+		);
+	}
+	return sections.length > 0 ? `\n\n${sections.join("\n")}` : "";
+}
+
+function appendEditDiagnostics(error: Error, diagnostics: EditFailureDiagnostics): Error {
+	error.message += formatEditFailureDiagnostics(diagnostics);
+	return error;
+}
+
 function getNotFoundError(path: string, editIndex: number, totalEdits: number): Error {
 	if (totalEdits === 1) {
 		return new Error(
@@ -322,12 +565,22 @@ export function applyEditsToNormalizedContent(
 		const edit = normalizedEdits[i];
 		const matchResult = fuzzyFindText(replacementBaseContent, edit.oldText);
 		if (!matchResult.found) {
-			throw getNotFoundError(path, i, normalizedEdits.length);
+			// Advisory only: candidates name near-miss locations but never supply a
+			// replacement. Matching above remains the only apply path.
+			const diagnosticTarget = usedFuzzyMatch ? normalizeForFuzzyMatch(edit.oldText) : edit.oldText;
+			throw appendEditDiagnostics(
+				getNotFoundError(path, i, normalizedEdits.length),
+				scanMissingMatchCandidates(replacementBaseContent, diagnosticTarget),
+			);
 		}
 
 		const occurrences = countOccurrences(replacementBaseContent, edit.oldText);
 		if (occurrences > 1) {
-			throw getDuplicateError(path, i, normalizedEdits.length, occurrences);
+			const diagnosticTarget = usedFuzzyMatch ? normalizeForFuzzyMatch(edit.oldText) : edit.oldText;
+			throw appendEditDiagnostics(
+				getDuplicateError(path, i, normalizedEdits.length, occurrences),
+				scanDuplicateOccurrences(replacementBaseContent, diagnosticTarget),
+			);
 		}
 
 		matchedEdits.push({
