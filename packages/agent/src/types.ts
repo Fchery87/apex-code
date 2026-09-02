@@ -148,6 +148,56 @@ export interface AgentLoopTurnUpdate {
 
 export interface PrepareNextTurnContext extends ShouldStopAfterTurnContext {}
 
+/** Which configured run-budget limit fired. */
+export type AgentBudgetLimit = "provider-requests" | "tool-calls" | "wall-time";
+
+/**
+ * Per-run budget policy (spec 2026-09-01-tool-reliability-and-execution-budgets.md;
+ * defaults selected in docs/research/2026-09-02-run-budget-measurements.md).
+ * Every field is independent; an absent field is unlimited.
+ */
+export interface AgentRunBudget {
+	/** Maximum provider requests the run may send, including retries and continuation requests. */
+	maxProviderRequests?: number;
+	/** Maximum tool calls the run may accept for execution, whether the batch runs sequentially or concurrently. */
+	maxToolCalls?: number;
+	/** Maximum wall time in milliseconds, counted from logical run start to settlement. */
+	maxWallTimeMs?: number;
+}
+
+/** Structured terminal outcome for a run, carried on `agent_end`. Precedence: aborted > error > budget > completed. */
+export type AgentStopReason =
+	| { kind: "completed" }
+	| { kind: "aborted" }
+	| { kind: "error" }
+	| { kind: "budget-exhausted"; limit: AgentBudgetLimit };
+
+/**
+ * Stateful budget controller for one logical run. The caller creates it and
+ * passes the same instance to every loop invocation of the run — retries,
+ * steering extensions, and follow-up extensions all consume the same counts.
+ * A local compaction summarization is maintenance, not progress: it is
+ * recorded through `recordMaintenanceRequest` and never consumes
+ * `maxProviderRequests`.
+ */
+export interface AgentRunBudgetController {
+	/** Gate the next provider request. False means the request must not start. */
+	tryBeginProviderRequest(): boolean;
+	/**
+	 * Accept one tool call for execution. False means the call must not run.
+	 * Checks the tool-call and wall-time limits only: a batch belonging to an
+	 * already-sent request is not vetoed by the provider-request bound, which
+	 * gates the next request instead.
+	 */
+	tryAcceptToolCall(): boolean;
+	/** Record a maintenance request (e.g. local compaction summarization). Never blocks anything. */
+	recordMaintenanceRequest(): void;
+	/** Maintenance requests recorded so far, for observability; never blocks a limit. */
+	maintenanceRequests(): number;
+	/** The first exhausted limit, if any. */
+	exhaustedLimit(): AgentBudgetLimit | undefined;
+}
+
 export interface AgentLoopConfig extends SimpleStreamOptions {
 	model: Model<any>;
 
@@ -223,6 +273,15 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 * Contract: must not throw or reject. Throwing interrupts the low-level agent loop without producing a normal event sequence.
 	 */
 	shouldStopAfterTurn?: (context: ShouldStopAfterTurnContext) => boolean | Promise<boolean>;
+	/**
+	 * Shared budget controller for this logical run. Absent means unlimited.
+	 * The same controller instance must be passed to every loop invocation of
+	 * the run so retries and queued work share one budget; cancellation and
+	 * explicit user stop always outrank it. No new provider request starts
+	 * after known exhaustion, and tool calls that have not started when the
+	 * tool-call bound is hit fail with a budget error instead of executing.
+	 */
+	runBudget?: AgentRunBudgetController;
 
 	/**
 	 * Called after `turn_end` when the loop will continue, immediately before the next turn starts.
@@ -446,7 +505,7 @@ export interface AgentContext {
 export type AgentEvent =
 	// Agent lifecycle
 	| { type: "agent_start" }
-	| { type: "agent_end"; messages: AgentMessage[] }
+	| { type: "agent_end"; messages: AgentMessage[]; stopReason?: AgentStopReason }
 	// Turn lifecycle - a turn is one assistant response + any tool calls/results
 	| { type: "turn_start" }
 	| { type: "turn_end"; message: AgentMessage; toolResults: ToolResultMessage[] }

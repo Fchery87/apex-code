@@ -9,7 +9,7 @@ import {
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { agentLoop, agentLoopContinue } from "../src/agent-loop.ts";
-import { setDefaultStreamFn } from "../src/index.ts";
+import { createRunBudgetController, setDefaultStreamFn } from "../src/index.ts";
 import {
 	type AgentContext,
 	type AgentEvent,
@@ -1643,5 +1643,288 @@ describe("agentLoopContinue with AgentMessage", () => {
 		for await (const event of stream) events.push(event);
 		const end = events.find((event) => event.type === "tool_execution_end");
 		expect(end).toMatchObject({ type: "tool_execution_end", isError: true, result: { details: { exitCode: 7 } } });
+	});
+});
+
+describe("run budget", () => {
+	function scriptedResponses(script: (requestIndex: number) => AssistantMessage[], latencyMs = 0) {
+		let requestIndex = 0;
+		const sent = { count: 0 };
+		const streamFn = () => {
+			const index = requestIndex++;
+			sent.count = requestIndex;
+			const result = new MockAssistantStream();
+			const message = script(index)[0] ?? createAssistantMessage([{ type: "text", text: "done" }]);
+			setTimeout(() => {
+				result.push({
+					type: "done",
+					reason: message.content.some((part) => part.type === "toolCall") ? "toolUse" : "stop",
+					message,
+				});
+			}, latencyMs);
+			return result;
+		};
+		return { streamFn, sent };
+	}
+
+	function countingTool(executed: string[]): AgentTool<any> {
+		return {
+			name: "probe",
+			label: "probe",
+			description: "fixture",
+			parameters: Type.Object({}),
+			execute: async () => {
+				executed.push(`call-${executed.length + 1}`);
+				return { content: [{ type: "text", text: "ok" }], details: {} };
+			},
+		};
+	}
+
+	function toolCallMessage(index: number, count: number): AssistantMessage {
+		return createAssistantMessage(
+			Array.from({ length: count }, (_, i) => ({
+				type: "toolCall" as const,
+				id: `r${index}-c${i}`,
+				name: "probe",
+				arguments: {},
+			})),
+		);
+	}
+
+	async function runLoop(
+		config: AgentLoopConfig,
+		streamFn: any,
+		tools: AgentTool<any>[] = [],
+		signal?: AbortSignal,
+	): Promise<{
+		events: AgentEvent[];
+		messages: AgentMessage[];
+		agentEnd: Extract<AgentEvent, { type: "agent_end" }>;
+	}> {
+		const events: AgentEvent[] = [];
+		const stream = agentLoop(
+			[createUserMessage("run")],
+			{ systemPrompt: "", messages: [], tools },
+			config,
+			signal,
+			streamFn,
+		);
+		for await (const event of stream) events.push(event);
+		const messages = await stream.result();
+		const agentEnd = events.find((event) => event.type === "agent_end") as Extract<AgentEvent, { type: "agent_end" }>;
+		return { events, messages, agentEnd };
+	}
+
+	function executionEnds(events: AgentEvent[]) {
+		return events.filter((event) => event.type === "tool_execution_end") as Extract<
+			AgentEvent,
+			{ type: "tool_execution_end" }
+		>[];
+	}
+
+	it("stops at the exact provider-request boundary and reports a structured stop reason", async () => {
+		const { streamFn, sent } = scriptedResponses(() => [toolCallMessage(0, 1)]);
+		const { agentEnd } = await runLoop(
+			{
+				model: createModel(),
+				convertToLlm: identityConverter,
+				runBudget: createRunBudgetController({ maxProviderRequests: 3 }),
+			},
+			streamFn,
+		);
+
+		expect(sent.count).toBe(3);
+		expect(agentEnd.stopReason).toEqual({ kind: "budget-exhausted", limit: "provider-requests" });
+	});
+
+	it("fails unstarted batch calls individually at the tool-call boundary", async () => {
+		const executed: string[] = [];
+		const { streamFn, sent } = scriptedResponses((index) =>
+			index === 0 ? [toolCallMessage(0, 4)] : [createAssistantMessage([{ type: "text", text: "done" }])],
+		);
+		const { events, agentEnd } = await runLoop(
+			{
+				model: createModel(),
+				convertToLlm: identityConverter,
+				toolExecution: "sequential",
+				runBudget: createRunBudgetController({ maxToolCalls: 2 }),
+			},
+			streamFn,
+			[countingTool(executed)],
+		);
+
+		expect(sent.count).toBe(1);
+		expect(executed).toEqual(["call-1", "call-2"]);
+		const ends = executionEnds(events);
+		expect(ends).toHaveLength(4);
+		expect(ends.filter((event) => !event.isError)).toHaveLength(2);
+		const failedTexts = ends
+			.filter((event) => event.isError)
+			.map((event) =>
+				event.result.content
+					.map((part: { type: string; text?: string }) => (part.type === "text" ? (part.text ?? "") : ""))
+					.join(" "),
+			);
+		expect(failedTexts.every((text) => text.includes("budget"))).toBe(true);
+		expect(agentEnd.stopReason).toEqual({ kind: "budget-exhausted", limit: "tool-calls" });
+	});
+
+	it("counts tool calls individually across concurrent batches", async () => {
+		const executed: string[] = [];
+		const { streamFn, sent } = scriptedResponses((index) =>
+			index < 2 ? [toolCallMessage(index, 3)] : [createAssistantMessage([{ type: "text", text: "done" }])],
+		);
+		const { events, agentEnd } = await runLoop(
+			{
+				model: createModel(),
+				convertToLlm: identityConverter,
+				toolExecution: "parallel",
+				runBudget: createRunBudgetController({ maxToolCalls: 5 }),
+			},
+			streamFn,
+			[countingTool(executed)],
+		);
+
+		expect(executed).toHaveLength(5);
+		const ends = executionEnds(events);
+		expect(ends.filter((event) => !event.isError)).toHaveLength(5);
+		expect(ends.filter((event) => event.isError)).toHaveLength(1);
+		expect(sent.count).toBe(2);
+		expect(agentEnd.stopReason).toEqual({ kind: "budget-exhausted", limit: "tool-calls" });
+	});
+
+	it("reports cancellation over budget exhaustion", async () => {
+		const controller = new AbortController();
+		const abortingTool: AgentTool<any> = {
+			name: "probe",
+			label: "probe",
+			description: "fixture",
+			parameters: Type.Object({}),
+			execute: async () => {
+				controller.abort();
+				return { content: [{ type: "text", text: "ok" }], details: {} };
+			},
+		};
+		const { streamFn, sent } = scriptedResponses((index) => [toolCallMessage(index, 1)]);
+		const { agentEnd } = await runLoop(
+			{
+				model: createModel(),
+				convertToLlm: identityConverter,
+				runBudget: createRunBudgetController({ maxProviderRequests: 1 }),
+			},
+			streamFn,
+			[abortingTool],
+			controller.signal,
+		);
+
+		// The first request exhausted maxProviderRequests, but the user aborted
+		// during the tool batch: cancellation outranks the budget.
+		expect(sent.count).toBe(1);
+		expect(agentEnd.stopReason).toEqual({ kind: "aborted" });
+	});
+
+	it("applies the wall-time limit before the next provider request", async () => {
+		const { streamFn, sent } = scriptedResponses((index) => [toolCallMessage(index, 1)], 20);
+		const { agentEnd } = await runLoop(
+			{
+				model: createModel(),
+				convertToLlm: identityConverter,
+				runBudget: createRunBudgetController({ maxWallTimeMs: 5 }),
+			},
+			streamFn,
+		);
+
+		expect(sent.count).toBe(1);
+		expect(agentEnd.stopReason).toEqual({ kind: "budget-exhausted", limit: "wall-time" });
+	}, 10000);
+
+	it("steering and follow-up queues cannot bypass the budget", async () => {
+		const { streamFn, sent } = scriptedResponses(() => [toolCallMessage(0, 1)]);
+		const steering: AgentMessage[] = [createUserMessage("steer")];
+		const followUp: AgentMessage[] = [createUserMessage("follow-up")];
+		const { agentEnd } = await runLoop(
+			{
+				model: createModel(),
+				convertToLlm: identityConverter,
+				runBudget: createRunBudgetController({ maxProviderRequests: 2 }),
+				getSteeringMessages: async () => steering.splice(0),
+				getFollowUpMessages: async () => followUp.splice(0),
+			},
+			streamFn,
+		);
+
+		expect(sent.count).toBe(2);
+		expect(agentEnd.stopReason).toEqual({ kind: "budget-exhausted", limit: "provider-requests" });
+	});
+
+	it("shares one controller across continuation loop invocations", async () => {
+		const controller = createRunBudgetController({ maxProviderRequests: 2 });
+		const { streamFn, sent } = scriptedResponses(() => [createAssistantMessage([{ type: "text", text: "done" }])]);
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			runBudget: controller,
+		};
+
+		await runLoop(config, streamFn);
+		const events: AgentEvent[] = [];
+		const continuation = agentLoopContinue(
+			{ systemPrompt: "", messages: [createUserMessage("earlier")], tools: [] },
+			config,
+			undefined,
+			streamFn,
+		);
+		for await (const event of continuation) events.push(event);
+		await continuation.result();
+		const agentEnd = events.find((event) => event.type === "agent_end") as Extract<AgentEvent, { type: "agent_end" }>;
+
+		expect(sent.count).toBe(2);
+		expect(agentEnd.stopReason).toEqual({ kind: "completed" });
+
+		// The third invocation is refused before any request is sent.
+		const refused: AgentEvent[] = [];
+		const third = agentLoopContinue(
+			{ systemPrompt: "", messages: [createUserMessage("more")], tools: [] },
+			config,
+			undefined,
+			streamFn,
+		);
+		for await (const event of third) refused.push(event);
+		await third.result();
+		const refusedEnd = refused.find((event) => event.type === "agent_end") as Extract<
+			AgentEvent,
+			{ type: "agent_end" }
+		>;
+		expect(sent.count).toBe(2);
+		expect(refusedEnd.stopReason).toEqual({ kind: "budget-exhausted", limit: "provider-requests" });
+	});
+
+	it("maintenance requests never consume the provider-request budget", () => {
+		const controller = createRunBudgetController({ maxProviderRequests: 1 });
+		controller.recordMaintenanceRequest();
+		controller.recordMaintenanceRequest();
+
+		expect(controller.maintenanceRequests()).toBe(2);
+		expect(controller.tryBeginProviderRequest()).toBe(true);
+		expect(controller.tryBeginProviderRequest()).toBe(false);
+		expect(controller.exhaustedLimit()).toBe("provider-requests");
+	});
+
+	it("leaves unbounded runs unlimited and reports normal completion", async () => {
+		const { streamFn } = scriptedResponses((index) =>
+			index < 2 ? [toolCallMessage(index, 1)] : [createAssistantMessage([{ type: "text", text: "done" }])],
+		);
+		const { events, agentEnd } = await runLoop(
+			{
+				model: createModel(),
+				convertToLlm: identityConverter,
+				runBudget: createRunBudgetController({}),
+			},
+			streamFn,
+		);
+
+		expect(agentEnd.stopReason).toEqual({ kind: "completed" });
+		const eventTypes = events.map((event) => event.type);
+		expect(eventTypes.lastIndexOf("turn_end")).toBeLessThan(eventTypes.lastIndexOf("agent_end"));
 	});
 });

@@ -141,6 +141,8 @@ export * from "./harness/utils/shell-output.ts";
 export * from "./harness/utils/truncate.ts";
 // Proxy utilities
 export * from "./proxy.ts";
+// Run budget (spec 2026-09-01-tool-reliability-and-execution-budgets.md)
+export * from "./run-budget.ts";
 export * from "./search/index.ts";
 // Stream defaults
 export { setDefaultStreamFn } from "./stream-fn.ts";

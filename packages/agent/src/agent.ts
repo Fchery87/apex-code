@@ -8,6 +8,7 @@ import type {
 	Transport,
 } from "@earendil-works/pi-ai";
 import { runAgentLoop, runAgentLoopContinue } from "./agent-loop.ts";
+import { createRunBudgetController } from "./run-budget.ts";
 import { getDefaultStreamFn } from "./stream-fn.ts";
 import type {
 	AfterToolCallContext,
@@ -17,6 +18,8 @@ import type {
 	AgentLoopConfig,
 	AgentLoopTurnUpdate,
 	AgentMessage,
+	AgentRunBudget,
+	AgentRunBudgetController,
 	AgentState,
 	AgentTool,
 	BeforeToolCallContext,
@@ -120,6 +123,13 @@ export interface AgentOptions {
 	transport?: Transport;
 	maxRetryDelayMs?: number;
 	toolExecution?: ToolExecutionMode;
+	/**
+	 * Budget policy applied to every logical run (spec 2026-09-01-tool-reliability-
+	 * and-execution-budgets.md). A fresh controller starts at each `prompt()`;
+	 * `continue()` shares the active run's controller, so retries, steering, and
+	 * follow-up extensions consume one budget. Absent = unlimited.
+	 */
+	runBudget?: AgentRunBudget;
 }
 
 class PendingMessageQueue {
@@ -212,6 +222,15 @@ export class Agent {
 	public maxRetryDelayMs?: number;
 	/** Tool execution strategy for assistant messages that contain multiple tool calls. */
 	public toolExecution: ToolExecutionMode;
+	/**
+	 * Budget policy applied to every logical run (spec 2026-09-01-tool-reliability-
+	 * and-execution-budgets.md). A fresh controller starts at each `prompt()`;
+	 * `continue()` shares the active run's controller, so retries, steering, and
+	 * follow-up extensions consume one budget. Absent = unlimited.
+	 */
+	public runBudget?: AgentRunBudget;
+
+	private budgetController?: AgentRunBudgetController;
 
 	constructor(options: AgentOptions) {
 		// Older compiled consumers may omit options or streamFn even though the current API requires them.
@@ -235,6 +254,7 @@ export class Agent {
 		this.transport = runtimeOptions.transport ?? "auto";
 		this.maxRetryDelayMs = runtimeOptions.maxRetryDelayMs;
 		this.toolExecution = runtimeOptions.toolExecution ?? "parallel";
+		this.runBudget = runtimeOptions.runBudget;
 	}
 
 	/**
@@ -353,6 +373,9 @@ export class Agent {
 				"Agent is already processing a prompt. Use steer() or followUp() to queue messages, or wait for completion.",
 			);
 		}
+		// A new prompt is a new logical run: the budget starts over. Continuations
+		// via continue() keep the active controller so queued work shares it.
+		this.budgetController = this.runBudget ? createRunBudgetController(this.runBudget) : undefined;
 		const messages = this.normalizePromptInput(input, images);
 		await this.runPromptMessages(messages);
 	}
@@ -362,6 +385,9 @@ export class Agent {
 		if (this.activeRun) {
 			throw new Error("Agent is already processing. Wait for completion before continuing.");
 		}
+		// A continuation belongs to the logical run already in progress: keep its
+		// controller. A continuation with no prior prompt starts its own run.
+		this.budgetController ??= this.runBudget ? createRunBudgetController(this.runBudget) : undefined;
 
 		const lastMessage = this._state.messages[this._state.messages.length - 1];
 		if (!lastMessage) {
@@ -455,6 +481,7 @@ export class Agent {
 			thinkingBudgets: this.thinkingBudgets,
 			maxRetryDelayMs: this.maxRetryDelayMs,
 			toolExecution: this.toolExecution,
+			runBudget: this.budgetController,
 			beforeToolCall: this.beforeToolCall,
 			afterToolCall: this.afterToolCall,
 			shouldStopAfterTurn: shouldStopAfterTurn

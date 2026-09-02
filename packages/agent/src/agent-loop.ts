@@ -16,6 +16,7 @@ import type {
 	AgentEvent,
 	AgentLoopConfig,
 	AgentMessage,
+	AgentStopReason,
 	AgentTool,
 	AgentToolCall,
 	AgentToolResult,
@@ -209,13 +210,28 @@ async function runLoop(
 				pendingMessages = [];
 			}
 
+			// Budget gate: no new provider request starts after known exhaustion.
+			// Cancellation and explicit user stop outrank the budget.
+			if (config.runBudget && !config.runBudget.tryBeginProviderRequest()) {
+				await emit({
+					type: "agent_end",
+					messages: newMessages,
+					stopReason: signal?.aborted
+						? { kind: "aborted" }
+						: { kind: "budget-exhausted", limit: config.runBudget.exhaustedLimit() ?? "provider-requests" },
+				});
+				return;
+			}
+
 			// Stream assistant response
 			const message = await streamAssistantResponse(currentContext, config, signal, emit, streamFunction);
 			newMessages.push(message);
 
 			if (message.stopReason === "error" || message.stopReason === "aborted") {
+				const stopReason: AgentStopReason =
+					signal?.aborted || message.stopReason === "aborted" ? { kind: "aborted" } : { kind: "error" };
 				await emit({ type: "turn_end", message, toolResults: [] });
-				await emit({ type: "agent_end", messages: newMessages });
+				await emit({ type: "agent_end", messages: newMessages, stopReason });
 				return;
 			}
 
@@ -252,7 +268,7 @@ async function runLoop(
 			};
 
 			if (await config.shouldStopAfterTurn?.(lastCompletedTurn)) {
-				await emit({ type: "agent_end", messages: newMessages });
+				await emit({ type: "agent_end", messages: newMessages, stopReason: { kind: "completed" } });
 				return;
 			}
 
@@ -271,7 +287,7 @@ async function runLoop(
 		break;
 	}
 
-	await emit({ type: "agent_end", messages: newMessages });
+	await emit({ type: "agent_end", messages: newMessages, stopReason: { kind: "completed" } });
 }
 
 /**
@@ -457,6 +473,19 @@ async function executeToolCallsSequential(
 				result: preparation.result,
 				isError: preparation.isError,
 			};
+		} else if (config.runBudget && !config.runBudget.tryAcceptToolCall()) {
+			// Accepted-count boundary: a call that has not started when the
+			// tool-call bound is hit fails with a bounded budget error instead of
+			// executing. Cancellation still breaks the batch below.
+			finalized = {
+				toolCall,
+				result: createErrorToolResult(
+					`Tool call "${toolCall.name}" was not executed: the run's ${
+						config.runBudget.exhaustedLimit() ?? "tool-call"
+					} budget was exhausted before this call started.`,
+				),
+				isError: true,
+			};
 		} else {
 			const executed = await executePreparedToolCall(preparation, signal, emit);
 			finalized = await finalizeExecutedToolCall(
@@ -510,6 +539,26 @@ async function executeToolCallsParallel(
 				toolCall,
 				result: preparation.result,
 				isError: preparation.isError,
+			} satisfies FinalizedToolCallOutcome;
+			await emitToolExecutionEnd(finalized, emit);
+			finalizedCalls.push(finalized);
+			if (signal?.aborted) {
+				break;
+			}
+			continue;
+		}
+
+		if (config.runBudget && !config.runBudget.tryAcceptToolCall()) {
+			// Accepted-count boundary for concurrent batches: the call was counted
+			// at acceptance, so an unstarted call past the bound fails bounded.
+			const finalized = {
+				toolCall,
+				result: createErrorToolResult(
+					`Tool call "${toolCall.name}" was not executed: the run's ${
+						config.runBudget.exhaustedLimit() ?? "tool-call"
+					} budget was exhausted before this call started.`,
+				),
+				isError: true,
 			} satisfies FinalizedToolCallOutcome;
 			await emitToolExecutionEnd(finalized, emit);
 			finalizedCalls.push(finalized);
