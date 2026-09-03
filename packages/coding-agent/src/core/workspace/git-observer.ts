@@ -38,6 +38,12 @@ export interface GitObserveOptions {
 	timeoutMs?: number;
 	/** Cancels the observation; the record reports `failed`. */
 	signal?: AbortSignal;
+	/**
+	 * Repository-relative path prefixes to omit from `paths` (exact match or
+	 * directory prefix). Used for harness bookkeeping that lives inside the
+	 * workspace — e.g. the session directory — which is not workspace state.
+	 */
+	excludePaths?: string[];
 }
 
 interface GitRunResult {
@@ -286,6 +292,11 @@ export async function observeWorkspaceGit(
 	const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 	const hashPaths = options?.hashPaths ?? true;
 	const signal = options?.signal;
+	const excludePaths = (options?.excludePaths ?? [])
+		.map((p) => p.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, ""))
+		.filter((p) => p.length > 0);
+	const isExcluded = (repoPath: string): boolean =>
+		excludePaths.some((ex) => repoPath === ex || repoPath.startsWith(`${ex}/`));
 
 	const warnings: string[] = [];
 	const failed = (message: string): WorkspaceStateRecord => ({
@@ -357,6 +368,9 @@ export async function observeWorkspaceGit(
 	let truncated = false;
 	let skippedHashes = 0;
 	for (const entry of parsePorcelainZ(status.stdout)) {
+		if (isExcluded(entry.path) || (entry.previousPath !== undefined && isExcluded(entry.previousPath))) {
+			continue;
+		}
 		if (paths.length >= maxPaths) {
 			truncated = true;
 			warnings.push(`path list truncated at ${maxPaths} paths`);

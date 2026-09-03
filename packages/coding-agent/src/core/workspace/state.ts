@@ -148,6 +148,37 @@ export function findWorkspaceObservationForCompaction(
 	return undefined;
 }
 
+/** Find the most recent observation record in session path order, if any. */
+export function findLatestWorkspaceObservation(
+	session: SessionManager,
+): { entryId: string; record: WorkspaceStateRecord } | undefined {
+	let found: { entryId: string; record: WorkspaceStateRecord } | undefined;
+	for (const entry of session.getEntries()) {
+		if (entry.type !== "custom") continue;
+		const record = readWorkspaceObservation(entry);
+		if (record) found = { entryId: entry.id, record };
+	}
+	return found;
+}
+
+/**
+ * WS.5: does the session's most recent workspace observation postdate its
+ * most recent comparison? True on resume onto a session whose latest
+ * observation has not been compared yet.
+ */
+export function hasWorkspaceObservationAwaitingComparison(session: SessionManager): boolean {
+	let lastObservation = -1;
+	let lastComparison = -1;
+	const entries = session.getEntries();
+	for (let i = 0; i < entries.length; i++) {
+		const entry = entries[i];
+		if (entry.type !== "custom") continue;
+		if (readWorkspaceObservation(entry)) lastObservation = i;
+		else if (readWorkspaceComparison(entry)) lastComparison = i;
+	}
+	return lastObservation > lastComparison;
+}
+
 /** List comparisons recorded against one observation, in path order. */
 export function listWorkspaceComparisons(session: SessionManager, observationId: string): WorkspaceStateComparison[] {
 	const comparisons: WorkspaceStateComparison[] = [];

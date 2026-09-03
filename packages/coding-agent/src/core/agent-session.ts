@@ -14,7 +14,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import { basename, dirname } from "node:path";
+import { basename, dirname, isAbsolute, relative } from "node:path";
 import { contentText } from "@earendil-works/pi-ai";
 import type {
 	AssistantMessage,
@@ -139,9 +139,16 @@ import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapp
 import { createToolSchemaToolDefinition } from "./tools/tool-schema.ts";
 import type { WebSearchOperations } from "./tools/web-search.ts";
 import { addUsageToTotals, createUsageTotals } from "./usage-totals.ts";
+import { buildWorkspaceComparison, compareWorkspaceObservations } from "./workspace/comparison.ts";
 import { type GitObserveOptions, observeWorkspaceGit } from "./workspace/git-observer.ts";
 import { formatWorkspaceProjection } from "./workspace/projection.ts";
-import { appendWorkspaceObservation, type WorkspaceStateRecord } from "./workspace/state.ts";
+import {
+	appendWorkspaceComparison,
+	appendWorkspaceObservation,
+	findLatestWorkspaceObservation,
+	hasWorkspaceObservationAwaitingComparison,
+	type WorkspaceStateRecord,
+} from "./workspace/state.ts";
 
 // ============================================================================
 // Skill Block Parsing
@@ -450,6 +457,12 @@ export class AgentSession {
 	 */
 	_workspaceObserver: (root: string, options?: GitObserveOptions) => Promise<WorkspaceStateRecord> =
 		observeWorkspaceGit;
+	/**
+	 * WS.5: one workspace comparison is due at the next model-turn boundary.
+	 * Set after a compaction stored an observation, or on construction when
+	 * the session's latest observation has no later comparison (resume).
+	 */
+	private _workspaceComparePending = false;
 	private _extensionRunnerRef?: { current?: ExtensionRunner };
 	private _initialActiveToolNames?: string[];
 	private _allowedToolNames?: Set<string>;
@@ -527,6 +540,7 @@ export class AgentSession {
 		this._hookRuntime = config.hookRuntime;
 		this._backgroundShellRegistry = config.backgroundShellRegistry;
 		this._permissionResponderFactory = config.permissionResponderFactory;
+		this._workspaceComparePending = hasWorkspaceObservationAwaitingComparison(this.sessionManager);
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, extensions, auto-compaction, retry logic)
@@ -1635,6 +1649,7 @@ export class AgentSession {
 		}
 
 		preflightResult?.(true);
+		await this._runWorkspaceComparisonBoundary();
 		await this._runAgentPrompt(messages);
 	}
 
@@ -2260,9 +2275,50 @@ export class AgentSession {
 	 */
 	async _captureWorkspaceObservation(signal: AbortSignal | undefined): Promise<WorkspaceStateRecord | undefined> {
 		try {
-			return await this._workspaceObserver(this._cwd, { signal });
+			return await this._workspaceObserver(this._cwd, {
+				signal,
+				// The session's own state directory is harness bookkeeping, not
+				// workspace content; observing it would report every turn as drift.
+				excludePaths: this._sessionExclusionPaths(),
+			});
 		} catch {
 			return undefined;
+		}
+	}
+
+	/** Session/artifact directories inside the workspace, relative paths. */
+	private _sessionExclusionPaths(): string[] {
+		const exclusions: string[] = [];
+		const sessionDir = this.sessionManager.getSessionDir();
+		if (sessionDir) {
+			const rel = relative(this._cwd, sessionDir);
+			if (rel.length > 0 && !rel.startsWith("..") && !isAbsolute(rel)) exclusions.push(rel);
+		}
+		return exclusions;
+	}
+
+	/**
+	 * WS.5 (spec 2026-09-01-harness-correctness-and-workspace-state.md § 3):
+	 * at the first model turn after a compaction, or after resume onto a
+	 * session with an uncompared observation, compare fresh workspace state
+	 * against the stored observation once and persist the outcome. The
+	 * observation stays historical. Never throws: comparison problems must
+	 * not fail the user's turn.
+	 */
+	private async _runWorkspaceComparisonBoundary(): Promise<void> {
+		if (!this._workspaceComparePending) return;
+		this._workspaceComparePending = false;
+		try {
+			const baseline = findLatestWorkspaceObservation(this.sessionManager);
+			if (!baseline) return;
+			const fresh = await this._captureWorkspaceObservation(undefined);
+			const outcome = compareWorkspaceObservations(baseline.record, fresh);
+			appendWorkspaceComparison(
+				this.sessionManager,
+				buildWorkspaceComparison(baseline.record.observationId, outcome),
+			);
+		} catch {
+			// Comparison is advisory; the turn proceeds.
 		}
 	}
 
@@ -2421,6 +2477,9 @@ export class AgentSession {
 					// Historical record, child of the compaction entry; never in
 					// the model context and never a rewrite of history.
 					appendWorkspaceObservation(this.sessionManager, workspaceRecord);
+					// WS.5: the next model turn compares fresh state against
+					// this observation and records the drift outcome.
+					this._workspaceComparePending = true;
 				} catch {
 					// Artifact/entry persistence problems downgrade the
 					// workspace status; they never fail transcript compaction.
@@ -2771,6 +2830,9 @@ export class AgentSession {
 					// Historical record, child of the compaction entry; never in
 					// the model context and never a rewrite of history.
 					appendWorkspaceObservation(this.sessionManager, workspaceRecord);
+					// WS.5: the next model turn compares fresh state against
+					// this observation and records the drift outcome.
+					this._workspaceComparePending = true;
 				} catch {
 					// Artifact/entry persistence problems downgrade the
 					// workspace status; they never fail transcript compaction.

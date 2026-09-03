@@ -400,6 +400,21 @@ describe("git observation adapter", () => {
 	}, 20_000);
 });
 
+it("excludes relative path prefixes from the reported paths", async () => {
+	const repo = initRepo("excluded");
+	writeFileSync(join(repo, "tracked.txt"), "one\n");
+	commitAll(repo, "initial");
+	mkdirSync(join(repo, "sessions"), { recursive: true });
+	writeFileSync(join(repo, "sessions", "s.jsonl"), "{}\n");
+	writeFileSync(join(repo, "edited.txt"), "changed\n");
+
+	const record = await observe(repo, { excludePaths: ["sessions"] });
+	const reported = record.paths.map((p) => p.path);
+	expect(record.status, `warnings: ${record.warnings.join("; ")}`).toBe("observed");
+	expect(reported).toContain("edited.txt");
+	expect(reported.some((p) => p.startsWith("sessions/"))).toBe(false);
+});
+
 describe("toplevel containment across platform spellings", () => {
 	const win = (root: string, toplevel: string, realpath?: (p: string) => string) =>
 		compareToplevel(root, toplevel, { platform: "win32", realpath: realpath ?? ((p) => p) });
