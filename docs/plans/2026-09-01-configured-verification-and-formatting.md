@@ -8,7 +8,7 @@
 
 | # | Task | State | SHA | Verified by |
 | --- | --- | --- | --- | --- |
-| VF.1 | Settle settings ownership, precedence, and trust | Not started | — | Spec update plus settings fixtures covering user, project, extension, malformed, untrusted, and absent policies; ADR decision recorded if required |
+| VF.1 | Settle settings ownership, precedence, and trust | Done (pending one green CI run) | `423f62193` | ADR 0028 recorded; spec §1 settled subsection; 6 fixture tests (absent/inert, user untouched, trusted merge, untrusted, malformed, round-trip); tsgo + biome + 64 settings-area tests + full suite 398 files/3365 tests green |
 | VF.2 | Implement strict policy loading and canonical permission projection | Not started | — | New settings/policy tests prove argv validation, path confinement, numeric bounds, no implicit shell, project trust, precedence, denied policies, and one contract snapshot |
 | VF.3 | Implement the bounded argv command executor | Not started | — | New scratch executor suite covers pass, fail, spawn failure, signal, timeout, cancellation, process-tree cleanup, UTF-8, output/artifact bounds, and no shell interpolation |
 | VF.4 | Integrate verification lifecycle and completion outcomes | Not started | — | Public session and mode tests cover explicit invocation, configured boundary, pass, fail, unavailable, timeout, cancellation, continue-unverified, blocking policy, stale-after-edit, and bounded evidence |
