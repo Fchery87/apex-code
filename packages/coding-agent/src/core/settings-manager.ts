@@ -67,6 +67,28 @@ export interface RunBudgetSettings {
 	maxWallTimeMs?: number | "unlimited"; // default: no wall-time limit this release
 }
 
+/**
+ * Workspace-state policy (WS.3, spec
+ * 2026-09-01-harness-correctness-and-workspace-state.md § 2). Patch and
+ * manifest bytes are opt-in; retention bounds always apply and are not
+ * unlimited by design.
+ */
+interface WorkspaceStateSettings {
+	/** `"off"` (default) stores metadata and hashes only; `"bounded"` stores patch bytes up to `maxPatchBytes`. */
+	patchCapture?: "off" | "bounded";
+	maxPatchBytes?: number;
+	maxArtifacts?: number;
+	maxTotalArtifactBytes?: number;
+}
+
+/** The resolved workspace-state policy consumed by the observation layer. */
+export interface ResolvedWorkspaceStatePolicy {
+	patchCapture: "off" | "bounded";
+	maxPatchBytes: number;
+	maxArtifacts: number;
+	maxTotalArtifactBytes: number;
+}
+
 /** The resolved per-run policy consumed by the agent core. */
 export interface ResolvedRunBudget {
 	maxProviderRequests?: number;
@@ -82,6 +104,15 @@ export interface ResolvedRunBudget {
  */
 export const DEFAULT_MAX_PROVIDER_REQUESTS = 200;
 export const DEFAULT_MAX_TOOL_CALLS = 2000;
+
+/**
+ * Workspace-state artifact defaults (WS.3). A patch cap of 256 KiB covers
+ * typical bounded summaries while keeping artifacts well inside the total
+ * 2 MiB retention budget for 20 retained artifacts.
+ */
+export const DEFAULT_WORKSPACE_MAX_PATCH_BYTES = 256 * 1024;
+export const DEFAULT_WORKSPACE_MAX_ARTIFACTS = 20;
+export const DEFAULT_WORKSPACE_MAX_TOTAL_BYTES = 2 * 1024 * 1024;
 
 function resolveRunBudgetLimit(
 	value: number | "unlimited" | undefined,
@@ -196,6 +227,7 @@ export interface Settings {
 	branchSummary?: BranchSummarySettings;
 	retry?: RetrySettings;
 	runBudget?: RunBudgetSettings;
+	workspaceState?: WorkspaceStateSettings;
 	hideThinkingBlock?: boolean;
 	showCacheMissNotices?: boolean; // default: false - show prompt-cache miss and compaction cost notices
 	externalEditor?: string; // Command for Ctrl+G external editor; takes precedence over VISUAL/EDITOR
@@ -1104,6 +1136,44 @@ export class SettingsManager {
 			),
 			maxToolCalls: resolveRunBudgetLimit(settings?.maxToolCalls, DEFAULT_MAX_TOOL_CALLS, "runBudget.maxToolCalls"),
 			maxWallTimeMs: resolveRunBudgetLimit(settings?.maxWallTimeMs, undefined, "runBudget.maxWallTimeMs"),
+		};
+	}
+
+	/**
+	 * Resolve the workspace-state policy (spec
+	 * 2026-09-01-harness-correctness-and-workspace-state.md § 2). Defaults to
+	 * metadata-only capture. Malformed values throw so a broken policy is
+	 * rejected before any session runs. The per-artifact cap is clamped to
+	 * the total retention cap so a single artifact can never exceed the
+	 * whole budget.
+	 */
+	getWorkspaceState(): ResolvedWorkspaceStatePolicy {
+		const settings = this.settings.workspaceState;
+		const patchCapture = settings?.patchCapture ?? "off";
+		if (patchCapture !== "off" && patchCapture !== "bounded") {
+			throw new Error(`Invalid workspaceState.patchCapture setting: ${String(patchCapture)}`);
+		}
+		const resolvePositive = (value: number | undefined, fallback: number, name: string): number => {
+			if (value === undefined) return fallback;
+			if (!Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
+				throw new Error(`Invalid workspaceState.${name} setting: ${String(value)}`);
+			}
+			return value;
+		};
+		const maxTotalArtifactBytes = resolvePositive(
+			settings?.maxTotalArtifactBytes,
+			DEFAULT_WORKSPACE_MAX_TOTAL_BYTES,
+			"maxTotalArtifactBytes",
+		);
+		const maxPatchBytes = Math.min(
+			resolvePositive(settings?.maxPatchBytes, DEFAULT_WORKSPACE_MAX_PATCH_BYTES, "maxPatchBytes"),
+			maxTotalArtifactBytes,
+		);
+		return {
+			patchCapture,
+			maxPatchBytes,
+			maxArtifacts: resolvePositive(settings?.maxArtifacts, DEFAULT_WORKSPACE_MAX_ARTIFACTS, "maxArtifacts"),
+			maxTotalArtifactBytes,
 		};
 	}
 
