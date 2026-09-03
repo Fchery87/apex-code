@@ -403,6 +403,26 @@ function estimateMessagesTokens(messages: AgentMessage[]): number {
 // AgentSession Class
 // ============================================================================
 
+/** Explicit workspace policy for `/tree` and `/fork`-family navigation (spec § 4). */
+export type TreeWorkspacePolicy = "keep" | "restore" | "fail-if-drifted" | "cancel";
+
+/** What the navigation did to the workspace, reported separately from the conversation move. */
+export interface TreeWorkspaceOutcome {
+	policy: TreeWorkspacePolicy;
+	outcome: "unchanged" | "restored" | "refused-drifted" | "missing-checkpoint" | "failed";
+	/** Checkpoint of the pre-restore state; present when a restore overwrote anything. */
+	preRestoreCheckpoint?: { entryId: string; commit: string };
+	warnings: string[];
+}
+
+export interface TreeNavigationResult {
+	editorText?: string;
+	cancelled: boolean;
+	aborted?: boolean;
+	summaryEntry?: BranchSummaryEntry;
+	workspace?: TreeWorkspaceOutcome;
+}
+
 export class AgentSession {
 	readonly agent: Agent;
 	readonly sessionManager: SessionManager;
@@ -3635,8 +3655,14 @@ export class AgentSession {
 	 */
 	async navigateTree(
 		targetId: string,
-		options: { summarize?: boolean; customInstructions?: string; replaceInstructions?: boolean; label?: string } = {},
-	): Promise<{ editorText?: string; cancelled: boolean; aborted?: boolean; summaryEntry?: BranchSummaryEntry }> {
+		options: {
+			summarize?: boolean;
+			customInstructions?: string;
+			replaceInstructions?: boolean;
+			label?: string;
+			workspacePolicy?: TreeWorkspacePolicy;
+		} = {},
+	): Promise<TreeNavigationResult> {
 		if (this.isStreaming) {
 			throw new Error("Wait for the current response to finish before navigating the session tree.");
 		}
@@ -3646,6 +3672,14 @@ export class AgentSession {
 		// No-op if already at target
 		if (targetId === oldLeafId) {
 			return { cancelled: false };
+		}
+
+		// WS.6 (spec 2026-09-01-harness-correctness-and-workspace-state.md § 4):
+		// files move only under an explicit policy, and a refused or cancelled
+		// restore leaves the conversation untouched too.
+		const workspaceStep = await this._resolveTreeWorkspaceStep(targetId, options.workspacePolicy ?? "keep");
+		if (workspaceStep.cancelled) {
+			return { cancelled: true, workspace: workspaceStep.outcome };
 		}
 
 		// Model required for summarization
@@ -3819,9 +3853,74 @@ export class AgentSession {
 
 			// Emit to custom tools
 
-			return { editorText, cancelled: false, summaryEntry };
+			return { editorText, cancelled: false, summaryEntry, workspace: workspaceStep.outcome };
 		} finally {
 			this._branchSummaryAbortController = undefined;
+		}
+	}
+
+	/**
+	 * WS.6: resolve what navigation may do to the workspace before the
+	 * conversation moves. `keep` never touches files; `restore` overwrites
+	 * only through the engine's pinned pre-restore checkpoint; `fail-if-
+	 * drifted` and `cancel` refuse when the workspace moved; a missing
+	 * checkpoint leaves the workspace unchanged and says so. Never throws.
+	 */
+	private async _resolveTreeWorkspaceStep(
+		targetId: string,
+		policy: TreeWorkspacePolicy,
+	): Promise<{ cancelled?: boolean; outcome: TreeWorkspaceOutcome }> {
+		const unchanged: TreeWorkspaceOutcome = { policy, outcome: "unchanged", warnings: [] };
+		if (policy === "keep") return { outcome: unchanged };
+		try {
+			const engine = await this._checkpoints.engine();
+			if (!engine) {
+				return {
+					outcome: {
+						policy,
+						outcome: "missing-checkpoint",
+						warnings: ["checkpoints are unavailable; workspace left unchanged"],
+					},
+				};
+			}
+			const checkpoint = await engine.lookup(targetId);
+			if (!checkpoint) return { outcome: { policy, outcome: "missing-checkpoint", warnings: [] } };
+			const matches = await engine.matchesWorktree(checkpoint);
+			if (matches === undefined) {
+				return {
+					outcome: {
+						policy,
+						outcome: "failed",
+						warnings: ["could not compare the workspace against the checkpoint"],
+					},
+				};
+			}
+			if (matches) return { outcome: unchanged };
+			if (policy === "fail-if-drifted" || policy === "cancel") {
+				return { cancelled: true, outcome: { policy, outcome: "refused-drifted", warnings: [] } };
+			}
+			const preRestore = await engine.restore(checkpoint);
+			if (!preRestore) {
+				return {
+					outcome: { policy, outcome: "failed", warnings: ["restore failed; workspace left unchanged"] },
+				};
+			}
+			return {
+				outcome: {
+					policy,
+					outcome: "restored",
+					preRestoreCheckpoint: { entryId: preRestore.entryId, commit: preRestore.commit },
+					warnings: [],
+				},
+			};
+		} catch (error) {
+			return {
+				outcome: {
+					policy,
+					outcome: "failed",
+					warnings: [`workspace policy check failed: ${error instanceof Error ? error.message : String(error)}`],
+				},
+			};
 		}
 	}
 

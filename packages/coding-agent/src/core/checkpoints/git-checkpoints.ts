@@ -22,6 +22,12 @@ export interface GitCheckpoints {
 	list(): Promise<readonly GitCheckpoint[]>;
 	/** Returns a checkpoint of the pre-restore state, which restores back through this same call. */
 	restore(checkpoint: GitCheckpoint): Promise<GitCheckpoint | undefined>;
+	/**
+	 * True when the current worktree (tracked and untracked, ignored excluded)
+	 * is tree-identical to the checkpoint; false when it moved; undefined when
+	 * the comparison could not be performed.
+	 */
+	matchesWorktree(checkpoint: GitCheckpoint): Promise<boolean | undefined>;
 	/** Deletes every ref this session owns, leaving other sessions' refs alone. */
 	prune(): Promise<void>;
 }
@@ -249,6 +255,23 @@ export async function createGitCheckpoints(
 				entryId: entry.ref.slice(prefix.length),
 				commit: entry.commit,
 			}));
+		},
+
+		async matchesWorktree(checkpoint) {
+			const indexDirectory = await mkdtemp(join(tmpdir(), "apex-checkpoint-compare-"));
+			const indexFile = join(indexDirectory, "index");
+			const environment = { GIT_INDEX_FILE: indexFile };
+			try {
+				const commitTree = await runGit(workspace, ["rev-parse", `${checkpoint.commit}^{tree}`]);
+				if (!commitTree.ok) return undefined;
+				if (!(await runGit(workspace, ["read-tree", checkpoint.commit], environment, timeout)).ok) return undefined;
+				if (!(await runGit(workspace, ["add", "-A"], environment, timeout)).ok) return undefined;
+				const worktreeTree = await runGit(workspace, ["write-tree"], environment, timeout);
+				if (!worktreeTree.ok) return undefined;
+				return worktreeTree.stdout.trim() === commitTree.stdout.trim();
+			} finally {
+				await rm(indexDirectory, { recursive: true, force: true }).catch(() => {});
+			}
 		},
 
 		async restore(checkpoint) {
