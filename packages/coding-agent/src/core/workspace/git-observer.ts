@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { lstatSync, readFileSync, readlinkSync, realpathSync } from "node:fs";
-import { isAbsolute, relative, sep } from "node:path";
+import { dirname, isAbsolute, win32 as pathWin32, relative, sep } from "node:path";
 import {
 	WORKSPACE_RECORD_VERSION,
 	type WorkspaceStateCoverage,
@@ -224,6 +224,59 @@ function prefixRelative(prefix: string, path: string): string {
  * when a limit truncated the capture. `observed` never implies more than
  * `coverage` states.
  */
+export interface ToplevelComparison {
+	/** Whether the physically resolved workspace root sits under the toplevel. */
+	inside: boolean;
+	/** Root path relative to the toplevel; strip this prefix from porcelain paths. */
+	prefix: string;
+	/** Physically resolved toplevel; base for absolute-path work like hashing. */
+	toplevelReal: string;
+}
+
+/**
+ * Decide containment of the workspace root inside git's toplevel after both
+ * sides are physically resolved. Windows spellings diverge from what Node's
+ * realpath returns for the same directory (short 8.3 names, drive-letter
+ * case), so the win32 branch resolves through the native resolver, folds
+ * case for the comparison, and uses win32 path semantics. The platform and
+ * resolver are injectable so tests can exercise those branches anywhere.
+ */
+export function compareToplevel(
+	workspaceRoot: string,
+	toplevel: string,
+	options?: {
+		platform?: NodeJS.Platform;
+		realpath?: (path: string) => string;
+	},
+): ToplevelComparison {
+	const platform = options?.platform ?? process.platform;
+	const isWin32 = platform === "win32";
+	const realpath =
+		options?.realpath ??
+		(isWin32
+			? (p: string) => {
+					try {
+						return realpathSync.native(p);
+					} catch {
+						return realpathSync(p);
+					}
+				}
+			: realpathSync);
+	const rootReal = realpath(workspaceRoot);
+	const toplevelReal = realpath(toplevel);
+	const pathMod = isWin32 ? pathWin32 : { relative, sep, dirname };
+	const fold = (p: string) => (isWin32 ? p.toLowerCase() : p);
+	const prefix = pathMod.relative(toplevelReal, rootReal);
+	const inside = !(prefix === ".." || prefix.startsWith(`..${pathMod.sep}`) || isAbsolute(prefix));
+	if (isWin32 && inside) {
+		// Recompute the strip prefix under case folding so a divergent drive or
+		// directory case still yields the clean "" or relative form.
+		const folded = pathMod.relative(fold(toplevelReal), fold(rootReal));
+		return { inside, prefix: folded, toplevelReal };
+	}
+	return { inside, prefix, toplevelReal };
+}
+
 export async function observeWorkspaceGit(
 	workspaceRoot: string,
 	options?: GitObserveOptions,
@@ -265,16 +318,15 @@ export async function observeWorkspaceGit(
 		return failed("git rev-parse failed");
 	}
 	// git resolves the toplevel physically (macOS /tmp -> /private/tmp,
-	// Windows drive-letter case and short names), so both sides go through
-	// realpath before comparing; otherwise a symlinked workspace root would
-	// produce a garbage prefix on every reported path.
+	// Windows drive-letter case and short names), so containment is decided
+	// through compareToplevel; otherwise a divergent spelling of the same
+	// directory would fail the observation or corrupt every reported path.
 	const toplevel = head.stdout.toString("utf-8").trim();
-	const rootReal = realpathSync(workspaceRoot);
-	const toplevelReal = realpathSync(toplevel);
-	const insidePrefix = relative(toplevelReal, rootReal);
-	if (insidePrefix === ".." || insidePrefix.startsWith(`..${sep}`) || isAbsolute(insidePrefix)) {
+	const comparison = compareToplevel(workspaceRoot, toplevel);
+	if (!comparison.inside) {
 		return failed("workspace root is outside the repository toplevel");
 	}
+	const insidePrefix = comparison.prefix;
 
 	const headCommit = await runGit(workspaceRoot, ["rev-parse", "--verify", "HEAD"], timeoutMs, signal);
 	const mergeHead = await runGit(workspaceRoot, ["rev-parse", "-q", "--verify", "MERGE_HEAD"], timeoutMs, signal);
@@ -320,7 +372,7 @@ export async function observeWorkspaceGit(
 			...(entry.previousPath ? { previousPath: prefixRelative(insidePrefix, entry.previousPath) } : {}),
 		};
 		if (hashPaths && kind !== "deleted") {
-			const { hash, skipped } = hashWorkspacePath(toplevelReal, entry.path, maxHashBytes);
+			const { hash, skipped } = hashWorkspacePath(comparison.toplevelReal, entry.path, maxHashBytes);
 			if (hash) workspacePath.contentHash = hash;
 			else if (skipped) skippedHashes++;
 		}

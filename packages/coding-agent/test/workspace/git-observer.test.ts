@@ -13,7 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { observeWorkspaceGit } from "../../src/core/workspace/git-observer.ts";
+import { compareToplevel, observeWorkspaceGit } from "../../src/core/workspace/git-observer.ts";
 
 let scratch: string;
 
@@ -102,7 +102,7 @@ describe("git observation adapter", () => {
 
 		const record = await observe(repo);
 
-		expect(record.status).toBe("observed");
+		expect(record.status, `warnings: ${record.warnings.join("; ")}`).toBe("observed");
 		expect(record.backend).toBe("git");
 		expect(record.workspaceRoot).toBe(repo);
 		// Coverage records what the observation examined, not what changed.
@@ -141,7 +141,7 @@ describe("git observation adapter", () => {
 		const record = await observe(repo);
 		const byPath = new Map(record.paths.map((p) => [p.path, p]));
 
-		expect(record.status).toBe("observed");
+		expect(record.status, `warnings: ${record.warnings.join("; ")}`).toBe("observed");
 		const staged = byPath.get("staged.txt");
 		expect(staged).toMatchObject({ kind: "modified", staged: true, unstaged: false });
 		const edited = byPath.get("edited.txt");
@@ -190,7 +190,7 @@ describe("git observation adapter", () => {
 		git(repo, "checkout", "--detach");
 
 		const record = await observe(repo);
-		expect(record.status).toBe("observed");
+		expect(record.status, `warnings: ${record.warnings.join("; ")}`).toBe("observed");
 		expect(record.base?.branch).toBeUndefined();
 		expect(record.base?.headCommit).toBe(git(repo, "rev-parse", "HEAD"));
 		expect(record.warnings.join("\n")).toMatch(/detached/i);
@@ -242,7 +242,7 @@ describe("git observation adapter", () => {
 
 			const record = await observe(alias);
 
-			expect(record.status).toBe("observed");
+			expect(record.status, `warnings: ${record.warnings.join("; ")}`).toBe("observed");
 			expect(record.workspaceRoot).toBe(alias);
 			expect(record.paths.find((p) => p.path === "tracked.txt")).toMatchObject({ kind: "modified" });
 		},
@@ -269,7 +269,7 @@ describe("git observation adapter", () => {
 		const record = await observe(repo);
 		const sub = record.paths.find((p) => p.path === "child");
 		expect(sub).toBeDefined();
-		expect(record.status).toBe("observed");
+		expect(record.status, `warnings: ${record.warnings.join("; ")}`).toBe("observed");
 		// No recursion: the submodule's own files are not reported.
 		expect(record.paths.find((p) => p.path === "child/inner.txt")).toBeUndefined();
 	});
@@ -295,7 +295,7 @@ describe("git observation adapter", () => {
 		git(repo, "add", "staged.txt");
 
 		const record = await observe(repo);
-		expect(record.status).toBe("observed");
+		expect(record.status, `warnings: ${record.warnings.join("; ")}`).toBe("observed");
 		expect(record.base?.headCommit).toBeUndefined();
 		expect(record.warnings.join("\n")).toMatch(/unborn|no commits/i);
 		const staged = record.paths.find((p) => p.path === "staged.txt");
@@ -312,7 +312,7 @@ describe("git observation adapter", () => {
 
 		const record = await observe(repo, { maxPaths: 2 });
 
-		expect(record.status).toBe("incomplete");
+		expect(record.status, `warnings: ${record.warnings.join("; ")}`).toBe("incomplete");
 		expect(record.paths).toHaveLength(2);
 		expect(record.base?.worktreeDigest).toBeUndefined();
 		expect(record.base?.indexDigest).toBeDefined();
@@ -339,7 +339,7 @@ describe("git observation adapter", () => {
 		writeFileSync(join(repo, "big.txt"), "x".repeat(16));
 
 		const record = await observe(repo, { maxHashBytes: 8 });
-		expect(record.status).toBe("incomplete");
+		expect(record.status, `warnings: ${record.warnings.join("; ")}`).toBe("incomplete");
 		expect(record.warnings.join("\n")).toMatch(/hash|skip/i);
 		const big = record.paths.find((p) => p.path === "big.txt");
 		expect(big).toBeDefined();
@@ -354,7 +354,7 @@ describe("git observation adapter", () => {
 
 		const record = await observe(repo, { hashPaths: false });
 
-		expect(record.status).toBe("observed");
+		expect(record.status, `warnings: ${record.warnings.join("; ")}`).toBe("observed");
 		expect(record.coverage.hashes).toBe(false);
 		expect(record.paths.every((p) => p.contentHash === undefined)).toBe(true);
 	});
@@ -395,7 +395,61 @@ describe("git observation adapter", () => {
 		const record = await observe(repo);
 		const after = repoSnapshot(repo);
 
-		expect(record.status).toBe("observed");
+		expect(record.status, `warnings: ${record.warnings.join("; ")}`).toBe("observed");
 		expect(after).toBe(before);
 	}, 20_000);
+});
+
+describe("toplevel containment across platform spellings", () => {
+	const win = (root: string, toplevel: string, realpath?: (p: string) => string) =>
+		compareToplevel(root, toplevel, { platform: "win32", realpath: realpath ?? ((p) => p) });
+
+	it("accepts drive-letter and separator case divergence on win32", () => {
+		const result = win(
+			"C:\\Users\\runneradmin\\AppData\\Local\\Temp\\repo",
+			"C:/Users/RUNNERADMIN/AppData/Local/Temp/repo",
+		);
+		expect(result.inside).toBe(true);
+		expect(result.prefix).toBe("");
+	});
+
+	it("accepts short-name (8.3) divergence once the resolver expands it", () => {
+		const result = win(
+			"C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\repo",
+			"C:\\Users\\runneradmin\\AppData\\Local\\Temp\\repo",
+			(p) => p.replaceAll("RUNNER~1", "runneradmin"),
+		);
+		expect(result.inside).toBe(true);
+		expect(result.prefix).toBe("");
+	});
+
+	it("computes the strip prefix for a root nested under the toplevel on win32", () => {
+		const result = win(
+			"C:\\Users\\runneradmin\\AppData\\Local\\Temp\\repo\\sub",
+			"C:\\Users\\runneradmin\\AppData\\Local\\Temp\\repo",
+		);
+		expect(result.inside).toBe(true);
+		expect(result.prefix).toBe("sub");
+	});
+
+	it("still rejects a genuinely outside root on win32", () => {
+		const result = win(
+			"C:\\Users\\runneradmin\\elsewhere\\repo",
+			"C:\\Users\\runneradmin\\AppData\\Local\\Temp\\repo",
+		);
+		expect(result.inside).toBe(false);
+	});
+
+	it("keeps posix comparison case-sensitive and physically resolved", () => {
+		// macOS shape: the caller's symlinked path and git's physical toplevel
+		// converge through realpath.
+		const inside = compareToplevel("/tmp/repo", "/private/tmp/repo", {
+			platform: "linux",
+			realpath: (p) => (p === "/tmp/repo" ? "/private/tmp/repo" : p),
+		});
+		expect(inside.inside).toBe(true);
+		expect(inside.prefix).toBe("");
+		const outside = compareToplevel("/private/tmp/repo", "/tmp/other", { platform: "linux", realpath: (p) => p });
+		expect(outside.inside).toBe(false);
+	});
 });
