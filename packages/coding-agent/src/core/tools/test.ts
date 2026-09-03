@@ -61,7 +61,9 @@ export interface TestOperationResult {
 	exitCode: number | null;
 	/**
 	 * How the run actually ended. Omitted classifications are derived from
-	 * `exitCode`: a code means `exit`, otherwise the run ended on a `signal`.
+	 * `exitCode`: a code means the run exited on its own; runner-stopped runs
+	 * (`timeout`, `cancelled`) always report null, otherwise the run ended on a
+	 * `signal`.
 	 */
 	outcome?: TestProcessOutcome;
 	/** Signal name when the runner was terminated by one, otherwise null. */
@@ -166,10 +168,26 @@ const defaultOperations: TestOperations = {
 			};
 		}
 		if (aborted) {
-			return { exitCode, outcome: "cancelled", signal: exitSignal, stdout: stdoutCapture, stderr: stderrCapture };
+			// The runner stopped the process, so the run has no meaningful exit
+			// code. A forced kill reports the OS artifact (a signal on POSIX,
+			// exit code 1 under taskkill on Windows); mirrors the bash tool,
+			// which reports exitCode null for interrupted runs.
+			return {
+				exitCode: null,
+				outcome: "cancelled",
+				signal: exitSignal,
+				stdout: stdoutCapture,
+				stderr: stderrCapture,
+			};
 		}
 		if (timedOut) {
-			return { exitCode, outcome: "timeout", signal: exitSignal, stdout: stdoutCapture, stderr: stderrCapture };
+			return {
+				exitCode: null,
+				outcome: "timeout",
+				signal: exitSignal,
+				stdout: stdoutCapture,
+				stderr: stderrCapture,
+			};
 		}
 		if (exitCode !== null) {
 			return { exitCode, outcome: "exit", signal: null, stdout: stdoutCapture, stderr: stderrCapture };
