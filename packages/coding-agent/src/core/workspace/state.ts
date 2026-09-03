@@ -37,6 +37,10 @@ export interface WorkspaceStateCoverage {
 export interface WorkspaceBase {
 	headCommit?: string;
 	branch?: string;
+	/** Digest over the index baseline, when the backend has one. */
+	indexDigest?: string;
+	/** Digest over the worktree baseline as observed, when complete. */
+	worktreeDigest?: string;
 }
 
 /** What kind of change a path carried at capture time. */
@@ -48,6 +52,8 @@ export interface WorkspaceStatePath {
 	kind: WorkspacePathKind;
 	staged?: boolean;
 	unstaged?: boolean;
+	/** Path is ignored by the backend's ignore rules. */
+	ignored?: boolean;
 	/** Content hash at capture time (`sha256:<hex>`), when hashes were covered. */
 	contentHash?: string;
 	/** Previous path for renames. */
@@ -70,13 +76,14 @@ export interface WorkspaceStateRecord {
 	/** Stable id, independent of entry ids; comparisons reference it. */
 	observationId: string;
 	/**
-	 * `observed` — full record; `partial` — record with coverage gaps;
-	 * `unsupported` — no backend for this workspace; `unavailable` —
-	 * observation could not be taken.
+	 * `observed` — the adapter observed the fields named by `coverage`;
+	 * `incomplete` — a configured limit prevented complete capture;
+	 * `unsupported` — no adapter can observe this workspace; `failed` — an
+	 * adapter attempted capture and could not complete it.
 	 */
-	status: "observed" | "partial" | "unsupported" | "unavailable";
-	/** Backend identifier, e.g. `git`; `none` when unsupported. */
-	backend: string;
+	status: "observed" | "incomplete" | "unsupported" | "failed";
+	/** Backend that produced the record. */
+	backend: "git" | "filesystem" | "none";
 	/** Absolute workspace root the record describes. */
 	workspaceRoot: string;
 	capturedAt: string;
@@ -100,8 +107,10 @@ export interface WorkspaceStateComparison {
 	comparedAt: string;
 	/** The observation this comparison was made against. */
 	comparedToObservationId: string;
-	/** `same` — no relevant change; `drifted` — state moved; `incomplete` — not fully comparable. */
-	result: "same" | "drifted" | "incomplete";
+	/** `same` — no relevant change; `drifted` — state moved;
+	 *  `unavailable` — the workspace could not be observed; `inconclusive` —
+	 *  no reliable comparison could be established. */
+	result: "same" | "drifted" | "unavailable" | "inconclusive";
 	changedPaths?: string[];
 	warnings: string[];
 }
