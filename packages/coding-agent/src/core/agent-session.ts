@@ -139,6 +139,9 @@ import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapp
 import { createToolSchemaToolDefinition } from "./tools/tool-schema.ts";
 import type { WebSearchOperations } from "./tools/web-search.ts";
 import { addUsageToTotals, createUsageTotals } from "./usage-totals.ts";
+import { type GitObserveOptions, observeWorkspaceGit } from "./workspace/git-observer.ts";
+import { formatWorkspaceProjection } from "./workspace/projection.ts";
+import { appendWorkspaceObservation, type WorkspaceStateRecord } from "./workspace/state.ts";
 
 // ============================================================================
 // Skill Block Parsing
@@ -441,6 +444,12 @@ export class AgentSession {
 	private _customTools: ToolDefinition[];
 	private _baseToolDefinitions: Map<string, ToolDefinition> = new Map();
 	private _cwd: string;
+	/**
+	 * Workspace observation adapter for compaction capture (WS.4). Injectable
+	 * so tests can force capture outcomes without a real repository.
+	 */
+	_workspaceObserver: (root: string, options?: GitObserveOptions) => Promise<WorkspaceStateRecord> =
+		observeWorkspaceGit;
 	private _extensionRunnerRef?: { current?: ExtensionRunner };
 	private _initialActiveToolNames?: string[];
 	private _allowedToolNames?: Set<string>;
@@ -2243,6 +2252,20 @@ export class AgentSession {
 	// =========================================================================
 
 	/** Generate Pi's built-in compaction summary for manual and automatic compaction. */
+	/**
+	 * Attempt exactly one workspace observation for a compaction (spec
+	 * 2026-09-01-harness-correctness-and-workspace-state.md § 3 step 1).
+	 * Returns undefined when observation is impossible; never throws and
+	 * never fails the surrounding compaction.
+	 */
+	async _captureWorkspaceObservation(signal: AbortSignal | undefined): Promise<WorkspaceStateRecord | undefined> {
+		try {
+			return await this._workspaceObserver(this._cwd, { signal });
+		} catch {
+			return undefined;
+		}
+	}
+
 	private async _runDefaultCompaction(
 		preparation: CompactionPreparation,
 		requestModel: Model<any>,
@@ -2350,6 +2373,15 @@ export class AgentSession {
 			let usage: Usage | undefined;
 			let details: unknown;
 
+			// One workspace observation attempt per compaction (spec
+			// 2026-09-01-harness-correctness-and-workspace-state.md § 3),
+			// before summary generation so the bounded projection can join
+			// the model-facing summary. Capture problems never fail the
+			// compaction.
+			const workspaceRecord = await this._captureWorkspaceObservation(
+				this._compactionAbortController?.signal ?? this._autoCompactionAbortController?.signal,
+			);
+
 			if (extensionCompaction) {
 				// Extension provided compaction content
 				summary = extensionCompaction.summary;
@@ -2374,6 +2406,9 @@ export class AgentSession {
 				tokensBefore = result.tokensBefore;
 				usage = result.usage;
 				details = result.details;
+				if (workspaceRecord) {
+					summary += `\n\n${formatWorkspaceProjection(workspaceRecord)}`;
+				}
 			}
 
 			if (this._compactionAbortController.signal.aborted) {
@@ -2381,6 +2416,16 @@ export class AgentSession {
 			}
 
 			this.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension, usage);
+			if (workspaceRecord) {
+				try {
+					// Historical record, child of the compaction entry; never in
+					// the model context and never a rewrite of history.
+					appendWorkspaceObservation(this.sessionManager, workspaceRecord);
+				} catch {
+					// Artifact/entry persistence problems downgrade the
+					// workspace status; they never fail transcript compaction.
+				}
+			}
 			const newEntries = this.sessionManager.getEntries();
 			const sessionContext = this.sessionManager.buildSessionContext();
 			this.agent.state.messages = sessionContext.messages;
@@ -2665,6 +2710,15 @@ export class AgentSession {
 			let usage: Usage | undefined;
 			let details: unknown;
 
+			// One workspace observation attempt per compaction (spec
+			// 2026-09-01-harness-correctness-and-workspace-state.md § 3),
+			// before summary generation so the bounded projection can join
+			// the model-facing summary. Capture problems never fail the
+			// compaction.
+			const workspaceRecord = await this._captureWorkspaceObservation(
+				this._compactionAbortController?.signal ?? this._autoCompactionAbortController?.signal,
+			);
+
 			if (extensionCompaction) {
 				// Extension provided compaction content
 				summary = extensionCompaction.summary;
@@ -2689,6 +2743,9 @@ export class AgentSession {
 				tokensBefore = compactResult.tokensBefore;
 				usage = compactResult.usage;
 				details = compactResult.details;
+				if (workspaceRecord) {
+					summary += `\n\n${formatWorkspaceProjection(workspaceRecord)}`;
+				}
 			}
 
 			if (this._autoCompactionAbortController.signal.aborted) {
@@ -2709,6 +2766,16 @@ export class AgentSession {
 			}
 
 			this.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension, usage);
+			if (workspaceRecord) {
+				try {
+					// Historical record, child of the compaction entry; never in
+					// the model context and never a rewrite of history.
+					appendWorkspaceObservation(this.sessionManager, workspaceRecord);
+				} catch {
+					// Artifact/entry persistence problems downgrade the
+					// workspace status; they never fail transcript compaction.
+				}
+			}
 			const newEntries = this.sessionManager.getEntries();
 			const sessionContext = this.sessionManager.buildSessionContext();
 			this.agent.state.messages = sessionContext.messages;
