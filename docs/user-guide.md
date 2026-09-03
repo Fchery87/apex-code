@@ -116,6 +116,28 @@ back to an earlier entry, enable the `git-checkpoint` extension from
 files created after the checkpoint, and pins the pre-restore state first so it can be
 undone.
 
+**Workspace state.** Every compaction also records what the workspace looked like: the
+repository root, the current base, and up to 200 changed paths, each with a SHA-256
+digest (files over 5 MiB are listed but not hashed; symlink entries hash their target
+path). The session's own state directory is excluded. The observation is a child of the
+compaction entry: the model sees a bounded projection, never a raw diff, and no patch
+content is captured.
+
+The first turn after a compaction — and the first turn after resuming a session whose
+latest observation never got one — compares fresh state against the stored observation
+and records the outcome: `same`, `drifted` (with the changed paths), `unavailable` (the
+workspace cannot be observed right now), or `inconclusive` (the stored record is too
+partial to judge). The historical observation is never rewritten. Outside a Git
+repository nothing is recorded and nothing fails.
+
+**Navigation choices.** `/tree` and `/fork` move only the conversation; your files are
+never touched unless a workspace policy says otherwise. The session API accepts an
+explicit policy: `keep` (the default — conversation only), `restore` (put the workspace
+back to the checkpoint pinned at the target entry; a pre-restore checkpoint is pinned
+first so the restore itself can be undone), `fail-if-drifted` (refuse the whole
+navigation when files moved since the checkpoint), and `cancel` (the same refusal, for
+interactive flows). A missing checkpoint leaves your files unchanged and says so.
+
 **Cost and usage.** `apex-code cost` reports recorded spend grouped by model,
 session, or role. `/session` shows the current session's token/cost breakdown
 during a run.
