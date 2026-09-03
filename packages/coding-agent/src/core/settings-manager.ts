@@ -288,6 +288,13 @@ export interface Settings {
 	 */
 	checkpoints?: CheckpointSettings;
 	/**
+	 * Named verification and formatter policies (spec
+	 * 2026-09-01-configured-verification-and-formatting.md section 1; ADR
+	 * 0028). Absent by default; project-scope policies load only after the
+	 * project-trust decision, like every project settings source.
+	 */
+	policies?: PoliciesSettings;
+	/**
 	 * Declarative hooks over the extension event catalog (spec
 	 * 2026-08-31-declarative-hooks). Absent by default; an absent key constructs
 	 * no runtime, spawns no subprocess, and changes no behavior. Project-scope
@@ -303,6 +310,46 @@ export interface Settings {
  * user's own collector, never to this project. Unset `otlpEndpoint` means export
  * never activates; there is no separate on/off switch to forget to flip.
  */
+
+/**
+ * Named verification and formatter policies (spec
+ * 2026-09-01-configured-verification-and-formatting.md section 1; ADR 0028).
+ * Absent by default: no key, no policies, no commands, no runtime. This
+ * settings layer only owns and exposes the raw per-source configuration;
+ * strict validation and per-ID resolution land with the policy loader
+ * (plan VF.2). `shell` is typed as literal `false`: a shell string is not a
+ * supported configuration.
+ */
+export interface PolicyCommandSettings {
+	id: string;
+	executable: string;
+	argv: string[];
+	/** "workspace" (default) or a path resolved against the workspace root. */
+	cwd?: string;
+	pathScope?: string[];
+	timeoutMs?: number;
+	maxOutputBytes?: number;
+	maxOutputLines?: number;
+	shell?: false;
+	permission?: "allow" | "ask" | "deny";
+}
+
+export interface VerificationPolicySettings extends PolicyCommandSettings {
+	/** Default false: a failed verification adds a warning, not a block. */
+	blocksCompletion?: boolean;
+}
+
+export interface FormatterPolicySettings extends PolicyCommandSettings {
+	/** Paths the formatter may write; the loader confines these to pathScope. */
+	declaredPaths: string[];
+}
+
+export interface PoliciesSettings {
+	schemaVersion: number;
+	verification?: VerificationPolicySettings[];
+	formatter?: FormatterPolicySettings[];
+}
+
 export interface ObservabilitySettings {
 	otlpEndpoint?: string; // e.g. "http://localhost:4318"; POSTed to as "<endpoint>/v1/traces"
 	otlpHeaders?: Record<string, string>; // extra headers for the OTLP export request, e.g. collector auth
@@ -654,6 +701,11 @@ export class SettingsManager {
 		}
 
 		return settings as Settings;
+	}
+
+	/** Merged policy settings (project replaces user arrays wholesale at this raw layer). */
+	getPolicySettings(): PoliciesSettings | undefined {
+		return this.settings.policies;
 	}
 
 	getGlobalSettings(): Settings {

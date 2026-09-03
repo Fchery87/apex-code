@@ -121,7 +121,7 @@ capable and measurably worse.
 | Checkpoints on by default | **landed** — CP.1 through CP.3 · `7f6e5800b` (three-OS CI run 33474171722) | [spec](specs/2026-09-01-checkpoints-default-on.md) | — |
 | Workspace-aware compaction and checkpoint navigation | **landed** — WS.1 through WS.7 · `8a36f1838` (three-OS CI run 33751872256) | [spec](specs/2026-09-01-harness-correctness-and-workspace-state.md) | — |
 | Tool reliability and execution budgets | **landed** — TR.1 through TR.7 · `cc9264873` · three-OS CI green (run `33707738039`, post-repair tree including `533de14e1`; first closure run `33705200104` failed on Windows and is superseded) | [spec](specs/2026-09-01-tool-reliability-and-execution-budgets.md) | — |
-| Configured verification and formatting | **active** — implementation planned | [spec](specs/2026-09-01-configured-verification-and-formatting.md) | [plan](plans/2026-09-01-configured-verification-and-formatting.md) |
+| Configured verification and formatting | **active** — VF.1 settling settings ownership (ADR 0028 accepted) | [spec](specs/2026-09-01-configured-verification-and-formatting.md) | [plan](plans/2026-09-01-configured-verification-and-formatting.md) |
 
 ---
 
@@ -1328,6 +1328,7 @@ takes the next free number instead of a reserved one.
 | 0025 | MCP rule grammar: `Mcp(server:tool)`, wildcard in the tool position only, metadata separate | follow-up | ✅ |
 | 0026 | npm dist-tags derive from the release version: prerelease to `next`, stable to `latest` | follow-up | ✅ |
 | 0027 | `AgentHarness` is not Apex Code's public API: the scaffold stays in-tree, unexported | follow-up | ✅ |
+| 0028 | Verification/formatter policy settings: project shadows user per ID inside trusted projects; extensions additive-only; declared permission is a ceiling | follow-up | ✅ |
 
 ## Cross-phase contracts
 

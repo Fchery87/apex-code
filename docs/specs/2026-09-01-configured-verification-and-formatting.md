@@ -99,6 +99,23 @@ interface FormatterPolicy extends CommandPolicy {
 
 A project policy is not trusted merely because it is in the repository. Loading it must follow the existing project trust and permission rules. The policy must use an executable plus argv by default. If `shell: true` is ever supported, it needs a distinct capability, explicit confirmation, and separate tests.
 
+#### Settings ownership, precedence, and trust (settled 2026-09-03, VF.1 — ADR 0028)
+
+Policies live under the optional `policies` settings key in user (global) and project
+settings, versioned by `schemaVersion: 1`, with `verification` and `formatter` arrays.
+The settings TypeScript shapes (`PolicyCommandSettings`, `VerificationPolicySettings`,
+`FormatterPolicySettings`, `PoliciesSettings`) carry the loader-facing fields; the
+runtime `CommandPolicy` above is stamped by the loader, which fills defaults
+(`cwd` `"workspace"`, bounded `timeoutMs`/`maxOutputBytes`/`maxOutputLines`,
+`permission` `"ask"`), rejects `shell: true` outright, and sets `trustedSource` from the
+file the policy was loaded from.
+
+- **Trust.** Project-scope policies load only after the existing project-trust decision; an untrusted project contributes zero policies.
+- **Precedence.** Within a trusted project, a project policy ID replaces the user policy with the same ID. The resolver reads `getGlobalSettings()` / `getProjectSettings()` separately, never the merged view (same-key arrays replace wholesale there).
+- **Extensions.** Extension-registered policies may only add new IDs; redefining a user or project ID is rejected at registration. Duplicate IDs within one source are a strict load error.
+- **Permission ceiling.** The declared `permission` is a ceiling: session permission mode, sandbox policy, and the canonical tool contract still cap every invocation.
+- **Defaults stay inert.** An absent `policies` key constructs no runtime and runs nothing; an unknown `schemaVersion` is a load error.
+
 ### 2. Execution and scope
 
 Verification may run at an explicit user request, a configured post-turn boundary, or a configured extension hook. The policy names whether a failure blocks a completion claim or only adds a warning. It never silently changes a result from failed to passed.
