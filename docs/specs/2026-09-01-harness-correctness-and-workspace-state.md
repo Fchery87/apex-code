@@ -1,6 +1,6 @@
 # Spec: Workspace-aware compaction and checkpoint navigation
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 
@@ -8,7 +8,7 @@
 | --- | --- |
 | Author | Apex Code maintainers |
 | Created | 2026-09-01 |
-| Last updated | 2026-09-02 |
+| Last updated | 2026-09-03 |
 | Roadmap phase | Product-surface follow-up |
 | Tracking issue/PR | none |
 | Compatibility posture | Preserves compatibility. Existing sessions and compaction entries remain readable when they have no workspace details. New workspace observations are additive. Existing Git checkpoint settings remain valid. Navigation will not rewrite a user's workspace implicitly. |
@@ -49,16 +49,16 @@ Injecting a complete raw diff into each compaction request is not a safe replace
 
 ## Goals
 
-- [ ] Record a versioned workspace observation with each new compaction boundary when a supported adapter can observe the workspace.
-- [ ] Preserve explicit `observed`, `unsupported`, `failed`, and `incomplete` outcomes. An observation must state which fields it covers rather than implying full workspace capture.
-- [ ] Represent tracked, staged, unstaged, untracked, deleted, and renamed paths when the selected adapter supports them. Define ignored-file, submodule, detached-HEAD, merge, symlink, and special-file behavior.
-- [ ] Keep larger patch or manifest content outside the session ledger as a bounded, integrity-checked artifact. Capture patch content only under an explicit privacy and retention policy.
-- [ ] Project only bounded workspace status, base identity, grouped changed paths, incompleteness warnings, and authorized artifact references into compaction context.
-- [ ] Compare a stored observation with a fresh observation on resume or at the first turn after compaction. Report `same`, `drifted`, `unavailable`, or `inconclusive` without overwriting the historical observation.
-- [ ] Keep workspace observation, transcript compaction, and rollback separate. Workspace capture failure must not fail otherwise successful compaction.
-- [ ] Define explicit `/tree` and `/fork` policies across interactive, print, JSON, RPC, and ACP modes. No mode may silently overwrite pending user changes.
-- [ ] Use the existing Git checkpoint engine for optional reversible restore, including a pre-restore checkpoint.
-- [ ] Test Git and non-Git workspaces, including unsupported adapters and concurrent external changes.
+- [x] Record a versioned workspace observation with each new compaction boundary when a supported adapter can observe the workspace.
+- [x] Preserve explicit `observed`, `unsupported`, `failed`, and `incomplete` outcomes. An observation must state which fields it covers rather than implying full workspace capture.
+- [x] Represent tracked, staged, unstaged, untracked, deleted, and renamed paths when the selected adapter supports them. Define ignored-file, submodule, detached-HEAD, merge, symlink, and special-file behavior.
+- [x] Keep larger patch or manifest content outside the session ledger as a bounded, integrity-checked artifact. Capture patch content only under an explicit privacy and retention policy.
+- [x] Project only bounded workspace status, base identity, grouped changed paths, incompleteness warnings, and authorized artifact references into compaction context.
+- [x] Compare a stored observation with a fresh observation on resume or at the first turn after compaction. Report `same`, `drifted`, `unavailable`, or `inconclusive` without overwriting the historical observation.
+- [x] Keep workspace observation, transcript compaction, and rollback separate. Workspace capture failure must not fail otherwise successful compaction.
+- [x] Define explicit `/tree` and `/fork` policies across interactive, print, JSON, RPC, and ACP modes. No mode may silently overwrite pending user changes.
+- [x] Use the existing Git checkpoint engine for optional reversible restore, including a pre-restore checkpoint.
+- [x] Test Git and non-Git workspaces, including unsupported adapters and concurrent external changes.
 
 ## Non-goals
 
@@ -221,6 +221,31 @@ Binding for WS.2 through WS.6. Recorded before any production code landed.
   count and total bytes; the store owns its cleanup at write time.
 - Artifact references confer no retrieval permission. Reads go through the
   normal permission system and output bounds.
+
+## Landed behavior (2026-09-03, WS.7)
+
+What shipped, as a reference for the names and bounds other surfaces read.
+
+### Observation (WS.1–WS.4)
+
+- `observeWorkspaceGit(root, options?)` in `packages/coding-agent/src/core/workspace/git-observer.ts` is the one adapter: `status` `observed` / `incomplete` / `unsupported` / `failed`, `backend` `"git"`, per-path entries `added | modified | deleted | renamed | untracked`, digest `sha256:<hex>` per path, coverage flags, and warnings. Outside a Git repository it reports `unsupported` ("not a git repository"); nothing else fails.
+- Measured limits: `DEFAULT_MAX_PATHS` 200 paths per observation (truncation warning), `DEFAULT_MAX_HASH_BYTES` 5 MiB per hashed file (larger files are listed with `skipped: "size"` and no digest; symlink entries hash their target path), `DEFAULT_TIMEOUT_MS` 10 s per git call.
+- Storage: additive custom entries via `appendWorkspaceObservation` / `readWorkspaceComparison` / `listWorkspaceComparisons` in `state.ts`. The observation is a child of its compaction entry and carries a stable `observationId`. `formatWorkspaceProjection` bounds what compaction context sees; the raw path list never enters the model context.
+- Patch artifacts: the record schema (`patchArtifactRef`, `patchBytes`, `patchComplete`) and the `WorkspaceArtifactStore` (sequence-named files, sha256 integrity, bounded retention) exist, but no current setting writes patch content; capture is digest-only by default.
+- Toplevel containment resolves both spellings through `compareToplevel` (POSIX `realpathSync`; win32 `realpathSync.native` plus case folding and `path.win32`), so macOS `/tmp` symlinks and Windows 8.3 short names cannot corrupt paths or fake escapes.
+- The session excludes its own state directory (`_sessionExclusionPaths`) from observation so harness bookkeeping never reads as drift.
+- Capture rides the compaction transaction (manual and auto): observer failure yields no entry and never fails the compaction.
+
+### Comparison (WS.5)
+
+- `compareWorkspaceObservations(stored, fresh, {artifactProbe?})` in `comparison.ts` is pure: equal digests → `same`; any moved path → `drifted` with a symmetric changed-path diff capped at `MAX_CHANGED_PATHS` 200 (plus a truncation warning); fresh `undefined` / `failed` / `unsupported` → `unavailable`; `incomplete` on either side, or digests missing where the stored record expected them, → `inconclusive`. A missing stored patch artifact adds a warning only.
+- `AgentSession` runs the comparison once per boundary — the first model turn after a compaction that stored an observation, and on resume onto a session whose latest observation has no later comparison — via `_workspaceComparePending` consumed at `prompt()` start (`_runWorkspaceComparisonBoundary`, never throws). The outcome persists as an `apex.workspace.comparison` entry referencing `comparedToObservationId`; the historical observation is never rewritten.
+
+### Navigation policies (WS.6)
+
+- `navigateTree(targetId, { workspacePolicy?: TreeWorkspacePolicy })` with `TreeWorkspacePolicy = "keep" | "restore" | "fail-if-drifted" | "cancel"` (`"keep"` default) and a `workspace` outcome `{ policy, outcome: "unchanged" | "restored" | "refused-drifted" | "missing-checkpoint" | "failed", preRestoreCheckpoint?, warnings }`.
+- `keep` never touches files. `restore` looks up the checkpoint pinned at the target entry, refuses nothing silently: missing checkpoint → `missing-checkpoint` (files unchanged), workspace drifted → files still restored through `GitCheckpoints.restore`, which pins a pre-restore checkpoint first. `fail-if-drifted` and `cancel` refuse the whole navigation (conversation untouched) when `matchesWorktree` reports drift.
+- `GitCheckpoints.matchesWorktree(checkpoint)` compares a temp-index `read-tree`/`add -A`/`write-tree` against the checkpoint's commit tree; returns `undefined` when the comparison cannot run, which reports as `failed` with a warning, never as a guessed match.
 
 ## Deletion inventory
 
