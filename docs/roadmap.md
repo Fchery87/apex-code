@@ -120,7 +120,7 @@ capable and measurably worse.
 | ACP adapter | **landed** — ACP.1 through ACP.5 · `6b76caa3b` (three-OS CI run 33469742558) | [spec](specs/2026-08-31-acp-adapter.md) | — |
 | Checkpoints on by default | **landed** — CP.1 through CP.3 · `7f6e5800b` (three-OS CI run 33474171722) | [spec](specs/2026-09-01-checkpoints-default-on.md) | — |
 | Workspace-aware compaction and checkpoint navigation | **active** — implementation planned | [spec](specs/2026-09-01-harness-correctness-and-workspace-state.md) | [plan](plans/2026-09-01-harness-correctness-and-workspace-state.md) |
-| Tool reliability and execution budgets | **landed** — TR.1 through TR.7 · `cc9264873` (three-OS CI run pending on push) | [spec](specs/2026-09-01-tool-reliability-and-execution-budgets.md) | — |
+| Tool reliability and execution budgets | **landed** — TR.1 through TR.7 · `cc9264873` · three-OS CI green (run `33707738039`, post-repair tree including `533de14e1`; first closure run `33705200104` failed on Windows and is superseded) | [spec](specs/2026-09-01-tool-reliability-and-execution-budgets.md) | — |
 | Configured verification and formatting | **active** — implementation planned | [spec](specs/2026-09-01-configured-verification-and-formatting.md) | [plan](plans/2026-09-01-configured-verification-and-formatting.md) |
 
 ---
