@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { lstatSync, readFileSync, readlinkSync } from "node:fs";
-import { relative } from "node:path";
+import { lstatSync, readFileSync, readlinkSync, realpathSync } from "node:fs";
+import { isAbsolute, relative, sep } from "node:path";
 import {
 	WORKSPACE_RECORD_VERSION,
 	type WorkspaceStateCoverage,
@@ -264,8 +264,17 @@ export async function observeWorkspaceGit(
 		}
 		return failed("git rev-parse failed");
 	}
+	// git resolves the toplevel physically (macOS /tmp -> /private/tmp,
+	// Windows drive-letter case and short names), so both sides go through
+	// realpath before comparing; otherwise a symlinked workspace root would
+	// produce a garbage prefix on every reported path.
 	const toplevel = head.stdout.toString("utf-8").trim();
-	const insidePrefix = relative(toplevel, workspaceRoot);
+	const rootReal = realpathSync(workspaceRoot);
+	const toplevelReal = realpathSync(toplevel);
+	const insidePrefix = relative(toplevelReal, rootReal);
+	if (insidePrefix === ".." || insidePrefix.startsWith(`..${sep}`) || isAbsolute(insidePrefix)) {
+		return failed("workspace root is outside the repository toplevel");
+	}
 
 	const headCommit = await runGit(workspaceRoot, ["rev-parse", "--verify", "HEAD"], timeoutMs, signal);
 	const mergeHead = await runGit(workspaceRoot, ["rev-parse", "-q", "--verify", "MERGE_HEAD"], timeoutMs, signal);
@@ -311,7 +320,7 @@ export async function observeWorkspaceGit(
 			...(entry.previousPath ? { previousPath: prefixRelative(insidePrefix, entry.previousPath) } : {}),
 		};
 		if (hashPaths && kind !== "deleted") {
-			const { hash, skipped } = hashWorkspacePath(toplevel, entry.path, maxHashBytes);
+			const { hash, skipped } = hashWorkspacePath(toplevelReal, entry.path, maxHashBytes);
 			if (hash) workspacePath.contentHash = hash;
 			else if (skipped) skippedHashes++;
 		}

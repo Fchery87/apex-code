@@ -229,6 +229,25 @@ describe("git observation adapter", () => {
 		expect(link?.contentHash).toBe(sha256Text("target.txt"));
 	});
 
+	it(
+		"resolves a symlinked workspace root without mangling paths",
+		{ skip: process.platform === "win32" },
+		async () => {
+			const real = initRepo("real-dir");
+			writeFileSync(join(real, "tracked.txt"), "one\n");
+			commitAll(real, "initial");
+			writeFileSync(join(real, "tracked.txt"), "one changed\n");
+			const alias = join(scratch, "alias");
+			execFileSync("ln", ["-s", real, alias]);
+
+			const record = await observe(alias);
+
+			expect(record.status).toBe("observed");
+			expect(record.workspaceRoot).toBe(alias);
+			expect(record.paths.find((p) => p.path === "tracked.txt")).toMatchObject({ kind: "modified" });
+		},
+	);
+
 	it("reports a supported submodule without recursing into it", async () => {
 		const child = initRepo("submodule-child");
 		writeFileSync(join(child, "inner.txt"), "inner\n");
