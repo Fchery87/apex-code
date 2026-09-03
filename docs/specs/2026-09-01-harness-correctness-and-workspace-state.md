@@ -8,7 +8,7 @@
 | --- | --- |
 | Author | Apex Code maintainers |
 | Created | 2026-09-01 |
-| Last updated | 2026-09-01 |
+| Last updated | 2026-09-02 |
 | Roadmap phase | Product-surface follow-up |
 | Tracking issue/PR | none |
 | Compatibility posture | Preserves compatibility. Existing sessions and compaction entries remain readable when they have no workspace details. New workspace observations are additive. Existing Git checkpoint settings remain valid. Navigation will not rewrite a user's workspace implicitly. |
@@ -175,6 +175,52 @@ On resume or at the first post-compaction turn, compare when an adapter is avail
 - A failed or cancelled restore reports its outcome and leaves the session/workspace relationship explicit.
 
 Navigation never discards pending user edits implicitly. An explicitly authorized restore may overwrite them only after the selected policy and pre-restore checkpoint requirements succeed.
+
+## Settled storage and artifact decisions (2026-09-02, WS.1)
+
+Binding for WS.2 through WS.6. Recorded before any production code landed.
+
+### Storage
+
+- Workspace state lives in **dedicated additive session entries**, not in
+  `CompactionEntry.details`. Core compaction writes `{readFiles, modifiedFiles}`
+  into `details`, and an extension replacing compaction replaces `details`
+  wholesale (`fromHook`), so a record stored there would silently vanish for
+  hook-driven compactions and would couple core state into a field documented
+  as extension-owned. `CompactionEntry.details` is unchanged by this feature
+  and arbitrary extension-owned details remain preserved by construction.
+- The records reuse the existing additive `custom` entry type with reserved
+  namespaced discriminants:
+  - `apex.workspace.observation` — one `WorkspaceStateRecord`;
+  - `apex.workspace.comparison` — one `WorkspaceStateComparison`.
+- The observation entry is appended as a **child of the compaction entry it
+  annotates** (`parentId` = the compaction entry id). Comparisons append later
+  in the path and never rewrite the historical observation.
+- ADR 0006 needs **no amendment**: no new entry type, no field meaning change,
+  and readers already ignore unknown entry payloads. This reuse of the existing
+  `custom` type is why no new public session-format decision is being made.
+- Neither record participates in LLM context (`custom` entries produce no
+  context messages). The model sees only the bounded projection carried by the
+  compaction summary text (WS.4) and drift notices (WS.5).
+
+### Artifacts
+
+- The durable owner is a **new session-owned store** on disk:
+  `<sessions-dir>/<session-file-basename>.artifacts/workspace-state/`, derived
+  from the session file path (`.jsonl` replaced by `.artifacts`). The existing
+  `OutputAccumulator` files are ephemeral OS-temp command output and are not
+  reused. An in-memory session (no file) has no artifact store; patch capture
+  then reports `incomplete` coverage rather than pretending to persist.
+- Writes are atomic: content lands in a unique temp file in the same directory
+  and is `rename(2)`d into place. Directory mode `0o700`, file mode `0o600`.
+- Every artifact carries `sha256` and byte length in its referring record;
+  readers verify both and treat a mismatch as `unavailable` integrity, never
+  as current state.
+- Default capture is metadata and hashes only. Patch bytes require explicit
+  configuration (settled with WS.3), bounded by a byte cap, FIFO-pruned by
+  count and total bytes; the store owns its cleanup at write time.
+- Artifact references confer no retrieval permission. Reads go through the
+  normal permission system and output bounds.
 
 ## Deletion inventory
 
