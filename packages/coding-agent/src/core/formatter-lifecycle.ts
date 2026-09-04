@@ -148,7 +148,16 @@ function snapshotScope(root: string, priority: string[], background: string[]): 
 }
 
 function insideWorkspace(root: string, absolute: string): boolean {
-	const rel = relative(resolve(root), absolute);
+	// The root itself may sit behind a symlink (macOS /tmp -> /private/tmp):
+	// compare the changed path's realpath against the root's realpath, or
+	// every workspace under a linked directory reads as an escape.
+	let realRoot = root;
+	try {
+		realRoot = realpathSync(root);
+	} catch {
+		// root vanished between snapshots: compare as-given
+	}
+	const rel = relative(realRoot, absolute);
 	return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 

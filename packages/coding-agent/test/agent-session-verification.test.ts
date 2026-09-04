@@ -26,18 +26,19 @@ import { SettingsManager } from "../src/core/settings-manager.ts";
 
 const directories: string[] = [];
 
-afterEach(() => {
-	rmSyncMock();
-});
-
 let currentTempDir: string | undefined;
+let currentRuntime: Awaited<ReturnType<typeof createAgentSessionRuntime>> | undefined;
 
-function rmSyncMock(): void {
+afterEach(async () => {
+	if (currentRuntime !== undefined) {
+		await currentRuntime.dispose();
+		currentRuntime = undefined;
+	}
 	if (currentTempDir !== undefined) {
 		rmSync(currentTempDir, { recursive: true, force: true });
 		currentTempDir = undefined;
 	}
-}
+});
 
 interface SessionUnderTest {
 	session: AgentSession;
@@ -99,6 +100,12 @@ function passPolicy(id: string, overrides: Record<string, unknown> = {}): Record
 
 function mockTurn(target: AgentSession): void {
 	const turnModel = target.model!;
+	// The mocked turn never reaches a provider, so the auth gate prompt()
+	// runs before streaming is satisfied locally: the harness-supplied
+	// runtime is told the provider is configured.
+	const modelRuntime = (target as unknown as { _modelRuntime: { hasConfiguredAuth: (provider: string) => boolean } })
+		._modelRuntime;
+	modelRuntime.hasConfiguredAuth = () => true;
 	target.agent.streamFunction = () => {
 		const stream = createAssistantMessageEventStream();
 		void Promise.resolve().then(() => {
