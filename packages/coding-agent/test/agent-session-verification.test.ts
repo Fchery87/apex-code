@@ -35,7 +35,24 @@ afterEach(async () => {
 		currentRuntime = undefined;
 	}
 	if (currentTempDir !== undefined) {
-		rmSync(currentTempDir, { recursive: true, force: true });
+		// Windows releases directory handles asynchronously after the killed
+		// process tree is reaped and CI file scanners delay releases further,
+		// so deletion retries past that window before failing loudly.
+		let retries = 12;
+		while (retries > 0) {
+			try {
+				rmSync(currentTempDir, { recursive: true, force: true });
+				break;
+			} catch (err: any) {
+				if (err.code === "EBUSY" || err.code === "ENOTEMPTY" || err.code === "EPERM") {
+					retries--;
+					if (retries === 0) throw err;
+					await new Promise((resolve) => setTimeout(resolve, 250));
+				} else {
+					throw err;
+				}
+			}
+		}
 		currentTempDir = undefined;
 	}
 });

@@ -16,7 +16,11 @@ afterEach(async () => {
 	while (tempDirs.length > 0) {
 		const dir = tempDirs.pop()!;
 		if (!existsSync(dir)) continue;
-		let retries = 5;
+		// Windows keeps directory handles alive briefly after a killed child
+		// process is reaped, and CI file scanners delay releases further, so a
+		// freshly used directory may not be deletable for a few hundred
+		// milliseconds. Retry well past that window before failing loudly.
+		let retries = 12;
 		while (retries > 0) {
 			try {
 				rmSync(dir, { recursive: true, force: true });
@@ -25,7 +29,7 @@ afterEach(async () => {
 				if (err.code === "EBUSY" || err.code === "ENOTEMPTY" || err.code === "EPERM") {
 					retries--;
 					if (retries === 0) throw err;
-					await new Promise((resolve) => setTimeout(resolve, 100));
+					await new Promise((resolve) => setTimeout(resolve, 250));
 				} else {
 					throw err;
 				}
