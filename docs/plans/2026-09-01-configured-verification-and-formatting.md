@@ -12,7 +12,7 @@
 | VF.2 | Implement strict policy loading and canonical permission projection | Done | `351e614a9` | New settings/policy tests prove argv validation, path confinement, numeric bounds, no implicit shell, project trust, precedence, denied policies, and one contract snapshot |
 | VF.3 | Implement the bounded argv command executor | Done (pending one green CI run) | `8fdcd3d71` | New scratch executor suite covers pass, fail, spawn failure, signal, timeout, cancellation, process-tree cleanup, UTF-8, output/artifact bounds, and no shell interpolation |
 | VF.4 | Integrate verification lifecycle and completion outcomes | Done (pending one green CI run) | `3e8747380` | Public session and mode tests cover explicit invocation, configured boundary, pass, fail, unavailable, timeout, cancellation, continue-unverified, blocking policy, stale-after-edit, and bounded evidence |
-| VF.5 | Integrate formatter path scope and mutation reporting | Not started | — | Public edit/write/session tests cover declared paths, unchanged files, formatter failure, unexpected mutation, symlink escape, path traversal, timeout, cancellation, and evidence |
+| VF.5 | Integrate formatter path scope and mutation reporting | Done (pending one green CI run) | `dffb1f9d7` | Public edit/write/session tests cover declared paths, unchanged files, formatter failure, unexpected mutation, symlink escape, path traversal, timeout, cancellation, and evidence |
 | VF.6 | Update documentation and close the gates | Not started | — | Focused suites above, `npx tsgo --noEmit`, `npm test`, `npm run check`, `node scripts/validate-docs-lifecycle.mjs .`, and required CI evidence |
 
 States: `Not started`, `In progress`, `Done, unverified`, `Done`.
