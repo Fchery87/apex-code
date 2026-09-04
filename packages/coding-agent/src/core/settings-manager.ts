@@ -348,6 +348,11 @@ export interface PoliciesSettings {
 	schemaVersion: number;
 	verification?: VerificationPolicySettings[];
 	formatter?: FormatterPolicySettings[];
+	/**
+	 * When verification runs: "explicit" (default, only on request) or
+	 * "post-turn" (after every completed model turn). VF.4.
+	 */
+	boundary?: "explicit" | "post-turn";
 }
 
 export interface ObservabilitySettings {
@@ -701,6 +706,12 @@ export class SettingsManager {
 		}
 
 		return settings as Settings;
+	}
+
+	/** The agent directory this manager loads global settings from, when known. */
+	getAgentDir(): string | undefined {
+		const globalPath = this.settingsPaths.global;
+		return globalPath === undefined ? undefined : dirname(globalPath);
 	}
 
 	/** Merged policy settings (project replaces user arrays wholesale at this raw layer). */

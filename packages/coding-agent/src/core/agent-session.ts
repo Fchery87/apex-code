@@ -112,6 +112,7 @@ import type { PermissionResponder } from "./permissions/responder.ts";
 import { createInteractiveResponder } from "./permissions/responder.ts";
 import { type EffectiveModeResolution, resolveEffectiveModeWithOrigin } from "./permissions/startup.ts";
 import type { PermissionMode } from "./permissions/store.ts";
+import { loadPolicyConfiguration } from "./policy-loader.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
 import { exportSessionToJsonl } from "./session-export.ts";
@@ -139,6 +140,11 @@ import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapp
 import { createToolSchemaToolDefinition } from "./tools/tool-schema.ts";
 import type { WebSearchOperations } from "./tools/web-search.ts";
 import { addUsageToTotals, createUsageTotals } from "./usage-totals.ts";
+import {
+	type VerificationCompletionStatus,
+	type VerificationRecord,
+	VerificationTracker,
+} from "./verification-lifecycle.ts";
 import { buildWorkspaceComparison, compareWorkspaceObservations } from "./workspace/comparison.ts";
 import { type GitObserveOptions, observeWorkspaceGit } from "./workspace/git-observer.ts";
 import { formatWorkspaceProjection } from "./workspace/projection.ts";
@@ -483,6 +489,10 @@ export class AgentSession {
 	 * the session's latest observation has no later comparison (resume).
 	 */
 	private _workspaceComparePending = false;
+	/** VF.4: verification lifecycle state, built lazily from policy settings. */
+	private _verificationTracker: VerificationTracker | undefined;
+	/** The workspace observation a verification result described, for staleness. */
+	private _verificationBaseline: WorkspaceStateRecord | undefined;
 	private _extensionRunnerRef?: { current?: ExtensionRunner };
 	private _initialActiveToolNames?: string[];
 	private _allowedToolNames?: Set<string>;
@@ -1671,6 +1681,7 @@ export class AgentSession {
 		preflightResult?.(true);
 		await this._runWorkspaceComparisonBoundary();
 		await this._runAgentPrompt(messages);
+		await this._runVerificationTurnBoundary();
 	}
 
 	/**
@@ -2314,7 +2325,106 @@ export class AgentSession {
 			const rel = relative(this._cwd, sessionDir);
 			if (rel.length > 0 && !rel.startsWith("..") && !isAbsolute(rel)) exclusions.push(rel);
 		}
+		// Harness runtime bookkeeping (auth, model store, durable state) is
+		// not workspace content either: when the agent directory sits inside
+		// the workspace, its runtime files would report every turn as drift.
+		// Same rule and same name list the fork/workspace fingerprints use.
+		const agentDir = this.settingsManager.getAgentDir();
+		if (agentDir !== undefined) {
+			const rel = relative(this._cwd, agentDir);
+			if (rel === "") {
+				exclusions.push("auth.json", "models-store.json", "state.sqlite");
+			} else if (rel.length > 0 && !rel.startsWith("..") && !isAbsolute(rel)) {
+				exclusions.push(rel);
+			}
+		}
 		return exclusions;
+	}
+
+	// ── VF.4: verification lifecycle (spec
+	// 2026-09-01-configured-verification-and-formatting.md § 4) ──────────
+
+	/**
+	 * Build (once) and refresh the tracker from the raw per-source policy
+	 * settings. ADR 0028: the loader consumes the sources separately and the
+	 * trust gate decides whether the project source exists at all.
+	 */
+	private _ensureVerificationTracker(): VerificationTracker {
+		if (this._verificationTracker === undefined) {
+			this._verificationTracker = new VerificationTracker({ workspaceRoot: this._cwd });
+		}
+		const snapshot = loadPolicyConfiguration({
+			globalSettings: this.settingsManager.getGlobalSettings().policies,
+			projectSettings: this.settingsManager.getProjectSettings().policies,
+			projectTrusted: this.settingsManager.isProjectTrusted(),
+		});
+		const boundary = this.settingsManager.getPolicySettings()?.boundary === "post-turn" ? "post-turn" : "explicit";
+		this._verificationTracker.configure(snapshot.verification, boundary);
+		return this._verificationTracker;
+	}
+
+	/**
+	 * Run one configured verification policy now and report the resulting
+	 * completion status. Unavailable when nothing is configured; the
+	 * workspace observation after the run becomes the staleness baseline.
+	 */
+	async requestVerification(
+		options: { policyId?: string; signal?: AbortSignal } = {},
+	): Promise<VerificationCompletionStatus> {
+		const tracker = this._ensureVerificationTracker();
+		if (tracker.policyIds().length === 0) {
+			return "unavailable";
+		}
+		const record = await tracker.runExplicit(options.policyId, { signal: options.signal });
+		if (record !== undefined) {
+			this._verificationBaseline = await this._captureWorkspaceObservation(options.signal);
+		}
+		return this.verificationStatus();
+	}
+
+	/** The current completion status: verified, failed, unavailable, interrupted, or continued-unverified. */
+	verificationStatus(): VerificationCompletionStatus {
+		return this._verificationTracker?.completionStatus() ?? "unavailable";
+	}
+
+	/** The live verification record with its bounded evidence, if any. */
+	verificationRecord(): VerificationRecord | undefined {
+		return this._verificationTracker?.latest();
+	}
+
+	/** Record that the user chose to finish without verification. */
+	continueWithoutVerification(): void {
+		this._ensureVerificationTracker().recordContinuedWithoutVerification();
+	}
+
+	/**
+	 * Turn boundary: retire a verification result the workspace has moved
+	 * past (conservatively — anything not provably "same" retires it), then
+	 * run the configured post-turn boundary. Never throws: verification is
+	 * advisory and the turn already completed.
+	 */
+	private async _runVerificationTurnBoundary(): Promise<void> {
+		let tracker = this._verificationTracker;
+		if (tracker === undefined) {
+			tracker = this._ensureVerificationTracker();
+		}
+		try {
+			if (tracker.latest() !== undefined) {
+				const fresh = await this._captureWorkspaceObservation(undefined);
+				if (this._verificationBaseline === undefined) {
+					tracker.noteWorkspaceChange(new Set(["unbaseline"]));
+				} else {
+					const comparison = compareWorkspaceObservations(this._verificationBaseline, fresh);
+					tracker.noteWorkspaceChange(comparison.result === "same" ? new Set() : new Set(["workspace-changed"]));
+				}
+			}
+			if (tracker.boundary === "post-turn" && tracker.policyIds().length > 0) {
+				await tracker.runExplicit();
+				this._verificationBaseline = await this._captureWorkspaceObservation(undefined);
+			}
+		} catch {
+			// Verification is advisory; the turn already completed.
+		}
 	}
 
 	/**
