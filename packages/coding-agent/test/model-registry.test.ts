@@ -9,12 +9,13 @@ import type {
 	OpenAICompletionsCompat,
 } from "@earendil-works/pi-ai/compat";
 import { getApiProvider, getSupportedThinkingLevels } from "@earendil-works/pi-ai/compat";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { GITHUB_COPILOT_MODELS } from "@earendil-works/pi-ai/providers/github-copilot.models";
+import { afterEach, beforeEach, describe, expect, onTestFailed, test, vi } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import type { ModelsJsonProvider } from "../src/core/model-config.ts";
 import { clearApiKeyCache, type ModelRegistry, type ProviderConfigInput } from "../src/core/model-registry.ts";
 
-import { createModelRegistry } from "./model-runtime-test-utils.ts";
+import { createModelRegistry, getModelRuntime } from "./model-runtime-test-utils.ts";
 
 describe("ModelRegistry", () => {
 	let tempDir: string;
@@ -1888,6 +1889,28 @@ describe("ModelRegistry", () => {
 				}));
 
 				const registry = await createModelRegistry(authStorage, modelsJsonPath);
+
+				onTestFailed(async () => {
+					const runtime = getModelRuntime(registry);
+					const credential = await authStorage.read("github-copilot");
+					console.error("[copilot-diag] credential:", JSON.stringify(credential));
+					console.error(
+						"[copilot-diag] configured:",
+						runtime.hasConfiguredAuth("github-copilot"),
+						"oauth:",
+						runtime.isUsingOAuth("github-copilot"),
+					);
+					console.error("[copilot-diag] providerIds:", JSON.stringify(runtime.getRegisteredProviderIds()));
+					console.error("[copilot-diag] runtimeError:", runtime.getError());
+					console.error(
+						"[copilot-diag] available:",
+						JSON.stringify(runtime.getAvailableSnapshot().map((m) => `${m.provider}/${m.id}`)),
+					);
+					console.error(
+						"[copilot-diag] builtinCopilotIds:",
+						JSON.stringify(Object.values(GITHUB_COPILOT_MODELS).map((m) => m.id)),
+					);
+				});
 
 				expect(
 					registry

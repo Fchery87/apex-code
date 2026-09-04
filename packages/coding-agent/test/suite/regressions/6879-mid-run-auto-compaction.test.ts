@@ -1,7 +1,8 @@
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { AgentTool } from "apex-code-agent-core";
 import { Type } from "typebox";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, onTestFailed } from "vitest";
+import { estimateContextTokens, shouldCompact } from "../../../src/core/compaction/compaction.ts";
 import { createHarness, type Harness } from "../harness.ts";
 
 function createLargeResultTool(onExecute?: () => void, resultCharacters = 400): AgentTool {
@@ -66,6 +67,28 @@ describe("issue #6879: mid-run threshold auto-compaction", () => {
 
 		await harness.session.prompt("seed old history");
 		await harness.session.prompt("run the large tool and finish the task");
+
+		onTestFailed(() => {
+			console.error("[6879-diag] timeline:", JSON.stringify(timeline));
+			const entries = harness.sessionManager.getEntries().map((entry) => ({
+				type: entry.type,
+				timestamp: (entry as { timestamp?: unknown }).timestamp,
+			}));
+			console.error("[6879-diag] entries:", JSON.stringify(entries));
+			const messages = harness.session.messages.map((m) => ({
+				role: m.role,
+				timestamp: (m as { timestamp?: unknown }).timestamp,
+				usage: JSON.stringify((m as { usage?: unknown }).usage ?? null),
+			}));
+			console.error("[6879-diag] messages:", JSON.stringify(messages));
+			const estimate = estimateContextTokens(harness.session.messages);
+			console.error(
+				"[6879-diag] estimate:",
+				JSON.stringify(estimate),
+				"shouldCompact:",
+				shouldCompact(estimate.tokens, 4_000, { enabled: true, reserveTokens: 3_400, keepRecentTokens: 120 }),
+			);
+		});
 
 		expect(timeline.slice(0, 3)).toEqual(["tool-complete", "compact-threshold", "resumed-provider-request"]);
 		expect(timeline.filter((event) => event === "compact-threshold")).toHaveLength(2);
