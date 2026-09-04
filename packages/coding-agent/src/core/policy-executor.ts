@@ -14,7 +14,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import { killProcessTree, sanitizeBinaryOutput } from "../utils/shell.ts";
 import type { CommandPolicy } from "./policy-loader.ts";
 import type { WorkspaceArtifactRef, WorkspaceArtifactStore } from "./workspace/artifacts.ts";
@@ -149,8 +149,12 @@ export async function runPolicyCommand(command: CommandPolicy, options: PolicyRu
 	// already rejects absolute paths and ".." segments; resolve() here is the
 	// second gate, on the computed path rather than the configured string.
 	const cwd = command.cwd === "workspace" ? options.workspaceRoot : resolve(options.workspaceRoot, command.cwd);
+	// The containment check uses relative() — a startsWith string comparison
+	// breaks on Windows, where resolve() switches to backslash separators.
 	const containmentRoot = resolve(options.workspaceRoot);
-	if (cwd !== containmentRoot && !cwd.startsWith(containmentRoot + (isAbsolute(containmentRoot) ? "/" : ""))) {
+	const containmentRel = relative(containmentRoot, cwd);
+	const insideWorkspace = containmentRel === "" || (!containmentRel.startsWith("..") && !isAbsolute(containmentRel));
+	if (!insideWorkspace) {
 		return {
 			...base,
 			cwd,
