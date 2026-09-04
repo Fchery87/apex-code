@@ -10,12 +10,16 @@ import type {
 } from "@earendil-works/pi-ai/compat";
 import { getApiProvider, getSupportedThinkingLevels } from "@earendil-works/pi-ai/compat";
 import { GITHUB_COPILOT_MODELS } from "@earendil-works/pi-ai/providers/github-copilot.models";
-import { afterEach, beforeEach, describe, expect, onTestFailed, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import type { ModelsJsonProvider } from "../src/core/model-config.ts";
 import { clearApiKeyCache, type ModelRegistry, type ProviderConfigInput } from "../src/core/model-registry.ts";
 
-import { createModelRegistry, getModelRuntime } from "./model-runtime-test-utils.ts";
+import { createModelRegistry } from "./model-runtime-test-utils.ts";
+
+// The Copilot catalog is regenerated from models.dev during the build, so any literal
+// model id here rots the moment upstream retires it. Bind to what the catalog ships.
+const [copilotModelId] = Object.values(GITHUB_COPILOT_MODELS).map((model) => model.id);
 
 describe("ModelRegistry", () => {
 	let tempDir: string;
@@ -1885,39 +1889,17 @@ describe("ModelRegistry", () => {
 					refresh: "github-access-token",
 					access: "tid=test;exp=9999999999;proxy-ep=proxy.individual.githubcopilot.com;",
 					expires: Date.now() + 60_000,
-					availableModelIds: ["gpt-4.1"],
+					availableModelIds: [copilotModelId],
 				}));
 
 				const registry = await createModelRegistry(authStorage, modelsJsonPath);
-
-				onTestFailed(async () => {
-					const runtime = getModelRuntime(registry);
-					const credential = await authStorage.read("github-copilot");
-					console.error("[copilot-diag] credential:", JSON.stringify(credential));
-					console.error(
-						"[copilot-diag] configured:",
-						runtime.hasConfiguredAuth("github-copilot"),
-						"oauth:",
-						runtime.isUsingOAuth("github-copilot"),
-					);
-					console.error("[copilot-diag] providerIds:", JSON.stringify(runtime.getRegisteredProviderIds()));
-					console.error("[copilot-diag] runtimeError:", runtime.getError());
-					console.error(
-						"[copilot-diag] available:",
-						JSON.stringify(runtime.getAvailableSnapshot().map((m) => `${m.provider}/${m.id}`)),
-					);
-					console.error(
-						"[copilot-diag] builtinCopilotIds:",
-						JSON.stringify(Object.values(GITHUB_COPILOT_MODELS).map((m) => m.id)),
-					);
-				});
 
 				expect(
 					registry
 						.getAvailable()
 						.filter((m) => m.provider === "github-copilot")
 						.map((m) => m.id),
-				).toEqual(["gpt-4.1"]);
+				).toEqual([copilotModelId]);
 			});
 
 			test("getApiKeyAndHeaders resolves authHeader on every request", async () => {
