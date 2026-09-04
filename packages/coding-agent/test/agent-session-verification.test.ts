@@ -84,6 +84,10 @@ async function createVerifiedSession(settings: unknown): Promise<SessionUnderTes
 		agentDir: tempDir,
 		sessionManager,
 	});
+	// afterEach disposes this before rmSync: the services-created model
+	// runtime owns the durable sqlite store, and Windows cannot unlink a
+	// file while its connection is open.
+	currentRuntime = runtimeHost;
 	const session = runtimeHost.session;
 	mockTurn(session);
 	return { session, tempDir, settingsPath: join(tempDir, "settings.json") };
