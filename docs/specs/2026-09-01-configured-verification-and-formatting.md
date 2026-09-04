@@ -1,6 +1,6 @@
 # Spec: Configured verification and formatting
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 
@@ -8,7 +8,7 @@
 | --- | --- |
 | Author | Apex Code maintainers |
 | Created | 2026-09-01 |
-| Last updated | 2026-09-01 |
+| Last updated | 2026-09-04 |
 | Roadmap phase | Product-surface follow-up |
 | Tracking issue/PR | none |
 | Compatibility posture | Preserves compatibility. No command runs by default, and existing edit, write, session, and tool results remain valid. Configured policies are additive. A policy that changes completion status or mutates files requires explicit configuration, permission, and documented failure semantics. |

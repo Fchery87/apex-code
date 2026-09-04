@@ -142,6 +142,66 @@ interactive flows). A missing checkpoint leaves your files unchanged and says so
 session, or role. `/session` shows the current session's token/cost breakdown
 during a run.
 
+### Configured verification and formatting
+
+**Verification.** A project or user `settings.json` can declare verification
+policies — commands the agent runs to check its work. Each policy has an id, an
+executable, an argv, and numeric bounds (timeout, output bytes, output lines);
+commands never run through a shell. Run one on demand with
+`requestVerification`, or set `policies.boundary` to `"post-turn"` to run the
+first configured policy after every completed turn. The session reports one of
+five states: `verified`, `failed`, `unavailable` (nothing configured), and —
+when the command was cancelled or timed out — the record says so instead of
+pretending. If you choose to keep working without verifying, the session says
+`continued-unverified` rather than silently implying a clean bill. A result
+retires the moment the workspace changes: a "verified" from three edits ago is
+not a "verified" now.
+
+**Formatting.** Formatter policies work the same way (`runConfiguredFormatter`).
+A formatter may only write inside its `declaredPaths` (which must stay inside
+the policy's `pathScope`), and the session reports exactly what changed:
+declared mutations, unexpected writes outside the declared scope, and any write
+that escaped the workspace through a symlink. Nothing is reverted
+automatically — the report is the evidence you act on.
+
+A `settings.json` declares them like this:
+
+```json
+{
+  "policies": {
+    "schemaVersion": 1,
+    "verification": [
+      {
+        "id": "typecheck",
+        "executable": "npx",
+        "argv": ["tsgo", "--noEmit"],
+        "cwd": "workspace",
+        "timeoutMs": 120000,
+        "maxOutputBytes": 262144,
+        "maxOutputLines": 2000,
+        "permission": "allow"
+      }
+    ],
+    "formatter": [
+      {
+        "id": "format",
+        "executable": "npx",
+        "argv": ["biome", "format", "--write", "."],
+        "cwd": "workspace",
+        "declaredPaths": ["src/**/*.ts"]
+      }
+    ]
+  }
+}
+```
+
+Policies load per source (user settings, project settings) and a trusted
+project's policy replaces a user policy with the same id (ADR 0028). Any
+invalid entry drops that entire source rather than running a half-validated
+command. Evidence (policy id, argv, cwd, status, duration, exit code, artifact
+reference) is bounded and never includes raw command output in the
+conversation; full output goes to the session's artifact store.
+
 ## Sharing sessions
 
 `/share` is an explicit publication action. Apex Code first asks for confirmation, then
