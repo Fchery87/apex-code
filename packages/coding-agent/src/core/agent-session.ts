@@ -102,6 +102,7 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.ts";
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
+import { type FormatterRunOutcome, runFormatterCommand } from "./formatter-lifecycle.ts";
 import type { HookRuntime } from "./hooks/types.ts";
 import type { McpRuntime } from "./mcp/runtime.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
@@ -2380,6 +2381,35 @@ export class AgentSession {
 			this._verificationBaseline = await this._captureWorkspaceObservation(options.signal);
 		}
 		return this.verificationStatus();
+	}
+
+	/**
+	 * VF.5: run one configured formatter policy now and report what it
+	 * actually mutated. Undefined when no formatter policy matches. Any real
+	 * mutation retires a prior verification record: the workspace the
+	 * verification described no longer exists.
+	 */
+	async runConfiguredFormatter(
+		options: { policyId?: string; signal?: AbortSignal } = {},
+	): Promise<FormatterRunOutcome | undefined> {
+		const snapshot = loadPolicyConfiguration({
+			globalSettings: this.settingsManager.getGlobalSettings().policies,
+			projectSettings: this.settingsManager.getProjectSettings().policies,
+			projectTrusted: this.settingsManager.isProjectTrusted(),
+		});
+		const policy =
+			options.policyId === undefined
+				? snapshot.formatter[0]
+				: snapshot.formatter.find((entry) => entry.id === options.policyId);
+		if (policy === undefined) return undefined;
+		const outcome = await runFormatterCommand(policy, {
+			workspaceRoot: this._cwd,
+			signal: options.signal,
+		});
+		if (outcome.mutations.changedPaths.length > 0) {
+			this._verificationTracker?.noteWorkspaceChange(new Set(outcome.mutations.changedPaths));
+		}
+		return outcome;
 	}
 
 	/** The current completion status: verified, failed, unavailable, interrupted, or continued-unverified. */

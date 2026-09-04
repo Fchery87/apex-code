@@ -200,3 +200,60 @@ describe("session verification lifecycle (VF.4)", () => {
 		expect(session.verificationStatus()).toBe("continued-unverified");
 	});
 });
+
+describe("session formatter lifecycle (VF.5)", () => {
+	it("runs a configured formatter and reports its mutations", async () => {
+		const { session, tempDir } = await createVerifiedSession({
+			policies: {
+				schemaVersion: 1,
+				formatter: [
+					{
+						id: "format",
+						executable: process.execPath,
+						argv: ["-e", `require("fs").writeFileSync("src/f.ts", "formatted")`],
+						cwd: "workspace",
+						declaredPaths: ["src/**/*.ts"],
+					},
+				],
+			},
+		});
+		mkdirSync(join(tempDir, "src"), { recursive: true });
+		writeFileSync(join(tempDir, "src", "f.ts"), "raw", "utf-8");
+		const outcome = await session.runConfiguredFormatter();
+		expect(outcome?.status).toBe("passed");
+		expect(outcome?.mutations.changedPaths).toEqual(["src/f.ts"]);
+		expect(outcome?.mutations.undeclaredPaths).toEqual([]);
+	});
+
+	it("returns undefined when no formatter policy matches", async () => {
+		const { session } = await createVerifiedSession({
+			policies: { schemaVersion: 1, verification: [passPolicy("typecheck")] },
+		});
+		expect(await session.runConfiguredFormatter()).toBeUndefined();
+		expect(await session.runConfiguredFormatter({ policyId: "nope" })).toBeUndefined();
+	});
+
+	it("retires a verified status when the formatter mutates the workspace", async () => {
+		const { session, tempDir } = await createVerifiedSession({
+			policies: {
+				schemaVersion: 1,
+				verification: [passPolicy("typecheck")],
+				formatter: [
+					{
+						id: "format",
+						executable: process.execPath,
+						argv: ["-e", `require("fs").writeFileSync("src/g.ts", "formatted")`],
+						cwd: "workspace",
+						declaredPaths: ["src/**/*.ts"],
+					},
+				],
+			},
+		});
+		mkdirSync(join(tempDir, "src"), { recursive: true });
+		writeFileSync(join(tempDir, "src", "g.ts"), "raw", "utf-8");
+		await session.requestVerification();
+		expect(session.verificationStatus()).toBe("verified");
+		await session.runConfiguredFormatter();
+		expect(session.verificationStatus()).toBe("unavailable");
+	});
+});
