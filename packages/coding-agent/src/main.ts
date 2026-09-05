@@ -9,7 +9,15 @@ import { createInterface } from "node:readline";
 import { type ImageContent, modelsAreEqual } from "@earendil-works/pi-ai";
 import { setCapabilityOverrides } from "@earendil-works/pi-tui";
 import chalk from "chalk";
-import { type Args, type Mode, normalizeSessionName, parseArgs, printHelp } from "./cli/args.ts";
+import {
+	type Args,
+	type Mode,
+	normalizeSessionName,
+	type ParsedCliCommand,
+	parseArgs,
+	parseCliCommand,
+	printHelp,
+} from "./cli/args.ts";
 import {
 	type AuthCheckResult,
 	checkProviderAuth,
@@ -569,6 +577,8 @@ async function promptForMissingSessionCwd(
 export interface MainOptions {
 	extensionFactories?: InlineExtension[];
 	sessionLeaseOwner?: "main" | "supervisor";
+	/** Already-parsed public CLI boundary value. */
+	parsedCommand?: ParsedCliCommand;
 }
 
 export async function main(args: string[], options?: MainOptions) {
@@ -621,7 +631,7 @@ export async function main(args: string[], options?: MainOptions) {
 		return;
 	}
 
-	const parsed = parseArgs(args);
+	const parsed = options?.parsedCommand?.args ?? parseCliCommand(args).args;
 	if (parsed.diagnostics.length > 0) {
 		for (const d of parsed.diagnostics) {
 			const color = d.type === "error" ? chalk.red : chalk.yellow;
@@ -825,6 +835,7 @@ export async function main(args: string[], options?: MainOptions) {
 		const permissionStore = new FilePermissionRuleStore({
 			cwd,
 			agentDir,
+			projectTrusted: settingsManager.isProjectTrusted(),
 			initialRules: (parsed.allowedTools ?? []).map((toolName) => ({
 				source: "cliArg" as const,
 				toolName,

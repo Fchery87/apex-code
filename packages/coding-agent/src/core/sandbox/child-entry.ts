@@ -1,3 +1,4 @@
+import { parseCliCommand } from "../../cli/args.ts";
 import { APP_NAME } from "../../config.ts";
 import { main } from "../../main.ts";
 import { setApexEnvironment } from "../environment.ts";
@@ -19,4 +20,5 @@ installSandboxNetworkRefusalMessages();
 const terminalSizePath = process.env[TERMINAL_SIZE_PATH_VARIABLE];
 if (terminalSizePath) applyTerminalSize(terminalSizePath);
 
-await main(process.argv.slice(2), { sessionLeaseOwner: "supervisor" });
+const args = process.argv.slice(2);
+await main(args, { sessionLeaseOwner: "supervisor", parsedCommand: parseCliCommand(args) });

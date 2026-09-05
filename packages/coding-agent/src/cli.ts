@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 /** The public CLI either supervises a sandbox child or starts an ordinary runtime. */
 import { fileURLToPath } from "node:url";
-import { parseArgs } from "./cli/args.ts";
+import { parseCliCommand } from "./cli/args.ts";
 import { APP_NAME, getAgentDir, getPackageDir } from "./config.ts";
 import { setApexEnvironment } from "./core/environment.ts";
 import { configureHttpDispatcher } from "./core/http-dispatcher.ts";
@@ -19,6 +19,8 @@ import { prepareHostToolBinaries } from "./utils/tools-manager.ts";
 
 async function run(): Promise<void> {
 	const args = process.argv.slice(2);
+	const command = parseCliCommand(args);
+	const parsed = command.args;
 	// Validate session IDs before entering the sandbox. Invalid metadata must fail fast
 	// without starting a child process or touching network/sandbox setup.
 	const sessionIdIndex = args.indexOf("--session-id");
@@ -33,7 +35,7 @@ async function run(): Promise<void> {
 	// Parsed straight from argv, before any settings loader runs. ADR 0016 keeps every
 	// supervisor policy input out of project files, and "run with no boundary" is the one
 	// input where that matters most.
-	const { addDir, sandbox: sandboxMode, permissionProfile, diagnostics: sandboxDiagnostics } = parseArgs(args);
+	const { addDir, sandbox: sandboxMode, permissionProfile, diagnostics: sandboxDiagnostics } = parsed;
 	for (const diagnostic of sandboxDiagnostics) {
 		if (diagnostic.type === "error" && /--add-dir|--sandbox|--permission-profile/.test(diagnostic.message)) {
 			console.error(`Error: ${diagnostic.message}`);
@@ -42,7 +44,7 @@ async function run(): Promise<void> {
 		}
 	}
 
-	if (sandboxMode === "danger-full-access" && requiresSandboxedChild(args)) {
+	if (sandboxMode === "danger-full-access" && requiresSandboxedChild(command)) {
 		writeFullAccessBanner(process.stderr);
 		if (!(await confirmFullAccess({}))) {
 			process.stderr.write("Aborted; the session was not started.\n");
@@ -51,7 +53,7 @@ async function run(): Promise<void> {
 		}
 	}
 
-	if (requiresSandboxedChild(args) && sandboxMode !== "danger-full-access") {
+	if (requiresSandboxedChild(command) && sandboxMode !== "danger-full-access") {
 		// The profile is resolved from global settings only and merged as additional
 		// permission, never as replacement: a profile widens what a session may reach and
 		// write, and cannot narrow or disable the boundary itself.
@@ -113,7 +115,7 @@ async function run(): Promise<void> {
 	process.emitWarning = (() => {}) as typeof process.emitWarning;
 	configureHttpDispatcher();
 	const { main } = await import("./main.ts");
-	await main(args);
+	await main(args, { parsedCommand: command });
 }
 
 await run();

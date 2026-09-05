@@ -1,24 +1,19 @@
 import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
+import type { ParsedCliCommand } from "../../cli/args.ts";
 import type { HostToolBinary } from "../../utils/tools-manager.ts";
 import { SettingsManager } from "../settings-manager.ts";
 import { resolveWebSearchHost } from "../web-search-provider.ts";
 import { resolveDefaultAllowedHosts } from "./default-hosts.ts";
 import type { SandboxLaunch } from "./supervisor.ts";
 
-const NON_SESSION_COMMANDS = new Set(["auth", "config", "install", "remove", "uninstall", "update", "list"]);
-const METADATA_FLAGS = new Set(["--version", "-v", "--export", "--list-models"]);
-
 /**
- * OS containment is the normal startup path for every command that can construct an
- * agent session. Commands that only inspect or maintain host configuration do not
- * create a runtime and therefore remain outside this child boundary.
+ * OS containment is the normal startup path for every parsed command that can
+ * construct an agent session. Classification consumes the same typed parse result
+ * as execution, so option values and text after `--` cannot impersonate metadata.
  */
-export function requiresSandboxedChild(args: readonly string[]): boolean {
-	if (NON_SESSION_COMMANDS.has(args[0] ?? "")) return false;
-	if (args.some((argument) => METADATA_FLAGS.has(argument))) return false;
-	if (args.includes("--help") || args.includes("-h")) return false;
-	return true;
+export function requiresSandboxedChild(command: ParsedCliCommand): boolean {
+	return command.kind === "session";
 }
 
 export interface SandboxedCliLaunch extends SandboxLaunch {

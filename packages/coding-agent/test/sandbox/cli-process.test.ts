@@ -19,11 +19,16 @@ function temporaryDirectory(prefix: string): string {
 }
 
 async function runCli(options: { args: readonly string[]; cwd: string; environment?: NodeJS.ProcessEnv }) {
+	let stdout = "";
 	let stderr = "";
 	const child = spawn(process.execPath, [cliPath, ...options.args], {
 		cwd: options.cwd,
 		env: { ...process.env, ...options.environment, PI_OFFLINE: "1" },
-		stdio: ["ignore", "ignore", "pipe"],
+		stdio: ["ignore", "pipe", "pipe"],
+	});
+	child.stdout.setEncoding("utf8");
+	child.stdout.on("data", (chunk: string) => {
+		stdout += chunk;
 	});
 	child.stderr.setEncoding("utf8");
 	child.stderr.on("data", (chunk: string) => {
@@ -33,7 +38,7 @@ async function runCli(options: { args: readonly string[]; cwd: string; environme
 		child.once("error", reject);
 		child.once("close", resolvePromise);
 	});
-	return { code, stderr };
+	return { code, stdout, stderr };
 }
 
 /**
@@ -66,6 +71,25 @@ describe.skipIf(process.platform === "win32")("sandboxed public CLI", { timeout:
 		expect(readdirSync(join(workspace, ".apex-code", "sandbox-agent"))).toEqual(
 			expect.arrayContaining(["models-store.json"]),
 		);
+	});
+
+	it.each([
+		["metadata-looking option value", ["--model", "--version", "hello"]],
+		["help text after end-of-options", ["--", "--help"]],
+		["version text after end-of-options", ["--", "--version"]],
+	])("keeps %s inside the public sandbox launcher", async (_label, args) => {
+		const workspace = temporaryDirectory("apex-sandbox-cli-adversarial-");
+		const result = await runCli({ args, cwd: workspace, environment: { PATH: "/definitely-missing" } });
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("OS sandbox is not enforcing this agent session");
+	});
+
+	it.each(["--help", "--version"])("keeps genuine %s as an unsandboxed metadata command", async (flag) => {
+		const workspace = temporaryDirectory("apex-sandbox-cli-metadata-");
+		const result = await runCli({ args: [flag], cwd: workspace, environment: { PATH: "/definitely-missing" } });
+		expect(result.code).toBe(0);
+		expect(result.stderr).not.toContain("OS sandbox is not enforcing this agent session");
+		expect(result.stdout.length).toBeGreaterThan(0);
 	});
 
 	it("fails closed before executing a normal agent session when the platform sandbox tool is unavailable", async () => {

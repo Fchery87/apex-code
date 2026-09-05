@@ -75,6 +75,23 @@ export interface Args {
 	diagnostics: Array<{ type: "warning" | "error"; message: string }>;
 }
 
+export type ParsedCliCommand =
+	| { readonly kind: "host"; readonly args: Args }
+	| { readonly kind: "metadata"; readonly args: Args }
+	| { readonly kind: "session"; readonly args: Args };
+
+const HOST_COMMANDS = new Set(["auth", "config", "install", "remove", "uninstall", "update", "list"]);
+
+/** Parse argv once, then classify startup behavior from the resulting values. */
+export function parseCliCommand(argv: readonly string[]): ParsedCliCommand {
+	const args = parseArgs(argv);
+	if (HOST_COMMANDS.has(argv[0] ?? "")) return { kind: "host", args };
+	if (args.help || args.version || args.export !== undefined || args.listModels !== undefined) {
+		return { kind: "metadata", args };
+	}
+	return { kind: "session", args };
+}
+
 const VALID_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 
 export function isValidThinkingLevel(level: string): level is ThinkingLevel {

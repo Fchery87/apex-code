@@ -147,6 +147,8 @@ export interface CreateFilePermissionRuleStoreOptions {
 	backends?: Partial<Record<FileBackedSource, AuthStorageBackend>>;
 	/** Immutable argv layers (`flag` / `cliArg`), validated by the CLI before construction. */
 	initialRules?: readonly PermissionRule[];
+	/** Resolved before construction. False excludes both project-controlled scopes. */
+	projectTrusted?: boolean;
 }
 
 /** File-backed store for policy/local/project/user, in-memory for command/session. */
@@ -156,6 +158,10 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 	private readonly initialRules: readonly PermissionRule[];
 	private readonly runtimeRules: Record<RuntimeSource, StoredPermissionRule[]> = { command: [], session: [] };
 	private readonly runtimeModes: Partial<Record<RuntimeSource, PermissionMode>> = {};
+	private readonly projectTrusted: boolean;
+	private projectScopes?: Promise<
+		readonly [{ scope: StoredPermissionScope; error?: Error }, { scope: StoredPermissionScope; error?: Error }]
+	>;
 
 	constructor(options: CreateFilePermissionRuleStoreOptions) {
 		const agentDir = options.agentDir ?? getAgentDir();
@@ -168,6 +174,7 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 		};
 		this.policyPath = options.policyPath ?? defaultPolicyPath();
 		this.initialRules = options.initialRules ?? [];
+		this.projectTrusted = options.projectTrusted ?? true;
 	}
 
 	private async readFileBackedScope(
@@ -196,10 +203,15 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 	}
 
 	async snapshot(): Promise<PermissionStoreSnapshot> {
-		const [policy, local, project, user] = await Promise.all([
+		// Project-controlled authorization is captured once. Workspace writes made by
+		// the agent, including symlink replacement, therefore cannot widen the current
+		// or next gate decision. Managed policy and user scope remain live ceilings.
+		this.projectScopes ??= this.projectTrusted
+			? Promise.all([this.readFileBackedScope("local"), this.readFileBackedScope("project")])
+			: Promise.resolve([{ scope: emptyScope() }, { scope: emptyScope() }] as const);
+		const [policy, [local, project], user] = await Promise.all([
 			this.readPolicy(),
-			this.readFileBackedScope("local"),
-			this.readFileBackedScope("project"),
+			this.projectScopes,
 			this.readFileBackedScope("user"),
 		]);
 		const errors: PermissionStoreError[] = [];
@@ -236,10 +248,14 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 			this.applyRuntime(update.destination, update);
 			return;
 		}
+		if (!this.projectTrusted && (update.destination === "local" || update.destination === "project")) {
+			throw new Error(`Cannot update untrusted ${update.destination} permission scope`);
+		}
 		await this.backends[update.destination].withLockAsync(async (content) => {
 			const next = applyToScope(parseScope(content), update);
 			return { result: undefined, next: JSON.stringify(next, null, 2) };
 		});
+		if (update.destination === "local" || update.destination === "project") this.projectScopes = undefined;
 	}
 
 	private applyRuntime(destination: RuntimeSource, update: PermissionUpdate): void {

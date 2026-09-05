@@ -22,8 +22,14 @@ export interface McpRuntime extends McpToolOptions {
 	close(): Promise<void>;
 }
 
-export function createMcpRuntime(cwd: string, connector: McpConnector = connectMcpServer): McpRuntime | undefined {
-	const { servers, diagnostics } = loadMcpConfig({ projectPath: join(cwd, PROJECT_CONFIG_FILENAME) });
+export function createMcpRuntime(
+	cwd: string,
+	connector: McpConnector = connectMcpServer,
+	options: { projectTrusted?: boolean } = {},
+): McpRuntime | undefined {
+	const { servers, diagnostics } = loadMcpConfig({
+		projectPath: options.projectTrusted === false ? undefined : join(cwd, PROJECT_CONFIG_FILENAME),
+	});
 	if (servers.size === 0) return undefined;
 
 	const cache = new McpMetadataCache();

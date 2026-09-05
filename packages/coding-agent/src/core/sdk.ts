@@ -327,6 +327,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		createSessionMcpConnector({
 			credentials: options.mcpCredentials ?? createSandboxCredentialStore() ?? AuthStorage.create(authPath),
 		}),
+		{ projectTrusted: settingsManager.isProjectTrusted() },
 	);
 
 	// `web_search`, `lsp`, and `mcp` join the core four only when configured. All stay

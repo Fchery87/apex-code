@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { parseCliCommand } from "../../src/cli/args.ts";
 import {
 	buildSandboxedCliLaunch,
 	requiresSandboxedChild,
@@ -325,15 +326,18 @@ describe("sandbox CLI launch", () => {
 		expect(resolved.refusals).toEqual([]);
 	});
 
-	it("routes every agent-session shape through the child while exempting only non-session commands", () => {
-		expect(requiresSandboxedChild(["--print", "hello"])).toBe(true);
-		expect(requiresSandboxedChild(["--mode", "rpc"])).toBe(true);
-		expect(requiresSandboxedChild([])).toBe(true);
-		expect(requiresSandboxedChild(["--version"])).toBe(false);
-		expect(requiresSandboxedChild(["--help"])).toBe(false);
-		expect(requiresSandboxedChild(["--help", "--print"])).toBe(false);
-		expect(requiresSandboxedChild(["auth", "check", "--provider", "test"])).toBe(false);
-		expect(requiresSandboxedChild(["config"])).toBe(false);
+	it("routes every agent-session shape through the child while exempting only parsed metadata and host commands", () => {
+		expect(requiresSandboxedChild(parseCliCommand(["--print", "hello"]))).toBe(true);
+		expect(requiresSandboxedChild(parseCliCommand(["--mode", "rpc"]))).toBe(true);
+		expect(requiresSandboxedChild(parseCliCommand([]))).toBe(true);
+		expect(requiresSandboxedChild(parseCliCommand(["--version"]))).toBe(false);
+		expect(requiresSandboxedChild(parseCliCommand(["--help"]))).toBe(false);
+		expect(requiresSandboxedChild(parseCliCommand(["--help", "--print"]))).toBe(false);
+		expect(requiresSandboxedChild(parseCliCommand(["--model", "--version", "hello"]))).toBe(true);
+		expect(requiresSandboxedChild(parseCliCommand(["--", "--help"]))).toBe(true);
+		expect(requiresSandboxedChild(parseCliCommand(["--", "--version"]))).toBe(true);
+		expect(requiresSandboxedChild(parseCliCommand(["auth", "check", "--provider", "test"]))).toBe(false);
+		expect(requiresSandboxedChild(parseCliCommand(["config"]))).toBe(false);
 	});
 });
 
