@@ -81,13 +81,16 @@ jobs:
             -m "Providers changed: ${changed}."
           git push --force origin "$BRANCH"
 
-          if gh pr view "$BRANCH" --json number --jq .number >/dev/null 2>&1; then
-            echo "Existing PR updated by the force-push."
-            exit 0
-          fi
+          body="$(printf 'Captured from models.dev at %s.\n\nProviders changed: %s.\n\nBuilds restore these files from `vendor/model-data`, so this PR is how a catalog change reaches users.\n\nThe refresh job already built this snapshot, which is what runs `check:model-data` against the frozen `.models.ts` shards. GitHub gates CI on PRs it opens itself, so approve the pending run to get the full suite on all three OSes before merging.\n' "$generated_at" "$changed")"
 
-          gh pr create \
-            --base main \
-            --head "$BRANCH" \
-            --title "chore(model-data): refresh vendored catalogs" \
-            --body "$(printf 'Captured from models.dev at %s.\n\nProviders changed: %s.\n\nBuilds restore these files from `vendor/model-data`, so this PR is how a catalog change reaches users.\n\nThe refresh job already built this snapshot, which is what runs `check:model-data` against the frozen `.models.ts` shards. GitHub gates CI on PRs it opens itself, so approve the pending run to get the full suite on all three OSes before merging.\n' "$generated_at" "$changed")"
+          # The body describes one specific diff, and a force-push replaces that
+          # diff. Rewriting it keeps an updated PR from advertising the providers
+          # some earlier run happened to catch.
+          if gh pr view "$BRANCH" --json number --jq .number >/dev/null 2>&1; then
+            gh pr edit "$BRANCH" --body "$body"
+            echo "Existing PR updated."
+          else
+            gh pr create --base main --head "$BRANCH" \
+              --title "chore(model-data): refresh vendored catalogs" \
+              --body "$body"
+          fi
