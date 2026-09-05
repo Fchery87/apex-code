@@ -22,8 +22,8 @@ Each task starts with a failing public-boundary test. Run the focused check befo
 |---|---|---|---|
 | ST.1 | Parse CLI input once and derive metadata behavior and sandbox selection from the typed result. | verified in `adf4a67f75c43d31689c72cf1be26dbbc218f9ef` | `npm --prefix packages/coding-agent test -- test/sandbox/cli-launch.test.ts test/sandbox/cli-process.test.ts`: metadata-looking values and `--` text enter the sandbox; genuine metadata stays outside. |
 | ST.2 | Resolve project trust before constructing permissions, MCP, hooks, and policy startup authority. | verified in `adf4a67f75c43d31689c72cf1be26dbbc218f9ef` | `test/startup-trust.test.ts`, `test/hooks/settings.test.ts`, `test/policy-loader.test.ts`, and `test/mcp/config.test.ts`: resolved trust gates permission scopes and MCP; existing settings gates cover hooks/policy. |
-| ST.3 | Prevent child-controlled permission files from changing effective authorization. | verified in `adf4a67f75c43d31689c72cf1be26dbbc218f9ef` | `test/startup-trust.test.ts`: ordinary replacement and symlink replacement leave the next store snapshot unchanged; managed policy and plan ceilings remain live. |
-| ST.4 | Add the adversarial startup and trust regression suite. | verified in `adf4a67f75c43d31689c72cf1be26dbbc218f9ef` | Focused seven-file suite: 85 tests passed. Scratch workspaces and synthetic connector only; no provider turn or credential. |
+| ST.3 | Prevent child-controlled permission files from changing effective authorization. | verified in `aa3bbb2c4eab49eba465699205ce054139affcd3` | `test/startup-trust.test.ts`: direct and symlink replacement of project and user files leave the next snapshot unchanged; `PermissionStore.apply()` refreshes only its destination; managed policy and runtime scopes remain live. |
+| ST.4 | Add the adversarial startup and trust regression suite. | verified in `adf4a67f75c43d31689c72cf1be26dbbc218f9ef` and `aa3bbb2c4eab49eba465699205ce054139affcd3` | Original focused seven-file suite: 85 tests passed. Reopened ST.3 focused permission/startup suite: 3 files and 25 tests passed, including user-file replacement, user-symlink replacement, supported apply refresh, and live managed policy. Scratch workspaces and synthetic connector only; no provider turn or credential. |
 
 ## Files and boundaries
 
@@ -45,4 +45,4 @@ Resolve only decisions needed by this plan. Record settled architecture in an AD
 
 ## Order changes
 
-None. Add a reason if execution changes the task order.
+Independent verification reopened ST.3 after the original startup slice closed. The verifier found that the sandbox child's workspace-backed `user` permission scope remained live. The user-scope repair in `aa3bbb2c4eab49eba465699205ce054139affcd3` supersedes ST.3's first implementation evidence in `adf4a67f75c43d31689c72cf1be26dbbc218f9ef`; the original commit remains the evidence for ST.1, ST.2, and ST.4.
