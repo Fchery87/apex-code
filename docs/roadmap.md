@@ -122,6 +122,7 @@ capable and measurably worse.
 | Workspace-aware compaction and checkpoint navigation | **landed** — WS.1 through WS.7 · `8a36f1838` (three-OS CI run 33751872256) | [spec](specs/2026-09-01-harness-correctness-and-workspace-state.md) | — |
 | Tool reliability and execution budgets | **landed** — TR.1 through TR.7 · `cc9264873` · three-OS CI green (run `33707738039`, post-repair tree including `533de14e1`; first closure run `33705200104` failed on Windows and is superseded) | [spec](specs/2026-09-01-tool-reliability-and-execution-budgets.md) | — |
 | Configured verification and formatting | **landed** — VF.1 through VF.6 · `f00df19e2` · three-OS CI green (run `33838960431`, repair-inclusive tree incl. Windows executor repair `e329441b1` and CI-only test repairs) · re-verified at `a0b68f368` (run `33926005862`) after models.dev retired a GitHub Copilot model id the fixtures pinned | [spec](specs/2026-09-01-configured-verification-and-formatting.md) | — |
+| Security boundary remediation | **active** — audit findings require remediation before security claims | [spec](specs/2026-09-05-security-boundary-remediation.md) | [startup](plans/2026-09-05-plan-startup-and-trust.md) · [authorization](plans/2026-09-05-plan-canonical-authorization.md) · [policy](plans/2026-09-05-plan-policy-and-supervisor.md) · [platform](plans/2026-09-05-plan-platform-boundaries.md) · [release](plans/2026-09-05-plan-release-integrity.md) |
 
 ---
 
