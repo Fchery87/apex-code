@@ -23,6 +23,7 @@
 		"check:scrubber": "tsgo --noEmit -p scripts/tsconfig.json",
 		"generate:models": "npm --prefix packages/ai run generate-models && npm --prefix packages/ai run generate-image-models",
 		"hydrate:model-data": "node scripts/apex/hydrate-model-data.mjs",
+		"refresh:model-data": "node scripts/apex/hydrate-model-data.mjs --refresh",
 		"check:model-data": "npm --prefix packages/ai run check:model-data",
 		"generate:model-catalog": "npm --prefix packages/ai run generate-model-catalog",
 		"diff:model-catalog": "node scripts/diff-model-catalog.mjs",

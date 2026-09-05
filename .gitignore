@@ -8,6 +8,8 @@ dist/
 packages/*/dist/
 packages/*/dist-chrome/
 packages/*/dist-firefox/
+# Restored from vendor/model-data by `npm run hydrate:model-data`; refresh the
+# committed snapshot with `npm run refresh:model-data`.
 packages/ai/src/providers/data/
 packages/ai/src/providers/.model-generation-*/
 *.cpuprofile
