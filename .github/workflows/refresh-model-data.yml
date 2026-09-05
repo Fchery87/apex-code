@@ -1,0 +1,80 @@
+name: Refresh model data
+
+# Builds restore the model catalogs from vendor/model-data and never call
+# models.dev, so nothing keeps that snapshot current any more. This job is what
+# replaces the freshness the old build-time fetch provided, with the difference
+# that a catalog change now arrives as a reviewable PR that CI has tested on all
+# three OSes, instead of changing silently under every build.
+on:
+  schedule:
+    # Weekly, matching the cadence dependabot already uses for this repo.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: refresh-model-data
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    name: Refresh vendored model catalogs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+
+      - run: npm ci --ignore-scripts
+
+      # Fails the job when models.dev is unreachable, after the wrapper's own
+      # retries. A red scheduled run is the signal; the snapshot in main is
+      # untouched and builds keep working from it.
+      - run: npm run refresh:model-data
+
+      - name: Open or update the refresh PR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: chore/refresh-model-data
+        run: |
+          set -Eeuo pipefail
+
+          if git diff --quiet -- vendor/model-data; then
+            echo "Snapshot already matches models.dev; nothing to open."
+            exit 0
+          fi
+
+          generated_at="$(node -p 'require("./vendor/model-data/.manifest.json").generatedAt')"
+          changed="$(git diff --name-only -- vendor/model-data | sed 's|vendor/model-data/||' | sed 's|\.json$||' | paste -sd, | sed 's/,/, /g')"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # The branch is reset from this run's main every time, so its history is
+          # never a base anyone builds on and a plain force-push is the intent.
+          git switch -C "$BRANCH"
+          git add vendor/model-data
+          git commit -m "chore(model-data): refresh vendored catalogs" \
+            -m "Captured from models.dev at ${generated_at}." \
+            -m "Providers changed: ${changed}."
+          git push --force origin "$BRANCH"
+
+          if gh pr view "$BRANCH" --json number --jq .number >/dev/null 2>&1; then
+            echo "Existing PR updated by the force-push."
+            exit 0
+          fi
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore(model-data): refresh vendored catalogs" \
+            --body "$(printf 'Captured from models.dev at %s.\n\nProviders changed: %s.\n\nBuilds restore these files from `vendor/model-data`, so this PR is how a catalog change reaches users. CI runs the full suite on all three OSes against the new data; `check:model-data` fails here if the provider set has drifted from the frozen `.models.ts` shards.\n' "$generated_at" "$changed")"
