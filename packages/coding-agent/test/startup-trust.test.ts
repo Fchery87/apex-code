@@ -60,7 +60,7 @@ describe("startup trust public loaders", () => {
 		expect(connector).not.toHaveBeenCalled();
 	});
 
-	it("freezes authorization at construction against file and symlink replacement", async () => {
+	it("freezes project authorization against file and symlink replacement", async () => {
 		const cwd = workspace();
 		const agentDir = join(cwd, "agent");
 		mkdirSync(join(cwd, ".apex-code"), { recursive: true });
@@ -80,5 +80,70 @@ describe("startup trust public loaders", () => {
 		writeFileSync(attacker, scope("bypassPermissions"));
 		symlinkSync(attacker, permissionPath);
 		expect(await store.snapshot()).toEqual(before);
+	});
+
+	it("freezes user authorization against direct file replacement", async () => {
+		const cwd = workspace();
+		const agentDir = join(cwd, "agent");
+		mkdirSync(agentDir, { recursive: true });
+		const permissionPath = join(agentDir, "permissions.json");
+		writeFileSync(permissionPath, scope("acceptEdits"));
+		const store = new FilePermissionRuleStore({ cwd, agentDir, policyPath: join(cwd, "policy") });
+		const before = await store.snapshot();
+
+		writeFileSync(permissionPath, scope("bypassPermissions"));
+
+		expect(await store.snapshot()).toEqual(before);
+	});
+
+	it("freezes user authorization against symlink replacement", async () => {
+		const cwd = workspace();
+		const agentDir = join(cwd, "agent");
+		mkdirSync(agentDir, { recursive: true });
+		const permissionPath = join(agentDir, "permissions.json");
+		writeFileSync(permissionPath, scope("acceptEdits"));
+		const store = new FilePermissionRuleStore({ cwd, agentDir, policyPath: join(cwd, "policy") });
+		const before = await store.snapshot();
+		rmSync(permissionPath);
+		const attacker = join(cwd, "attacker.json");
+		writeFileSync(attacker, scope("bypassPermissions"));
+		symlinkSync(attacker, permissionPath);
+
+		expect(await store.snapshot()).toEqual(before);
+	});
+
+	it("refreshes only a file scope changed through PermissionStore.apply", async () => {
+		const cwd = workspace();
+		const agentDir = join(cwd, "agent");
+		mkdirSync(join(cwd, ".apex-code"), { recursive: true });
+		mkdirSync(agentDir, { recursive: true });
+		const projectPath = join(cwd, ".apex-code", "permissions.json");
+		writeFileSync(projectPath, scope("acceptEdits"));
+		writeFileSync(join(agentDir, "permissions.json"), scope("acceptEdits"));
+		const store = new FilePermissionRuleStore({ cwd, agentDir, policyPath: join(cwd, "policy") });
+		await store.snapshot();
+		writeFileSync(projectPath, scope("bypassPermissions"));
+
+		await store.apply({ type: "setMode", destination: "user", mode: "bypassPermissions" });
+
+		const next = await store.snapshot();
+		expect(next.modesBySource.get("user")).toBe("bypassPermissions");
+		expect(next.modesBySource.get("project")).toBe("acceptEdits");
+	});
+
+	it("keeps managed policy live after file-backed scopes are captured", async () => {
+		const cwd = workspace();
+		const agentDir = join(cwd, "agent");
+		const policyPath = join(cwd, "policy.json");
+		const store = new FilePermissionRuleStore({ cwd, agentDir, policyPath });
+		expect((await store.snapshot()).rules.filter((rule) => rule.source === "policy")).toEqual([]);
+
+		writeFileSync(policyPath, scope("default"));
+
+		expect((await store.snapshot()).rules).toContainEqual({
+			source: "policy",
+			toolName: "bash",
+			behavior: "allow",
+		});
 	});
 });

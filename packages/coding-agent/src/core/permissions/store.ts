@@ -159,9 +159,10 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 	private readonly runtimeRules: Record<RuntimeSource, StoredPermissionRule[]> = { command: [], session: [] };
 	private readonly runtimeModes: Partial<Record<RuntimeSource, PermissionMode>> = {};
 	private readonly projectTrusted: boolean;
-	private projectScopes?: Promise<
-		readonly [{ scope: StoredPermissionScope; error?: Error }, { scope: StoredPermissionScope; error?: Error }]
-	>;
+	private readonly fileScopes: Partial<
+		Record<FileBackedSource, Promise<{ scope: StoredPermissionScope; error?: Error }>>
+	> = {};
+	private readonly fileScopeUpdates: Partial<Record<FileBackedSource, Promise<void>>> = {};
 
 	constructor(options: CreateFilePermissionRuleStoreOptions) {
 		const agentDir = options.agentDir ?? getAgentDir();
@@ -175,6 +176,18 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 		this.policyPath = options.policyPath ?? defaultPolicyPath();
 		this.initialRules = options.initialRules ?? [];
 		this.projectTrusted = options.projectTrusted ?? true;
+		if (!this.projectTrusted) {
+			this.fileScopes.local = Promise.resolve({ scope: emptyScope() });
+			this.fileScopes.project = Promise.resolve({ scope: emptyScope() });
+		}
+	}
+
+	private capturedFileBackedScope(source: FileBackedSource): Promise<{ scope: StoredPermissionScope; error?: Error }> {
+		const captured = this.fileScopes[source];
+		if (captured) return captured;
+		const initial = this.readFileBackedScope(source);
+		this.fileScopes[source] = initial;
+		return initial;
 	}
 
 	private async readFileBackedScope(
@@ -203,16 +216,14 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 	}
 
 	async snapshot(): Promise<PermissionStoreSnapshot> {
-		// Project-controlled authorization is captured once. Workspace writes made by
-		// the agent, including symlink replacement, therefore cannot widen the current
-		// or next gate decision. Managed policy and user scope remain live ceilings.
-		this.projectScopes ??= this.projectTrusted
-			? Promise.all([this.readFileBackedScope("local"), this.readFileBackedScope("project")])
-			: Promise.resolve([{ scope: emptyScope() }, { scope: emptyScope() }] as const);
-		const [policy, [local, project], user] = await Promise.all([
+		// File-backed authorization is captured once. Direct filesystem writes,
+		// including symlink replacement, cannot widen the current or next gate
+		// decision. Managed policy and runtime scopes remain live.
+		const [policy, local, project, user] = await Promise.all([
 			this.readPolicy(),
-			this.projectScopes,
-			this.readFileBackedScope("user"),
+			this.capturedFileBackedScope("local"),
+			this.capturedFileBackedScope("project"),
+			this.capturedFileBackedScope("user"),
 		]);
 		const errors: PermissionStoreError[] = [];
 		const withSource = (
@@ -251,11 +262,19 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 		if (!this.projectTrusted && (update.destination === "local" || update.destination === "project")) {
 			throw new Error(`Cannot update untrusted ${update.destination} permission scope`);
 		}
-		await this.backends[update.destination].withLockAsync(async (content) => {
-			const next = applyToScope(parseScope(content), update);
-			return { result: undefined, next: JSON.stringify(next, null, 2) };
+		const destination = update.destination;
+		const previousUpdate = this.fileScopeUpdates[destination]?.catch(() => undefined) ?? Promise.resolve();
+		const nextUpdate = previousUpdate.then(async () => {
+			const current = await this.capturedFileBackedScope(destination);
+			const next = applyToScope(current.scope, update);
+			await this.backends[destination].withLockAsync(async () => ({
+				result: undefined,
+				next: JSON.stringify(next, null, 2),
+			}));
+			this.fileScopes[destination] = Promise.resolve({ scope: next });
 		});
-		if (update.destination === "local" || update.destination === "project") this.projectScopes = undefined;
+		this.fileScopeUpdates[destination] = nextUpdate;
+		await nextUpdate;
 	}
 
 	private applyRuntime(destination: RuntimeSource, update: PermissionUpdate): void {
