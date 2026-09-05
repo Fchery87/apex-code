@@ -22,7 +22,7 @@ jobs:
   refresh:
     name: Refresh vendored model catalogs
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: write
       pull-requests: write
@@ -39,6 +39,14 @@ jobs:
       # retries. A red scheduled run is the signal; the snapshot in main is
       # untouched and builds keep working from it.
       - run: npm run refresh:model-data
+
+      # A PR opened by GITHUB_TOKEN does not start CI on its own; GitHub gates
+      # the run as action_required so workflows cannot trigger each other in a
+      # loop. So prove the refreshed snapshot builds before proposing it, rather
+      # than opening a PR whose only check is one a human has to unlock. This
+      # runs check:model-data, which is the failure specific to a refresh: a
+      # provider set that no longer matches the frozen .models.ts shards.
+      - run: npm run build
 
       - name: Open or update the refresh PR
         shell: bash
@@ -82,4 +90,4 @@ jobs:
             --base main \
             --head "$BRANCH" \
             --title "chore(model-data): refresh vendored catalogs" \
-            --body "$(printf 'Captured from models.dev at %s.\n\nProviders changed: %s.\n\nBuilds restore these files from `vendor/model-data`, so this PR is how a catalog change reaches users. CI runs the full suite on all three OSes against the new data; `check:model-data` fails here if the provider set has drifted from the frozen `.models.ts` shards.\n' "$generated_at" "$changed")"
+            --body "$(printf 'Captured from models.dev at %s.\n\nProviders changed: %s.\n\nBuilds restore these files from `vendor/model-data`, so this PR is how a catalog change reaches users.\n\nThe refresh job already built this snapshot, which is what runs `check:model-data` against the frozen `.models.ts` shards. GitHub gates CI on PRs it opens itself, so approve the pending run to get the full suite on all three OSes before merging.\n' "$generated_at" "$changed")"
