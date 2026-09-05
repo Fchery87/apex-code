@@ -20,14 +20,16 @@ Each task starts with a failing public-boundary test. Run the focused check befo
 
 | ID | Task | State | Verification |
 |---|---|---|---|
-| ST.1 | Parse CLI input once and derive metadata behavior and sandbox selection from the typed result. | not started | Public CLI tests for option values, positional text, `--`, `--help`, and `--version`. Run the focused CLI suite. |
-| ST.2 | Resolve project trust before constructing permissions, MCP, hooks, and policy startup authority. | not started | Scratch trusted and untrusted projects prove project loaders differ only after the trust decision. |
-| ST.3 | Prevent child-controlled permission files from changing effective authorization. | not started | An `acceptEdits` public session attempts writes and symlink replacement. The next snapshot remains unchanged. |
-| ST.4 | Add the adversarial startup and trust regression suite. | not started | The suite covers CLI, SDK, MCP, hooks, permission files, and negative controls at the public boundary. |
+| ST.1 | Parse CLI input once and derive metadata behavior and sandbox selection from the typed result. | verified in `adf4a67f75c43d31689c72cf1be26dbbc218f9ef` | `npm --prefix packages/coding-agent test -- test/sandbox/cli-launch.test.ts test/sandbox/cli-process.test.ts`: metadata-looking values and `--` text enter the sandbox; genuine metadata stays outside. |
+| ST.2 | Resolve project trust before constructing permissions, MCP, hooks, and policy startup authority. | verified in `adf4a67f75c43d31689c72cf1be26dbbc218f9ef` | `test/startup-trust.test.ts`, `test/hooks/settings.test.ts`, `test/policy-loader.test.ts`, and `test/mcp/config.test.ts`: resolved trust gates permission scopes and MCP; existing settings gates cover hooks/policy. |
+| ST.3 | Prevent child-controlled permission files from changing effective authorization. | verified in `adf4a67f75c43d31689c72cf1be26dbbc218f9ef` | `test/startup-trust.test.ts`: ordinary replacement and symlink replacement leave the next store snapshot unchanged; managed policy and plan ceilings remain live. |
+| ST.4 | Add the adversarial startup and trust regression suite. | verified in `adf4a67f75c43d31689c72cf1be26dbbc218f9ef` | Focused seven-file suite: 85 tests passed. Scratch workspaces and synthetic connector only; no provider turn or credential. |
 
 ## Files and boundaries
 
-The owner must list exact files in the first implementation commit. Do not widen the plan to unrelated providers, UI surfaces, or leaked or unlicensed source. Keep tests in scratch directories when they write state.
+Implementation files: `packages/coding-agent/src/cli.ts`, `src/cli/args.ts`, `src/main.ts`, `src/core/sandbox/{cli-launch,child-entry}.ts`, `src/core/permissions/store.ts`, `src/core/mcp/runtime.ts`, and `src/core/sdk.ts`. Tests: `test/sandbox/{cli-launch,cli-process}.test.ts` and `test/startup-trust.test.ts`. The umbrella spec records the settled loader/snapshot scope.
+
+This plan uses a documented two-commit close: the implementation commit establishes the real SHA; the close commit records and verifies that SHA in every task row. No placeholder SHA is recorded.
 
 ## Exit conditions
 
