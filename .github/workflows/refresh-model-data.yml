@@ -48,13 +48,18 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          if git diff --quiet -- vendor/model-data; then
-            echo "Snapshot already matches models.dev; nothing to open."
+          # Every refresh rewrites .manifest.json, because it records when it ran.
+          # Judging change by it would open an empty PR every week and teach
+          # everyone to ignore these, so only provider files count.
+          changed_files="$(git diff --name-only -- vendor/model-data | grep -v '/\.manifest\.json$' || true)"
+          if [ -z "$changed_files" ]; then
+            git checkout -- vendor/model-data
+            echo "Provider catalogs unchanged; only the refresh timestamp moved. Nothing to open."
             exit 0
           fi
 
           generated_at="$(node -p 'require("./vendor/model-data/.manifest.json").generatedAt')"
-          changed="$(git diff --name-only -- vendor/model-data | sed 's|vendor/model-data/||' | sed 's|\.json$||' | paste -sd, | sed 's/,/, /g')"
+          changed="$(echo "$changed_files" | sed 's|vendor/model-data/||' | sed 's|\.json$||' | paste -sd, | sed 's/,/, /g')"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
