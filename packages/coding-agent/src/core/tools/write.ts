@@ -8,12 +8,13 @@ import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts"
 import { getLanguageFromPath, highlightCode, type Theme } from "../../modes/interactive/theme/theme.ts";
 import { getExperimentalToolSampling } from "../experimental.ts";
 import type { ToolRenderResultOptions } from "../extensions/types.ts";
+import { getPreparedPathOperation, type PreparedPathOperation } from "../permissions/operations.ts";
 import type { ApexToolDefinition, EvidenceRecord } from "./contract.ts";
 import type { DiagnosticsOperations, DiagnosticsOutcome } from "./diagnostics.ts";
 import { diagnosticEvidenceForPath, formatDiagnosticsOutcome } from "./diagnostics.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
-import { resolveToCwd } from "./path-utils.ts";
+import { resolveToCwd, writePreparedPath } from "./path-utils.ts";
 import { normalizeDisplayText, renderToolPath, replaceTabs, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
@@ -49,11 +50,18 @@ export interface WriteOperations {
 	writeFile: (absolutePath: string, content: string) => Promise<void>;
 	/** Create directory recursively */
 	mkdir: (dir: string) => Promise<void>;
+	/**
+	 * Execute a gate-prepared write no-follow against the authorized target.
+	 * Required for gated calls: when a prepared operation exists, pathname writes
+	 * are never used, so an unset implementation fails closed.
+	 */
+	writePrepared?: (operation: PreparedPathOperation, content: string) => void;
 }
 
 const defaultWriteOperations: WriteOperations = {
 	writeFile: (path, content) => fsWriteFile(path, content, "utf-8"),
 	mkdir: (dir) => fsMkdir(dir, { recursive: true }).then(() => {}),
+	writePrepared: (operation, content) => writePreparedPath(operation, content),
 };
 
 export interface WriteToolOptions {
@@ -250,14 +258,13 @@ export function createWriteToolDefinition(
 			},
 		},
 		constrainedSampling: getExperimentalToolSampling(),
-		async execute(
-			_toolCallId,
-			{ path, content }: { path: string; content: string },
-			signal?: AbortSignal,
-			_onUpdate?,
-			_ctx?,
-		) {
-			const absolutePath = resolveToCwd(path, cwd);
+		async execute(_toolCallId, input: { path: string; content: string }, signal?: AbortSignal, _onUpdate?, _ctx?) {
+			const { path, content } = input;
+			const prepared = getPreparedPathOperation(input);
+			const absolutePath = prepared?.path.value ?? resolveToCwd(path, cwd);
+			if (prepared && !ops.writePrepared) {
+				throw new Error("No safe prepared write operation is available for this gated write");
+			}
 			const dir = dirname(absolutePath);
 			return withFileMutationQueue(absolutePath, async () => {
 				// Do not reject from an abort event listener here: that would release the
@@ -269,13 +276,19 @@ export function createWriteToolDefinition(
 				};
 
 				throwIfAborted();
-				// Create parent directories if needed.
-				await ops.mkdir(dir);
-				throwIfAborted();
+				if (prepared) {
+					// Gated path: no-follow execution against the exact authorized target.
+					ops.writePrepared!(prepared, content);
+					throwIfAborted();
+				} else {
+					// Create parent directories if needed.
+					await ops.mkdir(dir);
+					throwIfAborted();
 
-				// Write the file contents.
-				await ops.writeFile(absolutePath, content);
-				throwIfAborted();
+					// Write the file contents.
+					await ops.writeFile(absolutePath, content);
+					throwIfAborted();
+				}
 
 				const successText = `Successfully wrote ${content.length} bytes to ${path}`;
 

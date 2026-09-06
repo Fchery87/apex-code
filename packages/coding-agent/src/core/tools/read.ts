@@ -9,13 +9,14 @@ import { getReadmePath } from "../../config.ts";
 import { keyHint, keyText } from "../../modes/interactive/components/keybinding-hints.ts";
 import { getLanguageFromPath, highlightCode, type Theme } from "../../modes/interactive/theme/theme.ts";
 import { processImage } from "../../utils/image-process.ts";
-import { detectSupportedImageMimeTypeFromFile } from "../../utils/mime.ts";
+import { detectSupportedImageMimeType, detectSupportedImageMimeTypeFromFile } from "../../utils/mime.ts";
 import { formatPathRelativeToCwdOrAbsolute } from "../../utils/paths.ts";
 import { getExperimentalToolSampling } from "../experimental.ts";
 import type { ToolRenderResultOptions } from "../extensions/types.ts";
+import { getPreparedPathOperation } from "../permissions/operations.ts";
 import type { ApexToolDefinition } from "./contract.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
-import { resolveReadPathAsync, resolveToCwd } from "./path-utils.ts";
+import { readPreparedPath, resolveReadPathAsync, resolveToCwd } from "./path-utils.ts";
 import { getTextOutput, renderToolPath, replaceTabs, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, type TruncationResult, truncateHead } from "./truncate.ts";
@@ -235,7 +236,7 @@ export function createReadToolDefinition(
 		constrainedSampling: getExperimentalToolSampling(),
 		async execute(
 			_toolCallId,
-			{ path, offset, limit }: { path: string; offset?: number; limit?: number },
+			input: { path: string; offset?: number; limit?: number },
 			signal?: AbortSignal,
 			_onUpdate?,
 			ctx?,
@@ -255,19 +256,27 @@ export function createReadToolDefinition(
 
 					(async () => {
 						try {
-							const absolutePath = await resolveReadPathAsync(path, cwd);
+							const { path, offset, limit } = input;
+							const prepared = getPreparedPathOperation(input);
+							const absolutePath = prepared?.path.value ?? (await resolveReadPathAsync(path, cwd));
 							if (aborted) return;
-							// Check if file exists and is readable.
-							await ops.access(absolutePath);
+							if (!prepared) await ops.access(absolutePath);
 							if (aborted) return;
-							const mimeType = ops.detectImageMimeType ? await ops.detectImageMimeType(absolutePath) : undefined;
+							const buffer = prepared ? await readPreparedPath(prepared) : undefined;
+							// A gated read detects the MIME type from the already-verified bytes,
+							// so no secondary unverified pathname open happens after authorization.
+							const mimeType = prepared
+								? detectSupportedImageMimeType(buffer!)
+								: ops.detectImageMimeType
+									? await ops.detectImageMimeType(absolutePath)
+									: undefined;
 							let content: (TextContent | ImageContent)[];
 							let details: ReadToolDetails | undefined;
 							const nonVisionImageNote = getNonVisionImageNote(ctx?.model);
 							if (mimeType) {
 								// Read image as binary.
-								const buffer = await ops.readFile(absolutePath);
-								const processed = await processImage(buffer, mimeType, { autoResizeImages });
+								const imageBuffer = buffer ?? (await ops.readFile(absolutePath));
+								const processed = await processImage(imageBuffer, mimeType, { autoResizeImages });
 								if (!processed.ok) {
 									let textNote = `Read image file [${mimeType}]\n${processed.message}`;
 									if (nonVisionImageNote) textNote += `\n${nonVisionImageNote}`;
@@ -283,8 +292,7 @@ export function createReadToolDefinition(
 								}
 							} else {
 								// Read text content.
-								const buffer = await ops.readFile(absolutePath);
-								const textContent = buffer.toString("utf-8");
+								const textContent = (buffer ?? (await ops.readFile(absolutePath))).toString("utf-8");
 								const allLines = textContent.split("\n");
 								const totalFileLines = allLines.length;
 								// Apply offset if specified. Convert from 1-indexed input to 0-indexed array access.

@@ -9,6 +9,7 @@ import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts"
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import { ensureTool } from "../../utils/tools-manager.ts";
 import type { ToolRenderResultOptions } from "../extensions/types.ts";
+import { getPreparedPathOperation } from "../permissions/operations.ts";
 import type { ApexToolDefinition } from "./contract.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
 import { resolveToCwd } from "./path-utils.ts";
@@ -153,15 +154,7 @@ export function createGrepToolDefinition(
 		},
 		async execute(
 			_toolCallId,
-			{
-				pattern,
-				path: searchDir,
-				glob,
-				ignoreCase,
-				literal,
-				context,
-				limit,
-			}: {
+			input: {
 				pattern: string;
 				path?: string;
 				glob?: string;
@@ -174,6 +167,7 @@ export function createGrepToolDefinition(
 			_onUpdate?,
 			_ctx?,
 		) {
+			const { pattern, path: searchDir, glob, ignoreCase, literal, context, limit } = input;
 			return new Promise((resolve, reject) => {
 				if (signal?.aborted) {
 					reject(new Error("Operation aborted"));
@@ -195,7 +189,8 @@ export function createGrepToolDefinition(
 							return;
 						}
 
-						const searchPath = resolveToCwd(searchDir || ".", cwd);
+						const prepared = getPreparedPathOperation(input);
+						const searchPath = prepared ? prepared.path.value : resolveToCwd(searchDir || ".", cwd);
 						const ops = customOps ?? defaultGrepOperations;
 						let isDirectory: boolean;
 						try {

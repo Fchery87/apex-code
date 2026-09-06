@@ -3,7 +3,9 @@
 import { minimatch } from "minimatch";
 import type { Static, TSchema } from "typebox";
 import { formatPathRelativeToCwdOrAbsolute } from "../../utils/paths.ts";
+import { setPreparedPathOperation } from "../permissions/operations.ts";
 import type { PermissionBehavior, PermissionSpec } from "./contract.ts";
+import { preparePathOperation, resolveToCwd } from "./path-utils.ts";
 
 /**
  * Builds a glob-based PermissionSpec over a single path field. `getPath` extracts
@@ -21,19 +23,27 @@ export function createPathPermissionSpec<TParams extends TSchema>(options: {
 }): PermissionSpec<TParams> {
 	const { cwd, defaultBehavior, verb, getPath } = options;
 
-	const normalize = (path: string | undefined): string =>
-		formatPathRelativeToCwdOrAbsolute(path?.trim() ? path : ".", cwd);
+	const normalize = (path: string | undefined): string => {
+		const canonical = resolveToCwd(path?.trim() ? path : ".", cwd);
+		return formatPathRelativeToCwdOrAbsolute(canonical, cwd);
+	};
+	const escapeExact = (value: string): string => `exact:${value}`;
 
 	return {
 		defaultBehavior,
+		prepareCall(params) {
+			setPreparedPathOperation(params as object, preparePathOperation(getPath(params) ?? ".", cwd));
+		},
 		matches(ruleContent, params) {
-			return minimatch(normalize(getPath(params)), ruleContent, { dot: true });
+			return ruleContent.startsWith("exact:")
+				? normalize(getPath(params)) === ruleContent.slice("exact:".length)
+				: minimatch(normalize(getPath(params)), ruleContent, { dot: true });
 		},
 		describe(ruleContent) {
 			return `${verb} paths matching "${ruleContent}"`;
 		},
 		ruleForCall(params) {
-			return normalize(getPath(params));
+			return escapeExact(normalize(getPath(params)));
 		},
 	};
 }

@@ -215,7 +215,7 @@ describe("lsp workspace_symbol operation", () => {
 		const call = { operation: "workspace_symbol" as const, query: "x" };
 
 		const rule = definition.contract.permission.ruleForCall(call);
-		expect(rule).toBe(".");
+		expect(rule).toBe("exact:.");
 		expect(definition.contract.permission.matches(".", call)).toBe(true);
 		expect(definition.contract.permission.defaultBehavior).toBe("allow");
 	});

@@ -6,6 +6,7 @@ import { type Static, Type } from "typebox";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import type { ToolRenderResultOptions } from "../extensions/types.ts";
+import { getPreparedPathOperation } from "../permissions/operations.ts";
 import type { ApexToolDefinition } from "./contract.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
 import { pathExists, resolveToCwd } from "./path-utils.ts";
@@ -123,13 +124,8 @@ export function createLsToolDefinition(
 			context: { resultRecoverable: true, deferSchema: true },
 			evidence: { emits: new Set(), capture: () => [] },
 		},
-		async execute(
-			_toolCallId,
-			{ path, limit }: { path?: string; limit?: number },
-			signal?: AbortSignal,
-			_onUpdate?,
-			_ctx?,
-		) {
+		async execute(_toolCallId, input: { path?: string; limit?: number }, signal?: AbortSignal, _onUpdate?, _ctx?) {
+			const { path, limit } = input;
 			return new Promise((resolve, reject) => {
 				if (signal?.aborted) {
 					reject(new Error("Operation aborted"));
@@ -141,7 +137,8 @@ export function createLsToolDefinition(
 
 				(async () => {
 					try {
-						const dirPath = resolveToCwd(path || ".", cwd);
+						const prepared = getPreparedPathOperation(input);
+						const dirPath = prepared ? prepared.path.value : resolveToCwd(path || ".", cwd);
 						const effectiveLimit = limit ?? DEFAULT_LIMIT;
 
 						// Check if path exists.

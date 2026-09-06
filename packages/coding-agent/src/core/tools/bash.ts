@@ -87,9 +87,14 @@ function normalizeSegment(text: string): string {
  * matches `git commit` and `git commit -m x`, but not `git commitment` (word
  * boundary enforced) and not an unrelated segment in the same chained command.
  */
+function hasGrammarSensitiveStructure(value: string): boolean {
+	return /["'\\\t\n#]/.test(value);
+}
+
 function segmentMatchesRule(segment: string, ruleContent: string): boolean {
-	const normalizedSegment = normalizeSegment(segment);
-	const normalizedRule = normalizeSegment(ruleContent);
+	const sensitive = hasGrammarSensitiveStructure(segment) || hasGrammarSensitiveStructure(ruleContent);
+	const normalizedSegment = sensitive ? segment : normalizeSegment(segment);
+	const normalizedRule = sensitive ? ruleContent : normalizeSegment(ruleContent);
 	if (normalizedRule.endsWith(":*")) {
 		const prefix = normalizedRule.slice(0, -2).trim();
 		if (!prefix) return false;
@@ -126,12 +131,23 @@ export function createBashPermissionSpec(): PermissionSpec<typeof bashSchema> {
 			return "command" in params ? undefined : "allow";
 		},
 		matches(ruleContent, params) {
-			if (!("command" in params)) {
-				return ruleContent === BACKGROUND_HANDLE_RULE;
-			}
+			if (!("command" in params)) return ruleContent === BACKGROUND_HANDLE_RULE;
 			const classification = classifyBashCommand(params.command);
-			if (classification.type !== "segments") return false;
-			return classification.segments.every((segment) => segmentMatchesRule(segment, ruleContent));
+			return (
+				classification.type === "segments" &&
+				classification.segments.every((segment) => segmentMatchesRule(segment, ruleContent))
+			);
+		},
+		matchesDeny(ruleContent, params) {
+			if (!("command" in params)) return ruleContent === BACKGROUND_HANDLE_RULE;
+			const classification = classifyBashCommand(params.command);
+			return (
+				classification.type === "segments" &&
+				classification.segments.some((segment) => segmentMatchesRule(segment, ruleContent))
+			);
+		},
+		isUnknown(params) {
+			return "command" in params && classifyBashCommand(params.command).type !== "segments";
 		},
 		describe(ruleContent) {
 			if (ruleContent === BACKGROUND_HANDLE_RULE) {
@@ -145,7 +161,8 @@ export function createBashPermissionSpec(): PermissionSpec<typeof bashSchema> {
 			}
 			const classification = classifyBashCommand(params.command);
 			if (classification.type !== "segments" || classification.segments.length !== 1) return null;
-			return normalizeSegment(classification.segments[0]);
+			const segment = classification.segments[0];
+			return hasGrammarSensitiveStructure(segment) ? segment : normalizeSegment(segment);
 		},
 	};
 }

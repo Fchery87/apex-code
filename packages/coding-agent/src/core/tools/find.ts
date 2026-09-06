@@ -8,6 +8,7 @@ import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts"
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import { ensureTool } from "../../utils/tools-manager.ts";
 import type { ToolRenderResultOptions } from "../extensions/types.ts";
+import { getPreparedPathOperation } from "../permissions/operations.ts";
 import type { ApexToolDefinition } from "./contract.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
 import { pathExists, resolveToCwd } from "./path-utils.ts";
@@ -146,11 +147,12 @@ export function createFindToolDefinition(
 		},
 		async execute(
 			_toolCallId,
-			{ pattern, path: searchDir, limit }: { pattern: string; path?: string; limit?: number },
+			input: { pattern: string; path?: string; limit?: number },
 			signal?: AbortSignal,
 			_onUpdate?,
 			_ctx?,
 		) {
+			const { pattern, path: searchDir, limit } = input;
 			return new Promise((resolve, reject) => {
 				if (signal?.aborted) {
 					reject(new Error("Operation aborted"));
@@ -174,7 +176,8 @@ export function createFindToolDefinition(
 
 				(async () => {
 					try {
-						const searchPath = resolveToCwd(searchDir || ".", cwd);
+						const prepared = getPreparedPathOperation(input);
+						const searchPath = prepared ? prepared.path.value : resolveToCwd(searchDir || ".", cwd);
 						const effectiveLimit = limit ?? DEFAULT_LIMIT;
 						const ops = customOps ?? defaultFindOperations;
 

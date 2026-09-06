@@ -1,8 +1,226 @@
-import { accessSync, constants } from "node:fs";
+import {
+	accessSync,
+	closeSync,
+	constants,
+	existsSync,
+	fstatSync,
+	ftruncateSync,
+	mkdirSync,
+	openSync,
+	readFileSync,
+	realpathSync,
+	statSync,
+	writeSync,
+} from "node:fs";
 import { access } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, sep } from "node:path";
 import { normalizePath, resolvePath } from "../../utils/paths.ts";
+import type { PreparedPathOperation } from "../permissions/operations.ts";
 
 const NARROW_NO_BREAK_SPACE = "\u202F";
+
+export function preparePathOperation(filePath: string, cwd: string): PreparedPathOperation {
+	const canonicalPath = resolveToCwd(filePath, cwd);
+	if (!isAbsolute(canonicalPath)) throw new Error("Canonical path must be absolute");
+	try {
+		const stats = statSync(canonicalPath);
+		return {
+			kind: "path-existing",
+			path: { kind: "canonical-path", value: canonicalPath },
+			identity: { device: stats.dev, inode: stats.ino },
+		};
+	} catch {
+		return { kind: "path-new", path: { kind: "canonical-path", value: canonicalPath } };
+	}
+}
+
+/**
+ * Read the authorized target through a no-follow final-component open, verifying
+ * the descriptor identity captured at authorization before any byte is returned.
+ * A replaced alias or an injected symlink never matches and the read aborts.
+ */
+export function readPreparedPath(operation: PreparedPathOperation): Buffer {
+	if (operation.kind !== "path-existing") {
+		throw new PreparedTargetChangedError("Authorized read target did not exist when permission was checked");
+	}
+	return withTargetDirectory(operation, { createMissingDirectories: false }, (parent, name) => {
+		let fd: number;
+		try {
+			fd = openUnder(parent, name, constants.O_RDONLY | constants.O_NOFOLLOW);
+		} catch (error) {
+			throw new PreparedTargetChangedError("Authorized read target changed before execution", { cause: error });
+		}
+		try {
+			const stats = fstatSync(fd);
+			if (stats.dev !== operation.identity.device || stats.ino !== operation.identity.inode) {
+				throw new PreparedTargetChangedError("Authorized read target changed before execution");
+			}
+			return readFileSync(fd);
+		} finally {
+			closeSync(fd);
+		}
+	});
+}
+
+/** The authorized target changed between permission evaluation and execution. */
+export class PreparedTargetChangedError extends Error {}
+
+const PROC_FD = "/proc/self/fd";
+let procFdAvailable: boolean | undefined;
+
+/** /proc lets an already-open directory fd act as the parent of the next open, so a swapped intermediate directory cannot be traversed. */
+function useProcFd(): boolean {
+	if (procFdAvailable === undefined) {
+		try {
+			procFdAvailable = existsSync(`${PROC_FD}/self`);
+		} catch {
+			procFdAvailable = false;
+		}
+	}
+	return procFdAvailable;
+}
+
+interface OpenDirectory {
+	fd: number;
+	/** Fallback parent path for platforms without /proc/self/fd. */
+	path: string;
+}
+
+function splitComponents(absolutePath: string): string[] {
+	return absolutePath.split(sep).filter((component) => component.length > 0);
+}
+
+function openUnder(parent: OpenDirectory, name: string, flags: number, mode?: number): number {
+	if (useProcFd()) return openSync(`${PROC_FD}/${parent.fd}/${name}`, flags, mode);
+	return openSync(join(parent.path, name), flags, mode);
+}
+
+function mkdirUnder(parent: OpenDirectory, name: string): void {
+	if (useProcFd()) mkdirSync(`${PROC_FD}/${parent.fd}/${name}`);
+	else mkdirSync(join(parent.path, name));
+}
+
+function openChildDirectory(parent: OpenDirectory, name: string): OpenDirectory {
+	const flags = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
+	const fd = openUnder(parent, name, flags);
+	closeSync(parent.fd);
+	return { fd, path: join(parent.path, name) };
+}
+
+function writeAll(fd: number, content: string | Buffer): void {
+	const buffer = typeof content === "string" ? Buffer.from(content, "utf-8") : content;
+	let written = 0;
+	while (written < buffer.length) {
+		written += writeSync(fd, buffer, written, buffer.length - written);
+	}
+}
+
+function isMissingEntryError(error: unknown): boolean {
+	return (
+		typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "ENOENT"
+	);
+}
+
+/**
+ * Walk every directory component of the authorized path no-follow, holding one
+ * directory fd across the walk, then run the caller's final-component step against
+ * that walked parent. Any intermediate that is not a real directory — a swapped
+ * symlink, a removed component — aborts before the target is touched.
+ */
+function withTargetDirectory<T>(
+	operation: PreparedPathOperation,
+	options: { createMissingDirectories: boolean },
+	run: (parent: OpenDirectory, name: string) => T,
+): T {
+	const components = splitComponents(operation.path.value);
+	const name = components[components.length - 1];
+	if (name === undefined) throw new PreparedTargetChangedError("Authorized path has no final component");
+	let parent: OpenDirectory = { fd: openSync(sep, constants.O_RDONLY | constants.O_DIRECTORY), path: sep };
+	const closeParent = (): void => {
+		try {
+			closeSync(parent.fd);
+		} catch {}
+	};
+	for (const component of components.slice(0, -1)) {
+		try {
+			parent = openChildDirectory(parent, component);
+		} catch (error) {
+			if (options.createMissingDirectories && isMissingEntryError(error)) {
+				try {
+					mkdirUnder(parent, component);
+					parent = openChildDirectory(parent, component);
+					continue;
+				} catch (mkdirError) {
+					closeParent();
+					throw new PreparedTargetChangedError(`Authorized write parent "${component}" changed before execution`, {
+						cause: mkdirError,
+					});
+				}
+			}
+			closeParent();
+			throw new PreparedTargetChangedError(`Authorized path component "${component}" changed before execution`, {
+				cause: error,
+			});
+		}
+	}
+	try {
+		return run(parent, name);
+	} finally {
+		closeParent();
+	}
+}
+
+/**
+ * Execute an authorized write against the prepared target.
+ *
+ * - `path-existing`: the final component is opened `O_NOFOLLOW`, its descriptor
+ *   identity is compared with the identity captured at authorization, and only
+ *   then is the file truncated and written through that descriptor. A swapped
+ *   alias, an injected symlink, or a redirected parent never matches and the
+ *   write aborts before any byte changes.
+ * - `path-new`: missing parents are created no-follow under the walked directory
+ *   descriptor, and the file is created `O_CREAT | O_EXCL | O_NOFOLLOW`, so a
+ *   replaced parent or a pre-placed symlink is never followed.
+ */
+export function writePreparedPath(operation: PreparedPathOperation, content: string | Buffer): void {
+	withTargetDirectory(operation, { createMissingDirectories: operation.kind === "path-new" }, (parent, name) => {
+		if (operation.kind === "path-existing") {
+			let fd: number;
+			try {
+				fd = openUnder(parent, name, constants.O_WRONLY | constants.O_NOFOLLOW);
+			} catch (error) {
+				throw new PreparedTargetChangedError("Authorized write target changed before execution", { cause: error });
+			}
+			try {
+				const stats = fstatSync(fd);
+				if (stats.dev !== operation.identity.device || stats.ino !== operation.identity.inode) {
+					throw new PreparedTargetChangedError("Authorized write target changed before execution");
+				}
+				ftruncateSync(fd, 0);
+				writeAll(fd, content);
+			} finally {
+				closeSync(fd);
+			}
+			return;
+		}
+		let fd: number;
+		try {
+			fd = openUnder(
+				parent,
+				name,
+				constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+				0o600,
+			);
+		} catch (error) {
+			throw new PreparedTargetChangedError("Authorized new-file target changed before execution", { cause: error });
+		}
+		try {
+			writeAll(fd, content);
+		} finally {
+			closeSync(fd);
+		}
+	});
+}
 
 function tryMacOSScreenshotPath(filePath: string): string {
 	return filePath.replace(/ (AM|PM)\./gi, `${NARROW_NO_BREAK_SPACE}$1.`);
@@ -42,11 +260,25 @@ export function expandPath(filePath: string): string {
 }
 
 /**
- * Resolve a path relative to the given cwd.
- * Handles ~ expansion and absolute paths.
+ * Resolve a path relative to the given cwd, handling ~ expansion and absolute
+ * paths. The result is the single target used by both permission matching and
+ * filesystem execution.
  */
 export function resolveToCwd(filePath: string, cwd: string): string {
-	return resolvePath(filePath, cwd, { normalizeUnicodeSpaces: true, stripAtPrefix: true });
+	const requested = resolvePath(filePath, cwd, { normalizeUnicodeSpaces: true, stripAtPrefix: true });
+	try {
+		return realpathSync(requested);
+	} catch {
+		try {
+			return joinCanonicalParent(requested);
+		} catch {
+			return requested;
+		}
+	}
+}
+
+function joinCanonicalParent(requested: string): string {
+	return join(realpathSync(dirname(requested)), basename(requested));
 }
 
 export function resolveReadPath(filePath: string, cwd: string): string {

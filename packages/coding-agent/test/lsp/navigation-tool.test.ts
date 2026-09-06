@@ -121,7 +121,7 @@ describe("lsp navigation tool", () => {
 		expect([...definition.contract.capabilities]).toEqual(["fs.read"]);
 		expect(definition.contract.permission.defaultBehavior).toBe("allow");
 		expect(definition.contract.context).toMatchObject({ resultRecoverable: true, deferSchema: true });
-		expect(rule).toBe("src/space name.ts");
+		expect(rule).toBe("exact:src/space name.ts");
 		expect(definition.contract.permission.matches(rule!, call)).toBe(true);
 		expect(definition.contract.permission.matches(rule!, { ...call, path: "src/other.ts" })).toBe(false);
 	});

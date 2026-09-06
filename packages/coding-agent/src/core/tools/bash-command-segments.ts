@@ -90,6 +90,7 @@ export function classifyBashCommand(command: string): BashCommandClassification 
 		// These forms make a seemingly read-only command perform I/O, expand into
 		// different arguments, or introduce grammar this deliberately small parser
 		// cannot prove safe. A permission rule must never authorize them by prefix.
+		if (ch === "#") return { type: "unparseable" };
 		if (
 			ch === "<" ||
 			ch === ">" ||

@@ -44,8 +44,14 @@ export interface PermissionSpec<TParams extends TSchema = TSchema> {
 	 */
 	defaultBehaviorFor?(params: Static<TParams>): PermissionBehavior | undefined;
 
-	/** Does this call match this rule's content? The tool owns the grammar. */
+	/** Prepare canonical operation facts on the validated call before authorization and execution. */
+	prepareCall?(params: Static<TParams>): void;
+	/** Does this call match this rule's content as an allow rule? */
 	matches(ruleContent: string, params: Static<TParams>): boolean;
+	/** Optional deny matcher. It may identify any prohibited part of a structured call. */
+	matchesDeny?(ruleContent: string, params: Static<TParams>): boolean;
+	/** True when the call contains grammar that cannot be safely authorized by an allow. */
+	isUnknown?(params: Static<TParams>): boolean;
 
 	/** Human-readable rendering of a rule, for prompts and denial messages. */
 	describe(ruleContent: string): string;

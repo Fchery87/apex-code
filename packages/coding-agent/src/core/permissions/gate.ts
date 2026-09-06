@@ -54,6 +54,7 @@ export async function evaluateToolCall(
 ): Promise<GateDecision> {
 	const contract = resolveToolContract(options.getContract, toolName);
 	const spec = contract.permission;
+	if (spec.prepareCall) spec.prepareCall(params as never);
 	const snapshot = await options.store.snapshot();
 	if (snapshot.errors.length > 0) {
 		const sources = [...new Set(snapshot.errors.map((entry) => entry.source))].join(", ");

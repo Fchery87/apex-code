@@ -47,7 +47,13 @@ function ruleMatchesCall<TParams extends TSchema>(
 	spec: PermissionSpec<TParams>,
 	params: Static<TParams>,
 ): boolean {
+	if (spec.isUnknown?.(params)) {
+		if (rule.behavior === "allow") return false;
+		if (rule.behavior === "deny") return true;
+	}
 	if (rule.ruleContent === undefined) return true;
+	if (rule.behavior === "deny")
+		return spec.matchesDeny?.(rule.ruleContent, params) ?? spec.matches(rule.ruleContent, params);
 	return spec.matches(rule.ruleContent, params);
 }
 

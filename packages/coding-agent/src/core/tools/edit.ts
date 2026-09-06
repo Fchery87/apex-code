@@ -8,6 +8,7 @@ import { renderDiff } from "../../modes/interactive/components/diff.ts";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import { splitBom } from "../../utils/text.ts";
 import { getExperimentalToolSampling } from "../experimental.ts";
+import { getPreparedPathOperation, type PreparedPathOperation } from "../permissions/operations.ts";
 import type { ApexToolDefinition, EvidenceRecord } from "./contract.ts";
 import type { DiagnosticsOperations, DiagnosticsOutcome } from "./diagnostics.ts";
 import { diagnosticEvidenceForPath, formatDiagnosticsOutcome } from "./diagnostics.ts";
@@ -25,7 +26,7 @@ import {
 } from "./edit-diff.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
-import { resolveToCwd } from "./path-utils.ts";
+import { readPreparedPath, resolveToCwd, writePreparedPath } from "./path-utils.ts";
 import { renderToolPath, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
@@ -110,12 +111,21 @@ export interface EditOperations {
 	writeFile: (absolutePath: string, content: string) => Promise<void>;
 	/** Check if file is readable and writable (throw if not) */
 	access: (absolutePath: string) => Promise<void>;
+	/**
+	 * Execute a gate-prepared edit no-follow against the authorized target.
+	 * Required for gated calls: when a prepared operation exists, pathname reads
+	 * and writes are never used, so an unset implementation fails closed.
+	 */
+	readPreparedFile?: (operation: PreparedPathOperation) => Buffer;
+	writePreparedFile?: (operation: PreparedPathOperation, content: Buffer) => void;
 }
 
 const defaultEditOperations: EditOperations = {
 	readFile: (path) => fsReadFile(path),
 	writeFile: (path, content) => fsWriteFile(path, content, "utf-8"),
 	access: (path) => fsAccess(path, constants.R_OK | constants.W_OK),
+	readPreparedFile: (operation) => readPreparedPath(operation),
+	writePreparedFile: (operation, content) => writePreparedPath(operation, content),
 };
 
 export interface EditToolOptions {
@@ -371,7 +381,11 @@ export function createEditToolDefinition(
 		prepareArguments: prepareEditArguments,
 		async execute(_toolCallId, input: EditToolInput, signal?: AbortSignal, _onUpdate?, _ctx?) {
 			const { path, edits } = validateEditInput(input);
-			const absolutePath = resolveToCwd(path, cwd);
+			const prepared = getPreparedPathOperation(input);
+			const absolutePath = prepared?.path.value ?? resolveToCwd(path, cwd);
+			if (prepared && (!ops.readPreparedFile || !ops.writePreparedFile)) {
+				throw new Error("No safe prepared edit operation is available for this gated edit");
+			}
 
 			return withFileMutationQueue(absolutePath, async () => {
 				// Do not reject from an abort event listener here: that would release the
@@ -384,9 +398,10 @@ export function createEditToolDefinition(
 
 				throwIfAborted();
 
-				// Check if file exists.
+				// Check if file exists (skipped for a gated call: the prepared operation
+				// already proves existence, and the no-follow read enforces the identity).
 				try {
-					await ops.access(absolutePath);
+					if (!prepared) await ops.access(absolutePath);
 				} catch (error: unknown) {
 					throwIfAborted();
 					const errorMessage =
@@ -396,7 +411,7 @@ export function createEditToolDefinition(
 				throwIfAborted();
 
 				// Read the file.
-				const buffer = await ops.readFile(absolutePath);
+				const buffer = prepared ? ops.readPreparedFile!(prepared) : await ops.readFile(absolutePath);
 				const rawContent = buffer.toString("utf-8");
 				throwIfAborted();
 
@@ -408,7 +423,8 @@ export function createEditToolDefinition(
 				throwIfAborted();
 
 				const finalContent = bom + restoreLineEndings(newContent, originalEnding);
-				await ops.writeFile(absolutePath, finalContent);
+				if (prepared) ops.writePreparedFile!(prepared, Buffer.from(finalContent, "utf-8"));
+				else await ops.writeFile(absolutePath, finalContent);
 				throwIfAborted();
 
 				const diffResult = generateDiffString(baseContent, newContent);
