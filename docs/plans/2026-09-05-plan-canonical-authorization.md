@@ -1,6 +1,6 @@
 # Plan: Canonical authorization and execution
 
-**Status:** Not started
+**Status:** In progress
 
 **Spec:** [`docs/specs/2026-09-05-security-boundary-remediation.md`](../specs/2026-09-05-security-boundary-remediation.md)
 
@@ -20,15 +20,35 @@ Each task starts with a failing public-boundary test. Run the focused check befo
 
 | ID | Task | State | Verification |
 |---|---|---|---|
-| CA.1 | Define discriminated operation variants and validated boundary values for paths, Bash, commands, credentials, and evidence. | not started | Typecheck and boundary parser tests reject malformed external values. |
-| CA.2 | Migrate path authorization and execution to one canonical target. | not started | `@` paths, symlink aliases, new-write parents, and literal glob filenames pass gate-then-execute tests. |
-| CA.3 | Replace Boolean Bash matching with structured allow, deny, unknown, and no-match results. | not started | Scoped denies cover mixed and unsupported commands. Lower allows cannot erase higher restrictions. |
-| CA.4 | Preserve exact shell structure in approvals. | not started | Altered quoted whitespace, newlines, comments, and escapes cannot reuse an approval. |
-| CA.5 | Prove complete mediation across every registered tool and foreign tool fallback. | not started | Registry-driven tests show every invocation reaches the gate and unclassified tools default conservatively. |
+| CA.1 | Define discriminated operation variants and validated boundary values for paths, Bash, commands, credentials, and evidence. | verified in `f0c1368ca7be3164c171c79641aaa13945bd3e5f`, narrowed to path operations | `npx tsgo --noEmit` exits 0. `PreparedPathOperation` is a discriminated union over `path-existing` and `path-new` carrying a validated absolute `CanonicalPath` plus a captured `FileIdentity`. Command, credential, and evidence variants were removed rather than declared without production callers; see Narrowed claims. |
+| CA.2 | Migrate path authorization and execution to one canonical target. | verified in `f0c1368ca7be3164c171c79641aaa13945bd3e5f` for read, write, and edit | `npm --prefix packages/coding-agent test -- test/permissions/canonical-authorization.test.ts`: 16 tests pass, covering `@` paths, symlink aliases, new-write parents, and literal glob filenames. grep, find, and ls pin the authorized pathname but are not fd-pinned; see Narrowed claims. |
+| CA.3 | Replace Boolean Bash matching with structured allow, deny, unknown, and no-match results. | verified in `f0c1368ca7be3164c171c79641aaa13945bd3e5f`, no typed operation reaches the gate | `npm --prefix packages/coding-agent test -- test/permissions/bash-grammar.test.ts test/permissions/bash-command-segments.test.ts`: unparseable grammar cannot satisfy an allow, a deny matches any segment, and a scoped deny beats a lower blanket allow. The matcher still consumes parser-produced strings; see Narrowed claims. |
+| CA.4 | Preserve exact shell structure in approvals. | verified in `f0c1368ca7be3164c171c79641aaa13945bd3e5f` | `test/permissions/canonical-authorization.test.ts`: a persisted approval taken through `evaluateToolCall` matches only the identical command. Altered quoted whitespace, an appended comment, and an appended newline each fail closed to `block: true`. |
+| CA.5 | Prove complete mediation across every registered tool and foreign tool fallback. | verified in `f0c1368ca7be3164c171c79641aaa13945bd3e5f` when a gate is configured | `npm --prefix packages/coding-agent test -- test/permissions/gate-universal.test.ts test/permissions/canonical-authorization.test.ts`: every ordinary built-in, the conditional LSP registry, and the conditional MCP registry reach the gate through the public agent loop; a foreign tool with no contract resolves to `UNCLASSIFIED` and fails closed with no responder. The gate stays optional in `AgentSessionConfig`; see Narrowed claims. |
 
 ## Files and boundaries
 
-The owner must list exact files in the first implementation commit. Do not widen the plan to unrelated providers, UI surfaces, or leaked or unlicensed source. Keep tests in scratch directories when they write state.
+Implementation files: `packages/coding-agent/src/core/permissions/{operations,gate,rules}.ts` and `src/core/tools/{path-utils,path-permission,read,write,edit,grep,find,ls,bash,bash-command-segments,contract}.ts`. Tests: `test/permissions/canonical-authorization.test.ts`, with `test/lsp/{navigation-tool,workspace-symbol}.test.ts` updated for the new execute arity.
+
+This plan uses the same documented two-commit close as the startup plan: the implementation commit establishes the real SHA; the close commit records and verifies that SHA in every task row. No placeholder SHA is recorded.
+
+## Narrowed claims
+
+These are recorded rather than left as implied guarantees. Each one is a limit an independent verifier found or the implementer chose, not a deferred task.
+
+1. **Descriptor-pinned execution covers read, write, and edit only.** grep, find, and ls execute against the gate-authorized canonical pathname but do not hold a directory descriptor, so an intermediate directory swapped between authorization and execution remains a theoretical window for those three tools.
+2. **The walked-descriptor chain needs `/proc/self/fd`.** On platforms without it the final-component `O_NOFOLLOW` open and the descriptor identity check still apply, but intermediate components are opened by pathname prefix. The behavior verified here is Linux-only.
+3. **Only path operations carry a prepared operation.** Bash keeps its grammar-sensitive string-segment matcher. Command, credential, and evidence operation classes were removed rather than declared with no production caller.
+4. **Complete mediation holds when a permission gate is configured.** The gate remains optional in `AgentSessionConfig`; a session without one performs no authorization, by design.
+5. **New files are created mode 0600.** This is deliberate hardening and a visible behavior change.
+
+## Verification evidence
+
+- `npm --prefix packages/coding-agent test -- test/permissions/`: 13 files, 220 tests pass.
+- Mutation check. Forcing `getPreparedPathOperation()` to return `undefined` and changing nothing else fails 6 of 16 canonical-authorization cases (the agent-loop read race, four write races, the edit race) and passes the other 10. The race tests bite.
+- Full coding-agent workspace suite: 405 files, 3458 tests pass, 58 skipped.
+- `npx tsgo --noEmit` exits 0.
+- Independent review and the implementer's response are recorded in [`.apex-code/security-remediation/ca-verifier.md`](../../.apex-code/security-remediation/ca-verifier.md).
 
 ## Exit conditions
 

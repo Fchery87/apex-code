@@ -143,9 +143,21 @@ The full test suite is not green at the start of this work. The current baseline
 
 Read the [implementation handoff](../../.apex-code/audit-review-2026-09-05/implementation-handoff.md) for the recommended order and entry checks. The plan tables remain the only task status records.
 
-This change needs five plans because it spans the CLI, trust loaders, permission engine, tools, policy lifecycle, supervisor services, platform backends, SDK, release workflows, and tests. The plans are [startup and trust](../plans/2026-09-05-plan-startup-and-trust.md), [canonical authorization](../plans/2026-09-05-plan-canonical-authorization.md), [policy and supervisor authority](../plans/2026-09-05-plan-policy-and-supervisor.md), [platform boundaries](../plans/2026-09-05-plan-platform-boundaries.md), and [release integrity](../plans/2026-09-05-plan-release-integrity.md).
+This change needs five plans because it spans the CLI, trust loaders, permission engine, tools, policy lifecycle, supervisor services, platform backends, SDK, release workflows, and tests. The live plans are [canonical authorization](../plans/2026-09-05-plan-canonical-authorization.md), [policy and supervisor authority](../plans/2026-09-05-plan-policy-and-supervisor.md), [platform boundaries](../plans/2026-09-05-plan-platform-boundaries.md), and [release integrity](../plans/2026-09-05-plan-release-integrity.md).
+
+### Startup and trust, landed
+
+The startup and trust plan is complete and deleted. Its settled outcome is recorded here and in the "Trust context" row above.
+
+CLI input is parsed once and metadata behavior and sandbox selection derive from the typed result, so a metadata-looking option value or text after `--` can no longer skip sandbox startup while genuine `--help` and `--version` stay outside it. Trust resolves before permission stores, MCP runtimes, hooks, and policy startup authority are constructed, so an untrusted project contributes no grants, no modes, and no eager MCP.
+
+The project, local, and user permission scopes are each captured once per store rather than re-read on every snapshot. Managed policy stays live because it is host-owned and not child-writable. The user scope had to join the frozen set: in a sandboxed session its file lives inside the workspace at `.apex-code/sandbox-agent/permissions.json`, so a write-capable session could otherwise widen its own authorization, which a runtime probe reproduced. `PermissionStore.apply()` operates on the captured scope and refreshes only its own destination, so in-app persistence still works while a child write cannot change the next snapshot.
+
+Evidence: `adf4a67f75c43d31689c72cf1be26dbbc218f9ef` and `aa3bbb2c4eab49eba465699205ce054139affcd3`, both verified with `git cat-file -t`. `test/startup-trust.test.ts`, `test/sandbox/cli-launch.test.ts`, and `test/sandbox/cli-process.test.ts` cover direct and symlink replacement of every file-backed scope, the supported `apply()` refresh, and managed policy staying live.
 
 Create a separate ADR when implementation settles the canonical operation model, the SDK sandbox contract, or the release artifact authority. The ADR must cite this spec and replace the open choice with one settled decision.
+
+Settled so far: [ADR 0029](../adr/0029-prepared-path-operation.md) records the canonical operation model, and [ADR 0030](../adr/0030-configured-command-authority-and-formatter-confinement.md) records configured-command authority and the formatter confinement mechanism. [ADR 0018](../adr/0018-apex-only-release-version-authority.md) was amended for the release artifact authority.
 
 Do not advertise a complete security boundary until the P0 and P1 acceptance tests pass on the supported platforms.
 

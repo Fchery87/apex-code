@@ -122,7 +122,7 @@ capable and measurably worse.
 | Workspace-aware compaction and checkpoint navigation | **landed** — WS.1 through WS.7 · `8a36f1838` (three-OS CI run 33751872256) | [spec](specs/2026-09-01-harness-correctness-and-workspace-state.md) | — |
 | Tool reliability and execution budgets | **landed** — TR.1 through TR.7 · `cc9264873` · three-OS CI green (run `33707738039`, post-repair tree including `533de14e1`; first closure run `33705200104` failed on Windows and is superseded) | [spec](specs/2026-09-01-tool-reliability-and-execution-budgets.md) | — |
 | Configured verification and formatting | **landed** — VF.1 through VF.6 · `f00df19e2` · three-OS CI green (run `33838960431`, repair-inclusive tree incl. Windows executor repair `e329441b1` and CI-only test repairs) · re-verified at `a0b68f368` (run `33926005862`) after models.dev retired a GitHub Copilot model id the fixtures pinned | [spec](specs/2026-09-01-configured-verification-and-formatting.md) | — |
-| Security boundary remediation | **active** — audit findings require remediation before security claims | [spec](specs/2026-09-05-security-boundary-remediation.md) | [startup](plans/2026-09-05-plan-startup-and-trust.md) · [authorization](plans/2026-09-05-plan-canonical-authorization.md) · [policy](plans/2026-09-05-plan-policy-and-supervisor.md) · [platform](plans/2026-09-05-plan-platform-boundaries.md) · [release](plans/2026-09-05-plan-release-integrity.md) |
+| Security boundary remediation | **active** — audit findings require remediation before security claims | [spec](specs/2026-09-05-security-boundary-remediation.md) | [authorization](plans/2026-09-05-plan-canonical-authorization.md) · [policy](plans/2026-09-05-plan-policy-and-supervisor.md) · [platform](plans/2026-09-05-plan-platform-boundaries.md) · [release](plans/2026-09-05-plan-release-integrity.md) |
 
 ---
 
@@ -1330,6 +1330,8 @@ takes the next free number instead of a reserved one.
 | 0026 | npm dist-tags derive from the release version: prerelease to `next`, stable to `latest` | follow-up | ✅ |
 | 0027 | `AgentHarness` is not Apex Code's public API: the scaffold stays in-tree, unexported | follow-up | ✅ |
 | 0028 | Verification/formatter policy settings: project shadows user per ID inside trusted projects; extensions additive-only; declared permission is a ceiling | follow-up | ✅ |
+| 0029 | Authorization and execution share one prepared path operation; execution pins the target by descriptor identity | follow-up | ✅ |
+| 0030 | Configured commands are authorized through the same authority as tool calls; a formatter is confined by isolated copy and restricted promotion | follow-up | ✅ |
 
 ## Cross-phase contracts
 
