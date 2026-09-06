@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { collectLicenseEntries, formatReport } from "./generate-license-report.mjs";
+import { collectLicenseEntries, formatArtifactIdentity, formatReport } from "./generate-license-report.mjs";
 
 const script = fileURLToPath(new URL("./generate-license-report.mjs", import.meta.url));
 
@@ -130,6 +130,63 @@ test("CLI default mode writes the report to --out", async () => {
 		const { readFile } = await import("node:fs/promises");
 		const content = await readFile(out, "utf-8");
 		assert.match(content, /left-pad/);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+
+test("license evidence names the retained release artifact digests", () => {
+	const text = formatArtifactIdentity([{ packageName: "apex-code", version: "1.2.3", sha256: "a".repeat(64), integrity: "sha512-value" }]);
+	assert.match(text, /apex-code \| 1\.2\.3/);
+	assert.match(text, new RegExp("a{64}"));
+	assert.match(text, /sha512-value/);
+});
+
+
+// RI-B9: collectPackageDirs only ever read direct node_modules children and one
+// scoped level, so a non-hoistable production version left nested under its
+// parent never appeared in the report the release workflow calls a "complete
+// transitive production dependency license closure".
+test("license closure walks nested node_modules, not just hoisted top-level packages", async () => {
+	const root = await mkdtemp(join(tmpdir(), "apex-license-nested-"));
+	try {
+		const nodeModules = join(root, "node_modules");
+		await mkdir(nodeModules, { recursive: true });
+		await writePackage(nodeModules, "hoisted-dep", { version: "2.0.0", license: "MIT" });
+		await writePackage(nodeModules, "@scope/parent", { version: "1.0.0", license: "MIT" });
+
+		// A conflicting version npm could not hoist, so it stays nested.
+		const nestedModules = join(nodeModules, "hoisted-dep", "node_modules");
+		await writePackage(nestedModules, "conflicting-dep", { version: "1.0.0", license: "ISC" });
+		// And one level deeper again, under a scoped parent.
+		await writePackage(join(nodeModules, "@scope", "parent", "node_modules"), "@scope/nested-child", { version: "3.1.4", license: "BSD-3-Clause" });
+		await writePackage(join(nestedModules, "conflicting-dep", "node_modules"), "deeply-nested", { version: "0.0.1", license: "MIT" });
+
+		const entries = collectLicenseEntries(nodeModules);
+		const byName = Object.fromEntries(entries.map((entry) => [entry.name, entry]));
+		assert.deepEqual(byName["conflicting-dep"], { name: "conflicting-dep", version: "1.0.0", license: "ISC" });
+		assert.deepEqual(byName["@scope/nested-child"], { name: "@scope/nested-child", version: "3.1.4", license: "BSD-3-Clause" });
+		assert.deepEqual(byName["deeply-nested"], { name: "deeply-nested", version: "0.0.1", license: "MIT" });
+		assert.equal(entries.length, 5, JSON.stringify(entries));
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("license closure de-duplicates the same name and version reached through two nesting paths", async () => {
+	const root = await mkdtemp(join(tmpdir(), "apex-license-dedupe-"));
+	try {
+		const nodeModules = join(root, "node_modules");
+		await mkdir(nodeModules, { recursive: true });
+		await writePackage(nodeModules, "a", { version: "1.0.0", license: "MIT" });
+		await writePackage(nodeModules, "b", { version: "1.0.0", license: "MIT" });
+		await writePackage(join(nodeModules, "a", "node_modules"), "shared", { version: "9.9.9", license: "MIT" });
+		await writePackage(join(nodeModules, "b", "node_modules"), "shared", { version: "9.9.9", license: "MIT" });
+
+		const entries = collectLicenseEntries(nodeModules);
+		assert.equal(entries.filter((entry) => entry.name === "shared").length, 1);
+		assert.equal(entries.length, 3, JSON.stringify(entries));
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

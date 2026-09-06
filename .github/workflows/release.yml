@@ -15,6 +15,7 @@ permissions:
 jobs:
   publish:
     name: Publish tagged npm release
+    needs: verify-macos-packed
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: npm
@@ -67,13 +68,8 @@ jobs:
       - name: Check frozen package boundary
         run: node scripts/apex/check-frozen-packages.mjs
 
-      # ADR 0018 (task 12.11): a release does not ship a production dependency
-      # with a known high/critical vulnerability, even one already present
-      # before this release's own changes. --omit=dev: a vulnerable dev-only
-      # tool (a linter, a test runner) never reaches an end user's install and
-      # is not a release blocker on its own.
-      - name: Production dependency vulnerability audit
-        run: npm audit --omit=dev --audit-level=high
+      - name: Pin official npm provenance verifier
+        run: npm install --global npm@11.19.0 --ignore-scripts
 
       - name: Build
         run: npm run build
@@ -107,20 +103,12 @@ jobs:
         run: |
           set -Eeuo pipefail
           [[ "$("${RUNNER_TEMP}/binaries/linux-x64/apex-code" --version)" == "${VERSION}" ]]
+          node -e 'const {createHash}=require("node:crypto"); const {readFileSync}=require("node:fs"); process.stdout.write(createHash("sha256").update(readFileSync(process.argv[1])).digest("hex"))' "${RUNNER_TEMP}/binaries/SHA256SUMS" > "${RUNNER_TEMP}/binaries/artifact-identity.sha256"
 
       # Preserve the exact bytes that passed the pre-publication build and
       # smoke gate. The final job below is deliberately the only job with
       # contents: write, and consumes this immutable workflow artifact only
       # after the macOS registry-install gate succeeds.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: standalone-release-assets
-          path: |
-            ${{ runner.temp }}/binaries/apex-code-*.tar.gz
-            ${{ runner.temp }}/binaries/apex-code-*.zip
-            ${{ runner.temp }}/binaries/SHA256SUMS
-          if-no-files-found: error
-
       # ADR 0018 (task 12.8): a dry-run pack only proves the tarball builds, not
       # that its packed contents are what the maintainer believes they are --
       # the concrete trigger for this phase was exactly a tarball that packed
@@ -130,7 +118,28 @@ jobs:
       # scratch directory and runs a real, provider-independent scripted turn
       # through the real sandbox -- before either package is published.
       - name: Packed-artifact identity and functional smoke gate
-        run: node scripts/apex/packed-product-surface.mjs --out "${RUNNER_TEMP}/packed-product-surface" --smoke
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node scripts/apex/packed-product-surface.mjs \
+            --out "${RUNNER_TEMP}/packed-product-surface" \
+            --smoke \
+            --git-head "${GITHUB_SHA}" \
+            --workflow-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@${GITHUB_REF}" \
+            --standalone-directory "${RUNNER_TEMP}/binaries" \
+            --manifest-out "${RUNNER_TEMP}/packed-product-surface/release-artifacts.json"
+
+      # RI-B8: actions/upload-artifact roots the uploaded tree at the least
+      # common ancestor of everything its `path:` block matches. Uploading the
+      # manifest straight out of ${RUNNER_TEMP}/packed-product-surface would
+      # make that ancestor ${RUNNER_TEMP} and re-root every archive under
+      # release-assets/binaries/, which the final job does not read. Staging the
+      # manifest beside the archives keeps one upload root and a flat download.
+      # scripts/release-workflow.test.mjs materialises this layout and runs the
+      # final job's real shell block against it.
+      - name: Stage release artifact manifest beside the standalone archives
+        shell: bash
+        run: cp "${RUNNER_TEMP}/packed-product-surface/release-artifacts.json" "${RUNNER_TEMP}/binaries/release-artifacts.json"
 
       # Scoped to the packed-and-installed production dependency graph (the
       # scratch install the smoke gate above just created), not this monorepo's
@@ -138,8 +147,23 @@ jobs:
       # vitest, tsx, ...) no end user's install ever receives. "Complete
       # transitive production dependency license closure" means what actually
       # ships, not everything this repository happens to have installed.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: standalone-release-assets
+          path: |
+            ${{ runner.temp }}/binaries/apex-code-*.tar.gz
+            ${{ runner.temp }}/binaries/apex-code-*.zip
+            ${{ runner.temp }}/binaries/SHA256SUMS
+            ${{ runner.temp }}/binaries/artifact-identity.sha256
+            ${{ runner.temp }}/binaries/release-artifacts.json
+          if-no-files-found: error
+
+
+      - name: Audit packed production dependency graph
+        run: npm audit --omit=dev --audit-level=high --prefix "${RUNNER_TEMP}/packed-product-surface/smoke-install"
+
       - name: Generate third-party license report
-        run: npm run generate:license-report -- --node-modules "${RUNNER_TEMP}/packed-product-surface/smoke-install/node_modules"
+        run: npm run generate:license-report -- --node-modules "${RUNNER_TEMP}/packed-product-surface/smoke-install/node_modules" --release-manifest "${RUNNER_TEMP}/packed-product-surface/release-artifacts.json"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -151,7 +175,7 @@ jobs:
           include-hidden-files: true
 
       - name: Generate SBOM
-        run: node scripts/apex/generate-sbom.mjs
+        run: node scripts/apex/generate-sbom.mjs --release-manifest "${RUNNER_TEMP}/packed-product-surface/release-artifacts.json" --install-directory "${RUNNER_TEMP}/packed-product-surface/smoke-install"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -173,8 +197,7 @@ jobs:
       # The core is an exact dependency of the CLI, so it must become visible
       # in the registry before apex-code is published.
       - name: Publish Apex Code agent core
-        working-directory: packages/agent
-        run: npm publish --access public --provenance --tag "${{ steps.release.outputs.tag }}" --ignore-scripts
+        run: node scripts/apex/publish-release-artifact.mjs "${RUNNER_TEMP}/packed-product-surface/release-artifacts.json" apex-code-agent-core "${{ steps.release.outputs.tag }}"
 
       - name: Wait for agent core registry visibility
         shell: bash
@@ -194,8 +217,7 @@ jobs:
           done
 
       - name: Publish Apex Code CLI
-        working-directory: packages/coding-agent
-        run: npm publish --access public --provenance --tag "${{ steps.release.outputs.tag }}" --ignore-scripts
+        run: node scripts/apex/publish-release-artifact.mjs "${RUNNER_TEMP}/packed-product-surface/release-artifacts.json" apex-code "${{ steps.release.outputs.tag }}"
 
       - name: Verify clean registry install
         shell: bash
@@ -203,16 +225,17 @@ jobs:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -Eeuo pipefail
-          scratch="$(mktemp -d)"
-          trap 'rm -rf -- "$scratch"' EXIT
+          scratch="${RUNNER_TEMP}/registry-verification-install"
+          rm -rf -- "$scratch"
+          mkdir -p "$scratch"
           cd "$scratch"
           npm init --yes >/dev/null
-          # A newly published version can reach different registry/CDN edges at
-          # different times. Use a fresh cache on every attempt so npm does not
-          # retain an early ETARGET response, and allow up to ten minutes.
+          npm pkg set \
+            "dependencies.apex-code-agent-core=${VERSION}" \
+            "dependencies.apex-code=${VERSION}" >/dev/null
           for attempt in {1..60}; do
-            rm -rf -- "$scratch/npm-cache"
-            if npm install --global --prefix "$scratch/global" --cache "$scratch/npm-cache" --prefer-online --ignore-scripts "apex-code@${VERSION}"; then
+            rm -rf -- "$scratch/npm-cache" "$scratch/node_modules"
+            if npm install --cache "$scratch/npm-cache" --prefer-online --ignore-scripts; then
               break
             fi
             if [[ "${attempt}" == 60 ]]; then
@@ -221,32 +244,31 @@ jobs:
             fi
             sleep 10
           done
-          [[ "$("$scratch/global/bin/apex-code" --version)" == "${VERSION}" ]]
+          [[ "$("$scratch/node_modules/.bin/apex-code" --version)" == "${VERSION}" ]]
 
-      # ADR 0018 (task 12.9): "the install printed the right --version string"
-      # is not release evidence -- it does not prove the registry actually
-      # distributed the commit CI built and published. This compares the
-      # registry's own gitHead against the tag commit, re-downloads and
-      # rehashes each published tarball against the registry's own reported
-      # digests, and confirms npm provenance is attached.
+      # ADR 0018 and RI.2/RI.3: verify the registry download against the
+      # retained local digest, then let pinned npm verify the signed attestation
+      # before checking its subject, repository, workflow path, tag, and commit.
       - name: Verify registry gitHead, tarball hash, and provenance
         shell: bash
         env:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -Eeuo pipefail
+          npm --version | grep -Fx "11.19.0"
           node scripts/apex/verify-published-release.mjs \
-            "apex-code-agent-core@${VERSION}" "apex-code@${VERSION}" \
-            --git-head "${GITHUB_SHA}" \
+            --release-manifest "${RUNNER_TEMP}/packed-product-surface/release-artifacts.json" \
+            --install-directory "${RUNNER_TEMP}/registry-verification-install" \
             --manifest-out .artifacts/release-evidence.json
 
-      # Durable, retrievable release evidence (ADR 0018, task 12.11): the exact
-      # gitHead, tarball hash, and provenance attestation URL the registry
-      # reported for this release, independent of the workflow log.
+      # Durable release evidence includes both the retained local identity and
+      # the observed registry digest and signed provenance result.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-evidence
-          path: .artifacts/release-evidence.json
+          path: |
+            .artifacts/release-evidence.json
+            ${{ runner.temp }}/packed-product-surface/release-artifacts.json
           if-no-files-found: error
           # .artifacts/ is dot-prefixed ("hidden"); see the sbom upload step
           # above for why every upload from it needs this set.
@@ -257,6 +279,25 @@ jobs:
   # publishes; this job only verifies the already-published artifact installs
   # and runs on the other supported platform -- it must never re-run the
   # publish steps, or the release would be published twice.
+  verify-macos-packed:
+    name: Verify packed artifact smoke on macOS before publication
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Install
+        run: npm ci --ignore-scripts
+      - name: Build
+        run: npm run build
+      - name: Packed install and functional smoke
+        run: node scripts/apex/packed-product-surface.mjs --out "${RUNNER_TEMP}/packed-macos" --smoke
+
   verify-macos-install:
     name: Verify clean install on macOS
     runs-on: macos-latest
@@ -318,6 +359,10 @@ jobs:
         run: |
           set -Eeuo pipefail
           test -s release-assets/SHA256SUMS
+          test -s release-assets/artifact-identity.sha256
+          (cd release-assets && sha256sum -c SHA256SUMS)
+          test -s release-assets/release-artifacts.json
+          node -e 'const {createHash}=require("node:crypto"),{readFileSync}=require("node:fs"),{join}=require("node:path"),m=require("./release-assets/release-artifacts.json"),required=["apex-code-darwin-arm64.tar.gz","apex-code-darwin-x64.tar.gz","apex-code-linux-arm64.tar.gz","apex-code-linux-x64.tar.gz","apex-code-windows-arm64.zip","apex-code-windows-x64.zip"]; if(m.standaloneArtifacts.length!==6 || required.some(n=>!m.standaloneArtifacts.some(x=>x.filename===n))) throw new Error("release manifest must contain exactly six standalone archives"); if(m.releaseIdentity.expectedGitCommit!==process.env.GITHUB_SHA || m.releaseIdentity.workflowIdentity!==`https://github.com/${process.env.GITHUB_REPOSITORY}/.github/workflows/release.yml@${process.env.GITHUB_REF}`) throw new Error("release identity does not match current workflow"); for (const x of m.standaloneArtifacts) { const actual=createHash("sha256").update(readFileSync(join("release-assets",x.filename))).digest("hex"); if(actual!==x.sha256) throw new Error(`${x.filename}: release artifact identity mismatch`); }'
           # This job downloads an artifact and never checks the repository out, so
           # `gh` has no git remote to infer the repository from and exits with
           # "fatal: not a git repository". Naming it is smaller than adding a

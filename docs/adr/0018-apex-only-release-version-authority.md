@@ -33,9 +33,22 @@ zero-tolerance string ban, and a provider-independent sandbox/session functional
 run against the packed-and-installed artifact — not the source tree, because `dist/` is
 generated and git-ignored and a source-only check (`scripts/product-surface.test.mjs`) cannot
 observe what actually ships. After publication, the registry copy is independently
-re-verified: tag commit SHA, registry-reported `gitHead`, and a tarball content
-hash/manifest must agree with what CI built and published, not merely "did `--version` print
-the right string."
+re-verified: the downloaded tarball bytes and the signed provenance statement must agree
+with what CI built and published, not merely "did `--version` print the right string."
+
+**Where the commit binding lives.** Registry-reported `gitHead` is *not* the commit
+authority for an Apex release, and never can be. npm injects `gitHead` only on the
+`npm publish <directory>` path (`@npmcli/package-json`'s prepare steps); this release
+deliberately publishes the retained, smoke-tested *tarball file*, so the registry copy
+carries no `gitHead` at all. Requiring one would fail post-publication verification on
+both packages before any provenance check ran. The commit is bound instead in two places
+that this release actually controls: the release artifact record's `expectedGitCommit`
+(directory-side, written by the pre-publication pack step and carried through every
+downstream gate), and the signed SLSA provenance statement's resolved `gitCommit`, which
+is cryptographically attested rather than self-reported metadata. `gitHead` remains a
+consistency check when a registry copy happens to carry one; its absence is expected.
+
+**Immutable release artifact record.** The pre-publication pack step writes one versioned record for the release. Each package entry carries its name, version, absolute local tarball path, SHA-256, npm integrity, expected Git commit, signed-provenance subject, and expected GitHub workflow identity. Standalone archive digests share the record's commit and workflow identity. Every package publish receives the retained tarball path. Packed install, smoke, production dependency audit, SBOM, license closure, standalone checks, and post-publication verification consume or name that record. Post-publication verification downloads the registry bytes and compares them to the retained local digest. It then uses the pinned official npm CLI to verify the signed attestation before checking its subject digest, repository, workflow path, tag ref, and resolved Git commit. Registry metadata is an additional check, never independent proof of local artifact identity. A *publishable* record is written only after the packed identity check and the functional smoke have both passed, so the record's existence is itself the smoke evidence. `.github/workflows/release.yml` is the only workflow with npm or GitHub Release write authority.
 
 **Inherited tooling is not exempt.** `scripts/release.mjs` and `scripts/sync-versions.js` are
 carried over from upstream Pi's monorepo release process and, at the time of this ADR,

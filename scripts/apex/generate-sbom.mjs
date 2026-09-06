@@ -16,6 +16,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { readReleaseArtifactManifest } from "./packed-product-surface.mjs";
 import { fileURLToPath } from "node:url";
 import { npmSpawnArgs, npmSpawnOptions } from "./npm-command.mjs";
 import { getPublicWorkspacePackages } from "../release-packages.mjs";
@@ -44,6 +45,19 @@ export function describeTreeLockfileMismatch(stderr) {
 	return `node_modules is out of sync with package-lock.json (${name}: installed ${installed}, required ${required} by ${parent}). Run \`npm install\`, then retry.`;
 }
 
+
+export function attachReleaseArtifactIdentity(document, records) {
+	document.metadata ??= {};
+	document.metadata.properties ??= [];
+	for (const record of records) {
+		document.metadata.properties.push(
+			{ name: `apex:release-artifact:${record.packageName}:sha256`, value: record.sha256 },
+			{ name: `apex:release-artifact:${record.packageName}:integrity`, value: record.integrity },
+		);
+	}
+	return document;
+}
+
 /** Generate one package's SBOM. Throws if npm sbom fails or the output is empty/malformed. */
 export function generateSbomFor(pkg, cwd = REPO_ROOT) {
 	// npm resolves --workspace against its own internally realpath'd workspace
@@ -65,17 +79,31 @@ export function generateSbomFor(pkg, cwd = REPO_ROOT) {
 		}
 		throw error;
 	}
+	return parseSbomEvidence(output, pkg.name);
+}
+
+/**
+ * Parse and structurally validate one `npm sbom` result before anything writes
+ * it as release evidence. Shared by the workspace path and the release-install
+ * path: RI-B6 was exactly this validation existing on one path only, so an
+ * offline `{}` response exited 0 and produced a 0-component SBOM the release
+ * would then have uploaded.
+ */
+export function parseSbomEvidence(output, label) {
 	let document;
 	try {
 		document = JSON.parse(output);
 	} catch (error) {
-		throw new Error(`npm sbom for ${pkg.name} did not produce valid JSON: ${error instanceof Error ? error.message : error}`);
+		throw new Error(`npm sbom for ${label} did not produce valid JSON: ${error instanceof Error ? error.message : error}`);
 	}
-	// npm sbom always includes the scanned workspace package itself as one
-	// component even with zero real dependencies, so "empty" is <= 1, not 0.
+	if (!document || typeof document !== "object" || Array.isArray(document)) {
+		throw new Error(`npm sbom for ${label} did not produce a CycloneDX document`);
+	}
+	// npm sbom always includes the scanned root package itself as one component
+	// even with zero real dependencies, so "empty" is <= 1, not 0.
 	if (!Array.isArray(document.components) || document.components.length <= 1) {
 		throw new Error(
-			`npm sbom for ${pkg.name} produced no real dependency components -- refusing to write a near-empty SBOM as evidence`,
+			`npm sbom for ${label} produced no real dependency components -- refusing to write a near-empty SBOM as evidence`,
 		);
 	}
 	return document;
@@ -95,10 +123,22 @@ export function generateAllSboms(outDir = DEFAULT_OUT_DIR) {
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
-	const outFlagIndex = process.argv.indexOf("--out-dir");
-	const outDir = outFlagIndex !== -1 && process.argv[outFlagIndex + 1] ? resolve(process.argv[outFlagIndex + 1]) : DEFAULT_OUT_DIR;
+	const valueFor = (flag) => { const index = process.argv.indexOf(flag); return index === -1 ? undefined : process.argv[index + 1]; };
+	const outDir = valueFor("--out-dir") ? resolve(valueFor("--out-dir")) : DEFAULT_OUT_DIR;
+	const manifestPath = valueFor("--release-manifest");
+	const installDirectory = valueFor("--install-directory");
 	try {
-		const written = generateAllSboms(outDir);
+		let written;
+		if (manifestPath && installDirectory) {
+			const output = execFileSync("npm", npmSpawnArgs(["sbom", "--omit", "dev", "--sbom-format", "cyclonedx"]), npmSpawnOptions({ cwd: resolve(installDirectory), encoding: "utf8" }));
+			const document = attachReleaseArtifactIdentity(parseSbomEvidence(output, "the release install"), readReleaseArtifactManifest(resolve(manifestPath)));
+			mkdirSync(outDir, { recursive: true });
+			const outPath = join(outDir, "sbom-release-artifacts.cyclonedx.json");
+			writeFileSync(outPath, `${JSON.stringify(document, null, "\t")}\n`);
+			written = [{ name: "release-artifacts", path: outPath, componentCount: document.components?.length ?? 0 }];
+		} else {
+			written = generateAllSboms(outDir);
+		}
 		for (const entry of written) {
 			console.log(`Wrote ${entry.componentCount}-component SBOM for ${entry.name} to ${entry.path}`);
 		}

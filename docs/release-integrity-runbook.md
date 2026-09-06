@@ -13,8 +13,9 @@ resolution — never both at once in a way that could leave a gap.
 A release is suspect if any of the following is true:
 
 - `scripts/apex/verify-published-release.mjs` (the required post-publication CI step) reports a
-  `gitHead` mismatch, a tarball hash mismatch, or missing npm provenance for a just-published
-  version.
+  mismatch with the retained local SHA-256, a failed signed-attestation check, or a provenance
+  subject digest / repository / workflow path / tag ref / resolved-commit mismatch for a
+  just-published version.
 - `scripts/apex/packed-product-surface.mjs` would fail against the currently-published tarball
   if run against it directly (branding drift, a secret, or an absolute path shipped).
 - A user reports the installed CLI behaving differently than the tagged source, or `npm view
@@ -30,12 +31,19 @@ A release is suspect if any of the following is true:
    npm deprecate apex-code@<bad-version> "Compromised/incorrect build. Upgrade to <next-safe-version> immediately."
    npm deprecate apex-code-agent-core@<bad-version> "Compromised/incorrect build. Upgrade to <next-safe-version> immediately."
    ```
-3. **Investigate provenance** before assuming compromise vs. build defect: compare
-   `npm view apex-code@<bad-version> --json`'s `gitHead` against the tag's actual commit
-   (`git rev-parse <tag>`), and diff that commit against `main` for anything unexpected.
-   A `gitHead`/tag mismatch or an unattested (`dist.attestations` missing) publish is the
-   strongest compromise signal, since Trusted Publishing normally makes an unauthorized
-   publish from outside CI impossible.
+3. **Investigate provenance** before assuming compromise vs. build defect. Do **not** look for
+   a registry `gitHead`: Apex publishes the retained tarball file, and npm only records `gitHead`
+   when publishing a directory, so a missing `gitHead` is expected and proves nothing either way
+   (ADR 0018, "Where the commit binding lives"). The commit binding to check is the *signed*
+   one — decode the provenance statement npm returns and compare its resolved `gitCommit`,
+   subject digest, repository, workflow path, and tag ref against the retained
+   `release-artifacts.json` and `git rev-parse <tag>`:
+   ```bash
+   npm audit signatures --json --include-attestations --ignore-scripts   # from a scratch install
+   ```
+   A byte mismatch against the retained SHA-256, an invalid signature, a wrong signed workflow
+   identity, or a signed commit that is not the tag's commit is a strong compromise signal.
+   Treat registry metadata as corroboration, never as independent evidence.
 4. **Rotate what could have been exposed** if compromise (not just a build defect) is
    confirmed: GitHub Actions OIDC trust is short-lived per-run and does not need rotation
    itself, but review repository/environment secrets, branch protection, and required
@@ -47,8 +55,9 @@ A release is suspect if any of the following is true:
 6. **Verify the fix independently** after publish:
    ```bash
    node scripts/apex/verify-published-release.mjs \
-     "apex-code-agent-core@<fixed-version>" "apex-code@<fixed-version>" \
-     --git-head "$(git rev-parse v<fixed-version>)"
+     --release-manifest <retained-release-artifacts.json> \
+     --install-directory <scratch-install-containing-both-fixed-packages> \
+     --manifest-out <release-evidence.json>
    ```
 7. **Notify users.** Publish a GitHub Security Advisory (for a genuine vulnerability) or a
    GitHub Release note (for a build-integrity defect that was not a vulnerability), naming the

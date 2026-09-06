@@ -23,6 +23,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readReleaseArtifactManifest } from "./packed-product-surface.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const NODE_MODULES = join(REPO_ROOT, "node_modules");
@@ -93,16 +94,21 @@ export function collectPackageDirs(nodeModulesDir) {
 export function collectLicenseEntries(nodeModulesDir) {
 	const packagesRoot = join(dirname(nodeModulesDir), "packages");
 	const entries = [];
-	for (const dir of collectPackageDirs(nodeModulesDir)) {
-		if (isWorkspacePackage(dir, packagesRoot)) continue;
-		const pkg = readPackageJson(dir);
-		if (!pkg || !pkg.name) continue;
-		entries.push({
-			name: pkg.name,
-			version: pkg.version ?? "unknown",
-			license: formatLicense(pkg) ?? "UNKNOWN",
-		});
-	}
+	const visited = new Set();
+	const visit = (modulesDir) => {
+		for (const dir of collectPackageDirs(modulesDir)) {
+			let canonical;
+			try { canonical = realpathSync(dir); } catch { continue; }
+			if (visited.has(canonical) || isWorkspacePackage(dir, packagesRoot)) continue;
+			visited.add(canonical);
+			const pkg = readPackageJson(dir);
+			if (!pkg || !pkg.name) continue;
+			entries.push({ name: pkg.name, version: pkg.version ?? "unknown", license: formatLicense(pkg) ?? "UNKNOWN" });
+			const nested = join(dir, "node_modules");
+			if (existsSync(nested)) visit(nested);
+		}
+	};
+	visit(nodeModulesDir);
 	// De-duplicate by name+version (npm can hoist the same package under
 	// multiple scopes/paths in edge cases); keep the first occurrence.
 	const seen = new Set();
@@ -134,22 +140,32 @@ export function formatReport(entries) {
 	return `${lines.join("\n")}\n`;
 }
 
+
+export function formatArtifactIdentity(records) {
+	const lines = ["", "## Release artifact identity", "", "| Package | Version | SHA-256 | Integrity |", "| --- | --- | --- | --- |"];
+	for (const record of records) lines.push(`| ${record.packageName} | ${record.version} | ${record.sha256} | ${record.integrity} |`);
+	return `${lines.join("\n")}\n`;
+}
+
 function parseArgs(argv) {
 	let out = DEFAULT_OUT;
 	let stdout = false;
 	let nodeModulesDir = NODE_MODULES;
+	let releaseManifest;
 	for (let i = 0; i < argv.length; i++) {
 		if (argv[i] === "--out") out = resolve(argv[++i]);
 		else if (argv[i] === "--stdout") stdout = true;
 		else if (argv[i] === "--node-modules") nodeModulesDir = resolve(argv[++i]);
+		else if (argv[i] === "--release-manifest") releaseManifest = resolve(argv[++i]);
 	}
-	return { out, stdout, nodeModulesDir };
+	return { out, stdout, nodeModulesDir, releaseManifest };
 }
 
 function main() {
-	const { out, stdout, nodeModulesDir } = parseArgs(process.argv.slice(2));
+	const { out, stdout, nodeModulesDir, releaseManifest } = parseArgs(process.argv.slice(2));
 	const entries = collectLicenseEntries(nodeModulesDir);
-	const report = formatReport(entries);
+	let report = formatReport(entries);
+	if (releaseManifest) report += formatArtifactIdentity(readReleaseArtifactManifest(releaseManifest));
 
 	if (stdout) {
 		process.stdout.write(report);

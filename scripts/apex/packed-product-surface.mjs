@@ -15,9 +15,10 @@
  */
 
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { npmSpawnArgs, npmSpawnOptions } from "./npm-command.mjs";
 import { getPublicWorkspacePackages } from "../release-packages.mjs";
@@ -99,6 +100,138 @@ const ALL_PATTERNS = [
 	...REJECTED_SECRET_PATTERNS,
 	...REJECTED_ABSOLUTE_PATH_PATTERNS,
 ];
+
+
+export const RELEASE_ARTIFACT_MANIFEST_VERSION = 1;
+export const REQUIRED_OWNED_PACKAGES = ["apex-code-agent-core", "apex-code"];
+export const REQUIRED_STANDALONE_ARTIFACTS = [
+	"apex-code-darwin-arm64.tar.gz", "apex-code-darwin-x64.tar.gz",
+	"apex-code-linux-arm64.tar.gz", "apex-code-linux-x64.tar.gz",
+	"apex-code-windows-arm64.zip", "apex-code-windows-x64.zip",
+];
+
+function hashReleaseArtifact(tarballPath) {
+	const bytes = readFileSync(tarballPath);
+	return {
+		sha256: createHash("sha256").update(bytes).digest("hex"),
+		sha512: createHash("sha512").update(bytes).digest("hex"),
+		integrity: `sha512-${createHash("sha512").update(bytes).digest("base64")}`,
+	};
+}
+
+export function createReleaseArtifactRecord({ tarballPath, packed, expectedGitCommit, workflowIdentity }) {
+	const absoluteTarballPath = resolve(tarballPath);
+	const hashes = hashReleaseArtifact(absoluteTarballPath);
+	return {
+		packageName: packed.name,
+		version: packed.version,
+		tarballPath: absoluteTarballPath,
+		sha256: hashes.sha256,
+		integrity: hashes.integrity,
+		expectedGitCommit,
+		provenanceSubject: {
+			name: `pkg:npm/${packed.name}@${packed.version}`,
+			digest: { sha512: hashes.sha512 },
+		},
+		workflowIdentity,
+	};
+}
+
+function assertReleaseArtifactRecord(record) {
+	if (!record || typeof record !== "object") throw new Error("invalid release artifact record");
+	for (const field of ["packageName", "version", "tarballPath", "sha256", "integrity", "expectedGitCommit", "workflowIdentity"]) {
+		if (typeof record[field] !== "string" || record[field].length === 0) {
+			throw new Error(`invalid release artifact record field: ${field}`);
+		}
+	}
+	if (!isAbsolute(record.tarballPath)) throw new Error("release artifact tarballPath must be absolute");
+	if (!/^[0-9a-f]{64}$/.test(record.sha256)) throw new Error("release artifact sha256 must be lowercase hex");
+	if (!/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(record.integrity)) throw new Error("release artifact integrity must be sha512 SRI");
+	if (typeof record.provenanceSubject?.name !== "string" || !/^[0-9a-f]{128}$/.test(record.provenanceSubject?.digest?.sha512 ?? "")) {
+		throw new Error("release artifact provenance subject is invalid");
+	}
+}
+
+export function writeReleaseArtifactManifest(path, records, options = {}) {
+	for (const record of records) assertReleaseArtifactRecord(record);
+	if (records.length !== REQUIRED_OWNED_PACKAGES.length || new Set(records.map((record) => record.packageName)).size !== records.length || !REQUIRED_OWNED_PACKAGES.every((name) => records.some((record) => record.packageName === name))) {
+		throw new Error(`release artifact manifest must contain exactly ${REQUIRED_OWNED_PACKAGES.join(" and ")} packages`);
+	}
+	const identities = new Set(records.map((record) => `${record.expectedGitCommit}\0${record.workflowIdentity}`));
+	if (identities.size !== 1) throw new Error("release artifacts must share one commit and workflow identity");
+	const [first] = records;
+	const standaloneArtifacts = options.standaloneDirectory
+		? readdirSync(options.standaloneDirectory, { withFileTypes: true })
+			.filter((entry) => entry.isFile() && /\.(?:tar\.gz|zip)$/.test(entry.name))
+			.map((entry) => {
+				const bytes = readFileSync(join(options.standaloneDirectory, entry.name));
+				return { filename: entry.name, sha256: createHash("sha256").update(bytes).digest("hex") };
+			})
+			.sort((left, right) => left.filename.localeCompare(right.filename))
+		: [];
+	if (options.standaloneDirectory && (standaloneArtifacts.length !== REQUIRED_STANDALONE_ARTIFACTS.length || standaloneArtifacts.some((entry, index) => entry.filename !== REQUIRED_STANDALONE_ARTIFACTS.slice().sort()[index]))) {
+		throw new Error("release artifact manifest must contain exactly the six required standalone archives");
+	}
+	mkdirSync(dirname(path), { recursive: true });
+	writeFileSync(path, `${JSON.stringify({
+		schemaVersion: RELEASE_ARTIFACT_MANIFEST_VERSION,
+		releaseIdentity: { expectedGitCommit: first.expectedGitCommit, workflowIdentity: first.workflowIdentity },
+		artifacts: records,
+		standaloneArtifacts,
+	}, null, "\t")}\n`);
+}
+
+/**
+ * RI-B5. The single decision for whether a *publishable* release record may be
+ * written. The manifest used to be written before the smoke install ran, so a
+ * failed smoke still left a digest-valid record that publish-release-artifact.mjs
+ * would consume -- the record then asserted an ADR 0018 claim ("these tarballs
+ * passed smoke") that nothing had established. A manifest request without
+ * `--smoke` is rejected outright rather than silently producing an unproven
+ * record.
+ */
+export function releaseManifestGate({ manifestOut, smokeRequested, smokeOk, identityFailed }) {
+	if (!manifestOut) return { write: false };
+	if (!smokeRequested) {
+		return { write: false, error: "--manifest-out requires --smoke: a publishable release record must not exist without a passing functional smoke" };
+	}
+	if (identityFailed) return { write: false, error: "packed-artifact identity check failed; no publishable release record written" };
+	if (!smokeOk) return { write: false, error: "functional smoke failed; no publishable release record written" };
+	return { write: true };
+}
+
+export function readReleaseArtifactDocument(path) {
+	const document = JSON.parse(readFileSync(path, "utf8"));
+	if (document.schemaVersion !== RELEASE_ARTIFACT_MANIFEST_VERSION || !Array.isArray(document.artifacts) || !Array.isArray(document.standaloneArtifacts)) {
+		throw new Error(`unsupported release artifact manifest: ${path}`);
+	}
+	if (document.artifacts.length !== REQUIRED_OWNED_PACKAGES.length || new Set(document.artifacts.map((record) => record.packageName)).size !== document.artifacts.length || !REQUIRED_OWNED_PACKAGES.every((name) => document.artifacts.some((record) => record.packageName === name))) throw new Error("release artifact manifest must contain exactly the two Apex-owned packages");
+	if (!document.releaseIdentity || typeof document.releaseIdentity.expectedGitCommit !== "string" || typeof document.releaseIdentity.workflowIdentity !== "string") throw new Error("release artifact manifest has invalid releaseIdentity");
+	for (const record of document.artifacts) assertReleaseArtifactRecord(record);
+	if (document.artifacts.some((record) => record.expectedGitCommit !== document.releaseIdentity.expectedGitCommit || record.workflowIdentity !== document.releaseIdentity.workflowIdentity)) throw new Error("release artifact identity does not match package records");
+	const names = document.standaloneArtifacts.map((entry) => entry?.filename);
+	if (names.length !== REQUIRED_STANDALONE_ARTIFACTS.length || new Set(names).size !== names.length || REQUIRED_STANDALONE_ARTIFACTS.some((name) => !names.includes(name))) throw new Error("release artifact manifest must contain exactly the six required standalone archives");
+	for (const entry of document.standaloneArtifacts) if (!/^sha256-[a-f0-9]{64}$/.test(`sha256-${entry?.sha256 ?? ""}`) || typeof entry.filename !== "string") throw new Error("invalid standalone artifact record");
+	return document;
+}
+
+export function readReleaseArtifactManifest(path) {
+	return readReleaseArtifactDocument(path).artifacts;
+}
+
+export function verifyStandaloneArtifacts(document, directory) {
+	const problems = [];
+	for (const record of document.standaloneArtifacts) {
+		const path = join(directory, record.filename);
+		try {
+			const actual = createHash("sha256").update(readFileSync(path)).digest("hex");
+			if (actual !== record.sha256) problems.push(`${record.filename}: sha256 ${actual} does not match release artifact record ${record.sha256}`);
+		} catch (error) {
+			problems.push(`${record.filename}: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
+	return problems;
+}
 
 /** Pack a package directory for real and extract the tarball. Never `--dry-run`:
  * a dry run proves the tarball builds, not that its contents are reviewed. */
@@ -194,12 +327,20 @@ function fileExists(path) {
 }
 
 /** Pack and check every Apex-owned package. Returns a report; does not exit. */
-export function checkAllOwnedPackages(destinationDirectory) {
+export function checkAllOwnedPackages(destinationDirectory, identity = {}) {
 	const report = [];
 	for (const pkg of getPublicWorkspacePackages()) {
 		const { extractedDirectory, packed } = packToDirectory(pkg.directory, destinationDirectory);
 		const violations = checkPackedProductSurface(extractedDirectory, { requireApexReadme: pkg.name === "apex-code" });
-		report.push({ name: pkg.name, version: pkg.version, filename: packed.filename, violations });
+		const artifact = identity.expectedGitCommit && identity.workflowIdentity
+			? createReleaseArtifactRecord({
+				tarballPath: join(destinationDirectory, packed.filename),
+				packed,
+				expectedGitCommit: identity.expectedGitCommit,
+				workflowIdentity: identity.workflowIdentity,
+			})
+			: undefined;
+		report.push({ name: pkg.name, version: pkg.version, filename: packed.filename, violations, artifact });
 	}
 	return report;
 }
@@ -279,8 +420,26 @@ if (isMain) {
 			? resolve(process.argv[outFlagIndex + 1])
 			: mkdtempSync(join(tmpdir(), "apex-packed-product-surface-"));
 	const runSmoke = process.argv.includes("--smoke");
+	const valueFor = (flag) => {
+		const index = process.argv.indexOf(flag);
+		return index !== -1 ? process.argv[index + 1] : undefined;
+	};
+	const expectedGitCommit = valueFor("--git-head");
+	const workflowIdentity = valueFor("--workflow-identity");
+	const manifestOut = valueFor("--manifest-out");
+	const standaloneDirectory = valueFor("--standalone-directory");
+	if ([expectedGitCommit, workflowIdentity, manifestOut].some(Boolean) && ![expectedGitCommit, workflowIdentity, manifestOut].every(Boolean)) {
+		throw new Error("--git-head, --workflow-identity, and --manifest-out must be supplied together");
+	}
+	// Checked before anything is packed: refusing late would still have spent a
+	// full pack/install cycle producing a record it must then throw away.
+	const earlyGate = releaseManifestGate({ manifestOut, smokeRequested: runSmoke, smokeOk: false, identityFailed: false });
+	if (manifestOut && !runSmoke) {
+		console.error(earlyGate.error);
+		process.exit(1);
+	}
 
-	const report = checkAllOwnedPackages(destinationDirectory);
+	const report = checkAllOwnedPackages(destinationDirectory, { expectedGitCommit, workflowIdentity });
 	let failed = false;
 	const tarballsByName = {};
 	for (const entry of report) {
@@ -296,11 +455,15 @@ if (isMain) {
 		}
 	}
 
+
+	const identityFailed = failed;
+	let smokeOk = false;
 	if (!failed && runSmoke) {
 		console.log("\nRunning provider-independent functional smoke test against a clean install...");
 		const installDirectory = join(destinationDirectory, "smoke-install");
 		installPackedTarballs(tarballsByName, installDirectory);
 		const smoke = runPackedFunctionalSmoke(installDirectory);
+		smokeOk = smoke.ok;
 		if (smoke.ok) {
 			console.log("✓ functional smoke test completed a real turn through the packed, installed CLI");
 		} else {
@@ -309,6 +472,15 @@ if (isMain) {
 			console.error(smoke.stdout);
 			console.error(smoke.stderr);
 		}
+	}
+
+	const gate = releaseManifestGate({ manifestOut, smokeRequested: runSmoke, smokeOk, identityFailed });
+	if (gate.write) {
+		writeReleaseArtifactManifest(resolve(manifestOut), report.map((entry) => entry.artifact), { standaloneDirectory });
+		console.log(`Wrote immutable release artifact manifest to ${resolve(manifestOut)}`);
+	} else if (gate.error) {
+		failed = true;
+		console.error(gate.error);
 	}
 
 	process.exit(failed ? 1 : 0);
