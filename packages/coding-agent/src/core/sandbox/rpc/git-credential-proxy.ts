@@ -19,6 +19,77 @@ export interface GitCredentialProxy {
 	close(): Promise<void>;
 }
 
+/** A request that survived validation, or the reason it did not. */
+export type GitCredentialRequestParse =
+	| { readonly ok: true; readonly request: GitCredentialRequest }
+	| { readonly ok: false; readonly error: string; readonly audit: string };
+
+/**
+ * git's credential protocol is `key=value` lines terminated by a blank line, so any byte
+ * that can end a line or a field can rewrite the request downstream of this point. A
+ * `protocol` of `https\nhost=other.invalid\n\n` is authorized as one identity and served as
+ * another; the same is true of a carriage return, a NUL, or a bare space.
+ */
+const LINE_OR_FIELD_BREAKING = /[\s\u0000-\u001f\u007f-\u009f]/u;
+
+/**
+ * Structural, not an allowlist. Hardcoding `https` would refuse `ssh` and every custom
+ * scheme a host helper answers for, which is a working feature rather than an attack. What
+ * is refused is anything that is not a scheme: RFC 3986's shape, lowercased first so that
+ * the released identity and the served one cannot differ by case.
+ */
+const SCHEME_SHAPE = /^[a-z][a-z0-9+.-]*$/;
+
+/** Bounds, so a frame that is within the reader's byte limit is still not an essay. */
+const MAX_HOST_LENGTH = 255;
+const MAX_PROTOCOL_LENGTH = 32;
+
+/**
+ * Parse one credential request into the single structured identity everything downstream
+ * uses.
+ *
+ * The caller authorizes, releases, and serializes *this* value and never the raw fields,
+ * because the defect this closes is precisely that the string checked against the release
+ * was not the string handed to git.
+ */
+export function parseGitCredentialRequest(request: Record<string, unknown>): GitCredentialRequestParse {
+	const rawProtocol = request.protocol;
+	// git's own helper always sends one; an absent field means "whatever git defaults to",
+	// and https is what this channel has always assumed. A present non-string is a client
+	// that is not git.
+	if (rawProtocol !== undefined && typeof rawProtocol !== "string") {
+		return { ok: false, error: "Request protocol was not a string.", audit: "protocol field was not a string" };
+	}
+	if (typeof request.host !== "string") {
+		return { ok: false, error: "Request named no host.", audit: "host field was absent or not a string" };
+	}
+
+	const protocol = (rawProtocol ?? "https").toLowerCase();
+	const host = request.host;
+	if (!host) return { ok: false, error: "Request named no host.", audit: "host field was empty" };
+	if (host.length > MAX_HOST_LENGTH) {
+		return { ok: false, error: "Request host is too long.", audit: "host field exceeded its length bound" };
+	}
+	if (LINE_OR_FIELD_BREAKING.test(host)) {
+		return {
+			ok: false,
+			error: "Request host contains a control or whitespace character.",
+			audit: "host field carried a control or whitespace character",
+		};
+	}
+	if (protocol.length > MAX_PROTOCOL_LENGTH) {
+		return { ok: false, error: "Request protocol is too long.", audit: "protocol field exceeded its length bound" };
+	}
+	if (!SCHEME_SHAPE.test(protocol)) {
+		return {
+			ok: false,
+			error: "Request protocol is not a scheme.",
+			audit: "protocol field was not a scheme",
+		};
+	}
+	return { ok: true, request: { protocol, host } };
+}
+
 /**
  * Serve git credentials to the sandboxed child without ever putting one inside it.
  *
@@ -94,9 +165,15 @@ export function createGitCredentialProxy(options: {
 			// credential store, which ADR 0015 keeps as an explicit host operation.
 			return { ok: false, error: "Only credential reads are served over this channel." };
 		}
-		const host = typeof request.host === "string" ? request.host : "";
-		const protocol = typeof request.protocol === "string" ? request.protocol : "https";
-		if (!host) return { ok: false, error: "Request named no host." };
+		const parsed = parseGitCredentialRequest(request);
+		if (!parsed.ok) {
+			// The refused bytes are deliberately not echoed. This tail is read by a human and
+			// rendered in a terminal, and the whole point of the refused field is that it
+			// carries line breaks and control characters.
+			audit("(protocol)", `Refused a credential request whose ${parsed.audit}.`);
+			return { ok: false, error: parsed.error };
+		}
+		const { host, protocol } = parsed.request;
 
 		if (!options.isHostAllowed(host)) {
 			audit(host, `Refused a credential for ${host}, which this session may not reach.`);

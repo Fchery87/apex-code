@@ -1,5 +1,5 @@
-import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import * as net from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -238,6 +238,228 @@ describe.skipIf(process.platform === "win32")("sandbox git credential channel", 
 		closers.push(proxy.close);
 
 		await expect(ask(path, { op: "get", protocol: "https" })).resolves.toMatchObject({ ok: false });
+	});
+});
+
+describe.skipIf(process.platform === "win32")("git credential request validation", () => {
+	interface Watched {
+		path: string;
+		allowedFor: string[];
+		released: string[];
+		filled: Array<{ host: string; protocol: string }>;
+	}
+
+	async function watchedProxy(): Promise<Watched> {
+		const path = socketPath();
+		const watched: Watched = { path, allowedFor: [], released: [], filled: [] };
+		const proxy = await createGitCredentialProxy({
+			socketPath: path,
+			isHostAllowed: (host) => {
+				watched.allowedFor.push(host);
+				return true;
+			},
+			requestRelease: async (host) => {
+				watched.released.push(host);
+				return true;
+			},
+			fillCredential: async (request) => {
+				watched.filled.push({ host: request.host, protocol: request.protocol });
+				return HOST_CREDENTIAL;
+			},
+		});
+		closers.push(proxy.close);
+		return watched;
+	}
+
+	// A field carrying a newline rewrites the request git's own protocol reads, so the
+	// identity that was authorized is not the identity that gets served. Every one of
+	// these must die before the reachability check even sees a host.
+	const injections: Array<{ name: string; request: Record<string, unknown> }> = [
+		{ name: "newline in protocol", request: { protocol: "https\nhost=other.invalid\n\n", host: "github.com" } },
+		{ name: "newline in host", request: { protocol: "https", host: "github.com\nhost=other.invalid" } },
+		{ name: "carriage return in protocol", request: { protocol: "https\rhost=other.invalid", host: "github.com" } },
+		{ name: "carriage return in host", request: { protocol: "https", host: "github.com\rhost=other.invalid" } },
+		{ name: "NUL in protocol", request: { protocol: "https\u0000", host: "github.com" } },
+		{ name: "NUL in host", request: { protocol: "https", host: "github.com\u0000other.invalid" } },
+		{ name: "space in host", request: { protocol: "https", host: "github.com other.invalid" } },
+		{ name: "tab in protocol", request: { protocol: "ht\ttps", host: "github.com" } },
+		{ name: "scheme with a separator", request: { protocol: "https://other.invalid", host: "github.com" } },
+		{ name: "scheme starting with a digit", request: { protocol: "1https", host: "github.com" } },
+		{ name: "empty scheme", request: { protocol: "", host: "github.com" } },
+		{ name: "non-string protocol", request: { protocol: 7, host: "github.com" } },
+		{ name: "non-string host", request: { protocol: "https", host: ["github.com"] } },
+		{ name: "whitespace-only host", request: { protocol: "https", host: "   " } },
+	];
+
+	for (const injection of injections) {
+		it(`refuses ${injection.name} before authorization`, async () => {
+			const watched = await watchedProxy();
+
+			const response = await ask(watched.path, { op: "get", ...injection.request });
+
+			expect(response.ok).toBe(false);
+			expect(watched.allowedFor).toEqual([]);
+			expect(watched.released).toEqual([]);
+			expect(watched.filled).toEqual([]);
+			expect(JSON.stringify(response)).not.toContain("host-owned-token");
+		});
+	}
+
+	it("records a refused request without echoing the injected bytes into the audit tail", async () => {
+		const path = socketPath();
+		const violationStore = new SandboxViolationStore();
+		const proxy = await createGitCredentialProxy({
+			socketPath: path,
+			isHostAllowed: () => true,
+			requestRelease: async () => true,
+			fillCredential: async () => HOST_CREDENTIAL,
+			violationStore,
+		});
+		closers.push(proxy.close);
+
+		await ask(path, { op: "get", protocol: "https\nhost=other.invalid\n\n", host: "github.com" });
+
+		const violations = violationStore.list();
+		expect(violations).toHaveLength(1);
+		expect(violations[0].detail).not.toContain("other.invalid");
+		expect(violations[0].detail).not.toContain("\n");
+	});
+
+	it("keeps ssh working, because this is structural validation and not an https allowlist", async () => {
+		const watched = await watchedProxy();
+
+		await expect(ask(watched.path, { op: "get", protocol: "ssh", host: "github.com" })).resolves.toMatchObject({
+			ok: true,
+		});
+		expect(watched.filled).toEqual([{ host: "github.com", protocol: "ssh" }]);
+	});
+
+	it("keeps a custom helper scheme working", async () => {
+		const watched = await watchedProxy();
+
+		await expect(
+			ask(watched.path, { op: "get", protocol: "git+ssh", host: "code.internal.invalid" }),
+		).resolves.toMatchObject({ ok: true });
+		expect(watched.filled).toEqual([{ host: "code.internal.invalid", protocol: "git+ssh" }]);
+	});
+
+	it("authorizes and serves exactly one parsed identity, with the scheme lowercased", async () => {
+		const watched = await watchedProxy();
+
+		await expect(ask(watched.path, { op: "get", protocol: "HTTPS", host: "github.com" })).resolves.toMatchObject({
+			ok: true,
+		});
+		expect(watched.allowedFor).toEqual(["github.com"]);
+		expect(watched.released).toEqual(["github.com"]);
+		expect(watched.filled).toEqual([{ host: "github.com", protocol: "https" }]);
+	});
+});
+
+describe.skipIf(process.platform === "win32")("host git credential resolution is not run inside a repository", () => {
+	interface HostileTree {
+		repository: string;
+		home: string;
+		marker: string;
+		environment: NodeJS.ProcessEnv;
+	}
+
+	function hostileTree(): HostileTree {
+		const root = mkdtempSync(join(tmpdir(), "apex-git-cred-hostile-"));
+		directories.push(root);
+		const repository = join(root, "repo");
+		const home = join(root, "home");
+		const marker = join(root, "helper-ran");
+		mkdirSync(repository);
+		mkdirSync(home);
+		// A repository the agent could have cloned. Its local config names a helper that is
+		// a shell command; git runs it on whichever machine resolves the credential.
+		expect(spawnSync("git", ["init", "-q", repository], { stdio: "ignore" }).status).toBe(0);
+		expect(
+			spawnSync("git", ["-C", repository, "config", "credential.helper", `!f() { touch "${marker}"; }; f`], {
+				stdio: "ignore",
+			}).status,
+		).toBe(0);
+		writeFileSync(join(home, ".gitconfig"), "[user]\n\tname = Ada\n");
+		const environment: NodeJS.ProcessEnv = { ...process.env, HOME: home, GIT_TERMINAL_PROMPT: "0" };
+		delete environment.GIT_CONFIG_GLOBAL;
+		delete environment.GIT_DIR;
+		delete environment.GIT_WORK_TREE;
+		delete environment.GIT_INDEX_FILE;
+		delete environment.GIT_CONFIG;
+		return { repository, home, marker, environment };
+	}
+
+	it("never executes the credential helper of the repository the supervisor happens to stand in", async () => {
+		const tree = hostileTree();
+		const previous = process.cwd();
+		process.chdir(tree.repository);
+		try {
+			await expect(
+				fillHostGitCredential({ protocol: "https", host: "github.com" }, { environment: tree.environment }),
+			).resolves.toBeUndefined();
+		} finally {
+			process.chdir(previous);
+		}
+
+		expect(existsSync(tree.marker)).toBe(false);
+	});
+
+	it("never executes a helper reached through GIT_DIR or GIT_CONFIG in the inherited environment", async () => {
+		const tree = hostileTree();
+		const injected: NodeJS.ProcessEnv = {
+			...tree.environment,
+			GIT_DIR: join(tree.repository, ".git"),
+			GIT_WORK_TREE: tree.repository,
+			GIT_CONFIG: join(tree.repository, ".git", "config"),
+		};
+
+		await expect(
+			fillHostGitCredential({ protocol: "https", host: "github.com" }, { environment: injected }),
+		).resolves.toBeUndefined();
+
+		expect(existsSync(tree.marker)).toBe(false);
+	});
+
+	it("still resolves the host's global helper, so gh and the keychain keep working", async () => {
+		const tree = hostileTree();
+		writeFileSync(
+			join(tree.home, ".gitconfig"),
+			'[credential]\n\thelper = "!f() { test \\"$1\\" = get && printf \'username=ada\\npassword=from-host-store\\n\'; }; f"\n',
+		);
+		const previous = process.cwd();
+		process.chdir(tree.repository);
+		try {
+			await expect(
+				fillHostGitCredential({ protocol: "https", host: "github.com" }, { environment: tree.environment }),
+			).resolves.toEqual({ username: "ada", password: "from-host-store" });
+		} finally {
+			process.chdir(previous);
+		}
+
+		expect(existsSync(tree.marker)).toBe(false);
+	});
+
+	it("refuses to serialize an injected identity, so git is never spawned for it", async () => {
+		const tree = hostileTree();
+		writeFileSync(
+			join(tree.home, ".gitconfig"),
+			`[credential]\n\thelper = "!f() { touch \\"${tree.marker}\\"; }; f"\n`,
+		);
+
+		await expect(
+			fillHostGitCredential(
+				{ protocol: "https\nhost=other.invalid", host: "github.com" },
+				{ environment: tree.environment },
+			),
+		).resolves.toBeUndefined();
+		await expect(
+			fillHostGitCredential(
+				{ protocol: "https", host: "github.com\nhost=other.invalid" },
+				{ environment: tree.environment },
+			),
+		).resolves.toBeUndefined();
+
+		expect(existsSync(tree.marker)).toBe(false);
 	});
 });
 

@@ -1,7 +1,7 @@
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { supervisorTempDirectory } from "../supervisor-temp.ts";
-import type { GitCredential, GitCredentialRequest } from "./git-credential-proxy.ts";
+import { type GitCredential, type GitCredentialRequest, parseGitCredentialRequest } from "./git-credential-proxy.ts";
 
 /** Env var naming the child-side socket the helper talks to. */
 export const GIT_CREDENTIAL_SOCKET_VARIABLE = "APEX_GIT_CREDENTIAL_PATH";
@@ -125,22 +125,97 @@ export function writeGitCredentialHelper(directory: string): string {
 }
 
 /**
+ * The environment variables that decide which repository git is standing in, and which
+ * config it reads.
+ *
+ * `credential.helper` is a shell command git runs on whichever machine resolves the
+ * credential -- the host, here. Any of these four lets a repository the agent cloned choose
+ * that command, so a credential fill that inherits them is a host execution primitive with
+ * a socket in front of it.
+ *
+ * `HOME` and the global and system config are deliberately kept. They are how `gh`,
+ * libsecret, the macOS keychain and a plain `credential.helper` in `--global` are found,
+ * and they belong to the human running the supervisor rather than to any repository.
+ */
+const REPOSITORY_DISCOVERY_VARIABLES = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_CONFIG"] as const;
+
+interface PrivateFillDirectory {
+	/** Where git runs: empty, 0700, and inside no repository. */
+	readonly cwd: string;
+	/** Its parent, so git's upward search for a repository stops before leaving it. */
+	readonly ceiling: string;
+	readonly dispose: () => void;
+}
+
+function createPrivateFillDirectory(): PrivateFillDirectory {
+	const base = mkdtempSync(join(supervisorTempDirectory(), `apex-gitcred-fill-${process.pid}-`), { encoding: "utf8" });
+	chmodSync(base, 0o700);
+	const cwd = join(base, "empty");
+	mkdirSync(cwd, { mode: 0o700 });
+	// Resolved, because git ignores a ceiling entry that would need symlink resolution and
+	// `/tmp` is a symlink on macOS.
+	let ceiling = base;
+	try {
+		ceiling = realpathSync(base);
+	} catch {
+		// A ceiling that does not resolve is a weaker second guard, not a broken fill; the
+		// empty cwd is what does the work.
+	}
+	return {
+		cwd,
+		ceiling,
+		dispose: () => {
+			try {
+				rmSync(base, { force: true, recursive: true });
+			} catch {
+				// A leftover empty directory under the supervisor's own temp root is not worth
+				// failing a credential fill over.
+			}
+		},
+	};
+}
+
+/**
  * Resolve a credential on the host, through the host's own git configuration.
  *
  * `git credential fill` rather than reading any particular store, because the answer may
  * come from `gh`'s helper, libsecret, the macOS keychain, or a plain file, and only git
  * knows which of those this host is configured to ask. Reimplementing that resolution
  * would be a second, quietly diverging copy of it.
+ *
+ * Two things about *where* it runs are part of the boundary rather than housekeeping. It
+ * runs in a private empty directory, never in whatever directory the supervisor happened to
+ * be started from, because a repository's own `credential.helper` is a command git would
+ * otherwise execute on the host. And it runs without the four variables that would point it
+ * back at such a repository. The request is re-parsed here too: this function serializes
+ * into git's line protocol, so it refuses anything that could rewrite the identity it was
+ * asked for, whether or not the proxy already checked.
  */
 export async function fillHostGitCredential(
 	request: GitCredentialRequest,
-	options?: { environment?: NodeJS.ProcessEnv; cwd?: string },
+	options?: { environment?: NodeJS.ProcessEnv },
 ): Promise<GitCredential | undefined> {
+	const parsed = parseGitCredentialRequest({ protocol: request.protocol, host: request.host });
+	if (!parsed.ok) return undefined;
+	const identity = parsed.request;
+
 	const { spawn } = await import("node:child_process");
+	const directory = createPrivateFillDirectory();
+	const environment: NodeJS.ProcessEnv = { ...(options?.environment ?? process.env) };
+	for (const variable of REPOSITORY_DISCOVERY_VARIABLES) delete environment[variable];
+	environment.GIT_CEILING_DIRECTORIES = directory.ceiling;
+
 	return new Promise((resolve) => {
+		let settled = false;
+		const finish = (credential: GitCredential | undefined): void => {
+			if (settled) return;
+			settled = true;
+			directory.dispose();
+			resolve(credential);
+		};
 		const child = spawn("git", ["credential", "fill"], {
-			cwd: options?.cwd,
-			env: options?.environment ?? process.env,
+			cwd: directory.cwd,
+			env: environment,
 			stdio: ["pipe", "pipe", "ignore"],
 		});
 		let stdout = "";
@@ -148,10 +223,10 @@ export async function fillHostGitCredential(
 		child.stdout.on("data", (chunk: string) => {
 			stdout += chunk;
 		});
-		child.on("error", () => resolve(undefined));
+		child.on("error", () => finish(undefined));
 		child.on("close", (code) => {
 			if (code !== 0) {
-				resolve(undefined);
+				finish(undefined);
 				return;
 			}
 			const fields = new Map<string, string>();
@@ -161,8 +236,9 @@ export async function fillHostGitCredential(
 			}
 			const username = fields.get("username");
 			const password = fields.get("password");
-			resolve(username && password ? { username, password } : undefined);
+			finish(username && password ? { username, password } : undefined);
 		});
-		child.stdin.end(`protocol=${request.protocol}\nhost=${request.host}\n\n`);
+		child.stdin.on("error", () => finish(undefined));
+		child.stdin.end(`protocol=${identity.protocol}\nhost=${identity.host}\n\n`);
 	});
 }
