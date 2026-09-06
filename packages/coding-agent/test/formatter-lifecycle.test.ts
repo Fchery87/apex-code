@@ -7,11 +7,16 @@ import type { FormatterPolicy } from "../src/core/policy-loader.ts";
 
 /**
  * VF.5 (spec 2026-09-01-configured-verification-and-formatting.md § 2): the
- * formatter lifecycle. A formatter runs inside its declared scope, and the
+ * formatter lifecycle. A formatter runs inside its declared scope and the
  * before/after comparison is the evidence: which declared paths changed,
- * which changed paths were never declared, and which writes escaped the
- * workspace through a symlink or a traversal. Nothing is reverted — the
- * report is honest, the workspace is the user's.
+ * which changed paths were never declared, and which writes escaped through a
+ * symlink or a traversal.
+ *
+ * PS.2 changed what happens to an undeclared change. It is no longer reported
+ * and left on disk. The run happens against an isolated copy and only declared
+ * changes are promoted, so `status` is `scope-violated` and the live workspace
+ * never receives the stray bytes. Confinement cases live in
+ * `formatter-confinement.test.ts`; this file keeps the reporting contract.
  */
 
 const directories: string[] = [];
@@ -91,9 +96,10 @@ describe("formatter lifecycle: declared scope and mutation reporting", () => {
 			]),
 			{ workspaceRoot: root },
 		);
-		expect(outcome.status).toBe("passed");
+		expect(outcome.status).toBe("scope-violated");
 		expect(outcome.mutations.changedPaths.sort()).toEqual(["src/a.ts", "stray.txt"]);
 		expect(outcome.mutations.undeclaredPaths).toEqual(["stray.txt"]);
+		expect(readFileSync(join(root, "stray.txt"), "utf-8")).toBe("before");
 	});
 
 	it("treats paths outside pathScope as unexpected even when declared elsewhere", async () => {
@@ -113,8 +119,9 @@ describe("formatter lifecycle: declared scope and mutation reporting", () => {
 			),
 			{ workspaceRoot: root },
 		);
-		expect(outcome.status).toBe("passed");
+		expect(outcome.status).toBe("scope-violated");
 		expect(outcome.mutations.undeclaredPaths).toEqual(["other/x.ts"]);
+		expect(readFileSync(join(root, "other", "x.ts"), "utf-8")).toBe("before");
 	});
 
 	it("refuses traversal patterns before running anything", async () => {
@@ -127,7 +134,7 @@ describe("formatter lifecycle: declared scope and mutation reporting", () => {
 		expect(existsSync(join(root, "src", "a.ts"))).toBe(true);
 	});
 
-	it("flags symlink escapes as escaped paths rather than declared mutations", async () => {
+	it("never writes through a workspace symlink to its outside target", async () => {
 		const root = scratchWorkspace();
 		const outside = mkdtempSync(join(tmpdir(), "apex-vf5-outside-"));
 		directories.push(outside);
@@ -144,9 +151,11 @@ describe("formatter lifecycle: declared scope and mutation reporting", () => {
 			policy(["-e", `require("fs").writeFileSync("src/linked.ts", "rewritten")`]),
 			{ workspaceRoot: root },
 		);
-		expect(outcome.status).toBe("passed");
-		expect(outcome.mutations.escapedPaths).toEqual(["src/linked.ts"]);
-		expect(outcome.mutations.changedPaths).toContain("src/linked.ts");
+		// The stage never materializes a symlink, so the formatter's write lands
+		// on a plain stage file. Promotion then refuses the live target because it
+		// canonicalizes outside the workspace.
+		expect(outcome.status).not.toBe("passed");
+		expect(readFileSync(target, "utf-8")).toBe("original");
 	}, 15_000);
 
 	it("reports a timeout with tree cleanup and no false mutation claim", async () => {

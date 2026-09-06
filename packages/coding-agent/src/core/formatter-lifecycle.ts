@@ -1,27 +1,49 @@
 /**
- * VF.5: the formatter lifecycle (spec
- * 2026-09-01-configured-verification-and-formatting.md § 2). Runs a
- * formatter policy through the VF.3 executor and reports what actually
- * changed against what the policy declared: which declared paths were
- * mutated, which mutations were never declared (or fell outside the
- * policy's pathScope), and which writes escaped the workspace through a
- * symlink. Nothing is reverted — the workspace belongs to the user; the
- * report is the evidence.
+ * VF.5 plus PS.2: the formatter lifecycle. A formatter runs against an
+ * isolated copy of the workspace, never the workspace itself, and only the
+ * changes matching its declared paths are promoted back. An undeclared write
+ * is left behind in the discarded stage directory, so the live workspace never
+ * holds bytes the policy did not declare.
  *
- * The snapshot is a bounded walk of the workspace (harness directories
- * skipped, per-file and total byte caps). In-scope declared files are
- * hashed first so their comparison is exact even when the walk hits its
- * caps; `truncatedSnapshot` is set when coverage beyond the declared
- * scope was cut short, so an "unchanged" verdict can be read with the
- * right suspicion.
+ * This replaces post-hoc reporting. The earlier lifecycle ran the formatter in
+ * the live workspace and listed undeclared writes afterwards, which is a
+ * report, not a boundary: the stray bytes were already on disk. `status` is
+ * now `scope-violated` whenever a write fell outside the declared set, and
+ * that value can never read as `passed`.
+ *
+ * What this does NOT confine, deliberately and recorded rather than implied:
+ * a formatter writing to an absolute path outside the workspace, or reaching
+ * the network. Those are the OS sandbox's job. Copy plus restricted promotion
+ * confines workspace mutation, nothing wider.
+ *
+ * Promotion refuses any file whose live bytes changed during the run, because
+ * overwriting there would destroy a concurrent edit by the user. Such a run
+ * fails rather than reverting the user's work.
+ *
+ * The snapshot is a bounded walk (harness directories skipped, per-file and
+ * total byte caps). `truncatedSnapshot` is set when coverage was cut short, so
+ * an "unchanged" verdict can be read with the right suspicion.
  */
 
 import { createHash } from "node:crypto";
-import { type Dirent, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+	copyFileSync,
+	type Dirent,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	statSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { minimatch } from "minimatch";
+import type { AuthorizeConfiguredCommand } from "./permissions/policy-command.ts";
 import { type PolicyRunStatus, runPolicyCommand } from "./policy-executor.ts";
 import type { FormatterPolicy } from "./policy-loader.ts";
+import { preparePathOperation, writePreparedPath } from "./tools/path-utils.ts";
 import type { WorkspaceArtifactRef, WorkspaceArtifactStore } from "./workspace/artifacts.ts";
 
 /** Per-file hash cap: larger files compare by size plus prefix hash. */
@@ -72,6 +94,8 @@ export interface FormatterRunOptions {
 	workspaceRoot: string;
 	signal?: AbortSignal;
 	artifactStore?: WorkspaceArtifactStore;
+	/** PS.1. A blocked formatter is refused before the snapshot and before the spawn. */
+	authorize?: AuthorizeConfiguredCommand;
 }
 
 interface ScopeSnapshot {
@@ -192,6 +216,135 @@ function emptyMutations(): FormatterMutationReport {
 	return { changedPaths: [], undeclaredPaths: [], escapedPaths: [], unchanged: true, truncatedSnapshot: false };
 }
 
+/** A formatter that never ran. Nothing was spawned, so the mutation report is empty by construction. */
+function refused(policy: FormatterPolicy, workspaceRoot: string, reason: string): FormatterRunOutcome {
+	return {
+		status: "refused",
+		mutations: emptyMutations(),
+		evidence: {
+			policyId: policy.id,
+			executable: policy.executable,
+			argv: policy.argv,
+			cwd: workspaceRoot,
+			status: "refused",
+			durationMs: 0,
+			truncated: false,
+		},
+		refusalReason: reason,
+	};
+}
+
+/**
+ * Copy the workspace into a private stage directory the formatter runs in.
+ * Regular files only: a symlink is not reproduced, so a formatter cannot reach
+ * a link's target through the stage, and the live link is never followed on
+ * promotion either.
+ */
+function materializeStage(root: string): { stageRoot: string; truncated: boolean } {
+	const stageRoot = mkdtempSync(join(tmpdir(), "apex-formatter-stage-"));
+	let truncated = false;
+	let budgetFiles = MAX_SNAPSHOT_FILES;
+	let budgetBytes = MAX_SNAPSHOT_BYTES;
+
+	const walk = (dir: string): void => {
+		let entries: Dirent[];
+		try {
+			entries = readdirSync(dir, { withFileTypes: true });
+		} catch {
+			return;
+		}
+		for (const entry of entries) {
+			if (budgetFiles <= 0 || budgetBytes <= 0) {
+				truncated = true;
+				return;
+			}
+			const absolute = join(dir, entry.name);
+			if (entry.isDirectory()) {
+				if (SKIPPED_DIRECTORIES.has(entry.name)) continue;
+				mkdirSync(join(stageRoot, relative(root, absolute)), { recursive: true });
+				walk(absolute);
+				continue;
+			}
+			if (!entry.isFile()) continue;
+			let size: number;
+			try {
+				size = statSync(absolute).size;
+			} catch {
+				continue;
+			}
+			budgetFiles -= 1;
+			budgetBytes -= size;
+			try {
+				copyFileSync(absolute, join(stageRoot, relative(root, absolute)));
+			} catch {
+				truncated = true;
+			}
+		}
+	};
+
+	walk(root);
+	return { stageRoot, truncated };
+}
+
+interface PromotionResult {
+	promoted: string[];
+	/** Declared changes refused because the live file changed during the run. */
+	conflicted: string[];
+}
+
+/**
+ * Write the declared stage changes back into the live workspace through the
+ * canonical no-follow write path (CA.2), so a symlink planted at the live
+ * target is never followed. A file whose live bytes no longer match the
+ * pre-run fingerprint belongs to a concurrent editor and is refused.
+ */
+function promoteDeclaredChanges(
+	workspaceRoot: string,
+	stageRoot: string,
+	declaredChanges: string[],
+	preRun: Map<string, string>,
+): PromotionResult {
+	const promoted: string[] = [];
+	const conflicted: string[] = [];
+	for (const relPath of declaredChanges) {
+		const livePath = join(workspaceRoot, ...relPath.split("/"));
+		const stagePath = join(stageRoot, ...relPath.split("/"));
+		let liveHash: string | undefined;
+		try {
+			liveHash = hashFile(livePath, statSync(livePath).size);
+		} catch {
+			liveHash = undefined;
+		}
+		if (liveHash !== preRun.get(relPath)) {
+			conflicted.push(relPath);
+			continue;
+		}
+		let content: Buffer;
+		try {
+			content = readFileSync(stagePath);
+		} catch {
+			conflicted.push(relPath);
+			continue;
+		}
+		try {
+			mkdirSync(dirname(livePath), { recursive: true });
+			const prepared = preparePathOperation(livePath, workspaceRoot);
+			// A symlink at the live target canonicalizes to whatever it points at.
+			// Promotion writes only inside the workspace, so a target that resolves
+			// out is refused rather than followed.
+			if (!insideWorkspace(workspaceRoot, prepared.path.value)) {
+				conflicted.push(relPath);
+				continue;
+			}
+			writePreparedPath(prepared, content);
+			promoted.push(relPath);
+		} catch {
+			conflicted.push(relPath);
+		}
+	}
+	return { promoted, conflicted };
+}
+
 export async function runFormatterCommand(
 	policy: FormatterPolicy,
 	options: FormatterRunOptions,
@@ -204,65 +357,87 @@ export async function runFormatterCommand(
 	const scopePatterns = [...policy.declaredPaths, ...(policy.pathScope ?? [])];
 	const offending = scopePatterns.find((pattern) => pattern.includes("..") || isAbsolute(pattern));
 	if (offending !== undefined) {
-		return {
-			status: "refused",
-			mutations: emptyMutations(),
-			evidence: {
-				policyId: policy.id,
-				executable: policy.executable,
-				argv: policy.argv,
-				cwd: workspaceRoot,
-				status: "refused",
-				durationMs: 0,
-				truncated: false,
-			},
-			refusalReason: `declared scope ${JSON.stringify(offending)} must stay inside the workspace`,
-		};
+		return refused(
+			policy,
+			workspaceRoot,
+			`declared scope ${JSON.stringify(offending)} must stay inside the workspace`,
+		);
 	}
 
 	const tracked =
 		policy.pathScope === undefined ? policy.declaredPaths : intersectPatterns(policy.declaredPaths, policy.pathScope);
 
+	if (options.authorize !== undefined) {
+		const decision = await options.authorize({
+			policyId: policy.id,
+			executable: policy.executable,
+			argv: policy.argv,
+			cwd: workspaceRoot,
+			writeScope: tracked,
+			capabilities: new Set(["exec", "fs.write"]),
+			permission: policy.permission,
+		});
+		if (decision.block) return refused(policy, workspaceRoot, decision.reason ?? "not permitted");
+	}
+
 	// Background coverage is everything: an unexpected mutation lives
 	// outside every declared pattern, so only a whole-workspace view can
 	// report it. Caps bound the walk; truncatedSnapshot carries the doubt.
-	const before = snapshotScope(workspaceRoot, tracked, ["**"]);
+	const preRun = snapshotScope(workspaceRoot, tracked, ["**"]);
+	const stage = materializeStage(workspaceRoot);
+	const before = snapshotScope(stage.stageRoot, tracked, ["**"]);
 	const run = await runPolicyCommand(policy, {
-		workspaceRoot,
+		workspaceRoot: stage.stageRoot,
 		signal: options.signal,
 		artifactStore: options.artifactStore,
 	});
-	const after = snapshotScope(workspaceRoot, tracked, ["**"]);
+	const after = snapshotScope(stage.stageRoot, tracked, ["**"]);
 
 	const changedPaths = diffScope(before, after);
 	const undeclaredPaths: string[] = [];
 	const escapedPaths: string[] = [];
 	for (const relPath of changedPaths) {
 		if (!matchesAny(relPath, tracked)) undeclaredPaths.push(relPath);
-		const absolute = join(workspaceRoot, ...relPath.split("/"));
+		const absolute = join(stage.stageRoot, ...relPath.split("/"));
 		try {
 			const real = realpathSync(absolute);
-			if (!insideWorkspace(workspaceRoot, real)) escapedPaths.push(relPath);
+			if (!insideWorkspace(stage.stageRoot, real)) escapedPaths.push(relPath);
 		} catch {
 			// deleted or unresolvable between snapshots: no live escape to flag
 		}
 	}
 
+	const declaredChanges = changedPaths.filter(
+		(relPath) => matchesAny(relPath, tracked) && !escapedPaths.includes(relPath),
+	);
+	const promotion = promoteDeclaredChanges(workspaceRoot, stage.stageRoot, declaredChanges, preRun.hashes);
+	rmSync(stage.stageRoot, { recursive: true, force: true });
+
+	const outOfScope = undeclaredPaths.length > 0 || escapedPaths.length > 0;
+	const status: PolicyRunStatus =
+		run.status !== "passed"
+			? run.status
+			: outOfScope
+				? "scope-violated"
+				: promotion.conflicted.length > 0
+					? "failed"
+					: "passed";
+
 	return {
-		status: run.status,
+		status,
 		mutations: {
 			changedPaths,
 			undeclaredPaths,
 			escapedPaths,
 			unchanged: changedPaths.length === 0,
-			truncatedSnapshot: before.truncated || after.truncated,
+			truncatedSnapshot: preRun.truncated || before.truncated || after.truncated || stage.truncated,
 		},
 		evidence: {
 			policyId: run.policyId,
 			executable: run.executable,
 			argv: run.argv,
 			cwd: run.cwd,
-			status: run.status,
+			status,
 			durationMs: run.durationMs,
 			exitCode: run.exitCode,
 			signal: run.signal,

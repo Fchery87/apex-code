@@ -109,6 +109,7 @@ import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
 import { evaluateToolCall, type PermissionGateOptions } from "./permissions/gate.ts";
+import { type AuthorizeConfiguredCommand, authorizeConfiguredCommand } from "./permissions/policy-command.ts";
 import type { PermissionResponder } from "./permissions/responder.ts";
 import { createInteractiveResponder } from "./permissions/responder.ts";
 import { type EffectiveModeResolution, resolveEffectiveModeWithOrigin } from "./permissions/startup.ts";
@@ -2350,9 +2351,33 @@ export class AgentSession {
 	 * settings. ADR 0028: the loader consumes the sources separately and the
 	 * trust gate decides whether the project source exists at all.
 	 */
+	/**
+	 * PS.1. Configured commands reach the same permission authority tool calls
+	 * use. Undefined only when the session has no gate at all, which is the
+	 * documented SDK default; a gated session always authorizes.
+	 */
+	private _authorizeConfiguredCommand(): AuthorizeConfiguredCommand | undefined {
+		const gate = this._permissionGate;
+		if (gate === undefined) return undefined;
+		return (operation) =>
+			authorizeConfiguredCommand(operation, {
+				getMode: gate.getMode,
+				getResponder: () =>
+					this._permissionResponderFactory?.() ??
+					(this._extensionMode === "tui" && this._extensionUIContext
+						? createInteractiveResponder(this._extensionUIContext)
+						: undefined),
+			});
+	}
+
 	private _ensureVerificationTracker(): VerificationTracker {
 		if (this._verificationTracker === undefined) {
-			this._verificationTracker = new VerificationTracker({ workspaceRoot: this._cwd });
+			this._verificationTracker = new VerificationTracker({
+				workspaceRoot: this._cwd,
+				...(this._authorizeConfiguredCommand() !== undefined
+					? { authorize: this._authorizeConfiguredCommand() as AuthorizeConfiguredCommand }
+					: {}),
+			});
 		}
 		const snapshot = loadPolicyConfiguration({
 			globalSettings: this.settingsManager.getGlobalSettings().policies,
@@ -2402,9 +2427,11 @@ export class AgentSession {
 				? snapshot.formatter[0]
 				: snapshot.formatter.find((entry) => entry.id === options.policyId);
 		if (policy === undefined) return undefined;
+		const authorize = this._authorizeConfiguredCommand();
 		const outcome = await runFormatterCommand(policy, {
 			workspaceRoot: this._cwd,
 			signal: options.signal,
+			...(authorize !== undefined ? { authorize } : {}),
 		});
 		if (outcome.mutations.changedPaths.length > 0) {
 			this._verificationTracker?.noteWorkspaceChange(new Set(outcome.mutations.changedPaths));

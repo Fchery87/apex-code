@@ -19,7 +19,15 @@ import { killProcessTree, sanitizeBinaryOutput } from "../utils/shell.ts";
 import type { CommandPolicy } from "./policy-loader.ts";
 import type { WorkspaceArtifactRef, WorkspaceArtifactStore } from "./workspace/artifacts.ts";
 
-export type PolicyRunStatus = "passed" | "failed" | "spawn-failed" | "timeout" | "cancelled" | "refused";
+export type PolicyRunStatus =
+	| "passed"
+	| "failed"
+	| "spawn-failed"
+	| "timeout"
+	| "cancelled"
+	| "refused"
+	/** PS.2: the command ran but wrote outside its declared scope, so nothing outside was promoted. Never "passed". */
+	| "scope-violated";
 
 export interface PolicyRunOptions {
 	workspaceRoot: string;

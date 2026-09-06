@@ -15,6 +15,7 @@
  * through the store's permission gate.
  */
 
+import type { AuthorizeConfiguredCommand } from "./permissions/policy-command.ts";
 import type { PolicyRunOutcome, PolicyRunStatus } from "./policy-executor.ts";
 import { runPolicyCommand } from "./policy-executor.ts";
 import type { VerificationPolicy } from "./policy-loader.ts";
@@ -52,6 +53,12 @@ export type VerificationBoundary = "explicit" | "post-turn";
 
 export interface VerificationTrackerOptions {
 	workspaceRoot: string;
+	/**
+	 * PS.1. Absent only in tests and embeddings with no permission authority at
+	 * all; a session that has a gate always supplies one, and a blocked policy
+	 * then spawns nothing.
+	 */
+	authorize?: AuthorizeConfiguredCommand;
 }
 
 function evidenceFor(outcome: PolicyRunOutcome): VerificationEvidence {
@@ -85,9 +92,11 @@ export class VerificationTracker {
 	#workspaceRoot: string;
 	#latest: VerificationRecord | undefined;
 	#continuedWithoutVerification = false;
+	#authorize: AuthorizeConfiguredCommand | undefined;
 
 	constructor(options: VerificationTrackerOptions) {
 		this.#workspaceRoot = options.workspaceRoot;
+		this.#authorize = options.authorize;
 	}
 
 	configure(policies: VerificationPolicy[], boundary: VerificationBoundary): void {
@@ -119,6 +128,11 @@ export class VerificationTracker {
 			return undefined;
 		}
 		this.#continuedWithoutVerification = false;
+		const refusal = await this.#refuseUnauthorized(policy);
+		if (refusal !== undefined) {
+			this.#latest = refusal;
+			return this.#latest;
+		}
 		const outcome = await runPolicyCommand(policy, { workspaceRoot: this.#workspaceRoot, signal: options.signal });
 		this.#latest = recordOutcome(outcome);
 		return this.#latest;
@@ -158,5 +172,35 @@ export class VerificationTracker {
 	/** The current record, if one is live. Stale results are not returned. */
 	latest(): VerificationRecord | undefined {
 		return this.#latest;
+	}
+
+	/** A record for a policy the permission authority blocked. Nothing was spawned, so it can never read as verified. */
+	async #refuseUnauthorized(policy: VerificationPolicy): Promise<VerificationRecord | undefined> {
+		if (this.#authorize === undefined) return undefined;
+		const decision = await this.#authorize({
+			policyId: policy.id,
+			executable: policy.executable,
+			argv: policy.argv,
+			cwd: this.#workspaceRoot,
+			writeScope: undefined,
+			capabilities: new Set(["exec"]),
+			permission: policy.permission,
+		});
+		if (!decision.block) return undefined;
+		return {
+			outcome: "interrupted",
+			evidence: [
+				{
+					policyId: policy.id,
+					executable: policy.executable,
+					argv: policy.argv,
+					cwd: this.#workspaceRoot,
+					status: "refused",
+					durationMs: 0,
+					truncated: false,
+				},
+			],
+			observedAt: Date.now(),
+		};
 	}
 }
