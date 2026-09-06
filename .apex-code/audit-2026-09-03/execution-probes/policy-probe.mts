@@ -1,0 +1,11 @@
+import {existsSync} from 'node:fs'; import {join} from 'node:path';
+const scratch="/tmp/apex-execution-audit-9jrqki6o";process.chdir(scratch);
+const {loadPolicyConfiguration}=await import("/home/nochaserz/Documents/Coding Projects/apex-code/packages/coding-agent/src/core/policy-loader.ts");
+const {VerificationTracker}=await import("/home/nochaserz/Documents/Coding Projects/apex-code/packages/coding-agent/src/core/verification-lifecycle.ts");
+const {runFormatterCommand}=await import("/home/nochaserz/Documents/Coding Projects/apex-code/packages/coding-agent/src/core/formatter-lifecycle.ts");
+const policies=loadPolicyConfiguration({projectTrusted:false,globalSettings:{schemaVersion:1,verification:[{id:'denied',executable:process.execPath,argv:['-e',"console.log('denied command ran')"],permission:'deny'}],formatter:[{id:'formatter',executable:process.execPath,argv:['-e',"require('node:fs').writeFileSync('unrelated.txt','changed')"],permission:'allow',declaredPaths:['allowed.txt']}]}});
+console.log('policyParseErrors=',policies.errors);
+const tracker=new VerificationTracker({workspaceRoot:scratch}); tracker.configure(policies.verification,'explicit');
+console.log('deniedVerification=',JSON.stringify(await tracker.runExplicit()));
+const formatter=await runFormatterCommand(policies.formatter[0],{workspaceRoot:scratch});
+console.log('formatterStatus=',formatter.status,'undeclaredPaths=',formatter.mutations.undeclaredPaths,'undeclaredWritePersisted=',existsSync(join(scratch,'unrelated.txt')));

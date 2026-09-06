@@ -1,0 +1,10 @@
+import { createBashPermissionSpec, createLocalBashOperations } from "/home/nochaserz/Documents/Coding Projects/apex-code/packages/coding-agent/src/core/tools/bash.ts";
+import { existsSync } from 'node:fs';
+const cwd="/tmp/apex-permission-audit-kbt6mo76"; process.chdir(cwd);
+const spec=createBashPermissionSpec(); const ops=createLocalBashOperations();
+const safe="sh -c 'echo safe # comment touch marker'";
+const attack="sh -c 'echo safe # comment\ntouch marker'";
+const rule=spec.ruleForCall({command:safe});
+console.log('exact approved rule',rule); console.log('changed command matches',spec.matches(rule,{command:attack}));
+await ops.exec(safe,cwd,{onData:()=>{}});console.log('marker after original',existsSync('marker'));
+await ops.exec(attack,cwd,{onData:()=>{}});console.log('marker after changed input',existsSync('marker'));

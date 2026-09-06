@@ -1,0 +1,21 @@
+Current HEAD: 1964612833cddbf89e4ad61fa0921e8b42f488cc
+Audited HEAD: 2477e594ef1479d1cb4467f0bc50c2e14fcd3e00
+
+ M .gitignore
+ M package.json
+ M scripts/apex/hydrate-model-data.mjs
+ M scripts/apex/hydrate-model-data.test.mjs
+?? .apex-code/audit-2026-09-03/
+?? vendor/
+1964612833cddbf89e4ad61fa0921e8b42f488cc 2026-09-04T21:26:09-04:00 fix(ci): retry models.dev hydration before failing the build
+
+
+ package.json                             |  2 +-
+ scripts/apex/hydrate-model-data.mjs      | 43 +++++++++++++++++++++++++++
+ scripts/apex/hydrate-model-data.test.mjs | 50 ++++++++++++++++++++++++++++++++
+ 3 files changed, 94 insertions(+), 1 deletion(-)
+ .gitignore                               |  2 +
+ package.json                             |  1 +
+ scripts/apex/hydrate-model-data.mjs      | 74 ++++++++++++++++++++-----
+ scripts/apex/hydrate-model-data.test.mjs | 95 ++++++++++++++++++++++++--------
+ 4 files changed, 135 insertions(+), 37 deletions(-)

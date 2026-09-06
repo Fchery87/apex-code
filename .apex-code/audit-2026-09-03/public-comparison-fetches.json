@@ -1,0 +1,346 @@
+[
+  {
+    "id": "C1",
+    "requested_url": "https://code.claude.com/docs/en/permissions",
+    "final_url": "https://code.claude.com/docs/en/permissions",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:19:20.580512+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:19:20 GMT",
+    "last_modified": null,
+    "body_sha256": "68a46c3170c1146a646ab936cdd42879f023d27ba3d187f9a35daa4cf45d09cf",
+    "short_excerpts": [
+      "Rules are evaluated in order: deny, then ask, then allow.",
+      "Permission rules are enforced by Claude Code, not by the model.",
+      "Hook decisions don\u2019t bypass permission rules."
+    ]
+  },
+  {
+    "id": "C2",
+    "requested_url": "https://code.claude.com/docs/en/sandboxing",
+    "final_url": "https://code.claude.com/docs/en/sandboxing",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:19:35.116134+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:19:33 GMT",
+    "last_modified": null,
+    "body_sha256": "020b7793ba09eff21fa87f738269d3c74aadacf7b75e4a1f3b80edb05a75356a",
+    "short_excerpts": [
+      "Native Windows is not supported.",
+      "By default, if the sandbox cannot start because dependencies are missing or the platform is unsupported, Claude Code shows a warning and runs commands without sandboxing.",
+      "There is no built-in credential deny list, so only the files and variables you list are restricted.",
+      "The sandbox isolates Bash subprocesses."
+    ]
+  },
+  {
+    "id": "C3",
+    "requested_url": "https://code.claude.com/docs/en/security",
+    "final_url": "https://code.claude.com/docs/en/security",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:19:35.019049+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:19:33 GMT",
+    "last_modified": null,
+    "body_sha256": "098ca72ad116423db9b85a21befddefaf9179f9a79a6394a04abec208b5df7c2",
+    "short_excerpts": [
+      "Trust verification is disabled when running non-interactively with the -p flag",
+      "Anthropic reviews connectors against its"
+    ]
+  },
+  {
+    "id": "C4",
+    "requested_url": "https://code.claude.com/docs/en/settings",
+    "final_url": "https://code.claude.com/docs/en/settings",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:19:34.860779+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:19:33 GMT",
+    "last_modified": null,
+    "body_sha256": "a28c8c14e9be9d536bc04e31502cfc2291b62a0e4e537fb8fb25656eaafc6f69",
+    "short_excerpts": [
+      "Lists merge instead of overriding"
+    ]
+  },
+  {
+    "id": "C5",
+    "requested_url": "https://code.claude.com/docs/en/hooks",
+    "final_url": "https://code.claude.com/docs/en/hooks",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:19:35.716397+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:19:33 GMT",
+    "last_modified": null,
+    "body_sha256": "a2d5c45fcb10558c41c95db54608adfac0104badae0e5fc061d459c9e812a420",
+    "short_excerpts": [
+      "Command hooks execute shell commands with your full user permissions.",
+      "Claude Code never shows the dialog and treats the folder as trusted, so hooks committed in a repository\u2019s"
+    ]
+  },
+  {
+    "id": "C6",
+    "requested_url": "https://code.claude.com/docs/en/mcp",
+    "final_url": "https://code.claude.com/docs/en/mcp",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:19:35.410558+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:19:33 GMT",
+    "last_modified": null,
+    "body_sha256": "d7b403524e022223c64acaac127150868dc44fb01fde4c49038ec6b5f60b5ed6",
+    "short_excerpts": [
+      "it loads project-scoped servers without asking."
+    ]
+  },
+  {
+    "id": "C8",
+    "requested_url": "https://code.claude.com/docs/en/permission-modes",
+    "final_url": "https://code.claude.com/docs/en/permission-modes",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:20:59.299474+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:20:59 GMT",
+    "last_modified": null,
+    "body_sha256": "cec31df639c0493eab15d29c5180caad7fc42a418f8143a429ced4d78fc8c74d",
+    "short_excerpts": [
+      "On Pro, Max, and Team plans, the built-in starting permission mode is auto mode.",
+      "The built-in auto default requires Claude Code v2.1.228"
+    ]
+  },
+  {
+    "id": "C9",
+    "requested_url": "https://code.claude.com/docs/en/settings-reference",
+    "final_url": "https://code.claude.com/docs/en/settings-reference",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:23:08.721471+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:23:08 GMT",
+    "last_modified": null,
+    "body_sha256": "84499ff56e5341bb9192e7b46c97ee713f9277621339aeb784c7fab5b1f7cd2b",
+    "short_excerpts": [
+      "Default : false",
+      "can read the rest of the filesystem, including credential files."
+    ]
+  },
+  {
+    "id": "O1",
+    "requested_url": "https://developers.openai.com/codex/sandbox",
+    "final_url": "https://learn.chatgpt.com/docs/agent-approvals-security",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:19:36.070627+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:19:35 GMT",
+    "last_modified": "Fri, 04 Sep 2026 23:41:49 GMT",
+    "body_sha256": "a13ef10dd8306d2acacc67b588bf2a09aab51244f4987f8f7dad65b9fba0a249",
+    "short_excerpts": [
+      "By default, the agent runs with network access turned off.",
+      "Network on + network_proxy off: network stays on with unrestricted direct outbound access.",
+      "The check reduces DNS rebinding risk, but it does not eliminate it.",
+      "It does not filter web search, app or connector tool calls, MCP server connections"
+    ]
+  },
+  {
+    "id": "O2",
+    "requested_url": "https://developers.openai.com/codex/windows",
+    "final_url": "https://learn.chatgpt.com/docs/windows/windows-sandbox",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:19:36.163279+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:19:36 GMT",
+    "last_modified": "Fri, 04 Sep 2026 23:39:01 GMT",
+    "body_sha256": "314ffe225ddcede9b2057b32756d9451dceb5b6af56639e0bd61aaedcfe241ac",
+    "short_excerpts": [
+      "It's weaker than elevated",
+      "By default, both sandbox modes also use a private desktop for stronger UI isolation."
+    ]
+  },
+  {
+    "id": "O3",
+    "requested_url": "https://developers.openai.com/codex/rules",
+    "final_url": "https://learn.chatgpt.com/docs/agent-configuration/rules",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:19:36.225487+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:19:36 GMT",
+    "last_modified": "Fri, 04 Sep 2026 23:38:31 GMT",
+    "body_sha256": "b0e8a2d0b6d9d77fe1d8a48875e65f280774a0d76c18fd9481a2d957747404fc",
+    "short_excerpts": [
+      "forbidden > prompt > allow"
+    ]
+  },
+  {
+    "id": "O4",
+    "requested_url": "https://developers.openai.com/codex/mcp",
+    "final_url": "https://learn.chatgpt.com/docs/extend/mcp?surface=cli",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:19:36.187136+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:19:36 GMT",
+    "last_modified": "Fri, 04 Sep 2026 23:39:18 GMT",
+    "body_sha256": "d75c6f480c6e2b868fe24f732d0e77a3bc6bcd30dd32bc3034891eb97e62e30a",
+    "short_excerpts": [
+      ".codex/config.toml (trusted projects only).",
+      "disabled_tools (optional): Tool deny list (applied after enabled_tools )."
+    ]
+  },
+  {
+    "id": "O5",
+    "requested_url": "https://developers.openai.com/codex/config-reference",
+    "final_url": "https://learn.chatgpt.com/docs/config-file/config-reference",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:19:36.247485+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:19:36 GMT",
+    "last_modified": "Fri, 04 Sep 2026 23:37:36 GMT",
+    "body_sha256": "10b14fa945f2c55d7ef50441b6740c70fa5367a6d63b807bfd5dee8e379f57e8",
+    "short_excerpts": [
+      "on-failure is deprecated"
+    ]
+  },
+  {
+    "id": "O6",
+    "requested_url": "https://developers.openai.com/codex/hooks",
+    "final_url": "https://learn.chatgpt.com/docs/hooks",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:20:59.381296+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:20:59 GMT",
+    "last_modified": "Fri, 04 Sep 2026 23:38:01 GMT",
+    "body_sha256": "288395dce53d51616585c7d41d2fc5f168a03702c3562fd9796c867166d7ef17",
+    "short_excerpts": [
+      "Codex records trust against the hook's current hash",
+      "Errors, missing servers, and unavailable tools don't block the operation.",
+      "MCP tool hooks run synchronously. They don't request tool approval or trigger other hooks."
+    ]
+  },
+  {
+    "id": "O7",
+    "requested_url": "https://developers.openai.com/codex/config-file/config-basic",
+    "final_url": "https://learn.chatgpt.com/docs/config-file/config-basic",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:20:59.361564+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:20:59 GMT",
+    "last_modified": "Fri, 04 Sep 2026 23:38:38 GMT",
+    "body_sha256": "6ecadbfb6962f7246bb90e319b3ff7b2a48a21931ff12b397415ef1a5e2327e2",
+    "short_excerpts": [
+      "For security, Codex loads project .codex/ layers only when you trust the project."
+    ]
+  },
+  {
+    "id": "O8",
+    "requested_url": "https://developers.openai.com/codex/enterprise/managed-configuration",
+    "final_url": "https://learn.chatgpt.com/docs/enterprise/managed-configuration",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:20:59.376815+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:20:59 GMT",
+    "last_modified": "Fri, 04 Sep 2026 23:42:58 GMT",
+    "body_sha256": "bf722c8af96072acad3434004931b470b4aab2e78f6a709c6083daf3dd49a122",
+    "short_excerpts": [
+      "Requirements constrain security-sensitive settings",
+      "its name and identity match an approved entry"
+    ]
+  },
+  {
+    "id": "O9",
+    "requested_url": "https://developers.openai.com/codex/permissions",
+    "final_url": "https://learn.chatgpt.com/docs/permissions",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:23:09.037709+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:23:08 GMT",
+    "last_modified": "Fri, 04 Sep 2026 23:42:59 GMT",
+    "body_sha256": "c695a8256021b982ef5fd4a2a0c3d621afcfe655e88b1abd4b6271de645fe0aa",
+    "short_excerpts": [
+      "Beta. Permission profiles are under active development and may change.",
+      "with Landlock available for compatibility fallback paths."
+    ]
+  },
+  {
+    "id": "D1",
+    "requested_url": "https://api.github.com/repos/anthropics/claude-code/commits?path=CHANGELOG.md&until=2026-09-03T23%3A59%3A59Z&per_page=1",
+    "final_url": "https://api.github.com/repos/anthropics/claude-code/commits?path=CHANGELOG.md&until=2026-09-03T23%3A59%3A59Z&per_page=1",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:21:34.059139+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:21:34 GMT",
+    "last_modified": "Thu, 03 Sep 2026 23:48:05 GMT",
+    "body_sha256": "7531b88f14c474e4bbce30abf4e1717dc7006957e612cfff723c1cca4ee9dcb5",
+    "short_excerpts": [
+      "\"date\":\"2026-09-03T23:48:05Z\""
+    ]
+  },
+  {
+    "id": "D2",
+    "requested_url": "https://raw.githubusercontent.com/anthropics/claude-code/b3f0e501b79fe5cfc8c10d18cf3b0b6715c5c2fb/CHANGELOG.md",
+    "final_url": "https://raw.githubusercontent.com/anthropics/claude-code/b3f0e501b79fe5cfc8c10d18cf3b0b6715c5c2fb/CHANGELOG.md",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:22:04.146944+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:22:04 GMT",
+    "last_modified": null,
+    "body_sha256": "5f1267e095f1839d2f6f83ec293a4525412782025f9ff9b204fe55228b7636c9",
+    "short_excerpts": [
+      "## 2.1.260",
+      "Added `sandbox.failIfUnavailable` setting to exit with an error when sandbox is enabled but cannot start, instead of running unsandboxed"
+    ]
+  },
+  {
+    "id": "D3",
+    "requested_url": "https://www.anthropic.com/engineering/claude-code-sandboxing",
+    "final_url": "https://www.anthropic.com/engineering/claude-code-sandboxing",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:20:59.404458+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:20:59 GMT",
+    "last_modified": null,
+    "body_sha256": "0f1fb6cb10793bad14d4df1b3c08ed7f1ab4ca248e62895139cd4ec22bf310a3",
+    "short_excerpts": [
+      "Oct 20, 2025",
+      "Linux bubblewrap and MacOS seatbelt"
+    ]
+  },
+  {
+    "id": "D4",
+    "requested_url": "https://api.github.com/repos/openai/codex/commits?path=docs/sandbox.md&until=2026-09-03T23%3A59%3A59Z&per_page=1",
+    "final_url": "https://api.github.com/repos/openai/codex/commits?path=docs/sandbox.md&until=2026-09-03T23%3A59%3A59Z&per_page=1",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:21:34.135442+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:21:34 GMT",
+    "last_modified": "Fri, 02 Jan 2026 20:01:53 GMT",
+    "body_sha256": "53419d275567e097789704b10901c1b15dc7a930e1e5d524ed7ed28751da75cb",
+    "short_excerpts": [
+      "Replaced user documentation with links to developers docs site"
+    ]
+  },
+  {
+    "id": "D5",
+    "requested_url": "https://api.github.com/repos/openai/codex/commits/2de731490e86c11980c1c90b8a9f3fe332a118fd",
+    "final_url": "https://api.github.com/repos/openai/codex/commits/2de731490e86c11980c1c90b8a9f3fe332a118fd",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:22:04.159902+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:22:04 GMT",
+    "last_modified": "Fri, 02 Jan 2026 19:30:04 GMT",
+    "body_sha256": "d7bdf57ef523fa5709ac63dc83f0de860d03c79b7f3c50e395f77b804a300a8b",
+    "short_excerpts": [
+      "2026-01-02T19:30:04Z"
+    ]
+  },
+  {
+    "id": "D6",
+    "requested_url": "https://raw.githubusercontent.com/openai/codex/2de731490e86c11980c1c90b8a9f3fe332a118fd/docs/sandbox.md",
+    "final_url": "https://raw.githubusercontent.com/openai/codex/2de731490e86c11980c1c90b8a9f3fe332a118fd/docs/sandbox.md",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:22:04.110610+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:22:04 GMT",
+    "last_modified": null,
+    "body_sha256": "4218f15692931c63ed99d1aede50ef7f5f3858ee251894378118cc0e7a8d51b2",
+    "short_excerpts": [
+      "Combines **Landlock** and **seccomp** APIs",
+      "Windows sandbox support remains experimental."
+    ]
+  },
+  {
+    "id": "X1",
+    "requested_url": "https://developers.openai.com/codex/security",
+    "final_url": "https://learn.chatgpt.com/docs/security",
+    "status": 200,
+    "fetched_utc": "2026-09-05T01:19:36.151405+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:19:36 GMT",
+    "last_modified": "Fri, 04 Sep 2026 23:46:16 GMT",
+    "body_sha256": "b41c03366d3dadfbefa8188b7a2b27c56eb529925890f9269d68a56a1d70711d",
+    "short_excerpts": [
+      "Codex Security is an application security agent"
+    ]
+  },
+  {
+    "id": "X2",
+    "requested_url": "https://openai.com/index/introducing-codex/",
+    "final_url": "https://openai.com/index/introducing-codex/",
+    "status": 403,
+    "fetched_utc": "2026-09-05T01:20:59.297980+00:00",
+    "http_date": "Sat, 05 Sep 2026 01:20:59 GMT",
+    "last_modified": null,
+    "body_sha256": "5f1517c19a5dd78b21ee269754aec63e2018ce834d7450ee0659ad9236066841",
+    "short_excerpts": []
+  }
+]

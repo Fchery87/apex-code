@@ -1,0 +1,3 @@
+import {checkPublishedMetadata,checkTarballHash} from '/home/nochaserz/Documents/Coding Projects/apex-code/scripts/apex/verify-published-release.mjs';
+const m={gitHead:"tag-sha",dist:{shasum:"unreviewed-sha1",integrity:"sha512-unreviewed",tarball:"https://registry.example/unreviewed.tgz",attestations:{url:"https://registry.example/missing-attestation",provenance:{predicateType:"https://slsa.dev/provenance/v1"}}}};
+console.log(JSON.stringify({metadataProblems:checkPublishedMetadata(m,{gitHead:"tag-sha"}),tarballProblems:checkTarballHash(m,{shasum:"unreviewed-sha1",integrity:"sha512-unreviewed"})}));

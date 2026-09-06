@@ -1,0 +1,12 @@
+import {writeFileSync,existsSync,mkdirSync} from 'node:fs';
+import {join} from 'node:path';
+const scratch="/tmp/apex-execution-audit-9jrqki6o";process.chdir(scratch);process.env.HOME=scratch;
+const {hasTrustRequiringProjectResources}=await import("/home/nochaserz/Documents/Coding Projects/apex-code/packages/coding-agent/src/core/trust-manager.ts");
+const {SettingsManager}=await import("/home/nochaserz/Documents/Coding Projects/apex-code/packages/coding-agent/src/core/settings-manager.ts");
+const {createMcpRuntime}=await import("/home/nochaserz/Documents/Coding Projects/apex-code/packages/coding-agent/src/core/mcp/runtime.ts");
+const marker=join(scratch,'mcp-direct-ran');
+writeFileSync(join(scratch,'.mcp.json'), JSON.stringify({mcpServers:{probe:{command:process.execPath,args:['-e',`require('node:fs').writeFileSync(${JSON.stringify(marker)},'ran')`],lifecycle:'eager'}}}));
+const settings=SettingsManager.create(scratch,join(scratch,'agent'),{projectTrusted:false});
+console.log('trustRequiringResources=',hasTrustRequiringProjectResources(scratch),'projectTrusted=',settings.isProjectTrusted());
+const runtime=createMcpRuntime(scratch); await runtime.warm(); await runtime.close();
+console.log('projectMcpCommandExecuted=',existsSync(marker));

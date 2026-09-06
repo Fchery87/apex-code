@@ -1,0 +1,14 @@
+{
+  "head": "2477e594ef1479d1cb4467f0bc50c2e14fcd3e00",
+  "historical_cutoff_commit": "49e1f18efcf3dcbb130c4b108d9606fb3e0404a6",
+  "source_diff": "git diff --stat 49e1f18efcf3dcbb130c4b108d9606fb3e0404a6 HEAD -- packages/coding-agent/src packages/agent/src: empty",
+  "commands": {
+    "typecheck": "npx tsgo --noEmit",
+    "lint": "npx biome check --error-on-warnings .",
+    "docs": "npm run check:docs",
+    "audit": "npm audit --omit=dev --json",
+    "sandbox-narrow": "npm --prefix packages/coding-agent test -- test/sandbox/linux-backend.test.ts",
+    "sandbox-suite": "npm --prefix packages/coding-agent test -- test/sandbox",
+    "config-probe": "npx tsx .apex-code/audit-2026-09-03/config-projection-probe.ts"
+  }
+}

@@ -80,6 +80,16 @@ apex-code-*.html
 # with the team. `.apex-code/permissions.json` (the `project` source) IS versioned.
 .apex-code/permissions.local.json
 
+# Audit evidence: the written reports are versioned, the raw capture is not.
+# `market-evidence/` holds ~20MB of fetched page bodies and
+# `public-comparison-extracts.json` a 1.8MB extract dump. Both are inputs to
+# reports that are committed beside them, and neither is readable as a diff.
+.apex-code/audit-review-2026-09-05/market-evidence/
+.apex-code/audit-2026-09-03/public-comparison-extracts.json
+# Probe scratch containing throwaway git repositories, not evidence.
+.apex-code/audit-review-2026-09-05/execution-scratch/
+.apex-code/audit-review-2026-09-05/execution-scratch-corrected/
+
 # Secrets — never commit. See AGENTS.md § Secrets.
 .env.*
 !.env.example
