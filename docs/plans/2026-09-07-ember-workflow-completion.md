@@ -22,7 +22,7 @@ The tasks are ordered so the sequence proves itself. EMBER.1 corrects a false st
 |---|---|---|---|
 | EMBER.1 | Replace the "Always allow" label with a session-scoped one in the interactive responder, and decide the ACP surface. | verified in `69038c4a8` | `npx vitest run test/permissions/ test/acp/ --root packages/coding-agent`: 15 files, 237 tests pass. Four responder assertions and one ACP assertion were written first and watched fail against "Always allow". Both surfaces now read "Allow for this session". A gate test asserts the write is `{type: "addRules", destination: "session", rules: [{toolName: "read", behavior: "allow", ruleContent: "a.txt"}]}`, byte-identical to before, and that "Allow once" writes nothing. ACP `optionId` and `kind` are unchanged. `npx tsgo --noEmit` exits 0. |
 | EMBER.2 | Route the two Apex-owned custom selectors through `paintBackground`, and give the session selector's border `borderMuted`. | implemented, focused checks green, SHA pending | `npx vitest run test/model-selector.test.ts test/extension-selector-search.test.ts test/session-selector-rename.test.ts test/apex-theme.test.ts --root packages/coding-agent`: 4 files, 27 tests pass. Five assertions were written first and watched fail. The border test lives in `session-selector-rename.test.ts` because `session-selector-search.test.ts` covers a pure filter function and renders nothing. `paintedWidth` proves the fill hugs its text rather than spanning 120 columns. Neighbour sweep over 11 theme and selector suites, 73 tests pass. `npx tsgo --noEmit` exits 0. |
-| EMBER.3 | Delete the mode-label prefix and carry mode in the caret's hue so the input origin holds still. | not started | `npm --prefix packages/coding-agent test -- test/custom-editor-chrome.test.ts`. The cursor column is identical in agent mode, in bash mode, and during a streaming turn. Bash mode is still legible from the caret hue and the tray. |
+| EMBER.3 | Delete the mode-label prefix and carry mode in the marker's glyph and hue so the input origin holds still. | implemented, focused checks green, SHA pending | `npx vitest run test/custom-editor-chrome.test.ts test/custom-editor-history-keybindings.test.ts test/interactive-mode-status.test.ts --root packages/coding-agent`: 3 files, 78 tests pass. Four assertions were written first and watched fail on a missing `setPromptMode`. The origin holds across agent, bash, and a deliberately mismatched marker pair. `npx tsgo --noEmit` exits 0. |
 | EMBER.4 | Report hidden detail truthfully, render the hint only when detail is hidden, and add per-call expansion beside the global action. | not started | `npm --prefix packages/coding-agent test -- test/tool-execution-component.test.ts test/tool-execution-render-cache.test.ts`. A result hiding nothing renders no hint. Expanding one call leaves its siblings collapsed. The global action resets per-call overrides then applies its own value. Renderer invocation counts prove no renderer composes twice. A per-call toggle bumps `displayVersion` and invalidates the cache. |
 | EMBER.5 | Move working status, elapsed time, and interrupt guidance into the footer's width ladder, and add the compaction hint. | not started | `npm --prefix packages/coding-agent test -- test/footer-width.test.ts test/footer-accessibility.test.ts test/footer-usage-cache.test.ts` at 120, 80, 56, 40, and 28 columns. Permission posture, the textual `!` and `!!` pressure markers, and the interrupt action survive every width. The tray does not invalidate cached usage totals. A custom-footer session keeps a visible working state. |
 | EMBER.6 | Carry a bounded preview and an honest scope into the permission request, and carry denial guidance back through `GateDecision.reason`. | not started | `npm --prefix packages/coding-agent test -- test/permissions/`. Cases cover allow once, session rule, rule unavailable, cancel, guidance reaching the blocked tool result, an unavailable preview, and a concurrent in-place write between preview and apply. A rejection produces no execution and no evidence record. The preview reads only through the prepared operation. |
@@ -35,6 +35,23 @@ The tasks are ordered so the sequence proves itself. EMBER.1 corrects a false st
 - [ ] Re-run at the task head, interleaved with the baseline.
 - [ ] Fail the task if per-frame cost exceeds 16 ms or regresses against trunk.
 - [ ] `npm --prefix packages/coding-agent test -- test/tui-flicker-red-loop.test.ts` stays green.
+
+## Frame-budget baseline
+
+Measured on an idle host, trunk `1e0a86c17` then head interleaved, per the box below.
+
+| Probe | Trunk | Head |
+|---|---|---|
+| S1 32k-char chunk, ms mean | 5.87 | 5.66 |
+| S2 300 msgs, ms/frame mean | 7.39 | 9.14 |
+| S2 300 msgs, frames over 16 ms | 1.7% | 5.0% |
+| S3 300 msgs, rebuild ms | 576.82 | 632.76 |
+
+Two things this establishes for EMBER.4 and EMBER.5.
+
+**The budget is already marginal at 300 messages on trunk.** 1.7% of frames run over 16 ms before any of this work. That is a property of the current code, not something this plan introduced, and the next task to touch `ToolExecutionComponent` will be blamed for it unless the baseline is on record.
+
+**One run is not evidence on this host.** The first head measurement was taken minutes after a 21-minute full-load test suite and reported 18.86 ms mean with 50% of frames over budget, a uniform 2.5x across all three scenarios including Scenario 3, which no task in this plan can reach. Re-run interleaved with trunk on an idle machine it came back to 9.14 ms. Always measure trunk and head back to back on a quiet host, and treat a uniform multiple across untouched scenarios as contamination rather than a regression.
 
 ## Files and boundaries
 
@@ -77,7 +94,21 @@ Already landed, so out of scope. The dotted `borderMuted` overlay rule, the shar
 
 **Semantic colour survives the fill.** `paintBackground` walks the row and paints each visible run separately, leaving control sequences untouched, so the muted provider badges and the green checkmark in `/model` keep their meaning on a lit row. Only the accent was dropped. This was settled by running a probe against the real theme rather than by reasoning about ANSI nesting.
 
+**A third defect surfaced and was left alone.** `dynamic-border.ts` documents that components exported for extension use must pass an explicit colour function, because jiti gives an extension its own module cache where `DynamicBorder`'s own `theme` may be uninitialized. A closure passed from the caller's module captures the caller's `theme` instead, which is why it works. `ExtensionSelectorComponent` and `ModelSelectorComponent` are both exported at `src/index.ts:400` and `405` and both call `new DynamicBorder()` with no argument at `extension-selector.ts:48,84` and `model-selector.ts:116,146`. The session selector now complies; those two do not. Not fixed here because it is a latent extension-loading bug rather than a styling one, and it wants its own task and its own jiti test.
+
+**What the border test does not prove.** It asserts the rendered colour, which a bare `new DynamicBorder()` would also satisfy, since `borderMuted` is the default. The explicit-function requirement is a module-capture invariant, and reproducing it needs a simulated dual module cache. That is disproportionate here, so the requirement is carried by a comment at the call site and in the test rather than by an assertion. Recorded rather than overclaimed.
+
 **The first version of the hug assertion measured the wrong thing.** A rendered line is padded to the render width by its `Text` component, so line length says nothing about the fill. `paintedWidth` in `test/suite/theme-ansi.ts` sums the visible characters inside the background runs instead, which is the property the frozen interface actually constrains.
+
+## What EMBER.3 found
+
+**Bash mode gets a glyph, not only a hue.** The design reference asks for a hue change alone. This repo already refuses colour-only signalling at `footer.ts:241`, where context pressure carries `!` and `!!` in text so it survives a monochrome terminal and a colour-blind reader. The marker moves from a two-cell `\u203a ` to a two-cell `! `, so mode is readable without colour and the origin still holds.
+
+**`busy` was deleted rather than moved.** `WorkingStatusIndicator` in its own container already carried that signal, so `interactive-mode.ts:4394` was widening the prompt mid-turn for information the screen showed elsewhere. Nothing is lost before the tray work lands.
+
+**The invariant is structural now.** `CustomEditor` takes a closed `PromptMode` union and pads every marker to a common cell count in its constructor, so no mode can move the caret. A test constructs a deliberately mismatched pair, `"agent> "` against `"! "`, and asserts the origin holds anyway. Padding rather than throwing keeps a mismatched caller rendering instead of crashing its dock.
+
+**A second compatibility break.** `CustomEditor` is exported at `src/index.ts:395`, so `setModeLabel` was public API. It is removed rather than left as a no-op, because a no-op lets an extension keep calling a method that silently does nothing while a removal fails at build time. Recorded in the spec's posture and deletion inventory.
 
 ## Narrowed claims
 
@@ -90,12 +121,12 @@ Already landed, so out of scope. The dotted `borderMuted` overlay rule, the shar
 ## Verification evidence
 
 - [x] EMBER.1 verified in `69038c4a8`. `test/permissions/` and `test/acp/`, 15 files, 237 tests pass. Full `npm run check` passed through the pre-commit hook.
-- [x] EMBER.2 focused run. 4 files, 27 tests pass, plus an 11-file neighbour sweep at 73 tests. `npx tsgo --noEmit` exits 0. SHA still to record.
-- [ ] EMBER.3 SHA and the cursor-column test output.
+- [x] EMBER.2 verified in `26a455820`. Focused 4 files at 27 tests, neighbour sweep 11 files at 73 tests, and the full workspace suite at 409 files and 3537 tests, all pass.
+- [x] EMBER.3 focused run. 3 files, 78 tests pass. `npx tsgo --noEmit` exits 0. SHA still to record.
 - [ ] EMBER.4 SHA and both tool-execution test outputs.
 - [ ] EMBER.5 SHA and the three footer test outputs at all five widths.
 - [ ] EMBER.6 SHA and the full `test/permissions/` run.
-- [ ] Trunk and head numbers from `streaming-render-bench.ts` for every task.
+- [x] Trunk and head numbers recorded above. EMBER.1, EMBER.2, and EMBER.3 do not touch the components the bench renders.
 - [ ] One live run of the real TUI driving the whole journey. Type a task, watch it work, take an approval prompt, inspect a change, read the result. Capture the screens under `.apex-code/`.
 - [ ] `npx tsgo --noEmit` exits 0.
 - [ ] `npm test` green once per completed slice, and `npm run check` before close.

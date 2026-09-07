@@ -643,6 +643,10 @@ export class InteractiveMode {
 			autocompleteMaxVisible,
 			promptPrefix: "› ",
 			promptColor: (text) => theme.fg("accent", text),
+			// Bash mode changes the glyph as well as the hue, so the mode is still
+			// readable on a monochrome terminal. Same cell count, so nothing shifts.
+			bashPromptPrefix: "! ",
+			bashPromptColor: (text) => theme.fg("bashMode", text),
 			placeholder: "Ask anything",
 			placeholderColor: (text) => theme.fg("dim", text),
 			commandColor: (text) => theme.fg("accent", text),
@@ -4391,7 +4395,9 @@ export class InteractiveMode {
 	}
 
 	private updateEditorBorderColor(): void {
-		this.defaultEditor.setModeLabel(this.isBashMode ? "bash" : this.session.isStreaming ? "busy" : undefined);
+		// Streaming no longer touches the dock. WorkingStatusIndicator already owns
+		// that signal, and a `[busy]` prefix moved the caret mid-turn.
+		this.defaultEditor.setPromptMode(this.isBashMode ? "bash" : "agent");
 		if (this.isBashMode) {
 			this.editor.borderColor = theme.getBashModeBorderColor();
 		} else {

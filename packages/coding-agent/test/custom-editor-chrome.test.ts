@@ -4,6 +4,7 @@ import { KeybindingsManager } from "../src/core/keybindings.ts";
 import { CustomEditor } from "../src/modes/interactive/components/custom-editor.ts";
 import { getEditorTheme, initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
+import { openSequence } from "./suite/theme-ansi.ts";
 
 const ESC = String.fromCharCode(27);
 const BEL = String.fromCharCode(7);
@@ -28,6 +29,8 @@ function makeEditor(options?: {
 		paddingX: options?.paddingX ?? 0,
 		promptPrefix: options?.promptPrefix ?? "> ",
 		promptColor: (text) => theme.fg("accent", text),
+		bashPromptPrefix: "! ",
+		bashPromptColor: (text) => theme.fg("bashMode", text),
 		placeholder: options?.placeholder ?? PLACEHOLDER,
 		placeholderColor: (text) => theme.fg("dim", text),
 		commandColor: (text) => theme.fg("accent", text),
@@ -119,14 +122,56 @@ describe("CustomEditor chrome", () => {
 	});
 
 	describe("prompt prefix", () => {
-		it("adds a text label for bash mode without overflowing the dock", () => {
+		it("holds the input origin at the same column in every prompt mode", () => {
+			const columnOf = (mode: "agent" | "bash") => {
+				const editor = makeEditor();
+				editor.setPromptMode(mode);
+				editor.setText("hello");
+				return plain(editor.render(80)[1]).indexOf("hello");
+			};
+
+			expect(columnOf("agent")).toBeGreaterThan(0);
+			expect(columnOf("bash")).toBe(columnOf("agent"));
+		});
+
+		it("marks bash mode with its own glyph, so the mode survives without colour", () => {
 			const editor = makeEditor();
-			editor.setModeLabel("bash");
+			editor.setPromptMode("bash");
 			for (const width of [120, 40]) {
 				const lines = editor.render(width);
-				expect(plain(lines[1])).toContain("bash");
+				expect(plain(lines[1]).trimStart().startsWith("!")).toBe(true);
 				for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
 			}
+		});
+
+		it("tints the bash marker with the bash hue and returns to the accent", () => {
+			const editor = makeEditor();
+			editor.setPromptMode("bash");
+			expect(editor.render(80)[1]).toContain(openSequence((text) => theme.fg("bashMode", text)));
+
+			editor.setPromptMode("agent");
+			expect(editor.render(80)[1]).toContain(openSequence((text) => theme.fg("accent", text)));
+		});
+
+		it("pads a shorter mode marker so no mode can move the origin", () => {
+			const tui = { terminal: { rows: 40, cols: 80 }, requestRender() {}, invalidate() {} };
+			const editor = new CustomEditor(tui as never, getEditorTheme(), new KeybindingsManager(), {
+				paddingX: 0,
+				promptPrefix: "agent> ",
+				promptColor: (text) => theme.fg("accent", text),
+				bashPromptPrefix: "! ",
+				bashPromptColor: (text) => theme.fg("bashMode", text),
+				placeholder: PLACEHOLDER,
+				placeholderColor: (text) => theme.fg("dim", text),
+				commandColor: (text) => theme.fg("accent", text),
+			});
+			editor.focused = true;
+			editor.setText("hello");
+
+			editor.setPromptMode("agent");
+			const agentColumn = plain(editor.render(80)[1]).indexOf("hello");
+			editor.setPromptMode("bash");
+			expect(plain(editor.render(80)[1]).indexOf("hello")).toBe(agentColumn);
 		});
 
 		it("marks only the first input line, indenting continuations", () => {

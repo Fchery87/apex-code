@@ -11,7 +11,7 @@
 | Last updated | `2026-09-07` |
 | Roadmap phase | `none — product-surface follow-up` |
 | Tracking issue/PR | `none` |
-| Compatibility posture | `Preserves compatibility, with one deliberate wording break. See below.` |
+| Compatibility posture | `Preserves compatibility, with two deliberate breaks. See below.` |
 
 **Compatibility posture.** The presentation changes preserve compatibility. Custom
 editors, custom footers, extension working-indicator controls, and the
@@ -21,6 +21,13 @@ a session-scoped label instead. The label is the only thing that changes. The ru
 gate writes is identical, because the tool's own `ruleForCall()` still generates it. No
 session file, settings key, or CLI flag changes shape, so nothing a user has on disk
 stops working.
+
+The second break is an API removal. `CustomEditor` is exported at `src/index.ts:395`,
+so its `setModeLabel` was public. It is deleted rather than left as a no-op, and
+`setPromptMode` replaces it. A no-op would let an extension keep calling a method that
+silently does nothing, where a removal fails at build time for a TypeScript consumer.
+An extension that called `setModeLabel` must move to `setPromptMode`, whose argument is
+a closed `PromptMode` union rather than a free string.
 
 ## Executive summary
 
@@ -227,7 +234,9 @@ and the old shape is deleted in that wave rather than left beside the new one.
 
 | Item | Type | Disposition |
 | --- | --- | --- |
-| Variable-width `[${modeLabel}]` prompt prefix, `custom-editor.ts:199`, and its `setModeLabel` call at `interactive-mode.ts:4394` | code | removed, superseded by caret hue and the activity tray |
+| Variable-width `[${modeLabel}]` prompt prefix, `custom-editor.ts:199` | code | removed, superseded by a fixed-width per-mode marker |
+| `CustomEditor.setModeLabel`, public through `src/index.ts:395` | code | removed, superseded by `setPromptMode(mode: PromptMode)` |
+| The `busy` prompt label set at `interactive-mode.ts:4394` | behavior | removed. `WorkingStatusIndicator` already carried that signal, so nothing is lost before the tray work lands |
 | Unconditional disclosure hint, `tool-execution.ts:298` | behavior | removed, replaced by a hint conditioned on hidden detail |
 | Accent-only selected row, `model-selector.ts:405` and `extension-selector.ts:89` | code | superseded by `paintBackground` |
 | Accent border argument, `session-selector.ts:738` | code | superseded by `borderMuted`, the argument itself retained |
