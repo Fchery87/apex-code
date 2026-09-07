@@ -65,7 +65,7 @@ installation, use the same npm channel:
 ```bash
 npm install --global apex-code
 # or from an existing installation:
-apex-code update --self
+apex-code update
 ```
 
 If your system does not permit global npm writes, use a Node version manager, configure
@@ -241,8 +241,9 @@ normal turn follows this shape:
 3. **Ask for the next action.** The model can answer directly or request a tool call.
 4. **Check policy.** The tool's declared contract is evaluated against permission rules,
    project trust, and the active permission mode before execution.
-5. **Run the tool.** File, search, shell, network, question, planning, and delegation
-   tools perform the requested operation inside the applicable sandbox boundary.
+5. **Run the tool.** File, search, shell (foreground and background), network, question,
+   planning, and delegation tools perform the requested operation inside the applicable
+   sandbox boundary.
 6. **Capture the result.** The tool returns structured output and, where applicable,
    evidence such as an exit code, argv, patch hash, or test result.
 7. **Continue or finish.** The result is added to context; the model may request another
@@ -320,12 +321,19 @@ because both are fixed by the supervisor before the session's process starts. A 
 waved through by `bypassPermissions` is still refused by the boundary if it writes outside
 the workspace or reaches an unlisted host.
 
+Settings can also declare hooks: commands or HTTP endpoints attached to lifecycle events.
+A hook's output can return an allow, block, or ask decision, and that decision feeds the
+same permission gate. Hooks are absent until you configure them under a `hooks` key in
+settings.
+
 ### OS sandbox
 
 On Linux and macOS, every command that can start an agent session runs inside an OS-level
 sandbox, beneath the application-level permission decision. Commands that only inspect or
-maintain host configuration — `auth`, `config`, `install`, `--version`, `--help` — stay
-outside it. Windows remains a portability target, not a sandbox-enforcement target.
+maintain host configuration stay outside it: the host subcommands `auth`, `config`,
+`install`, `remove`, `uninstall`, `update`, and `list`, plus the metadata reads
+`--version`, `--help`, `--list-models`, and `--export`. Windows remains a portability
+target, not a sandbox-enforcement target.
 
 **Filesystem.** The workspace is the only writable location. The invoking account's home
 directory is hidden, so a session cannot read `~/.ssh`, `~/.aws`, or shell history, and its
@@ -413,6 +421,15 @@ For untrusted repositories or unattended generated code, use a container, VM, or
 with only the files and credentials the task requires. Read [`SECURITY.md`](SECURITY.md)
 before relying on Apex Code for higher-risk work.
 
+### Verification and formatter policies
+
+The `policies` settings key defines named commands the session may run for verification
+and formatting. Each policy pins one executable and its exact argv, and no policy runs
+through a shell. A formatter policy may write only the paths it declares. Verification
+runs only when requested unless `policies.boundary` is set to `"post-turn"`, and a failed
+check adds a warning unless the policy sets `blocksCompletion`. ADR 0030 records the
+authority model behind these limits.
+
 ### Project trust and extensions
 
 Project trust controls whether project-local configuration, skills, and extensions are
@@ -447,6 +464,10 @@ Sessions are JSONL files whose entries form a tree through parent and entry IDs.
 means you can branch in place instead of creating a new transcript for every experiment:
 `/tree` navigates branches, `/fork` creates a new branch, and `--continue` or `--resume`
 returns to prior work.
+
+In a git repository, worktree checkpoints are on by default. Apex Code records the
+worktree as the session changes it, so an earlier state can be restored after a bad edit.
+Set `"checkpoints": { "enabled": false }` in `settings.json` to turn them off.
 
 Evidence is captured at the source of an operation. For example, the bash tool knows its
 actual argv and exit code, and edit/write tools can record patch information. The result
@@ -523,6 +544,9 @@ Use JSON/RPC when another process owns orchestration. The permission mode must b
 explicit for non-interactive modes, and secrets should be kept out of prompts and
 captured output.
 
+`--mode acp` speaks the Agent Client Protocol over stdio JSON-RPC, which connects Apex
+Code to ACP clients such as Zed and the JetBrains IDEs.
+
 ### Share a session deliberately
 
 `/share` first asks for confirmation, then exports the complete session HTML and creates
@@ -566,6 +590,19 @@ extension has the privileges of the Apex Code process; review its source before 
 it. See [`packages/coding-agent/docs/extensions.md`](packages/coding-agent/docs/extensions.md)
 for lifecycle events, tools, UI, packages, and examples.
 
+### MCP servers
+
+A project's `.mcp.json` configures Model Context Protocol servers, and the resource
+manager in `apex-code config` manages them alongside other package resources. A server
+configured with `"auth": "oauth"` needs a one-time authorization:
+
+```bash
+apex-code mcp auth <server-name>
+```
+
+The command opens the OAuth flow in a browser and stores the tokens in the local
+credential store, never in the project.
+
 ## Network and privacy
 
 Apex Code sends no project-directed usage telemetry. At startup it may query npm for the
@@ -574,6 +611,8 @@ Apex Code sends no project-directed usage telemetry. At startup it may query npm
 ```bash
 APEX_CODE_SKIP_VERSION_CHECK=1 apex-code
 ```
+
+`--offline` implies the same skip.
 
 Model requests go to the provider you select. Optional OTLP traces are sent only to an
 endpoint you explicitly configure, using an allowlist that excludes prompts, messages,
@@ -690,6 +729,7 @@ before opening a change.
 | [`SECURITY.md`](SECURITY.md) | Security boundary and vulnerability reporting |
 | [`docs/support.md`](docs/support.md) | Maintainer, response targets, and supported-version line |
 | [`docs/release-integrity-runbook.md`](docs/release-integrity-runbook.md) | Recovery steps for a compromised or incorrect published release |
+| [`docs/release-governance-checklist.md`](docs/release-governance-checklist.md) | Repository settings a maintainer must verify for release integrity |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution workflow and source hygiene |
 
 ## License
