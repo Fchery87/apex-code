@@ -124,6 +124,7 @@ capable and measurably worse.
 | Configured verification and formatting | **landed** — VF.1 through VF.6 · `f00df19e2` · three-OS CI green (run `33838960431`, repair-inclusive tree incl. Windows executor repair `e329441b1` and CI-only test repairs) · re-verified at `a0b68f368` (run `33926005862`) after models.dev retired a GitHub Copilot model id the fixtures pinned | [spec](specs/2026-09-01-configured-verification-and-formatting.md) | — |
 | Security boundary remediation | **landed** — runtime implementation `7fa4f340c13adb5ca942266eb7501c51371673a3`; release implementation `aa860294d42bbe4086d06756c861ea2071b0573d`; serial validation passed, with default parallel `npm test` limited by host scheduling and native macOS execution unavailable locally | [spec](specs/2026-09-05-security-boundary-remediation.md) | — |
 | Ember carried through the working session | **in review** — EMBER.1 through EMBER.6 · `69038c4a8`, `26a455820`, `5b15e2027`, `be3451ef8`, `363d0f0a3`, `7a6639229` | [spec](specs/2026-09-07-ember-workflow-completion.md) | — |
+| Permission prompt shows what it authorizes | **planned**, spec written | [spec](specs/2026-09-07-permission-preview.md) | — |
 
 ---
 
