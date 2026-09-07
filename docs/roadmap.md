@@ -1332,6 +1332,7 @@ takes the next free number instead of a reserved one.
 | 0028 | Verification/formatter policy settings: project shadows user per ID inside trusted projects; extensions additive-only; declared permission is a ceiling | follow-up | ✅ |
 | 0029 | Authorization and execution share one prepared path operation; execution pins the target by descriptor identity | follow-up | ✅ |
 | 0030 | Configured commands are authorized through the same authority as tool calls; a formatter is confined by isolated copy and restricted promotion | follow-up | ✅ |
+| 0031 | SDK sandbox containment is an explicit `required` / `external` / `none` contract | follow-up | ✅ |
 
 ## Cross-phase contracts
 

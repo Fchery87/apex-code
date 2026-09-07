@@ -22,15 +22,17 @@ Each task starts with a failing public-boundary test. Run the focused check befo
 |---|---|---|---|
 | PS.1 | Route verification and formatting through canonical command authorization. | verified in `99d138bf55efa3354c9a36ef23c94084cf4f0a24` | `npm --prefix packages/coding-agent test -- test/policy-authorization.test.ts`: 16 tests pass. A `deny` policy and a plan-mode session each leave the command's marker file uncreated, through both the seam and a real `AgentSession`. An `ask` with no responder fails closed. Removing the session wiring fails the two production cases. |
 | PS.2 | Enforce formatter scope during execution or through restricted-copy promotion. | verified in `99d138bf55efa3354c9a36ef23c94084cf4f0a24` for workspace mutation | `npm --prefix packages/coding-agent test -- test/formatter-confinement.test.ts`: 9 tests pass. An undeclared write never reaches the live workspace and the run reports `scope-violated`, never `passed`. Before the change 5 of these failed with the stray bytes on disk. Host-wide absolute writes stay unconfined; see Narrowed claims. |
-| PS.3 | Move supervisor state and policy snapshots outside child-writable roots. | not started | Symlink substitution cannot redirect handoff writes. Effective policy inside the child equals the supervisor snapshot. |
+| PS.3 | Move supervisor state and policy snapshots outside child-writable roots. | verified in `7fa4f340c13adb5ca942266eb7501c51371673a3` | `npm --prefix packages/coding-agent test -- test/sandbox/supervisor.test.ts test/sandbox/supervisor-state.test.ts test/sandbox/terminal-handoff.test.ts`: private supervisor paths own handoff, terminal-size, relay, credential, and escalation state. Symlink and replacement cases cannot redirect writes. The child reads the captured supervisor policy snapshot. |
 | PS.4 | Harden Git credential execution and protocol validation. | verified in `a87da3471e64e88b5ca5bbeeb4aeee9751fa41c3` | `npm --prefix packages/coding-agent test -- test/sandbox/git-credential-channel.test.ts`: 39 tests pass. Newline, carriage return, NUL, scheme, and host injection are refused with zero calls to `isHostAllowed`, `requestRelease`, and `fillCredential`. A scratch repository whose `credential.helper` touches a marker never creates it, reached both by cwd and through `GIT_DIR`/`GIT_CONFIG`. |
-| PS.5 | Document the authority split and SDK embedding contract. | not started | SDK tests distinguish required, external, and absent OS containment. |
+| PS.5 | Document the authority split and SDK embedding contract. | verified in `7fa4f340c13adb5ca942266eb7501c51371673a3` | `npm --prefix packages/coding-agent test -- test/sdk-sandbox-contract.test.ts test/sandbox/supervisor-state.test.ts`: the SDK distinguishes `required`, `external`, and `none`, reports diagnostics, and propagates the selected contract to delegated children. ADR 0031 and the SDK guide record the contract. |
 
 ## Files and boundaries
 
 PS.1 and PS.2: `packages/coding-agent/src/core/permissions/policy-command.ts` (new), `src/core/{formatter-lifecycle,verification-lifecycle,policy-executor,agent-session}.ts`. Tests: `test/policy-authorization.test.ts` and `test/formatter-confinement.test.ts` (both new), with `test/formatter-lifecycle.test.ts` updated where it asserted the superseded contract.
 
 PS.4: `src/core/sandbox/rpc/{git-credential-proxy,git-credential-helper}.ts`. Tests: `test/sandbox/git-credential-channel.test.ts`.
+
+PS.3 and PS.5: `src/core/permissions/store.ts`, `src/core/sdk.ts`, and `src/core/sandbox/{cli-launch,cli-supervisor,linux-backend,macos-backend,supervisor,terminal-handoff,terminal-size}.ts`. Tests: `test/sdk-sandbox-contract.test.ts` and `test/sandbox/{supervisor-state,supervisor,terminal-handoff}.test.ts`. Documentation: ADR 0005, ADR 0031, and `docs/sdk.md`.
 
 This plan uses the same documented two-commit close as the startup plan: the implementation commit establishes the real SHA; the close commit records and verifies that SHA in every task row.
 
@@ -41,6 +43,8 @@ This plan uses the same documented two-commit close as the startup plan: the imp
 3. **PS.2 materializes regular files only.** A workspace symlink is not reproduced in the stage.
 4. **PS.4's `GIT_CEILING_DIRECTORIES` guard is unverified by test.** It was confirmed only by shell probe. The empty private cwd is what carries the guarantee.
 5. **PS.4 validates git protocol structure, not hostname grammar.** The claim is that a host cannot break out of a git protocol field.
+6. **The default parallel `npm test` is not green on this four-CPU host.** Under load it has hit scheduler-sensitive startup deadlines and orphaned Bubblewrap children. Package-scoped serial runs passed: scripts 163 passed and 4 skipped; agent core 430 passed and 1 skipped; coding agent 3,529 passed and 58 skipped across 409 passing files and 6 skipped files.
+7. **Native macOS execution was unavailable.** macOS source and test-seam coverage ran on Linux. This plan does not claim a fresh native macOS run.
 
 ## Exit conditions
 

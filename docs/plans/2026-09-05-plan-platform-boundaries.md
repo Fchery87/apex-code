@@ -1,6 +1,6 @@
 # Plan: Platform boundary and escalation remediation
 
-**Status:** Not started
+**Status:** In progress
 
 **Spec:** [`docs/specs/2026-09-05-security-boundary-remediation.md`](../specs/2026-09-05-security-boundary-remediation.md)
 
@@ -20,15 +20,22 @@ Each task starts with a failing public-boundary test. Run the focused check befo
 
 | ID | Task | State | Verification |
 |---|---|---|---|
-| PB.1 | Project only the Linux escalation socket and test the production child path. | not started | A real Bubblewrap child reaches the intended socket only. Headless and denied requests fail closed. |
-| PB.2 | Move macOS profiles into private supervisor state. | not started | Native macOS tests reject pre-existing symlink, replacement, and concurrent profile substitution. |
-| PB.3 | Replace macOS recursive escalation with a minimal runner. | not started | The runner has no credential, network, terminal, or unrelated channel and returns bounded output. |
-| PB.4 | Stop directory projections from exposing parent siblings. | not started | Linux and macOS projection tests keep sibling files unreadable while requested descendants remain available. |
-| PB.5 | Record platform-specific guarantees and unsupported cases. | not started | Documentation and diagnostics distinguish Linux, macOS, Windows, CLI, SDK, and RPC behavior. |
+| PB.1 | Project only the Linux escalation socket and test the production child path. | verified in `7fa4f340c13adb5ca942266eb7501c51371673a3` | `npm --prefix packages/coding-agent test -- test/sandbox/linux-backend.test.ts test/sandbox/supervisor.test.ts`: Linux launch projections expose only the intended escalation channel. Headless and denied requests fail closed. |
+| PB.2 | Move macOS profiles into private supervisor state. | done in `7fa4f340c13adb5ca942266eb7501c51371673a3`, native verification unavailable | `npm --prefix packages/coding-agent test -- test/sandbox/macos-backend.test.ts` passes on Linux. Profile paths and supervisor artifacts stay outside child-writable workspace state, with replacement protections covered at the test seam. A native macOS run is still missing. |
+| PB.3 | Replace macOS recursive escalation with a minimal runner. | done in `7fa4f340c13adb5ca942266eb7501c51371673a3`, native verification unavailable | `npm --prefix packages/coding-agent test -- test/sandbox/macos-backend.test.ts` passes on Linux. The runner uses a fresh minimal profile, bounded output, the requested writable root, and no credential, network, terminal, proxy, or escalation channel. A native macOS run is still missing. |
+| PB.4 | Stop directory projections from exposing parent siblings. | verified in `7fa4f340c13adb5ca942266eb7501c51371673a3` on Linux; macOS native verification unavailable | `npm --prefix packages/coding-agent test -- test/sandbox/linux-backend.test.ts test/sandbox/macos-backend.test.ts`: grouped projection planning keeps requested descendants available without exposing unrelated parent siblings. Linux execution passed. A native macOS run is still missing. |
+| PB.5 | Record platform-specific guarantees and unsupported cases. | verified in `7fa4f340c13adb5ca942266eb7501c51371673a3` | `npm run check:docs` passes. ADR 0005, ADR 0031, and the SDK guide distinguish Linux, macOS, Windows, CLI, SDK, and RPC behavior, including the weaker macOS loopback guarantee and the absence of a Windows backend. |
 
 ## Files and boundaries
 
-The owner must list exact files in the first implementation commit. Do not widen the plan to unrelated providers, UI surfaces, or leaked or unlicensed source. Keep tests in scratch directories when they write state.
+Implementation files: `packages/coding-agent/src/cli.ts` and `src/core/sandbox/{bwrap-arguments,cli-launch,cli-supervisor,linux-backend,macos-backend,supervisor,terminal-handoff,terminal-size}.ts`. Tests: `test/sandbox/{linux-backend,macos-backend,supervisor,supervisor-state,terminal-handoff}.test.ts`. Documentation: ADR 0005, ADR 0031, and `docs/sdk.md`.
+
+## Narrowed claims
+
+1. **PB.2 and PB.3 lack a fresh native macOS run.** The implementation and platform-specific tests pass on Linux, but Linux cannot execute Seatbelt or prove native profile behavior. These rows are done but not natively verified.
+2. **PB.4 has native Linux evidence only.** The macOS projection planner is covered by tests, but native Seatbelt behavior was not rerun.
+3. **Windows remains unsupported.** It fails closed rather than receiving a best-effort boundary.
+4. **The default parallel `npm test` is not green on this four-CPU host.** Under load it has hit scheduler-sensitive startup deadlines and orphaned Bubblewrap children. Package-scoped serial runs passed: scripts 163 passed and 4 skipped; agent core 430 passed and 1 skipped; coding agent 3,529 passed and 58 skipped across 409 passing files and 6 skipped files.
 
 ## Exit conditions
 
