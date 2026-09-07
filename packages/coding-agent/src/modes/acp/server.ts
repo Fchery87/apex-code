@@ -29,7 +29,9 @@ export interface AcpHost {
 
 const PERMISSION_OPTIONS = [
 	{ optionId: "allow-once", name: "Allow once", kind: "allow_once" },
-	{ optionId: "allow-always", name: "Always allow", kind: "allow_always" },
+	// `optionId` and `kind` are the wire contract; only the display name is ours to fix.
+	// The gate writes this to `session`, so "always" was never true.
+	{ optionId: "allow-always", name: "Allow for this session", kind: "allow_always" },
 	{ optionId: "reject-once", name: "Reject", kind: "reject_once" },
 	{ optionId: "reject-always", name: "Reject always", kind: "reject_always" },
 ] as const;

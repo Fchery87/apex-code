@@ -8,7 +8,7 @@ export interface PermissionAskRequest {
 
 export interface PermissionAnswer {
 	allow: boolean;
-	/** "Always allow this" — persist a session-source rule via the tool's own ruleForCall(). */
+	/** Persist a session-source rule via the tool's own ruleForCall(). The grant ends with the session. */
 	persist?: boolean;
 }
 
@@ -17,7 +17,8 @@ export interface PermissionResponder {
 }
 
 const ALLOW_ONCE = "Allow once";
-const ALWAYS_ALLOW = "Always allow";
+/** Named for what the gate actually writes: an `addRules` update whose destination is "session". */
+const ALLOW_SESSION = "Allow for this session";
 const DENY = "Deny";
 
 /** The subset of ExtensionUIContext (core/extensions/types.ts) this responder needs. */
@@ -40,11 +41,11 @@ export function createInteractiveResponder(ui: SelectUI): PermissionResponder {
 		async ask({ toolName, description }) {
 			const choice = await ui.select(`Permission required — ${toolName}: ${description}`, [
 				ALLOW_ONCE,
-				ALWAYS_ALLOW,
+				ALLOW_SESSION,
 				DENY,
 			]);
 			if (choice === ALLOW_ONCE) return { allow: true };
-			if (choice === ALWAYS_ALLOW) return { allow: true, persist: true };
+			if (choice === ALLOW_SESSION) return { allow: true, persist: true };
 			// DENY, or no selection (cancelled/dismissed) — fail closed.
 			return { allow: false };
 		},
