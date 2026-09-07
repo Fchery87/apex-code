@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0 through 12 landed · **Created:** 2026-08-08 · **Last updated:** 2026-08-23
+**Status:** Active — Phases 0 through 12 landed · **Created:** 2026-08-08 · **Last updated:** 2026-09-06
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -122,7 +122,7 @@ capable and measurably worse.
 | Workspace-aware compaction and checkpoint navigation | **landed** — WS.1 through WS.7 · `8a36f1838` (three-OS CI run 33751872256) | [spec](specs/2026-09-01-harness-correctness-and-workspace-state.md) | — |
 | Tool reliability and execution budgets | **landed** — TR.1 through TR.7 · `cc9264873` · three-OS CI green (run `33707738039`, post-repair tree including `533de14e1`; first closure run `33705200104` failed on Windows and is superseded) | [spec](specs/2026-09-01-tool-reliability-and-execution-budgets.md) | — |
 | Configured verification and formatting | **landed** — VF.1 through VF.6 · `f00df19e2` · three-OS CI green (run `33838960431`, repair-inclusive tree incl. Windows executor repair `e329441b1` and CI-only test repairs) · re-verified at `a0b68f368` (run `33926005862`) after models.dev retired a GitHub Copilot model id the fixtures pinned | [spec](specs/2026-09-01-configured-verification-and-formatting.md) | — |
-| Security boundary remediation | **active** — audit findings require remediation before security claims | [spec](specs/2026-09-05-security-boundary-remediation.md) | [authorization](plans/2026-09-05-plan-canonical-authorization.md) · [policy](plans/2026-09-05-plan-policy-and-supervisor.md) · [platform](plans/2026-09-05-plan-platform-boundaries.md) · [release](plans/2026-09-05-plan-release-integrity.md) |
+| Security boundary remediation | **landed** — runtime implementation `7fa4f340c13adb5ca942266eb7501c51371673a3`; release implementation `aa860294d42bbe4086d06756c861ea2071b0573d`; serial validation passed, with default parallel `npm test` limited by host scheduling and native macOS execution unavailable locally | [spec](specs/2026-09-05-security-boundary-remediation.md) | — |
 
 ---
 

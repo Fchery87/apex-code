@@ -1,6 +1,6 @@
 # Spec: Security boundary remediation
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 
@@ -8,7 +8,7 @@
 |---|---|
 | Author | Apex Code maintainers |
 | Created | 2026-09-05 |
-| Last updated | 2026-09-05 |
+| Last updated | 2026-09-06 |
 | Roadmap phase | Product-surface follow-up |
 | Tracking issue/PR | none |
 | Compatibility posture | Preserves compatibility for existing session entries, provider configuration, and ordinary CLI behavior. It changes unsafe authorization outcomes, startup ordering, and release workflow behavior. Existing project permission files and policy files remain readable only when their source is trusted. SDK callers must choose an explicit sandbox contract if they need OS containment. |
@@ -46,21 +46,21 @@ Passing focused unit tests does not prove complete mediation. The missing tests 
 
 ## Goals
 
-- [ ] The public CLI parses arguments once and uses the typed result for metadata behavior, sandbox selection, and session construction.
-- [ ] Untrusted projects cannot load project or local authorization grants, modes, eager MCP, hooks, or other project-controlled startup authority.
-- [ ] The child cannot modify the authorization state used by its current or next permission snapshot.
-- [ ] A canonical operation model supplies both authorization and execution for paths, Bash, configured commands, credential requests, and evidence.
-- [ ] `@` aliases, symlink aliases, literal glob characters, unsupported shell grammar, mixed shell commands, and grammar-sensitive whitespace cannot bypass authorization.
-- [ ] Every configured verifier and formatter enters the canonical execution permission path. A denied command does not spawn. An unresolved ask fails closed without a responder.
-- [ ] Formatter execution cannot write outside its declared scope. Any incomplete scope observation or undeclared mutation produces failure rather than `passed`.
-- [ ] Supervisor-owned state, policy snapshots, and platform profiles live outside child-writable roots and use safe file operations.
-- [ ] Git credential helpers run without repository-controlled configuration, and protocol fields cannot change the authorized credential identity.
-- [ ] Linux escalation works through the projected socket. macOS escalation uses a private profile and a minimal runner with no excess channels.
-- [ ] Directory projections expose only the requested directory or a private copied projection.
-- [ ] The SDK documents and enforces an explicit sandbox contract instead of implying OS containment.
-- [ ] Publication uses the exact packed bytes that passed smoke tests. Verification checks the pre-publication digest and signed provenance identity.
-- [ ] One release workflow remains authorized to publish artifacts.
-- [ ] Public-boundary adversarial tests cover each finding and run in scratch directories.
+- [x] The public CLI parses arguments once and uses the typed result for metadata behavior, sandbox selection, and session construction.
+- [x] Untrusted projects cannot load project or local authorization grants, modes, eager MCP, hooks, or other project-controlled startup authority.
+- [x] The child cannot modify the authorization state used by its current or next permission snapshot.
+- [x] A canonical operation model supplies authorization and execution for path operations. Bash retains its grammar-sensitive matcher, while unused command, credential, and evidence variants were not added.
+- [x] `@` aliases, symlink aliases, literal glob characters, unsupported shell grammar, mixed shell commands, and grammar-sensitive whitespace cannot bypass authorization within the covered paths and Bash matcher.
+- [x] Every configured verifier and formatter enters the canonical execution permission path. A denied command does not spawn. An unresolved ask fails closed without a responder.
+- [x] Formatter execution uses restricted-copy promotion for workspace mutation. Absolute writes outside the workspace remain outside this portable confinement and require the OS sandbox.
+- [x] Supervisor-owned state, policy snapshots, and platform profiles live outside child-writable roots and use safe file operations.
+- [x] Git credential helpers run without repository-controlled configuration, and protocol fields cannot change the authorized credential identity.
+- [x] Linux escalation uses the projected socket. macOS escalation uses a private profile and a minimal runner with no excess channels. Native macOS execution was not available in this Linux checkout.
+- [x] Directory projections expose only the requested directory or a private copied projection in the tested projection planners.
+- [x] The SDK documents and enforces an explicit sandbox contract instead of implying OS containment.
+- [x] Publication uses the exact packed bytes that passed smoke tests. Offline digest and signed-provenance statement checks pass.
+- [x] One release workflow remains authorized to publish artifacts.
+- [x] Public-boundary adversarial tests cover the repaired findings and run in scratch directories.
 
 ## Non-goals
 
@@ -137,13 +137,17 @@ Required focused checks include:
 - Signed provenance verification that checks subject digest and workflow identity.
 - `npx tsgo --noEmit`, focused package tests, `npm test`, `npm run check`, and the documentation lifecycle validator.
 
-The full test suite is not green at the start of this work. The current baseline includes two flaky startup-session failures in the recorded audit run. The plan must track whether each repair changes that baseline.
+The runtime implementation commit is `7fa4f340c13adb5ca942266eb7501c51371673a3`. The release implementation commit is `aa860294d42bbe4086d06756c861ea2071b0573d`. The documentation evidence commit is `7bc544c14`. All three resolve to Git commits.
+
+Local serial validation passed. Scripts reported 163 passed and 4 skipped. Agent core reported 430 passed and 1 skipped. Coding agent reported 3,529 passed and 58 skipped across 409 passing files and 6 skipped files. The implementation and evidence commits passed formatting, lint, TypeScript, documentation lifecycle, dependency, import, scrubber, lock freshness, and browser smoke checks.
+
+The default parallel `npm test` is not reliable on this four-CPU host. Under load it has hit scheduler-sensitive startup deadlines and orphaned Bubblewrap children. This is recorded as a host resource limitation, not as a green full-suite result.
+
+Native macOS execution was unavailable on this Linux host. macOS source and test-seam coverage is recorded, but this closure does not claim a native macOS run. Windows has no Apex OS backend and fails closed.
 
 ## Rollout
 
-Read the [implementation handoff](../../.apex-code/audit-review-2026-09-05/implementation-handoff.md) for the recommended order and entry checks. The plan tables remain the only task status records.
-
-This change needs five plans because it spans the CLI, trust loaders, permission engine, tools, policy lifecycle, supervisor services, platform backends, SDK, release workflows, and tests. The live plans are [canonical authorization](../plans/2026-09-05-plan-canonical-authorization.md), [policy and supervisor authority](../plans/2026-09-05-plan-policy-and-supervisor.md), [platform boundaries](../plans/2026-09-05-plan-platform-boundaries.md), and [release integrity](../plans/2026-09-05-plan-release-integrity.md).
+The implementation was completed in the documented order of startup and trust, canonical authorization, policy and supervisor authority, platform boundaries, and release integrity. The completed plan files and temporary handoff were deleted after their evidence was recorded.
 
 ### Startup and trust, landed
 
@@ -155,11 +159,9 @@ The project, local, and user permission scopes are each captured once per store 
 
 Evidence: `adf4a67f75c43d31689c72cf1be26dbbc218f9ef` and `aa3bbb2c4eab49eba465699205ce054139affcd3`, both verified with `git cat-file -t`. `test/startup-trust.test.ts`, `test/sandbox/cli-launch.test.ts`, and `test/sandbox/cli-process.test.ts` cover direct and symlink replacement of every file-backed scope, the supported `apply()` refresh, and managed policy staying live.
 
-Create a separate ADR when implementation settles the canonical operation model, the SDK sandbox contract, or the release artifact authority. The ADR must cite this spec and replace the open choice with one settled decision.
+Settled decisions are recorded in [ADR 0029](../adr/0029-prepared-path-operation.md), [ADR 0030](../adr/0030-configured-command-authority-and-formatter-confinement.md), [ADR 0031](../adr/0031-sdk-sandbox-contract.md), and the amendments to [ADR 0005](../adr/0005-sandbox-boundary-guarantees.md) and [ADR 0018](../adr/0018-apex-only-release-version-authority.md).
 
-Settled so far: [ADR 0029](../adr/0029-prepared-path-operation.md) records the canonical operation model, and [ADR 0030](../adr/0030-configured-command-authority-and-formatter-confinement.md) records configured-command authority and the formatter confinement mechanism. [ADR 0018](../adr/0018-apex-only-release-version-authority.md) was amended for the release artifact authority.
-
-Do not advertise a complete security boundary until the P0 and P1 acceptance tests pass on the supported platforms.
+This closure does not advertise native macOS verification, a live registry round trip, offline signature authenticity, or Windows containment. Those limits remain explicit in the recorded evidence and permanent ADRs.
 
 ## Deletion inventory summary
 
