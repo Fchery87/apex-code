@@ -1,3 +1,4 @@
+import { Text, visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it } from "vitest";
 import { ExtensionSelectorComponent } from "../src/modes/interactive/components/extension-selector.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
@@ -40,5 +41,26 @@ describe("ExtensionSelectorComponent search", () => {
 		// The fill hugs its text, matching the frozen SelectList it sits beside.
 		expect(paintedWidth(selected ?? "")).toBeGreaterThan(0);
 		expect(paintedWidth(selected ?? "")).toBeLessThan(120);
+	});
+
+	it("draws a preamble above the rows and keeps every line inside the width", () => {
+		initTheme("dark");
+		const preamble = new Text(["- const b = 2;", "+ const b = 3;"].join("\n"), 1, 0);
+		const selector = new ExtensionSelectorComponent(
+			"Permission required",
+			["Allow once", "Deny"],
+			() => {},
+			() => {},
+			{ preamble },
+		);
+
+		for (const width of [120, 80, 56, 40, 28]) {
+			const lines = selector.render(width);
+			for (const line of lines) expect(visibleWidth(line), `width ${width}`).toBeLessThanOrEqual(width);
+			const rendered = stripAnsi(lines.join("\n"));
+			expect(rendered, `width ${width}`).toContain("const b = 3;");
+			// The change has to sit above the choice it justifies, not below it.
+			expect(rendered.indexOf("const b = 3;"), `width ${width}`).toBeLessThan(rendered.indexOf("Allow once"));
+		}
 	});
 });

@@ -782,13 +782,29 @@ export async function computeEditsDiff(
 
 		// Read the file
 		const rawContent = await readFile(absolutePath, "utf-8");
+		return computeEditsDiffFromContent(path, rawContent, edits);
+	} catch (err) {
+		return { error: err instanceof Error ? err.message : String(err) };
+	}
+}
 
+/**
+ * The half of `computeEditsDiff` that does not choose which bytes to read.
+ *
+ * The permission preview must describe the operation the gate authorized rather
+ * than whatever the pathname resolves to a second time, so it supplies content
+ * read through the prepared operation and calls this (ADR 0029).
+ */
+export function computeEditsDiffFromContent(
+	path: string,
+	rawContent: string,
+	edits: Edit[],
+): EditDiffResult | EditDiffError {
+	try {
 		// Strip BOM before matching (LLM won't include invisible BOM in oldText)
 		const { text: content } = splitBom(rawContent);
 		const normalizedContent = normalizeToLF(content);
 		const { baseContent, newContent } = applyEditsToNormalizedContent(normalizedContent, edits, path);
-
-		// Generate the diff
 		return generateDiffString(baseContent, newContent);
 	} catch (err) {
 		return { error: err instanceof Error ? err.message : String(err) };

@@ -298,3 +298,126 @@ describe("guidance reaching the blocked tool result", () => {
 		expect(asked[0]).toMatchObject({ toolName: "read", sessionScope: { description: "exact:a.txt" } });
 	});
 });
+
+describe("the preview producer seam", () => {
+	function contractWithPreview(previewCall: (params: { path: string }) => unknown, behavior: "ask" | "allow" = "ask") {
+		return {
+			capabilities: new Set(),
+			permission: { ...exactSpec, defaultBehavior: behavior, previewCall },
+			context: {},
+			evidence: {},
+		} as unknown as ToolContract;
+	}
+
+	it("hands the produced preview to the responder", async () => {
+		const asked: Array<{ preview?: unknown }> = [];
+		await evaluateToolCall(
+			"read",
+			{ path: "a.txt" },
+			{
+				getContract: () => contractWithPreview(() => ({ kind: "summary", lines: ["1 line replaced"] })),
+				store: recordingStore() as never,
+				getMode: () => "default" as const,
+				responder: {
+					ask: async (request) => {
+						asked.push(request);
+						return { allow: false };
+					},
+				},
+			},
+		);
+
+		expect(asked[0]?.preview).toEqual({ kind: "summary", lines: ["1 line replaced"] });
+	});
+
+	it("leaves the preview absent when the tool has no producer", async () => {
+		const asked: Array<{ preview?: unknown }> = [];
+		await evaluateToolCall(
+			"read",
+			{ path: "a.txt" },
+			{
+				getContract: () => contract,
+				store: recordingStore() as never,
+				getMode: () => "default" as const,
+				responder: {
+					ask: async (request) => {
+						asked.push(request);
+						return { allow: false };
+					},
+				},
+			},
+		);
+
+		expect(asked[0]?.preview).toBeUndefined();
+	});
+
+	it("does not produce a preview for a call that never reaches the prompt", async () => {
+		const produced: string[] = [];
+		const options = {
+			getContract: () =>
+				contractWithPreview((params) => {
+					produced.push(params.path);
+					return { kind: "summary", lines: ["x"] };
+				}, "allow"),
+			store: recordingStore() as never,
+			getMode: () => "default" as const,
+			responder: { ask: async () => ({ allow: true }) },
+		};
+
+		const decision = await evaluateToolCall("read", { path: "a.txt" }, options);
+
+		// Reading a file to describe a call nobody was asked about is work the user
+		// never sees, on a path the gate already resolved without asking.
+		expect(decision.block).toBe(false);
+		expect(produced).toEqual([]);
+	});
+
+	it("degrades to unavailable when the producer throws", async () => {
+		const asked: Array<{ preview?: { kind?: string } }> = [];
+		await evaluateToolCall(
+			"read",
+			{ path: "a.txt" },
+			{
+				getContract: () =>
+					contractWithPreview(() => {
+						throw new Error("target changed");
+					}),
+				store: recordingStore() as never,
+				getMode: () => "default" as const,
+				responder: {
+					ask: async (request) => {
+						asked.push(request);
+						return { allow: false };
+					},
+				},
+			},
+		);
+
+		// A producer that throws must not take the prompt down with it, and must not
+		// leave the reader thinking nothing would change.
+		expect(asked[0]?.preview?.kind).toBe("unavailable");
+	});
+});
+
+describe("the prompt carries the preview to whatever draws it", () => {
+	it("passes a produced preview through select's options", async () => {
+		const ui = uiWith("Deny");
+		const responder = createInteractiveResponder(ui);
+		const preview = { kind: "diff", path: "a.ts", lines: ["+ x"], omittedLines: 0 } as const;
+
+		await responder.ask({ toolName: "edit", description: "Edit a.ts", preview });
+
+		const [, , opts] = ui.select.mock.calls[0] as [string, string[], { preview?: unknown } | undefined];
+		expect(opts?.preview).toEqual(preview);
+	});
+
+	it("passes nothing when the tool produced no preview", async () => {
+		const ui = uiWith("Deny");
+		const responder = createInteractiveResponder(ui);
+
+		await responder.ask({ toolName: "edit", description: "Edit a.ts" });
+
+		const [, , opts] = ui.select.mock.calls[0] as [string, string[], unknown];
+		expect(opts).toBeUndefined();
+	});
+});

@@ -55,6 +55,7 @@ import type { KeybindingsManager } from "../keybindings.ts";
 import type { CustomMessage } from "../messages.ts";
 import type { ModelRegistry } from "../model-registry.ts";
 import type { ScopedModel } from "../model-resolver.ts";
+import type { PermissionPreview } from "../permissions/responder.ts";
 import type {
 	BranchSummaryEntry,
 	CompactionEntry,
@@ -100,6 +101,8 @@ export interface ExtensionUIDialogOptions {
 	signal?: AbortSignal;
 	/** Timeout in milliseconds. Dialog auto-dismisses with live countdown display. */
 	timeout?: number;
+	/** What the prompt is about to authorize, drawn above the choices. */
+	preview?: PermissionPreview;
 }
 
 /** Placement for extension widgets. */

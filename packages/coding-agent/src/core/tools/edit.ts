@@ -9,12 +9,14 @@ import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import { splitBom } from "../../utils/text.ts";
 import { getExperimentalToolSampling } from "../experimental.ts";
 import { getPreparedPathOperation, type PreparedPathOperation } from "../permissions/operations.ts";
+import type { PermissionPreview } from "../permissions/responder.ts";
 import type { ApexToolDefinition, EvidenceRecord } from "./contract.ts";
 import type { DiagnosticsOperations, DiagnosticsOutcome } from "./diagnostics.ts";
 import { diagnosticEvidenceForPath, formatDiagnosticsOutcome } from "./diagnostics.ts";
 import {
 	applyEditsToNormalizedContent,
 	computeEditsDiff,
+	computeEditsDiffFromContent,
 	detectLineEnding,
 	type Edit,
 	type EditDiffError,
@@ -138,6 +140,42 @@ export interface EditToolOptions {
 	 * `GrepOperations`' injection pattern (`test.ts:28`, `grep.ts:58`).
 	 */
 	diagnosticsOperations?: DiagnosticsOperations;
+}
+
+/** A preview is a courtesy, so it never costs more than a screen or two of reading. */
+const PREVIEW_MAX_BYTES = 512 * 1024;
+const PREVIEW_MAX_LINES = 40;
+
+/**
+ * Describe the edit for the person deciding whether to allow it.
+ *
+ * Reads through the operation `prepareCall` stored rather than resolving the
+ * pathname again, so a target swapped after authorization fails here exactly as
+ * it fails the write. `readPreparedPath` throws in that case and the gate turns
+ * the throw into a stated reason, which is the outcome a reader needs: better a
+ * prompt that admits it cannot show the change than a diff of the wrong file.
+ */
+function previewEdit(params: EditToolInput): PermissionPreview {
+	const prepared = getPreparedPathOperation(params);
+	if (!prepared) return { kind: "unavailable", reason: "No authorized target was prepared for this call" };
+	if (prepared.kind === "path-new") {
+		return { kind: "summary", lines: [`Create ${params.path}`] };
+	}
+
+	const buffer = readPreparedPath(prepared);
+	if (buffer.byteLength > PREVIEW_MAX_BYTES) {
+		return { kind: "unavailable", reason: `File is larger than ${PREVIEW_MAX_BYTES / 1024}KB, so no diff is shown` };
+	}
+	if (buffer.includes(0)) {
+		return { kind: "unavailable", reason: "File is binary, so there is no diff to show" };
+	}
+
+	const result = computeEditsDiffFromContent(params.path, buffer.toString("utf-8"), params.edits as Edit[]);
+	if ("error" in result) return { kind: "unavailable", reason: result.error };
+
+	const lines = result.diff.split("\n");
+	const shown = lines.slice(0, PREVIEW_MAX_LINES);
+	return { kind: "diff", path: params.path, lines: shown, omittedLines: lines.length - shown.length };
 }
 
 function prepareEditArguments(input: unknown): EditToolInput {
@@ -361,6 +399,7 @@ export function createEditToolDefinition(
 				defaultBehavior: "ask",
 				verb: "Edit",
 				getPath: (params) => params.path,
+				previewCall: (params) => previewEdit(params as EditToolInput),
 			}),
 			context: { resultRecoverable: true, deferSchema: false },
 			evidence: {

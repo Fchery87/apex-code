@@ -148,6 +148,7 @@ import {
 	formatAuthSelectorProviderType,
 	OAuthSelectorComponent,
 } from "./components/oauth-selector.ts";
+import { renderPermissionPreview } from "./components/permission-preview.ts";
 import { ScopedModelsSelectorComponent } from "./components/scoped-models-selector.ts";
 import { SessionSelectorComponent } from "./components/session-selector.ts";
 import { PERMISSION_MODE_OVERRIDE_HINTS, SettingsSelectorComponent } from "./components/settings-selector.ts";
@@ -2679,6 +2680,7 @@ export class InteractiveMode {
 					timeout: opts?.timeout,
 					onToggleToolsExpanded: () => this.toggleToolOutputExpansion(),
 					enableSearch,
+					preamble: opts?.preview ? renderPermissionPreview(opts.preview) : undefined,
 				},
 			);
 

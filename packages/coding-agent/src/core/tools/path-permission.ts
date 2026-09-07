@@ -4,6 +4,7 @@ import { minimatch } from "minimatch";
 import type { Static, TSchema } from "typebox";
 import { formatPathRelativeToCwdOrAbsolute } from "../../utils/paths.ts";
 import { setPreparedPathOperation } from "../permissions/operations.ts";
+import type { PermissionPreview } from "../permissions/responder.ts";
 import type { PermissionBehavior, PermissionSpec } from "./contract.ts";
 import { preparePathOperation, resolveToCwd } from "./path-utils.ts";
 
@@ -20,8 +21,10 @@ export function createPathPermissionSpec<TParams extends TSchema>(options: {
 	defaultBehavior: PermissionBehavior;
 	verb: string;
 	getPath: (params: Static<TParams>) => string | undefined;
+	/** Describes the change for a human about to approve it. See PermissionSpec.previewCall. */
+	previewCall?: (params: Static<TParams>) => PermissionPreview;
 }): PermissionSpec<TParams> {
-	const { cwd, defaultBehavior, verb, getPath } = options;
+	const { cwd, defaultBehavior, verb, getPath, previewCall } = options;
 
 	const normalize = (path: string | undefined): string => {
 		const canonical = resolveToCwd(path?.trim() ? path : ".", cwd);
@@ -34,6 +37,7 @@ export function createPathPermissionSpec<TParams extends TSchema>(options: {
 		prepareCall(params) {
 			setPreparedPathOperation(params as object, preparePathOperation(getPath(params) ?? ".", cwd));
 		},
+		...(previewCall ? { previewCall } : {}),
 		matches(ruleContent, params) {
 			return ruleContent.startsWith("exact:")
 				? normalize(getPath(params)) === ruleContent.slice("exact:".length)

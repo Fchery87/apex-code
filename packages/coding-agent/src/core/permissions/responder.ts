@@ -1,5 +1,17 @@
 /** Interactive escalation for an `ask`-resolved permission decision. */
 
+/**
+ * What the prompt shows about the change it is authorizing.
+ *
+ * `unavailable` is a first-class variant rather than an absent field, because a
+ * reader who is shown nothing cannot tell "this changes nothing" from "we could
+ * not read it". Only the second one should stop them approving.
+ */
+export type PermissionPreview =
+	| { kind: "diff"; path: string; lines: readonly string[]; omittedLines: number }
+	| { kind: "summary"; lines: readonly string[] }
+	| { kind: "unavailable"; reason: string };
+
 export interface PermissionAskRequest {
 	toolName: string;
 	/** Human-readable rendering of what would be persisted, from the tool's own describe(). */
@@ -11,6 +23,11 @@ export interface PermissionAskRequest {
 	 * choice in that case promised a grant nothing would write.
 	 */
 	sessionScope?: { description: string };
+	/**
+	 * Produced by the tool's `previewCall`, after the gate decides to ask and never
+	 * before. Absent when the tool declares no producer.
+	 */
+	preview?: PermissionPreview;
 }
 
 export interface PermissionAnswer {
@@ -37,7 +54,7 @@ const DENY = "Deny";
 
 /** The subset of ExtensionUIContext (core/extensions/types.ts) this responder needs. */
 export interface SelectUI {
-	select(title: string, options: string[]): Promise<string | undefined>;
+	select(title: string, options: string[], opts?: { preview?: PermissionPreview }): Promise<string | undefined>;
 	/** Absent on hosts that cannot collect free text; the guidance choice is then not offered. */
 	input?(title: string, placeholder?: string): Promise<string | undefined>;
 }
@@ -54,13 +71,19 @@ export interface SelectUI {
  */
 export function createInteractiveResponder(ui: SelectUI): PermissionResponder {
 	return {
-		async ask({ toolName, description, sessionScope }) {
+		async ask({ toolName, description, sessionScope, preview }) {
 			const options = [ALLOW_ONCE];
 			if (sessionScope) options.push(ALLOW_SESSION);
 			if (ui.input) options.push(REJECT_WITH_GUIDANCE);
 			options.push(DENY);
 
-			const choice = await ui.select(`Permission required — ${toolName}: ${description}`, options);
+			// The preview travels as data. Drawing it belongs to whatever is hosting
+			// the prompt, which keeps this file free of a rendering dependency.
+			const choice = await ui.select(
+				`Permission required — ${toolName}: ${description}`,
+				options,
+				preview ? { preview } : undefined,
+			);
 			if (choice === ALLOW_ONCE) return { allow: true };
 			if (choice === ALLOW_SESSION) return { allow: true, persist: true };
 			if (choice === REJECT_WITH_GUIDANCE && ui.input) {

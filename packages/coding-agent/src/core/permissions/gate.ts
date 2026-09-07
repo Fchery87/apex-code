@@ -12,9 +12,9 @@
  */
 
 import type { BeforeToolCallContext, BeforeToolCallResult } from "apex-code-agent-core";
-import { resolveToolContract, type ToolContract } from "../tools/contract.ts";
+import { type PermissionSpec, resolveToolContract, type ToolContract } from "../tools/contract.ts";
 import { resolveWithMode } from "./modes.ts";
-import type { PermissionResponder } from "./responder.ts";
+import type { PermissionPreview, PermissionResponder } from "./responder.ts";
 import { resolvePermission } from "./rules.ts";
 import type { PermissionMode, PermissionRuleStore } from "./store.ts";
 
@@ -54,6 +54,24 @@ function describeDecision(contract: ToolContract, toolName: string, ruleContent:
  * that reaches the transcript.
  */
 const MAX_GUIDANCE_CHARS = 400;
+
+/**
+ * Run the tool's preview producer, if it declares one, on the ask branch only.
+ *
+ * A producer reads a file to describe a change, so a call the user was never
+ * asked about must not pay for it. A producer that throws degrades to a stated
+ * reason rather than to silence: `readPreparedPath` throws precisely when the
+ * target changed identity since authorization, which is the case a reader most
+ * needs to see.
+ */
+function producePreview(spec: PermissionSpec, params: unknown): PermissionPreview | undefined {
+	if (!spec.previewCall) return undefined;
+	try {
+		return spec.previewCall(params as never);
+	} catch (error) {
+		return { kind: "unavailable", reason: error instanceof Error ? error.message : String(error) };
+	}
+}
 
 function describeDecline(toolName: string, guidance: string | undefined): string {
 	const trimmed = guidance?.trim().slice(0, MAX_GUIDANCE_CHARS);
@@ -97,6 +115,7 @@ export async function evaluateToolCall(
 	}
 	const ruleForCall = spec.ruleForCall(params as never);
 	const answer = await responder.ask({
+		preview: producePreview(spec, params),
 		toolName,
 		description: ruleForCall !== null ? spec.describe(ruleForCall) : `Run ${toolName}`,
 		// Only offer a session grant the persist branch below would actually write.
