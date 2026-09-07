@@ -247,7 +247,7 @@ describe("edit failure diagnostics", () => {
 	it("returns the ordinary failure with a bounded notice when the file exceeds the scan budget", async () => {
 		const cwd = scratchDirectory();
 		const path = join(cwd, "huge.txt");
-		const chunk = "x".repeat(1024) + "\n";
+		const chunk = `${"x".repeat(1024)}\n`;
 		writeFileSync(path, chunk.repeat(Math.ceil((EDIT_DIAGNOSTIC_MAX_FILE_BYTES + 1024) / chunk.length)), "utf-8");
 
 		const failure = await expectEditFailure(cwd, {

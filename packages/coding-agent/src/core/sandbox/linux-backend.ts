@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { closeSync, mkdirSync, openSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildBwrapArguments } from "./bwrap-arguments.ts";
+import { buildBwrapArguments, descriptorBackedReadOnlyPaths } from "./bwrap-arguments.ts";
 import { createCommandEscalationApprover, createCredentialReleaser, createHostApprover } from "./host-approval.ts";
 import { createSandboxNetworkProxy, type SandboxNetworkProxy } from "./network-proxy.ts";
 import {
@@ -21,7 +21,12 @@ import {
 } from "./rpc/git-credential-helper.ts";
 import { createGitCredentialProxy, type GitCredentialProxy } from "./rpc/git-credential-proxy.ts";
 import type { SandboxBackend, SandboxLaunch } from "./supervisor.ts";
-import { createTerminalHandoff, TERMINAL_HANDOFF_PATH_VARIABLE, type TerminalHandoff } from "./terminal-handoff.ts";
+import {
+	createTerminalHandoff,
+	TERMINAL_HANDOFF_ACK_PATH_VARIABLE,
+	TERMINAL_HANDOFF_PATH_VARIABLE,
+	type TerminalHandoff,
+} from "./terminal-handoff.ts";
 import { publishTerminalSize, TERMINAL_SIZE_PATH_VARIABLE } from "./terminal-size.ts";
 import type { SandboxViolationStore } from "./violations.ts";
 
@@ -45,6 +50,8 @@ export interface LinuxSandboxBackendOptions {
 	fillGitCredential?: typeof fillHostGitCredential;
 	/** Injectable only for tests, which have no terminal to approve an escalation at. */
 	requestCommandEscalation?: (request: CommandEscalationRequest) => Promise<boolean>;
+	/** Retained for source compatibility; launch state is now required on each launch. */
+	supervisorStateDirectory?: string;
 }
 
 function commandExists(command: string): boolean {
@@ -122,7 +129,6 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 	let gitCredentialDirectory: string | undefined;
 	let escalationProxy: Awaited<ReturnType<typeof createCommandEscalationProxy>> | undefined;
 	let escalationDirectory: string | undefined;
-
 	if (!hasCommand("bwrap")) {
 		return {
 			status: { kind: "unavailable", reason: "Bubblewrap (bwrap) is required for OS sandboxing." },
@@ -135,13 +141,16 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 	return {
 		status: { kind: "enforced" },
 		async launch(launch: SandboxLaunch): Promise<number> {
-			const stateDirectory = join(launch.policy.workspace, ".apex-code", "sandbox-state");
-			mkdirSync(stateDirectory, { recursive: true });
+			const supervisorStateDirectory = launch.supervisorStateDirectory;
+			mkdirSync(supervisorStateDirectory, { recursive: true, mode: 0o700 });
+			const stateDirectory = launch.policy.workspace;
+			const acknowledgementPath = join(launch.policy.workspace, ".apex-code", "sandbox-handoff-ack");
+			mkdirSync(join(launch.policy.workspace, ".apex-code"), { recursive: true });
 
 			const violationCountBeforeLaunch = violationStore?.totalCount ?? 0;
 
 			const { hostSocketPath, childSocketPath } = resolveProxySocketPaths();
-			handoff = createTerminalHandoff(stateDirectory);
+			handoff = createTerminalHandoff(supervisorStateDirectory, { acknowledgementPath });
 			const gitCredentialPaths = resolveGitCredentialChannelPaths();
 			gitCredentialDirectory = gitCredentialPaths.hostSocketDirectory;
 			proxy = await createSandboxNetworkProxy({
@@ -166,7 +175,7 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 					(options?.fillGitCredential ?? fillHostGitCredential)(request, { environment: process.env }),
 				violationStore,
 			});
-			writeGitCredentialHelper(stateDirectory);
+			writeGitCredentialHelper(supervisorStateDirectory);
 
 			const escalationPaths = resolveCommandEscalationChannelPaths();
 			escalationDirectory = escalationPaths.hostSocketDirectory;
@@ -174,7 +183,7 @@ export function createLinuxSandboxBackend(options?: LinuxSandboxBackendOptions):
 			// .cjs forces CommonJS regardless of the target workspace's package.json "type"
 			// field -- a plain .js here would be parsed as ESM under "type": "module" and
 			// crash on `require`, since Node resolves module type from the nearest package.json.
-			const relayScriptPath = join(stateDirectory, "relay.cjs");
+			const relayScriptPath = join(supervisorStateDirectory, "relay.cjs");
 			writeFileSync(
 				relayScriptPath,
 				`
@@ -211,13 +220,22 @@ server.on("error", (err) => {
 `.trim(),
 			);
 
-			const readOnlyFileDescriptors = (launch.readOnlyFiles ?? []).map((path) => openSync(path, "r"));
+			const primaryReadOnlyPaths = [
+				process.execPath,
+				launch.command,
+				supervisorStateDirectory,
+				...(launch.readOnlyPaths ?? []),
+			];
+			const readOnlyFileDescriptors = [
+				...descriptorBackedReadOnlyPaths(primaryReadOnlyPaths),
+				...(launch.readOnlyFiles ?? []),
+			].map((path) => openSync(path, "r"));
 			// The descriptors above are opened before the child spawns and must be closed
 			// on every exit path -- including a spawn/wait rejection -- or a crashed launch
 			// leaks an open handle onto a host-owned credential file for the process's life.
 			// The workspace is bind-mounted read-write into the sandbox, so a file
 			// here is visible at the same absolute path on both sides of it.
-			const terminalSizePath = join(stateDirectory, "terminal-size");
+			const terminalSizePath = join(supervisorStateDirectory, "terminal-size");
 			const stopPublishingTerminalSize = publishTerminalSize(terminalSizePath);
 
 			// The second child derives its argv from the same builder as the first, with one
@@ -241,7 +259,7 @@ server.on("error", (err) => {
 					buildBwrapArguments({
 						workspace: launch.policy.workspace,
 						additionalWritableRoots: launch.policy.additionalWritableRoots,
-						readOnlyPaths: [process.execPath, launch.command, ...(launch.readOnlyPaths ?? [])],
+						readOnlyPaths: primaryReadOnlyPaths,
 						readOnlyFiles: launch.readOnlyFiles ?? [],
 						readOnlyBinaries: launch.readOnlyBinaries ?? [],
 						sockets: [
@@ -265,7 +283,8 @@ server.on("error", (err) => {
 							TMPDIR: launch.environment?.TMPDIR ?? stateDirectory,
 							APEX_UDS_PATH: childSocketPath,
 							[TERMINAL_SIZE_PATH_VARIABLE]: terminalSizePath,
-							[TERMINAL_HANDOFF_PATH_VARIABLE]: stateDirectory,
+							[TERMINAL_HANDOFF_PATH_VARIABLE]: supervisorStateDirectory,
+							[TERMINAL_HANDOFF_ACK_PATH_VARIABLE]: acknowledgementPath,
 							[GIT_CREDENTIAL_SOCKET_VARIABLE]: gitCredentialPaths.childSocketPath,
 							[COMMAND_ESCALATION_SOCKET_VARIABLE]: escalationPaths.childSocketPath,
 						},
@@ -328,14 +347,19 @@ async function runEscalatedCommand(options: {
 	spawnBwrap: typeof spawn;
 }): Promise<CommandEscalationResult> {
 	const { request, launch, stateDirectory } = options;
+	const escalatedReadOnlyPaths = launch.readOnlyPaths ?? [];
+	const readOnlyFileDescriptors = [
+		...descriptorBackedReadOnlyPaths(escalatedReadOnlyPaths),
+		...(launch.readOnlyFiles ?? []),
+	].map((path) => openSync(path, "r"));
 	const child = options.spawnBwrap(
 		"bwrap",
 		buildBwrapArguments({
 			workspace: launch.policy.workspace,
 			additionalWritableRoots: [...launch.policy.additionalWritableRoots, request.writableRoot],
-			readOnlyPaths: launch.readOnlyPaths ?? [],
-			readOnlyFiles: [],
-			readOnlyBinaries: [],
+			readOnlyPaths: escalatedReadOnlyPaths,
+			readOnlyFiles: launch.readOnlyFiles ?? [],
+			readOnlyBinaries: launch.readOnlyBinaries ?? [],
 			sockets: [],
 			environment: {
 				HOME: launch.environment?.HOME ?? stateDirectory,
@@ -344,21 +368,25 @@ async function runEscalatedCommand(options: {
 			command: "/bin/sh",
 			args: ["-c", request.command],
 		}),
-		{ stdio: ["ignore", "pipe", "pipe"] },
+		{ stdio: ["ignore", "pipe", "pipe", ...readOnlyFileDescriptors] },
 	);
 	let stdout = "";
 	let stderr = "";
-	child.stdout?.setEncoding("utf8");
-	child.stdout?.on("data", (chunk: string) => {
-		stdout += chunk;
-	});
-	child.stderr?.setEncoding("utf8");
-	child.stderr?.on("data", (chunk: string) => {
-		stderr += chunk;
-	});
-	const code = await new Promise<number>((resolveCode) => {
-		child.once("error", () => resolveCode(1));
-		child.once("exit", (exitCode) => resolveCode(exitCode ?? 1));
-	});
-	return { code, stdout, stderr };
+	try {
+		child.stdout?.setEncoding("utf8");
+		child.stdout?.on("data", (chunk: string) => {
+			stdout += chunk;
+		});
+		child.stderr?.setEncoding("utf8");
+		child.stderr?.on("data", (chunk: string) => {
+			stderr += chunk;
+		});
+		const code = await new Promise<number>((resolveCode) => {
+			child.once("error", () => resolveCode(1));
+			child.once("exit", (exitCode) => resolveCode(exitCode ?? 1));
+		});
+		return { code, stdout, stderr };
+	} finally {
+		for (const descriptor of readOnlyFileDescriptors) closeSync(descriptor);
+	}
 }

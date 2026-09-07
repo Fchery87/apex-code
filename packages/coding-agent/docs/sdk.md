@@ -49,6 +49,31 @@ The main factory function for a single `AgentSession`.
 
 `createAgentSession()` uses a `ResourceLoader` to supply extensions, skills, prompt templates, themes, and context files. If you do not provide one, it uses `DefaultResourceLoader` with standard discovery.
 
+#### Sandbox contract
+
+The SDK cannot determine whether its host process is contained. Choose the
+contract that describes how the embedding runs:
+
+```typescript
+const { session, sandboxContract, sandboxDiagnostic } = await createAgentSession({
+  sandbox: "required",
+});
+```
+
+* `"required"` refuses to create the session unless Apex's enforcing supervisor
+  marker is present. Use this when the SDK runs inside an Apex CLI child.
+* `"external"` creates the session and reports that containment belongs to
+  another system. The SDK does not verify that system.
+* `"none"` creates the session without asserting OS containment. This is the
+  default for compatibility.
+
+The result always reports `sandboxContract`. It includes `sandboxDiagnostic` for
+`"external"` and `"none"`. Delegated children inherit the selected contract.
+Do not treat a normal SDK process, a permission gate, or a read-only tool list
+as an OS sandbox. See [ADR 0031](../../docs/adr/0031-sdk-sandbox-contract.md)
+and [ADR 0005](../../docs/adr/0005-sandbox-boundary-guarantees.md) for the
+platform limits.
+
 ```typescript
 import { createAgentSession, SessionManager } from "apex-code";
 

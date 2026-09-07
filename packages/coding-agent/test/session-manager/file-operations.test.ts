@@ -80,7 +80,7 @@ describe("loadEntriesFromFile", () => {
 		expect(entries).toHaveLength(2);
 	});
 
-	it("adds a newline after an unterminated valid record", () => {
+	it("loads an unterminated valid record without rewriting the file", () => {
 		const file = join(tempDir, "unterminated.jsonl");
 		const content =
 			'{"type":"session","id":"abc","timestamp":"2025-01-01T00:00:00Z","cwd":"/tmp"}\n' +
@@ -88,17 +88,17 @@ describe("loadEntriesFromFile", () => {
 		writeFileSync(file, content);
 
 		expect(loadEntriesFromFile(file)).toHaveLength(2);
-		expect(readFileSync(file, "utf8")).toBe(`${content}\n`);
+		expect(readFileSync(file, "utf8")).toBe(content);
 	});
 
-	it("adds a newline after an unterminated malformed final fragment", () => {
+	it("ignores an unterminated malformed final fragment without rewriting the file", () => {
 		const file = join(tempDir, "malformed-tail.jsonl");
 		const content =
 			'{"type":"session","id":"abc","timestamp":"2025-01-01T00:00:00Z","cwd":"/tmp"}\n' + '{"type":"message"';
 		writeFileSync(file, content);
 
 		expect(loadEntriesFromFile(file)).toHaveLength(1);
-		expect(readFileSync(file, "utf8")).toBe(`${content}\n`);
+		expect(readFileSync(file, "utf8")).toBe(content);
 	});
 
 	it("does not modify an unterminated non-session file", () => {

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 /** The public CLI either supervises a sandbox child or starts an ordinary runtime. */
 import { fileURLToPath } from "node:url";
 import { parseCliCommand } from "./cli/args.ts";
@@ -16,6 +17,61 @@ import { launchSandboxedCli } from "./core/sandbox/cli-supervisor.ts";
 import { confirmFullAccess, writeFullAccessBanner } from "./core/sandbox/full-access.ts";
 import { resolveSandboxProfile } from "./core/sandbox/profiles.ts";
 import { prepareHostToolBinaries } from "./utils/tools-manager.ts";
+
+function resolveRuntimeReadOnlyPaths(): readonly string[] {
+	const packageDir = getPackageDir();
+	const checkoutRoot = dirname(dirname(packageDir));
+	const checkoutPackagesDirectory = join(checkoutRoot, "packages");
+	const checkoutDependenciesDirectory = join(checkoutRoot, "node_modules");
+
+	// The source checkout hoists dependencies to the repository root. Package-local
+	// node_modules entries are often symlinks into that directory, so projecting only
+	// the package directory leaves Node unable to resolve imports after /home is hidden.
+	// Project the workspace packages that the runtime dependency graph actually names,
+	// rather than the whole `packages` parent, so unrelated workspace siblings remain
+	// hidden. Do not apply this to installed layouts: exposing a package manager's
+	// entire global node_modules parent would weaken the exact sibling projection.
+	if (
+		existsSync(checkoutPackagesDirectory) &&
+		existsSync(checkoutDependenciesDirectory) &&
+		packageDir.startsWith(`${checkoutPackagesDirectory}${sep}`)
+	) {
+		const packagePaths = new Set<string>([packageDir]);
+		const packagesToInspect = [packageDir];
+		while (packagesToInspect.length > 0) {
+			const currentPackage = packagesToInspect.pop()!;
+			let manifest: {
+				dependencies?: Record<string, string>;
+				optionalDependencies?: Record<string, string>;
+			};
+			try {
+				manifest = JSON.parse(readFileSync(join(currentPackage, "package.json"), "utf8")) as typeof manifest;
+			} catch {
+				continue;
+			}
+			for (const dependencyName of Object.keys({
+				...manifest.dependencies,
+				...manifest.optionalDependencies,
+			})) {
+				const dependencyPath = join(checkoutDependenciesDirectory, dependencyName);
+				try {
+					const realDependencyPath = realpathSync(dependencyPath);
+					if (
+						realDependencyPath.startsWith(`${checkoutPackagesDirectory}${sep}`) &&
+						!packagePaths.has(realDependencyPath)
+					) {
+						packagePaths.add(realDependencyPath);
+						packagesToInspect.push(realDependencyPath);
+					}
+				} catch {
+					// A missing optional dependency does not make the CLI unlaunchable.
+				}
+			}
+		}
+		return [...packagePaths, checkoutDependenciesDirectory];
+	}
+	return [packageDir, dirname(packageDir)];
+}
 
 async function run(): Promise<void> {
 	const args = process.argv.slice(2);
@@ -99,10 +155,11 @@ async function run(): Promise<void> {
 			],
 			environment: process.env,
 			workspace: process.cwd(),
+			agentDir: getAgentDir(),
 			allowedHosts,
 			authPath,
 			additionalWritableRoots: [...(addDir ?? []), ...(profile?.additionalWritableRoots ?? [])],
-			readOnlyPaths: [getPackageDir(), dirname(getPackageDir())],
+			readOnlyPaths: resolveRuntimeReadOnlyPaths(),
 			toolBinaries,
 			skillPaths,
 		});

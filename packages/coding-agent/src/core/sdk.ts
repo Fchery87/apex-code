@@ -22,6 +22,7 @@ import { DerivedPermissionRuleStore } from "./permissions/store.ts";
 import { mergeProviderAttributionHeaders } from "./provider-attribution.ts";
 import type { ResourceLoader } from "./resource-loader.ts";
 import { DefaultResourceLoader } from "./resource-loader.ts";
+import { SANDBOX_ENFORCEMENT_MARKER_VALUE, SANDBOX_ENFORCEMENT_MARKER_VARIABLE } from "./sandbox/cli-launch.ts";
 import { createSandboxCredentialStore } from "./sandbox/rpc/credential-client.ts";
 import { getDefaultSessionDir, SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
@@ -131,7 +132,11 @@ export interface CreateAgentSessionOptions {
 	 * AuthStorage — the same fallback chain the model runtime applies.
 	 */
 	mcpCredentials?: CredentialStore;
+	/** The caller's assertion about OS sandbox containment. */
+	sandbox?: SdkSandboxContract;
 }
+
+export type SdkSandboxContract = "required" | "external" | "none";
 
 /** Result from createAgentSession */
 export interface CreateAgentSessionResult {
@@ -141,7 +146,12 @@ export interface CreateAgentSessionResult {
 	extensionsResult: LoadExtensionsResult;
 	/** Warning if session was restored with a different model than saved */
 	modelFallbackMessage?: string;
+	sandboxContract: SdkSandboxContract;
+	sandboxDiagnostic?: string;
 }
+
+export const SDK_SANDBOX_ENFORCEMENT_MARKER_VARIABLE = SANDBOX_ENFORCEMENT_MARKER_VARIABLE;
+export const SDK_SANDBOX_ENFORCEMENT_MARKER_VALUE = SANDBOX_ENFORCEMENT_MARKER_VALUE;
 
 // Re-exports
 
@@ -235,6 +245,17 @@ function extractFinalAssistantText(session: AgentSession): string {
 }
 
 export async function createAgentSession(options: CreateAgentSessionOptions = {}): Promise<CreateAgentSessionResult> {
+	const sandboxContract = options.sandbox ?? "none";
+	const markerPresent = process.env[SDK_SANDBOX_ENFORCEMENT_MARKER_VARIABLE] === SDK_SANDBOX_ENFORCEMENT_MARKER_VALUE;
+	if (sandboxContract === "required" && !markerPresent) {
+		throw new Error("SDK sandbox contract requires OS containment, but no enforcing supervisor marker is present.");
+	}
+	const sandboxDiagnostic =
+		sandboxContract === "external"
+			? "Sandbox containment is external to the SDK; the SDK cannot verify OS containment."
+			: sandboxContract === "none"
+				? "No OS containment is asserted by the SDK sandbox contract."
+				: undefined;
 	const cwd = resolvePath(options.cwd ?? options.sessionManager?.getCwd() ?? process.cwd());
 	const agentDir = options.agentDir ? resolvePath(options.agentDir) : getDefaultAgentDir();
 	let resourceLoader = options.resourceLoader;
@@ -580,6 +601,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					// header on its next createAgentSession call) -- otherwise recursion
 					// would be silently capped at one level regardless of maxDelegationDepth.
 					delegation,
+					sandbox: sandboxContract,
 				});
 				await childSession.bindExtensions({});
 				return {
@@ -639,5 +661,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		session,
 		extensionsResult,
 		modelFallbackMessage,
+		sandboxContract,
+		sandboxDiagnostic,
 	};
 }

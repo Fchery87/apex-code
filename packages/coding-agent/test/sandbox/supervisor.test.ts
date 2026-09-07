@@ -49,6 +49,7 @@ describe("SandboxSupervisor", () => {
 				command: "/usr/bin/node",
 				args: ["cli.js", "--print", "hello"],
 				policy: { workspace: "/workspace", allowedHosts: [], additionalWritableRoots: [] },
+				supervisorStateDirectory: expect.any(String),
 			},
 		]);
 		await supervisor.close();

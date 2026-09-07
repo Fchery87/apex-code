@@ -103,18 +103,19 @@ describe("policy executor: outcomes", () => {
 		const pidFile = join(dir, "grandchild.pid");
 		const parentScript = [
 			`const { spawn } = require("child_process");`,
-			`const gc = spawn(process.execPath, ["-e",`,
-			`  "require('fs').writeFileSync(process.argv[1], String(process.pid)); setTimeout(() => {}, 60000)",`,
-			`  ${JSON.stringify(pidFile)}], { stdio: "ignore" });`,
+			`const { writeFileSync } = require("fs");`,
+			`const gc = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"], { stdio: "ignore" });`,
+			`writeFileSync(${JSON.stringify(pidFile)}, String(gc.pid));`,
 			`setTimeout(() => {}, 60000);`,
 		].join("\n");
-		const outcome = await runPolicyCommand(policy({ argv: ["-e", parentScript], timeoutMs: 800 }), {
+		const outcome = await runPolicyCommand(policy({ argv: ["-e", parentScript], timeoutMs: 5_000 }), {
 			workspaceRoot: dir,
 		});
 		expect(outcome.status).toBe("timeout");
 
-		// The grandchild writes its pid once running; poll briefly, then wait
-		// for the killed tree to actually release it.
+		// The parent records the grandchild PID as soon as spawn returns. This avoids
+		// making the assertion depend on a second Node process starting within 800 ms
+		// while the full suite is saturating the machine.
 		let grandchildPid: number | undefined;
 		const deadline = Date.now() + 5_000;
 		while (Date.now() < deadline) {
@@ -144,7 +145,7 @@ describe("policy executor: outcomes", () => {
 			}
 		})();
 		expect(released).toBe(true);
-	}, 20_000);
+	}, 30_000);
 });
 
 function readFileSyncText(path: string): string {

@@ -595,14 +595,13 @@ export function loadEntriesFromFile(filePath: string): FileEntry[] {
 		closeSync(fd);
 	}
 
-	// Validate session header before repairing the file.
+	// Validate the session header before returning parsed entries.
 	if (entries.length === 0) return entries;
 	const header = entries[0];
 	if (header.type !== "session" || typeof (header as { id?: unknown }).id !== "string") {
 		return [];
 	}
 
-	if (pending) appendFileSync(resolvedFilePath, "\n");
 	return entries;
 }
 

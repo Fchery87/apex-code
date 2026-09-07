@@ -39,7 +39,7 @@ function canEnforceLinuxSandbox(): boolean {
 }
 
 describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
-	it("permits a child and grandchild to write only in the workspace", async () => {
+	it("permits a child and grandchild to write in the workspace and not outside it", async () => {
 		const cwd = workspace();
 		const outside = join(dirname(cwd), `outside-${Date.now()}.txt`);
 		const violations = new SandboxViolationStore();
@@ -48,12 +48,12 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 			backend,
 			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
 		});
-		const script = `sh -c 'printf allowed > ${join(cwd, "allowed.txt")}' && sh -c 'printf blocked > ${outside}'`;
+		const script = `sh -c 'printf allowed > ${join(cwd, "allowed.txt")}' && ! sh -c 'printf blocked > ${outside}'`;
 
-		await expect(supervisor.launch({ command: "/bin/sh", args: ["-c", script] })).resolves.not.toBe(0);
+		await expect(supervisor.launch({ command: "/bin/sh", args: ["-c", script] })).resolves.toBe(0);
 		expect(readFileSync(join(cwd, "allowed.txt"), "utf8")).toBe("allowed");
 		expect(existsSync(outside)).toBe(false);
-		expect(violations.list()).toMatchObject([{ kind: "filesystem" }]);
+		expect(violations.list()).toEqual([]);
 		await supervisor.close();
 	});
 
@@ -84,6 +84,60 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 				}),
 			).resolves.not.toBe(0);
 			expect(readFileSync(authPath, "utf8")).toBe("host-secret");
+		} finally {
+			await supervisor.close();
+		}
+	});
+
+	it("projects a read-only directory without exposing its parent siblings", async () => {
+		const cwd = workspace();
+		const hostParent = workspace();
+		const projectedDirectory = join(hostParent, "projected");
+		const projectedFile = join(projectedDirectory, "visible.txt");
+		const siblingFile = join(hostParent, "sibling.txt");
+		mkdirSync(projectedDirectory, { recursive: true });
+		writeFileSync(projectedFile, "visible");
+		writeFileSync(siblingFile, "hidden");
+		const backend = createLinuxSandboxBackend();
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
+
+		try {
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: ["-c", `test "$(cat ${projectedFile})" = visible && test ! -e ${siblingFile}`],
+					readOnlyPaths: [projectedDirectory],
+				}),
+			).resolves.toBe(0);
+		} finally {
+			await supervisor.close();
+		}
+	});
+
+	it("keeps the workspace mounted when a read-only directory is its /tmp sibling", async () => {
+		const cwd = workspace();
+		const projectedDirectory = workspace();
+		const projectedFile = join(projectedDirectory, "visible.txt");
+		const resultPath = join(cwd, "result.txt");
+		writeFileSync(projectedFile, "visible");
+		const backend = createLinuxSandboxBackend();
+		const supervisor = createSandboxSupervisor({
+			backend,
+			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+		});
+
+		try {
+			await expect(
+				supervisor.launch({
+					command: "/bin/sh",
+					args: ["-c", `cat ${projectedFile} > ${resultPath}`],
+					readOnlyPaths: [projectedDirectory],
+				}),
+			).resolves.toBe(0);
+			expect(readFileSync(resultPath, "utf8")).toBe("visible");
 		} finally {
 			await supervisor.close();
 		}
@@ -185,23 +239,25 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 
 	it("names the terminal handoff directory to the child so it can yield for an escalation prompt", async () => {
 		const cwd = workspace();
+		const supervisorStateDirectory = join(tmpdir(), `apex-linux-state-${process.pid}-${Date.now()}`);
+		mkdirSync(supervisorStateDirectory, { recursive: true });
+		temporaryDirectories.push(supervisorStateDirectory);
 		const backend = createLinuxSandboxBackend();
 		const supervisor = createSandboxSupervisor({
 			backend,
 			policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
 		});
-		const stateDirectory = join(cwd, ".apex-code", "sandbox-state");
-
 		try {
-			// The directory must be inside the workspace bind, or the child watches a path
-			// the sandbox never gave it and silently never yields the terminal.
 			await expect(
 				supervisor.launch({
 					command: "/bin/sh",
 					args: [
 						"-c",
-						`test "$APEX_TERMINAL_HANDOFF_PATH" = "${stateDirectory}" && test -d "$APEX_TERMINAL_HANDOFF_PATH"`,
+						`test "$APEX_TERMINAL_HANDOFF_PATH" = "${supervisorStateDirectory}" && ` +
+							`test -d "$APEX_TERMINAL_HANDOFF_PATH" && ` +
+							`test "$APEX_TERMINAL_HANDOFF_ACK_PATH" = "${join(cwd, ".apex-code", "sandbox-handoff-ack")}"`,
 					],
+					supervisorStateDirectory,
 				}),
 			).resolves.toBe(0);
 		} finally {
@@ -242,6 +298,7 @@ describe.skipIf(!canEnforceLinuxSandbox())("Linux sandbox backend", () => {
 					args: ["-c", script],
 					readOnlyFiles: [identity.path],
 					environment: { PATH: process.env.PATH, GIT_CONFIG_GLOBAL: identity.path },
+					supervisorStateDirectory: stateDirectory,
 				}),
 			).resolves.toBe(0);
 		} finally {

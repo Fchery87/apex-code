@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { createCommandEscalationApprover, createCredentialReleaser, createHostApprover } from "./host-approval.ts";
@@ -7,6 +7,7 @@ import { createSandboxNetworkProxy, type SandboxNetworkProxy } from "./network-p
 import {
 	COMMAND_ESCALATION_SOCKET_VARIABLE,
 	type CommandEscalationRequest,
+	type CommandEscalationResult,
 	createCommandEscalationProxy,
 	resolveCommandEscalationChannelPaths,
 } from "./rpc/command-proxy.ts";
@@ -18,7 +19,13 @@ import {
 } from "./rpc/git-credential-helper.ts";
 import { createGitCredentialProxy, type GitCredentialProxy } from "./rpc/git-credential-proxy.ts";
 import type { SandboxBackend, SandboxLaunch } from "./supervisor.ts";
-import { createTerminalHandoff, TERMINAL_HANDOFF_PATH_VARIABLE, type TerminalHandoff } from "./terminal-handoff.ts";
+import {
+	createTerminalHandoff,
+	TERMINAL_HANDOFF_ACK_PATH_VARIABLE,
+	TERMINAL_HANDOFF_PATH_VARIABLE,
+	type TerminalHandoff,
+} from "./terminal-handoff.ts";
+import { publishTerminalSize, TERMINAL_SIZE_PATH_VARIABLE } from "./terminal-size.ts";
 import type { SandboxViolationStore } from "./violations.ts";
 
 export interface MacosSandboxBackendOptions {
@@ -34,6 +41,19 @@ export interface MacosSandboxBackendOptions {
 	spawnChild?: typeof spawn;
 	/** Injectable only for tests, which have no terminal to approve an escalation at. */
 	requestCommandEscalation?: (request: CommandEscalationRequest) => Promise<boolean>;
+	/** Retained for source compatibility; launch state is now required on each launch. */
+	supervisorStateDirectory?: string;
+}
+
+const ESCALATION_OUTPUT_LIMIT = 64 * 1024;
+
+function seatbeltParameter(value: string): string {
+	return value.replaceAll("\\", "\\\\").replaceAll("\n", "\\n").replaceAll('"', '\\"');
+}
+
+function appendBounded(current: string, chunk: string, limit = ESCALATION_OUTPUT_LIMIT): string {
+	if (current.length >= limit) return current;
+	return current + chunk.slice(0, limit - current.length);
 }
 
 function sandboxExecExists(command: string): boolean {
@@ -63,7 +83,14 @@ function waitForExit(child: ReturnType<typeof spawn>): Promise<number> {
  * unresolved symlinked path, e.g. Homebrew's own layout, silently never matches).
  */
 function readOnlyDirectories(paths: readonly string[]): string[] {
-	const directories = paths.map((path) => dirname(resolve(path)));
+	const directories = paths.map((path) => {
+		const resolved = resolve(path);
+		try {
+			return statSync(resolved).isDirectory() ? resolved : dirname(resolved);
+		} catch {
+			return dirname(resolved);
+		}
+	});
 	const canonical = directories.map((directory) => {
 		try {
 			return realpathSync(directory);
@@ -138,7 +165,6 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 	let gitCredentialDirectory: string | undefined;
 	let escalationProxy: Awaited<ReturnType<typeof createCommandEscalationProxy>> | undefined;
 	let escalationDirectory: string | undefined;
-
 	if (!hasCommand("sandbox-exec")) {
 		return {
 			status: { kind: "unavailable", reason: "sandbox-exec (Seatbelt) is required for OS sandboxing." },
@@ -159,10 +185,13 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 			const writableRoots = launch.policy.additionalWritableRoots;
 			const stateDirectory = join(workspace, ".apex-code", "sandbox-state");
 			mkdirSync(stateDirectory, { recursive: true });
+			const supervisorStateDirectory = launch.supervisorStateDirectory;
+			mkdirSync(supervisorStateDirectory, { recursive: true, mode: 0o700 });
+			const acknowledgementPath = join(stateDirectory, "terminal-handoff-ack");
 
 			const violationCountBeforeLaunch = violationStore?.totalCount ?? 0;
 
-			handoff = createTerminalHandoff(stateDirectory);
+			handoff = createTerminalHandoff(supervisorStateDirectory, { acknowledgementPath });
 			// Both channels are AF_UNIX servers, which Windows has not got. Nothing is lost
 			// by skipping them there: ADR 0005 leaves Windows unsupported and this backend
 			// reports `unavailable` on any real Windows host. They are reachable here only
@@ -191,7 +220,7 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 					fillCredential: (request) => fillHostGitCredential(request, { environment: process.env }),
 					violationStore,
 				}));
-			writeGitCredentialHelper(stateDirectory);
+			writeGitCredentialHelper(supervisorStateDirectory);
 
 			const escalationPaths = unixSocketsAvailable ? resolveCommandEscalationChannelPaths() : undefined;
 			escalationDirectory = escalationPaths?.hostSocketDirectory;
@@ -203,20 +232,14 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 					socketPath: escalationPaths.hostSocketPath,
 					requestApproval: options?.requestCommandEscalation ?? createCommandEscalationApprover({ handoff }),
 					violationStore,
-					runEscalated: async (request) => {
-						const escalated = createMacosSandboxBackend(options);
-						const code = await escalated.launch({
-							...launch,
-							command: "/bin/sh",
-							args: ["-c", request.command],
-							policy: {
-								...launch.policy,
-								additionalWritableRoots: [...launch.policy.additionalWritableRoots, request.writableRoot],
-							},
-						});
-						await escalated.close();
-						return { code, stdout: "", stderr: "" };
-					},
+					runEscalated: (request) =>
+						runEscalatedCommand({
+							request,
+							launch,
+							workspace,
+							supervisorStateDirectory,
+							spawnSandboxExec: options?.spawnChild ?? spawn,
+						}),
 				}));
 			const proxyPort = proxy.port as number;
 
@@ -226,7 +249,12 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 				? canonicalSocketPath(launch.credentialChannel.hostSocketPath)
 				: undefined;
 
-			const readOnlyDirs = readOnlyDirectories([process.execPath, launch.command, ...(launch.readOnlyPaths ?? [])]);
+			const readOnlyDirs = readOnlyDirectories([
+				process.execPath,
+				launch.command,
+				...(launch.readOnlyPaths ?? []),
+				supervisorStateDirectory,
+			]);
 			const readOnlyFiles = (launch.readOnlyFiles ?? []).map((path) => {
 				try {
 					return realpathSync(path);
@@ -234,6 +262,8 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 					return resolve(path);
 				}
 			});
+			const terminalSizePath = join(supervisorStateDirectory, "terminal-size");
+			const stopPublishingTerminalSize = publishTerminalSize(terminalSizePath);
 			let userHome: string | undefined;
 			try {
 				userHome = realpathSync(homedir());
@@ -282,7 +312,7 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 					? [`(allow network-outbound (remote unix-socket (literal "${escalationPaths.hostSocketPath}")))`]
 					: []),
 			];
-			const profilePath = join(stateDirectory, "profile.sb");
+			const profilePath = join(supervisorStateDirectory, "profile.sb");
 			writeFileSync(profilePath, profileLines.join("\n"));
 
 			const params: string[] = ["-D", `USER_HOME=${userHome}`];
@@ -310,7 +340,9 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 						TMPDIR: launch.environment?.TMPDIR ?? stateDirectory,
 						HTTP_PROXY: `http://127.0.0.1:${proxyPort}`,
 						HTTPS_PROXY: `http://127.0.0.1:${proxyPort}`,
-						[TERMINAL_HANDOFF_PATH_VARIABLE]: stateDirectory,
+						[TERMINAL_HANDOFF_PATH_VARIABLE]: supervisorStateDirectory,
+						[TERMINAL_HANDOFF_ACK_PATH_VARIABLE]: acknowledgementPath,
+						[TERMINAL_SIZE_PATH_VARIABLE]: terminalSizePath,
 						...(gitCredentialPaths
 							? { [GIT_CREDENTIAL_SOCKET_VARIABLE]: gitCredentialPaths.childSocketPath }
 							: {}),
@@ -326,6 +358,7 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 				process.stderr.write(chunk);
 			});
 			const exitCode = await waitForExit(child);
+			stopPublishingTerminalSize();
 			await proxy?.close();
 			const proxyAlreadyRecordedAViolation = (violationStore?.totalCount ?? 0) > violationCountBeforeLaunch;
 			const kind = exitCode !== 0 && !proxyAlreadyRecordedAViolation ? classifySandboxFailure(stderr) : undefined;
@@ -348,4 +381,64 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 			await proxy?.close();
 		},
 	};
+}
+
+async function runEscalatedCommand(options: {
+	request: CommandEscalationRequest;
+	launch: SandboxLaunch;
+	workspace: string;
+	supervisorStateDirectory: string;
+	spawnSandboxExec: typeof spawn;
+}): Promise<CommandEscalationResult> {
+	const profilePath = join(options.supervisorStateDirectory, `escalation-${process.pid}-${Date.now()}.sb`);
+	const writableRoots = [...options.launch.policy.additionalWritableRoots, options.request.writableRoot].map((root) =>
+		resolve(root),
+	);
+	writeFileSync(
+		profilePath,
+		[
+			"(version 1)",
+			'(import "bsd.sb")',
+			"(allow process-exec*)",
+			"(allow process-fork)",
+			"(allow file-read*)",
+			"(deny file-write*)",
+			`(allow file-write* (subpath "${seatbeltParameter(options.workspace)}"))`,
+			...writableRoots.map((root) => `(allow file-write* (subpath "${seatbeltParameter(root)}"))`),
+			"(deny network*)",
+		].join("\n"),
+		{ mode: 0o600 },
+	);
+	try {
+		const child = options.spawnSandboxExec(
+			"sandbox-exec",
+			["-f", profilePath, "--", "/bin/sh", "-c", options.request.command],
+			{
+				cwd: options.workspace,
+				env: {
+					PATH: options.launch.environment?.PATH,
+					HOME: options.launch.environment?.HOME,
+					TMPDIR: options.launch.environment?.TMPDIR,
+				},
+				stdio: ["ignore", "pipe", "pipe"],
+			},
+		);
+		let stdout = "";
+		let stderr = "";
+		child.stdout?.setEncoding("utf8");
+		child.stdout?.on("data", (chunk: string) => {
+			stdout = appendBounded(stdout, chunk);
+		});
+		child.stderr?.setEncoding("utf8");
+		child.stderr?.on("data", (chunk: string) => {
+			stderr = appendBounded(stderr, chunk);
+		});
+		const code = await new Promise<number>((resolveCode) => {
+			child.once("error", () => resolveCode(1));
+			child.once("exit", (exitCode) => resolveCode(exitCode ?? 1));
+		});
+		return { code, stdout, stderr };
+	} finally {
+		rmSync(profilePath, { force: true });
+	}
 }

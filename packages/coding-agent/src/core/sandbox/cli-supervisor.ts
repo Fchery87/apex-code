@@ -1,10 +1,18 @@
 import { rmSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { parseArgs } from "../../cli/args.ts";
 import { reportConcurrentSessionRefusal } from "../../cli/concurrent-session.ts";
+import { getAgentDir } from "../../config.ts";
 import type { HostToolBinary } from "../../utils/tools-manager.ts";
 import { acquireSessionLease, readLiveSessionLeases } from "../session-lease.ts";
-import { buildSandboxedCliLaunch, getSandboxSessionDirectory, type HostSkillPaths } from "./cli-launch.ts";
+import {
+	buildSandboxedCliLaunch,
+	createSupervisorStateDirectory,
+	getSandboxSessionDirectory,
+	type HostSkillPaths,
+	resolveSupervisorPolicyPath,
+	writeSupervisorPolicySnapshot,
+} from "./cli-launch.ts";
 import { createProjectedGitConfig, resolveHostGitIdentity } from "./git-identity.ts";
 import { createLinuxSandboxBackend } from "./linux-backend.ts";
 import { createMacosSandboxBackend } from "./macos-backend.ts";
@@ -41,6 +49,7 @@ export async function launchSandboxedCli(options: {
 	args: readonly string[];
 	environment: NodeJS.ProcessEnv;
 	workspace: string;
+	agentDir?: string;
 	allowedHosts?: readonly string[];
 	additionalWritableRoots?: readonly string[];
 	readOnlyPaths?: readonly string[];
@@ -61,6 +70,8 @@ export async function launchSandboxedCli(options: {
 	}
 	const violationStore = new SandboxViolationStore();
 	const backend = dependencies.createBackend({ violationStore });
+	const agentDir = options.agentDir ?? getAgentDir();
+	const supervisorState = createSupervisorStateDirectory();
 
 	const supervisor = createSandboxSupervisor({ backend, policy: policyResult.policy });
 	let credentialProxy: Awaited<ReturnType<typeof createCredentialProxy>> | undefined;
@@ -68,6 +79,19 @@ export async function launchSandboxedCli(options: {
 	let projectedGitConfig: ReturnType<typeof createProjectedGitConfig> | undefined;
 	try {
 		const parsed = parseArgs(options.args);
+		const resolvedSessionPath =
+			parsed.session &&
+			(parsed.session.includes("/") || parsed.session.includes("\\") || parsed.session.endsWith(".jsonl"))
+				? resolve(options.workspace, parsed.session)
+				: undefined;
+		const sessionRelativePath = resolvedSessionPath ? relative(options.workspace, resolvedSessionPath) : undefined;
+		const externalSessionPath =
+			resolvedSessionPath &&
+			sessionRelativePath !== undefined &&
+			sessionRelativePath !== "" &&
+			(sessionRelativePath === ".." || sessionRelativePath.startsWith(`..${sep}`) || isAbsolute(sessionRelativePath))
+				? resolvedSessionPath
+				: undefined;
 		const wantsPersistentSession = !parsed.noSession && !parsed.help && parsed.listModels === undefined;
 		const sessionDirectory = getSandboxSessionDirectory(policyResult.policy.workspace);
 		if (wantsPersistentSession && !parsed.allowConcurrent) {
@@ -100,14 +124,18 @@ export async function launchSandboxedCli(options: {
 		// that removes the directory again. The supervisor is unsandboxed, so the host home
 		// is still visible at this point; inside the child it is not.
 		const identity = resolveHostGitIdentity({ environment: options.environment });
+		const snapshotPath = writeSupervisorPolicySnapshot({
+			directory: supervisorState.path,
+			agentDir,
+			policyPath: resolveSupervisorPolicyPath(options.environment),
+			environment: options.environment,
+		});
 		// The helper command is derived from the state directory rather than handed back by
 		// the backend, because the config has to name it before any backend exists. Both
 		// sides derive the same path, so the config never names a file nothing created.
 		projectedGitConfig = identity
 			? createProjectedGitConfig(identity, {
-					credentialHelper: gitCredentialHelperCommand(
-						join(policyResult.policy.workspace, ".apex-code", "sandbox-state"),
-					),
+					credentialHelper: gitCredentialHelperCommand(supervisorState.path),
 				})
 			: undefined;
 
@@ -118,11 +146,14 @@ export async function launchSandboxedCli(options: {
 			environment: options.environment,
 			allowedHosts: options.allowedHosts,
 			readOnlyPaths: options.readOnlyPaths,
+			sessionPath: externalSessionPath,
 			authPath: options.authPath,
 			gitConfigPath: projectedGitConfig?.path,
 			toolBinaries: options.toolBinaries,
 			skillPaths: options.skillPaths,
 			credentialChannel,
+			supervisorStateDirectory: supervisorState.path,
+			policySnapshotPath: snapshotPath,
 		});
 		return await supervisor.launch(launch);
 	} catch (error: unknown) {
@@ -133,6 +164,7 @@ export async function launchSandboxedCli(options: {
 		lease?.release();
 		if (projectedGitConfig) rmSync(projectedGitConfig.directory, { force: true, recursive: true });
 		const cleanupResults = await Promise.allSettled([supervisor.close(), credentialProxy?.close()]);
+		supervisorState.dispose();
 		for (const violation of violationStore.list()) {
 			dependencies.stderr.write(
 				`Sandbox violation (${violation.kind}): ${violation.command} — ${violation.detail}\n`,

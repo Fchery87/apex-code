@@ -1,5 +1,6 @@
-import { type FSWatcher, readFileSync, rmSync, watch, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { closeSync, constants, type FSWatcher, openSync, readFileSync, rmSync, watch } from "node:fs";
+import { dirname, join } from "node:path";
+import { writeWithoutFollowingLinks } from "./terminal-size.ts";
 
 /**
  * Lends the terminal from the sandboxed child back to the supervisor for a prompt.
@@ -25,12 +26,51 @@ import { join } from "node:path";
  * is the direction this is allowed to fail in.
  */
 
-/** Env var naming the directory both sides agree on. */
+/**
+ * Env var naming the directory holding the supervisor's command file.
+ *
+ * Supervisor-private where the platform backend allocates one (PS.3): the child reads the
+ * suspend/resume latch there and can never write it. The acknowledgement travels the other
+ * way and therefore has its own variable below.
+ */
 export const TERMINAL_HANDOFF_PATH_VARIABLE = "APEX_TERMINAL_HANDOFF_PATH";
+
+/**
+ * Env var naming the child-writable acknowledgement file.
+ *
+ * Absent means "the file next to the command file", which is the single-directory
+ * arrangement the macOS backend still uses. The two locations are kept explicit rather
+ * than derived because the platforms genuinely differ: Linux can put the command file on a
+ * host path the child sees read-only, and macOS has no `/home` tmpfs to separate them with.
+ */
+export const TERMINAL_HANDOFF_ACK_PATH_VARIABLE = "APEX_TERMINAL_HANDOFF_ACK_PATH";
 
 const STATE_FILE = "terminal-handoff";
 const ACKNOWLEDGEMENT_FILE = "terminal-handoff-ack";
 const DEFAULT_ACKNOWLEDGEMENT_TIMEOUT_MS = 1_000;
+
+/**
+ * Read without following a symlink at the final path component; undefined when refused.
+ *
+ * The acknowledgement is the one half of the handoff the contained side writes, so a link
+ * planted at its path would otherwise let the child choose which host file the supervisor
+ * reads. Its content is not authority (ADR 0023), but the read itself is the supervisor's.
+ */
+function readWithoutFollowingLinks(path: string): string | undefined {
+	let descriptor: number;
+	try {
+		descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+	} catch {
+		return undefined;
+	}
+	try {
+		return readFileSync(descriptor, "utf8");
+	} catch {
+		return undefined;
+	} finally {
+		closeSync(descriptor);
+	}
+}
 
 /**
  * How often each side re-reads the state file, independently of the watcher.
@@ -59,13 +99,20 @@ export interface TerminalHandoff {
 	stop(): void;
 }
 
-/** Supervisor side. */
-export function createTerminalHandoff(
-	directory: string,
-	options?: { acknowledgementTimeoutMs?: number },
-): TerminalHandoff {
+export interface TerminalHandoffOptions {
+	acknowledgementTimeoutMs?: number;
+	/**
+	 * Where the child writes its acknowledgement. Defaults to the file beside the command
+	 * file. Split from it when the command file lives somewhere the child cannot write.
+	 */
+	acknowledgementPath?: string;
+}
+
+/** Supervisor side. `directory` holds the command file; see the env vars above. */
+export function createTerminalHandoff(directory: string, options?: TerminalHandoffOptions): TerminalHandoff {
 	const statePath = join(directory, STATE_FILE);
-	const acknowledgementPath = join(directory, ACKNOWLEDGEMENT_FILE);
+	const acknowledgementPath = options?.acknowledgementPath ?? join(directory, ACKNOWLEDGEMENT_FILE);
+	const acknowledgementDirectory = dirname(acknowledgementPath);
 	// Floored at two poll intervals. The state file is a latch the child samples, so a
 	// supervisor that gives up before the child can sample writes `resume` over its own
 	// `suspend` and the child observes neither: it reads one value equal to what it
@@ -81,7 +128,7 @@ export function createTerminalHandoff(
 
 	function write(state: HandoffState): void {
 		try {
-			writeFileSync(statePath, `${state}\n`);
+			writeWithoutFollowingLinks(statePath, `${state}\n`);
 		} catch {
 			// A handoff we cannot request still leaves the prompt readable often enough to
 			// be worth attempting; it is never worth failing the escalation over.
@@ -100,15 +147,14 @@ export function createTerminalHandoff(
 				resolve();
 			};
 			const check = () => {
-				try {
-					if (readFileSync(acknowledgementPath, "utf8").trim() === "suspended") finish();
-				} catch {
-					// Not written yet.
-				}
+				// No-follow: the acknowledgement path is the one half of the handoff the child
+				// may write, so a link planted there would otherwise let it choose which host
+				// file the supervisor reads.
+				if (readWithoutFollowingLinks(acknowledgementPath)?.trim() === "suspended") finish();
 			};
 			timer = setTimeout(finish, timeout);
 			try {
-				watcher = watch(directory, check);
+				watcher = watch(acknowledgementDirectory, check);
 			} catch {
 				// Without a watcher the poll below still delivers, just less promptly.
 			}
@@ -157,9 +203,10 @@ export function createTerminalHandoff(
 export function observeTerminalHandoff(
 	directory: string,
 	hooks: { suspend: () => void | Promise<void>; resume: () => void | Promise<void> },
+	options?: { acknowledgementPath?: string },
 ): { stop: () => void } {
 	const statePath = join(directory, STATE_FILE);
-	const acknowledgementPath = join(directory, ACKNOWLEDGEMENT_FILE);
+	const acknowledgementPath = options?.acknowledgementPath ?? join(directory, ACKNOWLEDGEMENT_FILE);
 	let current: HandoffState = "resume";
 	let applying: Promise<void> = Promise.resolve();
 
@@ -176,7 +223,7 @@ export function observeTerminalHandoff(
 			if (state === "suspend") {
 				await hooks.suspend();
 				try {
-					writeFileSync(acknowledgementPath, "suspended\n");
+					writeWithoutFollowingLinks(acknowledgementPath, "suspended\n");
 				} catch {
 					// The supervisor's timeout covers an acknowledgement we cannot write.
 				}

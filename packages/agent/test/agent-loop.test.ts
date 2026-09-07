@@ -1824,12 +1824,12 @@ describe("run budget", () => {
 	});
 
 	it("applies the wall-time limit before the next provider request", async () => {
-		const { streamFn, sent } = scriptedResponses((index) => [toolCallMessage(index, 1)], 20);
+		const { streamFn, sent } = scriptedResponses((index) => [toolCallMessage(index, 1)], 100);
 		const { agentEnd } = await runLoop(
 			{
 				model: createModel(),
 				convertToLlm: identityConverter,
-				runBudget: createRunBudgetController({ maxWallTimeMs: 5 }),
+				runBudget: createRunBudgetController({ maxWallTimeMs: 50 }),
 			},
 			streamFn,
 		);

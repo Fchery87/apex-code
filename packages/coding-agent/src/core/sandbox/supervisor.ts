@@ -1,9 +1,17 @@
+import { chmodSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { requireSandboxEnforcement, type SandboxPolicy, type SandboxStatus } from "./policy.ts";
 
 export interface SandboxLaunch {
 	readonly command: string;
 	readonly args: readonly string[];
 	readonly policy: SandboxPolicy;
+	/**
+	 * A supervisor-owned private directory. Platform backends must never derive this
+	 * from the workspace or fall back to it.
+	 */
+	readonly supervisorStateDirectory: string;
 	readonly environment?: NodeJS.ProcessEnv;
 	/** Application/runtime directories needed by the child but never writable by it. */
 	readonly readOnlyPaths?: readonly string[];
@@ -37,7 +45,15 @@ export interface SandboxBackend {
 
 export interface SandboxSupervisor {
 	readonly status: SandboxStatus;
-	launch(options: Omit<SandboxLaunch, "policy">): Promise<number>;
+	/**
+	 * The supervisor may allocate this for low-level callers and tests. The backend
+	 * still receives a required, private path on every launch.
+	 */
+	launch(
+		options: Omit<SandboxLaunch, "policy" | "supervisorStateDirectory"> & {
+			readonly supervisorStateDirectory?: string;
+		},
+	): Promise<number>;
 	close(): Promise<void>;
 }
 
@@ -53,7 +69,16 @@ export function createSandboxSupervisor(options: {
 		status: options.backend.status,
 		async launch(launch) {
 			requireSandboxEnforcement(options.backend.status);
-			return options.backend.launch({ ...launch, policy: options.policy });
+			const ownsStateDirectory = launch.supervisorStateDirectory === undefined;
+			const supervisorStateDirectory =
+				launch.supervisorStateDirectory ??
+				mkdtempSync(join(tmpdir(), `apex-supervisor-${process.pid}-`), { encoding: "utf8" });
+			if (ownsStateDirectory) chmodSync(supervisorStateDirectory, 0o700);
+			try {
+				return await options.backend.launch({ ...launch, supervisorStateDirectory, policy: options.policy });
+			} finally {
+				if (ownsStateDirectory) rmSync(supervisorStateDirectory, { force: true, recursive: true });
+			}
 		},
 		async close() {
 			await options.backend.close();

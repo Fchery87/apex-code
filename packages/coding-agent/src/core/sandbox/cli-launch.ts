@@ -1,4 +1,15 @@
-import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { join, sep } from "node:path";
 import type { ParsedCliCommand } from "../../cli/args.ts";
 import type { HostToolBinary } from "../../utils/tools-manager.ts";
@@ -6,6 +17,7 @@ import { SettingsManager } from "../settings-manager.ts";
 import { resolveWebSearchHost } from "../web-search-provider.ts";
 import { resolveDefaultAllowedHosts } from "./default-hosts.ts";
 import type { SandboxLaunch } from "./supervisor.ts";
+import { supervisorTempDirectory } from "./supervisor-temp.ts";
 
 /**
  * OS containment is the normal startup path for every parsed command that can
@@ -18,10 +30,138 @@ export function requiresSandboxedChild(command: ParsedCliCommand): boolean {
 
 export interface SandboxedCliLaunch extends SandboxLaunch {
 	readonly environment: NodeJS.ProcessEnv;
+	/**
+	 * The supervisor's own 0700 state directory, outside every writable root the child
+	 * has.
+	 */
+	readonly supervisorStateDirectory: string;
 }
 
 export function getSandboxSessionDirectory(workspace: string): string {
 	return join(workspace, ".apex-code", "sandbox-sessions");
+}
+
+/**
+ * Env var naming the file that carries the host's `policy` and `user` permission scopes
+ * into the child (PS.3).
+ *
+ * Deliberately absent from `SAFE_CHILD_ENVIRONMENT_KEYS`: only the supervisor's own
+ * resolution may name it, never the invoking shell and never a project file (ADR 0016).
+ */
+export const POLICY_SNAPSHOT_PATH_VARIABLE = "APEX_CODE_POLICY_SNAPSHOT_PATH";
+
+/**
+ * The marker asserting that an OS boundary is actually enforcing this process (PS.5).
+ *
+ * Set only on the supervisor's own launch environment for a child it is about to contain.
+ * It is not in the child-environment allowlist, so a value of this name in the invoking
+ * shell never survives into a child; the supervisor's own value is the only one that can.
+ * `core/sdk.ts` reads it for `sandbox: "required"` and keeps the same two literals -- a
+ * marker spelled two ways would be a drift the SDK could not detect at runtime, so
+ * `test/sdk-sandbox-contract.test.ts` pins them to each other.
+ */
+export const SANDBOX_ENFORCEMENT_MARKER_VARIABLE = "APEX_CODE_SANDBOX_ENFORCED";
+export const SANDBOX_ENFORCEMENT_MARKER_VALUE = "1";
+
+export interface SupervisorStateDirectory {
+	/** A 0700 directory under the supervisor temp root, outside every child-writable root. */
+	readonly path: string;
+	readonly dispose: () => void;
+}
+
+/**
+ * Allocate the directory the supervisor keeps its own launch state in.
+ *
+ * Everything the supervisor writes for a launch -- the terminal handoff latch, the
+ * published terminal size, the network relay, the git credential helper, the permission
+ * snapshot -- used to live in `workspace/.apex-code/sandbox-state`, which is inside the
+ * one writable bind the child has. A child that planted a symlink there redirected the
+ * *next* launch's supervisor writes onto arbitrary host paths, and could rewrite the
+ * scripts the supervisor was about to run. Under the supervisor temp root the child sees
+ * these files through the read-only root bind (Linux) or Seatbelt's write denial outside
+ * the workspace (macOS), so it can neither replace them nor plant a link where one goes.
+ */
+export function createSupervisorStateDirectory(): SupervisorStateDirectory {
+	const path = mkdtempSync(join(supervisorTempDirectory(), `apex-supervisor-${process.pid}-`), { encoding: "utf8" });
+	chmodSync(path, 0o700);
+	return {
+		path,
+		dispose: () => {
+			try {
+				rmSync(path, { force: true, recursive: true });
+			} catch {
+				// A leftover directory under the supervisor's own temp root is not worth
+				// failing a session teardown over.
+			}
+		},
+	};
+}
+
+/**
+ * The managed policy file this host resolves, read before the child's environment exists.
+ *
+ * `cli-launch`'s child-environment allowlist filters `APEX_CODE_POLICY_PATH` out, so a
+ * host that configured a custom managed policy had it silently disappear at the boundary
+ * and the child fell back to the system path -- the config-projection defect PS.3 closes.
+ * Resolution here mirrors `core/permissions/store.ts`'s own default exactly.
+ */
+export function resolveSupervisorPolicyPath(environment: NodeJS.ProcessEnv = process.env): string {
+	if (environment.APEX_CODE_POLICY_PATH) return environment.APEX_CODE_POLICY_PATH;
+	return process.platform === "win32"
+		? join(environment.ProgramData ?? "C:\\ProgramData", "apex-code", "policy.json")
+		: "/etc/apex-code/policy.json";
+}
+
+/**
+ * The two host-owned permission scopes, captured verbatim.
+ *
+ * Raw file text rather than parsed rules, so the child's store applies exactly the same
+ * validation -- and reports exactly the same malformed-file error -- as it would have on
+ * the host. A snapshot that pre-parsed would have to decide what a malformed host policy
+ * means, and the only safe answer to that lives in the store.
+ */
+interface SupervisorPolicySnapshotFile {
+	readonly version: 1;
+	readonly policy: string | null;
+	readonly user: string | null;
+}
+
+function readHostScopeText(path: string): string | null {
+	try {
+		return readFileSync(path, "utf8");
+	} catch {
+		// Absent is the ordinary case for both files; an unreadable one projects as absent
+		// rather than as authority the child cannot see the shape of.
+		return null;
+	}
+}
+
+/**
+ * Capture the host `policy` and `user` permission scopes into the supervisor's private
+ * directory and return the file's path.
+ *
+ * Called before `buildSandboxedCliLaunch` repoints `APEX_CODE_CODING_AGENT_DIR` at a
+ * workspace directory the child can write. Without it the child's `user` scope came from a
+ * file the child itself owns, and its `policy` scope from a path the environment allowlist
+ * had already removed.
+ */
+export function writeSupervisorPolicySnapshot(options: {
+	directory: string;
+	/** The *host* agent directory, before the launch repoints it. */
+	agentDir: string;
+	policyPath?: string;
+	environment?: NodeJS.ProcessEnv;
+}): string {
+	const directory = join(options.directory, "policy");
+	mkdirSync(directory, { recursive: true, mode: 0o700 });
+	const snapshot: SupervisorPolicySnapshotFile = {
+		version: 1,
+		policy: readHostScopeText(options.policyPath ?? resolveSupervisorPolicyPath(options.environment)),
+		user: readHostScopeText(join(options.agentDir, "permissions.json")),
+	};
+	const path = join(directory, "permission-snapshot.json");
+	writeFileSync(path, JSON.stringify(snapshot), { mode: 0o600 });
+	return path;
 }
 
 /**
@@ -255,6 +395,7 @@ export function buildSandboxedCliLaunch(options: {
 	allowedHosts?: readonly string[];
 	additionalWritableRoots?: readonly string[];
 	readOnlyPaths?: readonly string[];
+	sessionPath?: string;
 	authPath?: string;
 	/**
 	 * A synthesized two-key git config, projected read-only so the child can author a
@@ -272,7 +413,12 @@ export function buildSandboxedCliLaunch(options: {
 	skillPaths?: HostSkillPaths;
 	/** The supervisor-owned credential write channel, when one was opened. */
 	credentialChannel?: SandboxLaunch["credentialChannel"];
+	/** The supervisor's private 0700 state directory for this launch. */
+	supervisorStateDirectory?: string;
+	/** The captured host permission scopes, named to the child read-only. */
+	policySnapshotPath?: string;
 }): SandboxedCliLaunch {
+	const supervisorStateDirectory = options.supervisorStateDirectory ?? createSupervisorStateDirectory().path;
 	const stateDirectory = join(options.workspace, ".apex-code", "sandbox-state");
 	const agentDirectory = join(options.workspace, ".apex-code", "sandbox-agent");
 	const sessionDirectory = getSandboxSessionDirectory(options.workspace);
@@ -299,7 +445,9 @@ export function buildSandboxedCliLaunch(options: {
 	const { agentSkills, agentsHomeSkills } = options.skillPaths ?? {};
 	const skillMountPaths = [agentSkills, agentsHomeSkills].filter((path): path is string => path !== undefined);
 	const readOnlyPaths = [...(options.readOnlyPaths ?? []), ...skillMountPaths];
-	const readOnlyFiles = [options.authPath, options.gitConfigPath].filter((path): path is string => path !== undefined);
+	const readOnlyFiles = [options.sessionPath, options.authPath, options.gitConfigPath].filter(
+		(path): path is string => path !== undefined,
+	);
 	const readOnlyBinaries = (options.toolBinaries ?? []).map((binary) => ({
 		source: binary.path,
 		destination: join(toolsDirectory, binary.name),
@@ -318,6 +466,7 @@ export function buildSandboxedCliLaunch(options: {
 		// Travels on the launch contract so the platform backend projects the socket;
 		// the environment entry above is what tells the child where to find it.
 		...(options.credentialChannel ? { credentialChannel: options.credentialChannel } : {}),
+		supervisorStateDirectory,
 		environment: {
 			...childEnvironment,
 			...(options.authPath ? { APEX_CODE_AUTH_PATH: options.authPath } : {}),
@@ -330,6 +479,11 @@ export function buildSandboxedCliLaunch(options: {
 			...(options.gitConfigPath ? { GIT_CONFIG_GLOBAL: options.gitConfigPath } : {}),
 			...(agentSkills ? { APEX_CODE_SKILL_PATH_AGENT: agentSkills } : {}),
 			...(agentsHomeSkills ? { APEX_CODE_SKILL_PATH_AGENTS_HOME: agentsHomeSkills } : {}),
+			// The host's own permission scopes, and the assertion that a boundary is
+			// enforcing this process. Both are supervisor-resolved for exactly the reason
+			// `agentDirectory` below is: the child's copy is writable by the child.
+			...(options.policySnapshotPath ? { [POLICY_SNAPSHOT_PATH_VARIABLE]: options.policySnapshotPath } : {}),
+			[SANDBOX_ENFORCEMENT_MARKER_VARIABLE]: SANDBOX_ENFORCEMENT_MARKER_VALUE,
 			APEX_CODE_CODING_AGENT_DIR: agentDirectory,
 			APEX_CODE_CODING_AGENT_SESSION_DIR: sessionDirectory,
 			HOME: stateDirectory,

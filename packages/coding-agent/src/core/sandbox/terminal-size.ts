@@ -1,4 +1,4 @@
-import { type FSWatcher, readFileSync, watch, writeFileSync } from "node:fs";
+import { closeSync, constants, type FSWatcher, openSync, readFileSync, watch, writeFileSync } from "node:fs";
 
 /**
  * Carries the host terminal's size across the sandbox boundary.
@@ -18,6 +18,31 @@ import { type FSWatcher, readFileSync, watch, writeFileSync } from "node:fs";
 
 /** Env var naming the file both sides agree on. */
 export const TERMINAL_SIZE_PATH_VARIABLE = "APEX_TERMINAL_SIZE_PATH";
+
+/**
+ * Write without following a symlink at the final path component.
+ *
+ * Shared with `terminal-handoff.ts`, which took its transport from this file and inherits
+ * the same exposure: every file here is written by the supervisor, on the host, at a path
+ * the contained side may be able to create an entry at. A link planted there would
+ * redirect a host write the child could not otherwise make -- the audit demonstrated this
+ * against the workspace state directory. `O_NOFOLLOW` refuses instead.
+ *
+ * Node exposes no `openat`, so this guards the final component only; the containing
+ * directory must be one the child cannot write for the guarantee to be complete.
+ */
+export function writeWithoutFollowingLinks(path: string, contents: string): void {
+	const descriptor = openSync(
+		path,
+		constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW,
+		0o600,
+	);
+	try {
+		writeFileSync(descriptor, contents);
+	} finally {
+		closeSync(descriptor);
+	}
+}
 
 export interface TerminalSize {
 	columns: number;
@@ -47,7 +72,7 @@ export function publishTerminalSize(path: string, stdout: NodeJS.WriteStream = p
 		const rows = stdout.rows;
 		if (!Number.isInteger(columns) || !Number.isInteger(rows)) return;
 		try {
-			writeFileSync(path, formatSize({ columns, rows }));
+			writeWithoutFollowingLinks(path, formatSize({ columns, rows }));
 		} catch {
 			// A size we cannot publish is not worth failing a launch over.
 		}

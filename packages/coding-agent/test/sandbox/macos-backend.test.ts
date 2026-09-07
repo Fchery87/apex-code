@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { createSupervisorStateDirectory } from "../../src/core/sandbox/cli-launch.ts";
 import { createMacosSandboxBackend } from "../../src/core/sandbox/macos-backend.ts";
 import { createSandboxSupervisor } from "../../src/core/sandbox/supervisor.ts";
 import { SandboxViolationStore } from "../../src/core/sandbox/violations.ts";
@@ -227,11 +228,14 @@ describe("macOS violation attribution", () => {
 			}) as unknown as typeof spawn,
 		});
 		const cwd = workspace();
+		const state = createSupervisorStateDirectory();
+		temporaryDirectories.push(state.path);
 		return backend
 			.launch({
 				command: "/bin/sh",
 				args: ["-c", "true"],
 				policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+				supervisorStateDirectory: state.path,
 			})
 			.then(async () => {
 				await backend.close();
@@ -284,6 +288,8 @@ describe("macOS violation attribution", () => {
 describe("macOS credential channel projection", () => {
 	function launchWithChannel(credentialChannel: { hostSocketPath: string; childSocketPath: string } | undefined) {
 		const cwd = workspace();
+		const state = createSupervisorStateDirectory();
+		temporaryDirectories.push(state.path);
 		let spawnArguments: readonly string[] = [];
 		let spawnEnvironment: NodeJS.ProcessEnv | undefined;
 		const spawnChild = ((command: string, args: readonly string[], options?: { env?: NodeJS.ProcessEnv }) => {
@@ -302,6 +308,7 @@ describe("macOS credential channel projection", () => {
 				command: "/bin/sh",
 				args: ["-c", "true"],
 				policy: { workspace: cwd, allowedHosts: [], additionalWritableRoots: [] },
+				supervisorStateDirectory: state.path,
 				// As on Linux, the launch builder advertises the channel; this backend
 				// must carry it through to sandbox-exec's environment untouched.
 				environment: credentialChannel ? { APEX_CREDENTIAL_PROXY_PATH: credentialChannel.childSocketPath } : {},
@@ -309,7 +316,7 @@ describe("macOS credential channel projection", () => {
 			})
 			.then(async (code) => {
 				await backend.close();
-				return { code, cwd, spawnArguments, spawnEnvironment };
+				return { code, cwd, statePath: state.path, spawnArguments, spawnEnvironment };
 			});
 	}
 
@@ -317,13 +324,13 @@ describe("macOS credential channel projection", () => {
 		const hostDirectory = mkdtempSync(join(tmpdir(), "apex-cred-seatbelt-"));
 		temporaryDirectories.push(hostDirectory);
 		const hostSocketPath = join(hostDirectory, "channel.sock");
-		const { code, cwd, spawnArguments, spawnEnvironment } = await launchWithChannel({
+		const { code, statePath, spawnArguments, spawnEnvironment } = await launchWithChannel({
 			hostSocketPath,
 			childSocketPath: hostSocketPath,
 		});
 
 		expect(code).toBe(0);
-		const profile = readFileSync(join(cwd, ".apex-code", "sandbox-state", "profile.sb"), "utf8");
+		const profile = readFileSync(join(statePath, "profile.sb"), "utf8");
 		// Seatbelt matches canonical paths; on macOS tmpdir() is a symlink (/var ->
 		// /private/var), so the literal is the resolved form of the same socket.
 		const canonical = join(realpathSync(dirname(hostSocketPath)), basename(hostSocketPath));
@@ -333,10 +340,10 @@ describe("macOS credential channel projection", () => {
 	});
 
 	it("adds no unix-socket rule and no environment when no channel exists", async () => {
-		const { code, cwd, spawnEnvironment } = await launchWithChannel(undefined);
+		const { code, statePath, spawnEnvironment } = await launchWithChannel(undefined);
 
 		expect(code).toBe(0);
-		const profile = readFileSync(join(cwd, ".apex-code", "sandbox-state", "profile.sb"), "utf8");
+		const profile = readFileSync(join(statePath, "profile.sb"), "utf8");
 		// The git credential and command escalation channels are always opened, so their
 		// socket rules are always present. What must be absent is the credential channel's,
 		// whose sockets live under an `apex-cred-` directory.

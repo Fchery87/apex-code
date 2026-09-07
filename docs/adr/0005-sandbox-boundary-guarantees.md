@@ -217,3 +217,37 @@ they come only from argv.
 Neither addition changes what the boundary guarantees when it is enforced, and neither is
 reachable from inside the child. The default with no flags is byte for byte the boundary
 this ADR has described throughout.
+
+## Amendment (2026-09-05): platform boundary implementation contract
+
+The platform adapters now make the following guarantees, with no implication that
+unsupported platforms receive a best-effort substitute:
+
+* **Linux:** the CLI child and its descendants run under Bubblewrap with a read-only
+  host root, a writable workspace and explicitly named writable roots, hidden host
+  home, and no network namespace route except the supervisor's explicitly projected
+  proxy socket. The command-escalation socket is the only escalation channel projected
+  into the normal child. An approved command is a separate minimal Bubblewrap child
+  with the requested writable root and no credential, terminal, or escalation channels.
+  Directory projections use a private descriptor-backed mount and do not expose sibling
+  entries in the parent directory. Supervisor artifacts (handoff command, relay,
+  terminal-size file, and credential helper) use the supervisor's private state
+  directory; only the child acknowledgement is placed in a workspace path.
+* **macOS:** the CLI child runs under Seatbelt with broad read/narrow write rules,
+  workspace and named writable roots, denied network except the configured proxy
+  endpoint, and separately recorded weaker shared-host-loopback semantics. Profiles
+  and supervisor artifacts are outside the child-writable workspace. Escalation uses
+  a fresh private minimal profile permitting the workspace and requested writable
+  root, denies network, captures bounded output, and exposes no credential, proxy,
+  terminal, or escalation channel. Seatbelt has no Linux-equivalent private network
+  namespace and no directory mount-shadow primitive; native macOS integration tests
+  remain required and are not run on Linux.
+* **Windows:** no OS backend is available. The CLI, SDK, and RPC surfaces fail closed
+  rather than implying that a normal process is contained.
+
+The same distinction applies across entry points: the CLI selects and launches an
+ enforced backend, SDK callers must choose their explicit sandbox contract, and RPC
+requests inherit the supervisor's platform backend and headless approval behavior.
+Headless, print, JSON, and RPC sessions have no terminal approver, so escalation is
+denied without asking on both supported platforms. A denied request never widens the
+existing session.

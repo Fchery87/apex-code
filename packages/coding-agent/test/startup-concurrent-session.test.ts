@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
@@ -15,17 +15,68 @@ async function stopChild(child: ChildProcess): Promise<void> {
 	if (child.exitCode !== null || child.signalCode !== null) {
 		return;
 	}
+	const descendants = listDescendantPids(child.pid);
 	child.kill("SIGTERM");
 	await new Promise<void>((resolvePromise) => {
 		const timeout = setTimeout(() => {
 			child.kill("SIGKILL");
 			resolvePromise();
-		}, 1_000);
+		}, 5_000);
 		child.once("close", () => {
 			clearTimeout(timeout);
 			resolvePromise();
 		});
 	});
+	for (const pid of descendants.reverse()) {
+		try {
+			process.kill(pid, "SIGKILL");
+		} catch {
+			// The supervisor may already have reaped the process.
+		}
+	}
+}
+
+function listDescendantPids(rootPid: number | undefined): number[] {
+	if (rootPid === undefined) return [];
+	const result = spawnSync("ps", ["-eo", "pid=,ppid="], { encoding: "utf8" });
+	if (result.status !== 0) return [];
+	const childrenByParent = new Map<number, number[]>();
+	for (const line of result.stdout.split("\n")) {
+		const [pidText, parentText] = line.trim().split(/\s+/);
+		const pid = Number(pidText);
+		const parent = Number(parentText);
+		if (!Number.isInteger(pid) || !Number.isInteger(parent)) continue;
+		const children = childrenByParent.get(parent) ?? [];
+		children.push(pid);
+		childrenByParent.set(parent, children);
+	}
+	const descendants: number[] = [];
+	const visit = (parent: number): void => {
+		for (const pid of childrenByParent.get(parent) ?? []) {
+			descendants.push(pid);
+			visit(pid);
+		}
+	};
+	visit(rootPid);
+	return descendants;
+}
+
+function stopOrphanedConcurrentSandboxes(roots: string[]): void {
+	if (roots.length === 0) return;
+	const result = spawnSync("ps", ["-eo", "pid=,pgid=,args="], { encoding: "utf8" });
+	if (result.status !== 0) return;
+	for (const line of result.stdout.split("\n")) {
+		const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
+		if (!match || !match[3].includes("bwrap --new-session") || !roots.some((root) => match[3].includes(root))) {
+			continue;
+		}
+		const pid = Number(match[1]);
+		try {
+			process.kill(pid, "SIGKILL");
+		} catch {
+			// The test process may have already reaped the sandbox.
+		}
+	}
 }
 
 afterEach(async () => {
@@ -33,6 +84,7 @@ afterEach(async () => {
 		await stopChild(child);
 		stderrByChild.delete(child);
 	}
+	stopOrphanedConcurrentSandboxes(tempDirs);
 	for (const dir of tempDirs.splice(0)) {
 		rmSync(dir, { recursive: true, force: true });
 	}

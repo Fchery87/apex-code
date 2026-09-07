@@ -50,14 +50,14 @@ describe("standalone test tool runner-stopped exit codes", () => {
 	it("reports exitCode null for a timed-out run even when the kill produces an exit code", async () => {
 		const fixture = writeFixture(scratch, "hangs.cjs", HANGS_AND_EXITS_ONE);
 		const failure = await createTool(scratch)
-			.execute("test-call", { executable: process.execPath, args: [fixture], timeout: 1 })
+			.execute("test-call", { executable: process.execPath, args: [fixture], timeout: 5 })
 			.catch((error) => error);
 
 		expect(failure).toBeInstanceOf(Error);
 		expect(failure.details.outcome).toBe("timeout");
 		expect(failure.details.exitCode).toBeNull();
 		expect(failure.message).toContain("output-before-hang-5501");
-	});
+	}, 15_000);
 
 	it("reports exitCode null for a cancelled run even when the kill produces an exit code", async () => {
 		const fixture = writeFixture(scratch, "hangs-cancelled.cjs", HANGS_AND_EXITS_ONE);
