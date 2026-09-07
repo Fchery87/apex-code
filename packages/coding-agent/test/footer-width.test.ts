@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { AgentSession } from "../src/core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../src/core/footer-data-provider.ts";
 import { FooterComponent, formatCwdForFooter } from "../src/modes/interactive/components/footer.ts";
+import { WorkingStatusIndicator } from "../src/modes/interactive/components/status-indicator.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
@@ -409,5 +410,79 @@ describe("FooterComponent width handling", () => {
 
 		expect(stats).toContain("$1.234");
 		expect(stats).not.toContain("(sub)");
+	});
+
+	it("carries working activity in the tray", () => {
+		const session = createSession({ sessionName: "s", percent: 12 });
+		const footer = new FooterComponent(session, createFooterData(1));
+		footer.setActivity({ render: () => ["editing middleware.ts (esc to interrupt)"], invalidate() {} });
+
+		const rendered = stripAnsi(footer.render(120).join("\n"));
+
+		expect(rendered).toContain("editing middleware.ts");
+		expect(rendered).toContain("esc to interrupt");
+		expect(rendered).toContain("default");
+	});
+
+	it("never lets activity displace permission posture or context pressure", () => {
+		const session = createSession({ sessionName: "s", percent: 95 });
+		const footer = new FooterComponent(session, createFooterData(1));
+		footer.setActivity({ render: () => ["editing a file with a long name (esc to interrupt)"], invalidate() {} });
+
+		for (const width of [120, 80, 56, 40, 28]) {
+			const lines = footer.render(width);
+			for (const line of lines) expect(visibleWidth(line), `width ${width}`).toBeLessThanOrEqual(width);
+			const rendered = stripAnsi(lines.join("\n"));
+			expect(rendered, `width ${width}`).toMatch(/default|bypass|plan|accept|dontAsk/);
+			expect(rendered, `width ${width}`).toContain("!!");
+		}
+	});
+
+	it("drops activity before it drops the spelled-out permission mode", () => {
+		const session = createSession({ sessionName: "s", percent: 12 });
+		const footer = new FooterComponent(session, createFooterData(1));
+		footer.setActivity({ render: () => ["x".repeat(200)], invalidate() {} });
+
+		const rendered = stripAnsi(footer.render(40).join("\n"));
+
+		expect(rendered).toContain("default");
+		expect(rendered).not.toContain("xxxxx");
+	});
+
+	it("offers compaction only when pressure is high and nothing will compact on its own", () => {
+		const pressured = new FooterComponent(createSession({ sessionName: "s", percent: 88 }), createFooterData(1));
+		pressured.setAutoCompactEnabled(false);
+		expect(stripAnsi(pressured.render(120).join("\n"))).toContain("/compact soon");
+
+		const automatic = new FooterComponent(createSession({ sessionName: "s", percent: 88 }), createFooterData(1));
+		automatic.setAutoCompactEnabled(true);
+		expect(stripAnsi(automatic.render(120).join("\n"))).not.toContain("/compact soon");
+
+		const calm = new FooterComponent(createSession({ sessionName: "s", percent: 12 }), createFooterData(1));
+		calm.setAutoCompactEnabled(false);
+		expect(stripAnsi(calm.render(120).join("\n"))).not.toContain("/compact soon");
+	});
+
+	it("draws the real working indicator, whose first rendered row is blank", () => {
+		const session = createSession({ sessionName: "s", percent: 12 });
+		const footer = new FooterComponent(session, createFooterData(1));
+		const indicator = new WorkingStatusIndicator(
+			{ requestRender: () => {} } as never,
+			"Working... (esc to interrupt)",
+		);
+
+		try {
+			// Loader.render returns ["", ...lines]; taking row 0 would silently render
+			// an empty tray segment and look like the feature was never wired up.
+			expect(indicator.render(120)[0]).toBe("");
+			footer.setActivity(indicator);
+
+			const rendered = stripAnsi(footer.render(120).join("\n"));
+			expect(rendered).toContain("Working...");
+			expect(rendered).toContain("esc to interrupt");
+			expect(rendered).toContain("default");
+		} finally {
+			indicator.dispose();
+		}
 	});
 });

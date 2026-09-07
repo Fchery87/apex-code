@@ -3,6 +3,7 @@ import { Container, isViewportTUI, Text } from "@earendil-works/pi-tui";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { VirtualTerminal } from "../../tui/test/virtual-terminal.ts";
 import type { FullscreenExitOutput, TuiMode } from "../src/core/settings-manager.ts";
+import type { StatusIndicatorKind } from "../src/modes/interactive/components/status-indicator.ts";
 import {
 	createInteractiveTui,
 	createInteractiveTuiReference,
@@ -313,15 +314,17 @@ describe("InteractiveMode copy confirmation", () => {
 });
 
 type ClearStatusContext = {
-	activeStatusIndicator: { kind: "working"; dispose: () => void } | undefined;
+	activeStatusIndicator: { kind: StatusIndicatorKind; dispose: () => void } | undefined;
 	statusContainer: Container;
 	options: { tuiMode?: TuiMode };
 	ui: { getClearOnShrink: () => boolean };
 	idleStatus: Component;
+	footer: { setActivity: (activity: Component | undefined) => void };
+	customFooter: object | undefined;
 };
 
 type InteractiveModePrototype = {
-	clearStatusIndicator(this: ClearStatusContext, kind?: "working"): void;
+	clearStatusIndicator(this: ClearStatusContext, kind?: StatusIndicatorKind): void;
 };
 
 const interactiveModePrototype = InteractiveMode.prototype as unknown as InteractiveModePrototype;
@@ -334,11 +337,14 @@ describe("clear-on-shrink status spacing", () => {
 		] as const) {
 			const dispose = vi.fn();
 			const context: ClearStatusContext = {
-				activeStatusIndicator: { kind: "working", dispose },
+				// Retry keeps its own rows, so it is the kind that still reserves height.
+				activeStatusIndicator: { kind: "retry", dispose },
 				statusContainer: new Container(),
 				options: { tuiMode },
 				ui: { getClearOnShrink: () => true },
 				idleStatus: new Text("", 0, 0),
+				footer: { setActivity: () => {} },
+				customFooter: undefined,
 			};
 
 			interactiveModePrototype.clearStatusIndicator.call(context);
@@ -346,5 +352,43 @@ describe("clear-on-shrink status spacing", () => {
 			expect(dispose).toHaveBeenCalledOnce();
 			expect(context.statusContainer.children).toHaveLength(expectedChildren);
 		}
+	});
+
+	it("reserves no status height for working, which the tray draws instead", () => {
+		const dispose = vi.fn();
+		const setActivity = vi.fn();
+		const context: ClearStatusContext = {
+			activeStatusIndicator: { kind: "working", dispose },
+			statusContainer: new Container(),
+			options: { tuiMode: "regular" },
+			ui: { getClearOnShrink: () => true },
+			idleStatus: new Text("", 0, 0),
+			footer: { setActivity },
+			customFooter: undefined,
+		};
+
+		interactiveModePrototype.clearStatusIndicator.call(context);
+
+		expect(dispose).toHaveBeenCalledOnce();
+		expect(setActivity).toHaveBeenCalledWith(undefined);
+		// Those two rows are the density this task buys back on every turn.
+		expect(context.statusContainer.children).toHaveLength(0);
+	});
+
+	it("keeps working in its own rows when an extension owns the footer", () => {
+		const dispose = vi.fn();
+		const context: ClearStatusContext = {
+			activeStatusIndicator: { kind: "working", dispose },
+			statusContainer: new Container(),
+			options: { tuiMode: "regular" },
+			ui: { getClearOnShrink: () => true },
+			idleStatus: new Text("", 0, 0),
+			footer: { setActivity: () => {} },
+			customFooter: {},
+		};
+
+		interactiveModePrototype.clearStatusIndicator.call(context);
+
+		expect(context.statusContainer.children).toHaveLength(1);
 	});
 });

@@ -94,6 +94,7 @@ export class FooterComponent implements Component {
 	private session: AgentSession;
 	private footerData: ReadonlyFooterDataProvider;
 	private accessibilitySettings: FooterAccessibilitySettings;
+	private activity: Component | undefined;
 
 	constructor(
 		session: AgentSession,
@@ -118,6 +119,19 @@ export class FooterComponent implements Component {
 
 	setPermissionMode(mode: PermissionMode): void {
 		this.permissionMode = mode;
+	}
+
+	/**
+	 * The working indicator, rendered inline in the tray instead of in its own
+	 * rows above the editor.
+	 *
+	 * Taking the component rather than a string keeps the spinner animation, the
+	 * extension-supplied `WorkingIndicatorOptions`, and disposal where they already
+	 * live. This setter only moves where the line is drawn, so it cannot disturb
+	 * the usage cache.
+	 */
+	setActivity(activity: Component | undefined): void {
+		this.activity = activity;
 	}
 
 	/**
@@ -187,6 +201,13 @@ export class FooterComponent implements Component {
 		const upSymbol = symbolPreset === "ascii" ? "^" : "↑";
 		const downSymbol = symbolPreset === "ascii" ? "v" : "↓";
 		const bulletSymbol = symbolPreset === "ascii" ? "-" : "•";
+		// One line, unpadded, so the fit ladder can measure it as a segment. Loader
+		// prepends a blank row to stand off from the transcript, which the tray does
+		// not need, so this takes the first row that actually carries the message.
+		const activityLine = this.activity
+			?.render(width)
+			.map((line) => line.replace(/ +$/, ""))
+			.find((line) => line.length > 0);
 
 		// Calculate cumulative usage from ALL session entries (not just post-compaction messages),
 		// cached against the session's entry version (see computeUsage).
@@ -261,7 +282,13 @@ export class FooterComponent implements Component {
 		} else {
 			contextPercentStr = contextPercentDisplay;
 		}
+		// Only worth saying when pressure is real and nothing will act on its own.
+		// With auto-compaction on, the "(auto)" marker above already answers it.
+		const compactPrompt =
+			contextPercentValue > 70 && !this.autoCompactEnabled ? theme.fg("warning", "/compact soon") : undefined;
 		statsParts.push(contextPercentStr);
+		if (compactPrompt) statsParts.push(compactPrompt);
+		if (activityLine) statsParts.unshift(activityLine);
 		if (areExperimentalFeaturesEnabled()) {
 			statsParts.push(`${theme.fg("dim", bulletSymbol)} ${theme.bold(theme.fg("warning", "xp"))}`);
 		}
@@ -320,7 +347,11 @@ export class FooterComponent implements Component {
 
 			const joinSegments = (segments: string[]): string => segments.join(separator);
 			const fits = (segments: string[]): boolean => visibleWidth(joinSegments(segments)) <= width;
-			let left: string[] = [permissionFull];
+			const safetyFirst = (...rest: Array<string | undefined>): string[] => [
+				permissionFull,
+				...rest.filter((segment): segment is string => segment !== undefined),
+			];
+			let left: string[] = safetyFirst(compactPrompt, activityLine);
 			let right = contextGauged;
 
 			// The gauge is decoration over a value the text already states, so it
@@ -328,6 +359,17 @@ export class FooterComponent implements Component {
 			// spelled-out permission mode, which is why this is its own rung.
 			if (!fits([...left, right])) {
 				right = contextFull;
+			}
+
+			// Activity is operational, so it outranks every optional segment below.
+			// It still yields to the safety posture and to the pressure reading,
+			// which are the two things the tray must never lose.
+			if (!fits([...left, right])) {
+				left = safetyFirst(compactPrompt);
+			}
+
+			if (!fits([...left, right])) {
+				left = safetyFirst();
 			}
 
 			if (!fits([...left, right])) {
