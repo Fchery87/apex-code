@@ -117,6 +117,7 @@ capable and measurably worse.
 | Mid-run auto-compaction | **landed** — `61be67e27` | [spec](specs/2026-08-29-mid-run-auto-compaction.md) | — |
 | Declarative hooks | **landed** — HOOKS.1 through HOOKS.7 · `a9675e1ce` (three-OS CI run 33451005458) | [spec](specs/2026-08-31-declarative-hooks.md) | — |
 | Background shell | **landed** — SHELL.1 through SHELL.5 · `9d086353d` (three-OS CI run 33462273866) | [spec](specs/2026-08-31-background-shell.md) | — |
+| Bash provider schema | **active** | [spec](specs/2026-09-07-bash-provider-schema.md) | — |
 | ACP adapter | **landed** — ACP.1 through ACP.5 · `6b76caa3b` (three-OS CI run 33469742558) | [spec](specs/2026-08-31-acp-adapter.md) | — |
 | Checkpoints on by default | **landed** — CP.1 through CP.3 · `7f6e5800b` (three-OS CI run 33474171722) | [spec](specs/2026-09-01-checkpoints-default-on.md) | — |
 | Workspace-aware compaction and checkpoint navigation | **landed** — WS.1 through WS.7 · `8a36f1838` (three-OS CI run 33751872256) | [spec](specs/2026-09-01-harness-correctness-and-workspace-state.md) | — |
