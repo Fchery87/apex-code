@@ -23,7 +23,7 @@ The tasks are ordered so the sequence proves itself. EMBER.1 corrects a false st
 | EMBER.1 | Replace the "Always allow" label with a session-scoped one in the interactive responder, and decide the ACP surface. | verified in `69038c4a8` | `npx vitest run test/permissions/ test/acp/ --root packages/coding-agent`: 15 files, 237 tests pass. Four responder assertions and one ACP assertion were written first and watched fail against "Always allow". Both surfaces now read "Allow for this session". A gate test asserts the write is `{type: "addRules", destination: "session", rules: [{toolName: "read", behavior: "allow", ruleContent: "a.txt"}]}`, byte-identical to before, and that "Allow once" writes nothing. ACP `optionId` and `kind` are unchanged. `npx tsgo --noEmit` exits 0. |
 | EMBER.2 | Route the two Apex-owned custom selectors through `paintBackground`, and give the session selector's border `borderMuted`. | implemented, focused checks green, SHA pending | `npx vitest run test/model-selector.test.ts test/extension-selector-search.test.ts test/session-selector-rename.test.ts test/apex-theme.test.ts --root packages/coding-agent`: 4 files, 27 tests pass. Five assertions were written first and watched fail. The border test lives in `session-selector-rename.test.ts` because `session-selector-search.test.ts` covers a pure filter function and renders nothing. `paintedWidth` proves the fill hugs its text rather than spanning 120 columns. Neighbour sweep over 11 theme and selector suites, 73 tests pass. `npx tsgo --noEmit` exits 0. |
 | EMBER.3 | Delete the mode-label prefix and carry mode in the marker's glyph and hue so the input origin holds still. | implemented, focused checks green, SHA pending | `npx vitest run test/custom-editor-chrome.test.ts test/custom-editor-history-keybindings.test.ts test/interactive-mode-status.test.ts --root packages/coding-agent`: 3 files, 78 tests pass. Four assertions were written first and watched fail on a missing `setPromptMode`. The origin holds across agent, bash, and a deliberately mismatched marker pair. `npx tsgo --noEmit` exits 0. |
-| EMBER.4 | Report hidden detail truthfully, render the hint only when detail is hidden, and add per-call expansion beside the global action. | not started | `npm --prefix packages/coding-agent test -- test/tool-execution-component.test.ts test/tool-execution-render-cache.test.ts`. A result hiding nothing renders no hint. Expanding one call leaves its siblings collapsed. The global action resets per-call overrides then applies its own value. Renderer invocation counts prove no renderer composes twice. A per-call toggle bumps `displayVersion` and invalidates the cache. |
+| EMBER.4 | Report hidden detail truthfully and render the hint only when detail is hidden. Per-call expansion split out, see below. | implemented, focused checks green, SHA pending | `npx vitest run test/tool-execution-component.test.ts test/tool-execution-render-cache.test.ts test/tui-flicker-red-loop.test.ts test/interactive-mode-status.test.ts --root packages/coding-agent`: 4 files, 79 tests pass. Three assertions were written first and watched fail. A result hiding nothing renders no hint. A truncated result announces exactly once, with its count. Expanding one call leaves a sibling's rendered output byte-identical. `npx tsgo --noEmit` exits 0. |
 | EMBER.5 | Move working status, elapsed time, and interrupt guidance into the footer's width ladder, and add the compaction hint. | not started | `npm --prefix packages/coding-agent test -- test/footer-width.test.ts test/footer-accessibility.test.ts test/footer-usage-cache.test.ts` at 120, 80, 56, 40, and 28 columns. Permission posture, the textual `!` and `!!` pressure markers, and the interrupt action survive every width. The tray does not invalidate cached usage totals. A custom-footer session keeps a visible working state. |
 | EMBER.6 | Carry a bounded preview and an honest scope into the permission request, and carry denial guidance back through `GateDecision.reason`. | not started | `npm --prefix packages/coding-agent test -- test/permissions/`. Cases cover allow once, session rule, rule unavailable, cancel, guidance reaching the blocked tool result, an unavailable preview, and a concurrent in-place write between preview and apply. A rejection produces no execution and no evidence record. The preview reads only through the prepared operation. |
 
@@ -52,6 +52,8 @@ Two things this establishes for EMBER.4 and EMBER.5.
 **The budget is already marginal at 300 messages on trunk.** 1.7% of frames run over 16 ms before any of this work. That is a property of the current code, not something this plan introduced, and the next task to touch `ToolExecutionComponent` will be blamed for it unless the baseline is on record.
 
 **One run is not evidence on this host.** The first head measurement was taken minutes after a 21-minute full-load test suite and reported 18.86 ms mean with 50% of frames over budget, a uniform 2.5x across all three scenarios including Scenario 3, which no task in this plan can reach. Re-run interleaved with trunk on an idle machine it came back to 9.14 ms. Always measure trunk and head back to back on a quiet host, and treat a uniform multiple across untouched scenarios as contamination rather than a regression.
+
+**The 300-message row cannot measure anything on this host.** Run twice on identical EMBER.4 code, minutes apart and idle, Scenario 2 at 300 messages returned 21.72 ms with 63.3% of frames over budget and then 7.59 ms with 0.0%. A 2.9x spread on an unchanged tree. The 20 and 100 message rows are stable to within a few tenths and show head at or below both the EMBER.3 control and trunk. Judge a change on those two rows, and treat any single 300-message reading as unusable.
 
 ## Files and boundaries
 
@@ -110,20 +112,33 @@ Already landed, so out of scope. The dotted `borderMuted` overlay rule, the shar
 
 **A second compatibility break.** `CustomEditor` is exported at `src/index.ts:395`, so `setModeLabel` was public API. It is removed rather than left as a no-op, because a no-op lets an extension keep calling a method that silently does nothing while a removal fails at build time. Recorded in the spec's posture and deletion inventory.
 
+## What EMBER.4 found
+
+**The component hint was a ninth copy.** Every truncating renderer already prints its own counted affordance, each guarded by a real count. `read.ts:196`, `write.ts:194`, `grep.ts:116`, `find.ts:111`, `ls.ts:90`, `bash.ts:479`, `bash-execution.ts:196`, and the fallback at `tool-execution.ts:174`. The component then appended a tenth line saying the same thing with no count. A truncated call showed the affordance twice, and an untruncated one showed a hint pointing at nothing.
+
+**Deleting it outright was wrong, and an existing test caught it.** `formatReadResult` returns an empty string when collapsed and not an error, so `read` hides its entire body and announces nothing. The component hint is its only signal. The test named "renders one component-owned disclosure hint when a result is collapsed" exists for exactly that case. The hint is kept and made conditional instead: suppressed when the fallback knows it hid nothing, suppressed when the rendered content already carries the shared phrase, rendered otherwise.
+
+**One existing behaviour was left alone deliberately.** "short errors are not truncated when collapsed" asserts the affordance on a short error with nothing hidden, through the no-definition path. That is tested intent whose reasoning is not recorded, so it was not overridden on a guess. The residual case is narrow and is listed under narrowed claims.
+
+**A collapsed error now says how to act.** `renderCollapsedError` printed a count with no way to reach the rest. It now carries the same phrase every other affordance uses.
+
+**Per-call expansion is split out.** The component already holds per-call state, and a new test proves expanding one call leaves a sibling's rendered output byte-identical. What is missing is a way for a person to choose a call, which needs the inspector overlay the spec names but never designed. That is a feature with its own interaction design, not a line in this task, so it wants its own spec and its own task. `interactive-mode.ts:3489` still broadcasts one boolean, and that is unchanged here.
+
 ## Narrowed claims
 
 1. **Preview coverage is partial by design.** Tools with no producer, binary files, and very large files render a truthful summary or an explicit unavailable reason.
 2. **Custom renderers keep their behavior.** A renderer that does not report hidden detail gets an inspect affordance with no omitted-line count. `renderShell: "self"` is untouched.
 3. **Custom footers migrate on opt-in.** They keep their separate working indicator until they adopt the tray input.
 4. **The residual staleness case is a failed apply, not a wrong write.** EMBER.6 tests for it.
-5. **Settings selection stays inconsistent with the other overlays.** This is a frozen-component limit, recorded rather than hidden. Anyone reading the screens will still see it.
+5. **A custom renderer that hides nothing and says nothing still shows the affordance.** Detecting that needs a second composition, which the render cache exists to prevent. The suppression covers the two cases the component can know for certain.
+6. **Settings selection stays inconsistent with the other overlays.** This is a frozen-component limit, recorded rather than hidden. Anyone reading the screens will still see it.
 
 ## Verification evidence
 
 - [x] EMBER.1 verified in `69038c4a8`. `test/permissions/` and `test/acp/`, 15 files, 237 tests pass. Full `npm run check` passed through the pre-commit hook.
 - [x] EMBER.2 verified in `26a455820`. Focused 4 files at 27 tests, neighbour sweep 11 files at 73 tests, and the full workspace suite at 409 files and 3537 tests, all pass.
-- [x] EMBER.3 focused run. 3 files, 78 tests pass. `npx tsgo --noEmit` exits 0. SHA still to record.
-- [ ] EMBER.4 SHA and both tool-execution test outputs.
+- [x] EMBER.3 verified in `5b15e2027`. 3 files, 78 tests pass. Full `npm run check` passed through the pre-commit hook.
+- [x] EMBER.4 focused run. 4 files, 79 tests pass. Bench at 20 and 100 messages flat against the EMBER.3 control, measured back to back and idle. SHA still to record.
 - [ ] EMBER.5 SHA and the three footer test outputs at all five widths.
 - [ ] EMBER.6 SHA and the full `test/permissions/` run.
 - [x] Trunk and head numbers recorded above. EMBER.1, EMBER.2, and EMBER.3 do not touch the components the bench renders.
