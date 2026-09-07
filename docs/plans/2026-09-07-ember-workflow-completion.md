@@ -20,8 +20,8 @@ The tasks are ordered so the sequence proves itself. EMBER.1 corrects a false st
 
 | ID | Task | State | Verification |
 |---|---|---|---|
-| EMBER.1 | Replace the "Always allow" label with a session-scoped one in the interactive responder, and decide the ACP surface. | implemented, focused checks green, SHA pending | `npx vitest run test/permissions/ test/acp/ --root packages/coding-agent`: 15 files, 237 tests pass. Four responder assertions and one ACP assertion were written first and watched fail against "Always allow". Both surfaces now read "Allow for this session". A gate test asserts the write is `{type: "addRules", destination: "session", rules: [{toolName: "read", behavior: "allow", ruleContent: "a.txt"}]}`, byte-identical to before, and that "Allow once" writes nothing. ACP `optionId` and `kind` are unchanged. `npx tsgo --noEmit` exits 0. |
-| EMBER.2 | Route the two Apex-owned custom selectors through `paintBackground`, and give the session selector's border `borderMuted`. | not started | `npm --prefix packages/coding-agent test -- test/model-selector.test.ts test/extension-selector-search.test.ts test/session-selector-search.test.ts`. Each asserts the painted row or border in the emitted ANSI, not a palette token. The highlight hugs its text, matching `getSelectListTheme`. The session selector still passes an explicit color function. |
+| EMBER.1 | Replace the "Always allow" label with a session-scoped one in the interactive responder, and decide the ACP surface. | verified in `69038c4a8` | `npx vitest run test/permissions/ test/acp/ --root packages/coding-agent`: 15 files, 237 tests pass. Four responder assertions and one ACP assertion were written first and watched fail against "Always allow". Both surfaces now read "Allow for this session". A gate test asserts the write is `{type: "addRules", destination: "session", rules: [{toolName: "read", behavior: "allow", ruleContent: "a.txt"}]}`, byte-identical to before, and that "Allow once" writes nothing. ACP `optionId` and `kind` are unchanged. `npx tsgo --noEmit` exits 0. |
+| EMBER.2 | Route the two Apex-owned custom selectors through `paintBackground`, and give the session selector's border `borderMuted`. | implemented, focused checks green, SHA pending | `npx vitest run test/model-selector.test.ts test/extension-selector-search.test.ts test/session-selector-rename.test.ts test/apex-theme.test.ts --root packages/coding-agent`: 4 files, 27 tests pass. Five assertions were written first and watched fail. The border test lives in `session-selector-rename.test.ts` because `session-selector-search.test.ts` covers a pure filter function and renders nothing. `paintedWidth` proves the fill hugs its text rather than spanning 120 columns. Neighbour sweep over 11 theme and selector suites, 73 tests pass. `npx tsgo --noEmit` exits 0. |
 | EMBER.3 | Delete the mode-label prefix and carry mode in the caret's hue so the input origin holds still. | not started | `npm --prefix packages/coding-agent test -- test/custom-editor-chrome.test.ts`. The cursor column is identical in agent mode, in bash mode, and during a streaming turn. Bash mode is still legible from the caret hue and the tray. |
 | EMBER.4 | Report hidden detail truthfully, render the hint only when detail is hidden, and add per-call expansion beside the global action. | not started | `npm --prefix packages/coding-agent test -- test/tool-execution-component.test.ts test/tool-execution-render-cache.test.ts`. A result hiding nothing renders no hint. Expanding one call leaves its siblings collapsed. The global action resets per-call overrides then applies its own value. Renderer invocation counts prove no renderer composes twice. A per-call toggle bumps `displayVersion` and invalidates the cache. |
 | EMBER.5 | Move working status, elapsed time, and interrupt guidance into the footer's width ladder, and add the compaction hint. | not started | `npm --prefix packages/coding-agent test -- test/footer-width.test.ts test/footer-accessibility.test.ts test/footer-usage-cache.test.ts` at 120, 80, 56, 40, and 28 columns. Permission posture, the textual `!` and `!!` pressure markers, and the interrupt action survive every width. The tray does not invalidate cached usage totals. A custom-footer session keeps a visible working state. |
@@ -69,6 +69,16 @@ Already landed, so out of scope. The dotted `borderMuted` overlay rule, the shar
 
 **A second, separate defect surfaced and was left alone.** ACP offers "Reject always" and maps it to `{allow: false, persist: true}` at `server.ts:146`. The gate returns at `gate.ts:87` on any denial, before it reads `persist`, so no deny rule is ever written. That label promises persistence the code does not deliver, which is the same class of defect EMBER.1 exists to fix. It is not fixed here because the honest repair is to actually persist deny rules, and that is a behavior change with its own tests and its own risk. It needs its own task.
 
+## What EMBER.2 found
+
+**The border scope was smaller than the plan assumed.** All 58 `DynamicBorder` constructions were checked. Every selector overlay except the session selector already took the `borderMuted` default, so only `session-selector.ts:738` and `746` changed. The other accent callers are `earendil-announcement.ts` and `extensions/llama/ui.ts`, a banner and an extension surface rather than selectors, and both were left alone.
+
+**One painter now has one home.** `paintSelectedRow` was extracted from `getSelectListTheme` and is called by the frozen-component path and by both custom lists, so the treatment cannot drift into three variants.
+
+**Semantic colour survives the fill.** `paintBackground` walks the row and paints each visible run separately, leaving control sequences untouched, so the muted provider badges and the green checkmark in `/model` keep their meaning on a lit row. Only the accent was dropped. This was settled by running a probe against the real theme rather than by reasoning about ANSI nesting.
+
+**The first version of the hug assertion measured the wrong thing.** A rendered line is padded to the render width by its `Text` component, so line length says nothing about the fill. `paintedWidth` in `test/suite/theme-ansi.ts` sums the visible characters inside the background runs instead, which is the property the frozen interface actually constrains.
+
 ## Narrowed claims
 
 1. **Preview coverage is partial by design.** Tools with no producer, binary files, and very large files render a truthful summary or an explicit unavailable reason.
@@ -79,8 +89,8 @@ Already landed, so out of scope. The dotted `borderMuted` overlay rule, the shar
 
 ## Verification evidence
 
-- [x] EMBER.1 focused run. `test/permissions/` and `test/acp/`, 15 files, 237 tests pass. `npx tsgo --noEmit` exits 0. SHA still to record.
-- [ ] EMBER.2 SHA and the three selector test outputs.
+- [x] EMBER.1 verified in `69038c4a8`. `test/permissions/` and `test/acp/`, 15 files, 237 tests pass. Full `npm run check` passed through the pre-commit hook.
+- [x] EMBER.2 focused run. 4 files, 27 tests pass, plus an 11-file neighbour sweep at 73 tests. `npx tsgo --noEmit` exits 0. SHA still to record.
 - [ ] EMBER.3 SHA and the cursor-column test output.
 - [ ] EMBER.4 SHA and both tool-execution test outputs.
 - [ ] EMBER.5 SHA and the three footer test outputs at all five widths.

@@ -1351,14 +1351,25 @@ export function paintBackground(line: string, background: ThemeBg): string {
 	return output;
 }
 
+/**
+ * The one selected-row treatment: a background step under full-contrast text.
+ *
+ * That reads at a glance without the accent having to carry it, which leaves the
+ * accent free to mean "Apex owns this" everywhere else on screen.
+ *
+ * The fill hugs the composed row rather than spanning the terminal, because
+ * `SelectListTheme.selectedText` is handed a row and no width and pi-tui is
+ * frozen (ADR 0001). Lists that compose their own rows call this directly, so
+ * they match the frozen component instead of becoming the odd ones out.
+ */
+export function paintSelectedRow(text: string): string {
+	return paintBackground(theme.fg("text", text), "selectedBg");
+}
+
 export function getSelectListTheme(): SelectListTheme {
 	return {
 		selectedPrefix: (text: string) => theme.fg("accent", text),
-		// The selected row is the only lit surface in an overlay: a background
-		// step plus full-contrast text. That reads at a glance without the accent
-		// having to carry it, which leaves the accent free to mean "Apex owns
-		// this" everywhere else on screen.
-		selectedText: (text: string) => paintBackground(theme.fg("text", text), "selectedBg"),
+		selectedText: paintSelectedRow,
 		description: (text: string) => theme.fg("dim", text),
 		scrollInfo: (text: string) => theme.fg("dim", text),
 		noMatch: (text: string) => theme.fg("dim", text),

@@ -14,7 +14,7 @@ import {
 import type { ModelRuntime } from "../../../core/model-runtime.ts";
 import { refreshModelCatalogs } from "../model-catalog-refresh.ts";
 import { getModelSelectorSearchText } from "../model-search.ts";
-import { theme } from "../theme/theme.ts";
+import { paintSelectedRow, theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, keyText, rawKeyHint } from "./keybinding-hints.ts";
 
@@ -403,19 +403,19 @@ export class ModelSelectorComponent extends Container implements Focusable {
 	}
 
 	private renderRow(row: Row, isSelected: boolean): string {
-		const prefix = isSelected ? theme.fg("accent", "→ ") : "  ";
+		const prefix = isSelected ? "→ " : "  ";
 		if (row.kind === "provider") {
-			const label = isSelected ? theme.fg("accent", row.provider) : row.provider;
 			const count = theme.fg("muted", ` (${row.count} model${row.count === 1 ? "" : "s"})`);
 			const checkmark = row.hasCurrent ? theme.fg("success", " ✓") : "";
-			return `${prefix}${label}${count}${checkmark}`;
+			const composed = `${prefix}${row.provider}${count}${checkmark}`;
+			return isSelected ? paintSelectedRow(composed) : composed;
 		}
-		const label = isSelected ? theme.fg("accent", row.item.id) : row.item.id;
 		const showProvider = this.step.kind === "models" && this.step.provider === null;
 		const badge = showProvider ? ` ${theme.fg("muted", `[${row.item.provider}]`)}` : "";
 		const defaultBadge = this.isDefaultModel(row.item.model) ? theme.fg("muted", " · default") : "";
 		const checkmark = modelsAreEqual(this.currentModel, row.item.model) ? theme.fg("success", " ✓") : "";
-		return `${prefix}${label}${badge}${defaultBadge}${checkmark}`;
+		const composed = `${prefix}${row.item.id}${badge}${defaultBadge}${checkmark}`;
+		return isSelected ? paintSelectedRow(composed) : composed;
 	}
 
 	private updateList(): void {

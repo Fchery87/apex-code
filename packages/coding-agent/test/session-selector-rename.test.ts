@@ -3,7 +3,8 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { KeybindingsManager } from "../src/core/keybindings.ts";
 import type { SessionInfo } from "../src/core/session-manager.ts";
 import { SessionSelectorComponent } from "../src/modes/interactive/components/session-selector.ts";
-import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
+import { accentOpen, openSequence } from "./suite/theme-ansi.ts";
 
 async function flushPromises(): Promise<void> {
 	await new Promise<void>((resolve) => {
@@ -107,5 +108,27 @@ describe("session selector rename", () => {
 
 		expect(renameSession).toHaveBeenCalledTimes(1);
 		expect(renameSession).toHaveBeenCalledWith(sessions[0]!.path, "XOld");
+	});
+
+	it("draws its overlay boundary as the quiet rule every other selector uses", async () => {
+		const sessions = [makeSession({ id: "a" })];
+		const selector = new SessionSelectorComponent(
+			async () => sessions,
+			async () => [],
+			() => {},
+			() => {},
+			() => {},
+			() => {},
+			{ showRenameHint: true, keybindings: new KeybindingsManager() },
+		);
+		await flushPromises();
+
+		const output = selector.render(120).join("\n");
+		const rule = "\u2504";
+
+		// DynamicBorder still receives an explicit colour function, which it documents
+		// as required for components reachable through jiti. Only the colour moves.
+		expect(output).toContain(openSequence((text) => theme.fg("borderMuted", text)) + rule);
+		expect(output).not.toContain(accentOpen() + rule);
 	});
 });

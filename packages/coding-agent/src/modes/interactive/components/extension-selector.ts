@@ -4,7 +4,7 @@
  */
 
 import { Container, fuzzyFilter, getKeybindings, Input, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
-import { theme } from "../theme/theme.ts";
+import { paintSelectedRow, theme } from "../theme/theme.ts";
 import { CountdownTimer } from "./countdown-timer.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, rawKeyHint } from "./keybinding-hints.ts";
@@ -91,7 +91,7 @@ export class ExtensionSelectorComponent extends Container {
 		for (let i = 0; i < this.filteredOptions.length; i++) {
 			const isSelected = i === this.selectedIndex;
 			const text = isSelected
-				? theme.fg("accent", "→ ") + theme.fg("accent", this.filteredOptions[i])
+				? paintSelectedRow(`→ ${this.filteredOptions[i]}`)
 				: `  ${theme.fg("text", this.filteredOptions[i])}`;
 			this.listContainer.addChild(new Text(text, 1, 0));
 		}
