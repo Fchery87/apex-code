@@ -142,8 +142,13 @@ tokens.
 - [ ] A completed tool call with nothing hidden renders no disclosure hint.
 - [ ] Expanding one tool call leaves every other call unchanged, and the global expand
       action still expands everything.
-- [ ] The permission prompt names the scope it actually grants, shows the proposed
-      change, and lets a rejection carry guidance into the blocked tool result.
+- [ ] The permission prompt names the scope it actually grants, and lets a rejection
+      carry guidance into the blocked tool result.
+- [ ] The prompt shows the proposed change before the user chooses. **Deferred.**
+      `ExtensionSelectorComponent` draws its title as one accent-bold `Text` and
+      `select` offers no other channel, so this needs either a new review component or
+      a new extension UI primitive. The roadmap rules out a second TUI stack, so which
+      of those is acceptable is a design decision and gets its own spec.
 - [ ] The context tray keeps its textual pressure markers and gains an actionable
       compaction hint.
 - [ ] `pi-tui` and `pi-ai` are unchanged, per-frame cost stays inside the 16 ms budget,
@@ -190,7 +195,7 @@ current code is right and the reference is stale.
 | Tool disclosure | Report whether detail is hidden and render the hint only then. Add per-call toggling through the existing `setExpanded`. | `components/tool-execution.ts`, `interactive-mode.ts` |
 | Activity tray | Move working status, elapsed time, and interrupt guidance into the footer's existing width ladder, reusing the existing elapsed timer. | `components/footer.ts`, `interactive-mode.ts` |
 | Context hint | Add an actionable compaction hint beside the existing textual pressure markers. | `components/footer.ts` |
-| Permission review | Carry a bounded preview and an honest scope into the request. Carry optional guidance back on a denial. | `core/permissions/responder.ts`, `core/permissions/gate.ts`, new `components/permission-review.ts` |
+| Permission review | Carry an honest scope into the request and optional guidance back on a denial, both over the existing `select` and `input` primitives. | `core/permissions/responder.ts`, `core/permissions/gate.ts`, `modes/acp/server.ts` |
 
 **Disclosure state.** Per-call toggling sets `expanded` through `setExpanded`, which
 calls `updateDisplay` and increments `displayVersion`, so the render cache invalidates

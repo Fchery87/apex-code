@@ -25,7 +25,7 @@ The tasks are ordered so the sequence proves itself. EMBER.1 corrects a false st
 | EMBER.3 | Delete the mode-label prefix and carry mode in the marker's glyph and hue so the input origin holds still. | implemented, focused checks green, SHA pending | `npx vitest run test/custom-editor-chrome.test.ts test/custom-editor-history-keybindings.test.ts test/interactive-mode-status.test.ts --root packages/coding-agent`: 3 files, 78 tests pass. Four assertions were written first and watched fail on a missing `setPromptMode`. The origin holds across agent, bash, and a deliberately mismatched marker pair. `npx tsgo --noEmit` exits 0. |
 | EMBER.4 | Report hidden detail truthfully and render the hint only when detail is hidden. Per-call expansion split out, see below. | implemented, focused checks green, SHA pending | `npx vitest run test/tool-execution-component.test.ts test/tool-execution-render-cache.test.ts test/tui-flicker-red-loop.test.ts test/interactive-mode-status.test.ts --root packages/coding-agent`: 4 files, 79 tests pass. Three assertions were written first and watched fail. A result hiding nothing renders no hint. A truncated result announces exactly once, with its count. Expanding one call leaves a sibling's rendered output byte-identical. `npx tsgo --noEmit` exits 0. |
 | EMBER.5 | Move working status and interrupt guidance into the footer's width ladder, and add the compaction prompt. Elapsed time deferred, see below. | implemented, focused checks green, SHA pending | `npx vitest run test/footer-width.test.ts test/footer-accessibility.test.ts test/footer-context-gauge.test.ts test/footer-usage-cache.test.ts test/footer-data-provider.test.ts test/interactive-mode-status.test.ts test/interactive-tui.test.ts test/tui-flicker-red-loop.test.ts --root packages/coding-agent`: 8 files, 94 tests pass. Permission posture and the `!!` pressure marker survive 120, 80, 56, 40, and 28 columns with activity present. A 200-character activity is dropped before the spelled-out permission mode. A custom-footer session keeps the indicator in its own rows. `npx tsgo --noEmit` exits 0. |
-| EMBER.6 | Carry a bounded preview and an honest scope into the permission request, and carry denial guidance back through `GateDecision.reason`. | not started | `npm --prefix packages/coding-agent test -- test/permissions/`. Cases cover allow once, session rule, rule unavailable, cancel, guidance reaching the blocked tool result, an unavailable preview, and a concurrent in-place write between preview and apply. A rejection produces no execution and no evidence record. The preview reads only through the prepared operation. |
+| EMBER.6 | Carry an honest scope into the permission request and denial guidance back through `GateDecision.reason`. Preview split out, see below. | implemented, focused checks green, SHA pending | `npx vitest run test/permissions/ test/acp/ test/interactive-tui.test.ts test/footer-width.test.ts --root packages/coding-agent`: 17 files, 281 tests pass. Six assertions were written first and watched fail. Cases cover allow once, the session rule, a contract yielding no rule, a dismissed guidance prompt, a host with no text entry, guidance bounded at 400 characters, and an end-to-end turn through the real agent loop asserting the guidance reaches the tool result while the tool never executes. `npx tsgo --noEmit` exits 0. |
 
 ## Frame budget, for every task
 
@@ -140,6 +140,24 @@ Already landed, so out of scope. The dotted `borderMuted` overlay rule, the shar
 
 **The tray rule is a free function so the white-box tests can reach it.** `test/interactive-tui.test.ts` calls `clearStatusIndicator` with a fabricated `this`, so a prototype helper broke it. `trayOwnsActivity(kind, hasCustomFooter)` takes its two inputs directly.
 
+## What EMBER.6 found
+
+**Denial guidance needed no new TUI stack.** `ExtensionUIContext` already exposes `input(title, placeholder)` beside `select`, which is the same argument `responder.ts` already makes for using `select`. The guidance choice is offered only when the host provides `input`, so a host without text entry simply does not see it.
+
+**The delivery path was verified end to end, not assumed.** `agent-loop.ts:686` turns a blocked decision's `reason` into the error tool result. A test drives a real turn through `Agent` with a denying responder and asserts the typed instruction appears in the tool result while `toolExecuted` stays false. Asserting only at the gate would have proved the string was set, not that the model ever reads it.
+
+**Guidance is bounded at 400 characters.** It is user-entered free text on a path that reaches the transcript, so it is truncated at the gate rather than pasted whole.
+
+**The session grant was offered where nothing would be written.** `gate.ts` ignores `persist` when `ruleForCall()` returns null, so the choice promised a grant that silently did nothing. The request now carries `sessionScope` only when a rule exists, and the responder offers the choice only then. This is the same defect class as EMBER.1, one layer down.
+
+**ACP had the same gap and was fixed in the same wave.** The bridge at `main.ts:905` dropped the request and passed three loose strings, so the client was offered allow-always regardless. It now passes whether a rule would be written, and the server filters the `allow_always` option out. `optionId` and `kind` still never move.
+
+**`PermissionAnswer` stayed additive rather than becoming a union.** A discriminated union would make `{allow: true, guidance}` and `{allow: false, persist: true}` unrepresentable, and that second one is exactly the ACP "Reject always" defect recorded under EMBER.1. Making the union is the right eventual shape, but it belongs with the task that decides whether deny rules should persist at all, not with this one.
+
+**The preview is split out.** The remaining half of this task is showing the proposed change before the choice. `ExtensionSelectorComponent` renders its title as a single accent-bold `Text`, so a diff cannot ride in it, and `select` has no other channel. Delivering it means either a new review component or a new extension UI primitive, and the roadmap's "Explicitly not building" section rules out a second TUI stack, so which of those is acceptable is a design decision rather than an implementation detail. It needs its own spec.
+
+**The frame budget box is answered by inspection.** EMBER.6 touches `permissions/`, `modes/acp/`, and `main.ts`. None of them render, and none are in the benchmark's import graph. A number here would measure only this host's noise, which the section above already documents at up to 2.9x on unchanged code.
+
 ## Narrowed claims
 
 1. **Preview coverage is partial by design.** Tools with no producer, binary files, and very large files render a truthful summary or an explicit unavailable reason.
@@ -155,8 +173,8 @@ Already landed, so out of scope. The dotted `borderMuted` overlay rule, the shar
 - [x] EMBER.2 verified in `26a455820`. Focused 4 files at 27 tests, neighbour sweep 11 files at 73 tests, and the full workspace suite at 409 files and 3537 tests, all pass.
 - [x] EMBER.3 verified in `5b15e2027`. 3 files, 78 tests pass. Full `npm run check` passed through the pre-commit hook.
 - [x] EMBER.4 verified in `be3451ef8`. 4 files, 79 tests pass. Full `npm run check` passed through the pre-commit hook.
-- [x] EMBER.5 focused run. 8 files, 94 tests pass. Bench clean A/B against `be3451ef8` shows head at 1.03 and 3.02 against control 1.06 and 3.50. SHA still to record.
-- [ ] EMBER.6 SHA and the full `test/permissions/` run.
+- [x] EMBER.5 verified in `363d0f0a3`. 8 files, 94 tests pass. Full `npm run check` passed through the pre-commit hook.
+- [x] EMBER.6 focused run. 17 files, 281 tests pass, including an end-to-end turn through the agent loop. SHA still to record.
 - [x] Trunk and head numbers recorded above. EMBER.1, EMBER.2, and EMBER.3 do not touch the components the bench renders.
 - [ ] One live run of the real TUI driving the whole journey. Type a task, watch it work, take an approval prompt, inspect a change, read the result. Capture the screens under `.apex-code/`.
 - [ ] `npx tsgo --noEmit` exits 0.

@@ -46,6 +46,21 @@ function describeDecision(contract: ToolContract, toolName: string, ruleContent:
 	return `${toolName} is not permitted by the current permission configuration.`;
 }
 
+/**
+ * A denial, plus whatever the user said to do instead.
+ *
+ * The reason becomes the blocked tool result the model reads, so guidance is
+ * bounded here rather than pasted whole: it is user-entered free text on a path
+ * that reaches the transcript.
+ */
+const MAX_GUIDANCE_CHARS = 400;
+
+function describeDecline(toolName: string, guidance: string | undefined): string {
+	const trimmed = guidance?.trim().slice(0, MAX_GUIDANCE_CHARS);
+	if (!trimmed) return `${toolName} was declined.`;
+	return `${toolName} was declined. The user asked for this instead. ${trimmed}`;
+}
+
 /** Pure decision function, independent of the beforeToolCall adapter shape below — the part under direct test. */
 export async function evaluateToolCall(
 	toolName: string,
@@ -84,9 +99,11 @@ export async function evaluateToolCall(
 	const answer = await responder.ask({
 		toolName,
 		description: ruleForCall !== null ? spec.describe(ruleForCall) : `Run ${toolName}`,
+		// Only offer a session grant the persist branch below would actually write.
+		sessionScope: ruleForCall !== null ? { description: spec.describe(ruleForCall) } : undefined,
 	});
 	if (!answer.allow) {
-		return { block: true, reason: `${toolName} was declined.` };
+		return { block: true, reason: describeDecline(toolName, answer.guidance) };
 	}
 	if (answer.persist && ruleForCall !== null) {
 		await options.store.apply({

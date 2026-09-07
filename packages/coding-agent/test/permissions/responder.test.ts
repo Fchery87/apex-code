@@ -9,6 +9,14 @@ function uiWithSelectReturning(value: string | undefined) {
 }
 
 const ALLOW_SESSION = "Allow for this session";
+const REJECT_WITH_GUIDANCE = "Reject and say what to do instead";
+
+function uiWith(select: string | undefined, input?: string | undefined) {
+	return {
+		select: vi.fn().mockResolvedValue(select),
+		input: vi.fn().mockResolvedValue(input),
+	};
+}
 
 describe("createInteractiveResponder", () => {
 	it("renders the tool's describe() output (passed in as `description`) in the prompt", async () => {
@@ -56,12 +64,24 @@ describe("createInteractiveResponder", () => {
 		expect(answer).toEqual({ allow: false });
 	});
 
-	it("presents exactly the three expected options, in a stable order", async () => {
+	it("presents every offerable option in a stable order", async () => {
+		const ui = uiWith("Deny");
+		const responder = createInteractiveResponder(ui);
+		await responder.ask({
+			toolName: "read",
+			description: "Read a.txt",
+			sessionScope: { description: "Read a.txt" },
+		});
+		const [, options] = ui.select.mock.calls[0] as [string, string[]];
+		expect(options).toEqual(["Allow once", ALLOW_SESSION, REJECT_WITH_GUIDANCE, "Deny"]);
+	});
+
+	it("falls back to allow-once and deny when the call offers neither scope nor text entry", async () => {
 		const ui = uiWithSelectReturning("Deny");
 		const responder = createInteractiveResponder(ui);
 		await responder.ask({ toolName: "read", description: "Read a.txt" });
 		const [, options] = ui.select.mock.calls[0];
-		expect(options).toEqual(["Allow once", ALLOW_SESSION, "Deny"]);
+		expect(options).toEqual(["Allow once", "Deny"]);
 	});
 
 	it("offers no choice that claims a grant outliving the session", async () => {
@@ -140,5 +160,141 @@ describe("the session choice and the rule the gate writes", () => {
 
 		expect(decision.block).toBe(false);
 		expect(store.applied).toHaveLength(0);
+	});
+});
+
+describe("declining with guidance", () => {
+	it("offers the guidance choice and carries the typed text back", async () => {
+		const ui = uiWith(REJECT_WITH_GUIDANCE, "edit the config instead");
+		const responder = createInteractiveResponder(ui);
+
+		const answer = await responder.ask({
+			toolName: "edit",
+			description: "Edit src/auth/middleware.ts",
+			sessionScope: { description: "Edit src/auth/middleware.ts" },
+		});
+
+		expect(ui.input).toHaveBeenCalledTimes(1);
+		expect(answer).toEqual({ allow: false, guidance: "edit the config instead" });
+	});
+
+	it("still denies when the guidance prompt is dismissed", async () => {
+		const ui = uiWith(REJECT_WITH_GUIDANCE, undefined);
+		const responder = createInteractiveResponder(ui);
+
+		const answer = await responder.ask({ toolName: "edit", description: "Edit a.ts" });
+
+		expect(answer).toEqual({ allow: false });
+	});
+
+	it("omits the guidance choice when the host cannot collect text", async () => {
+		const ui = { select: vi.fn().mockResolvedValue("Deny") };
+		const responder = createInteractiveResponder(ui);
+
+		await responder.ask({ toolName: "edit", description: "Edit a.ts" });
+
+		const [, options] = ui.select.mock.calls[0] as [string, string[]];
+		expect(options).not.toContain(REJECT_WITH_GUIDANCE);
+	});
+});
+
+describe("offering a session grant only when one would be written", () => {
+	it("omits the session choice when the tool yields no rule", async () => {
+		const ui = uiWith("Deny");
+		const responder = createInteractiveResponder(ui);
+
+		await responder.ask({ toolName: "ask_user", description: "Run ask_user" });
+
+		const [, options] = ui.select.mock.calls[0] as [string, string[]];
+		expect(options).not.toContain(ALLOW_SESSION);
+		expect(options).toContain("Allow once");
+	});
+
+	it("offers it when the tool yields a rule", async () => {
+		const ui = uiWith("Deny");
+		const responder = createInteractiveResponder(ui);
+
+		await responder.ask({
+			toolName: "edit",
+			description: "Edit a.ts",
+			sessionScope: { description: "Edit a.ts" },
+		});
+
+		const [, options] = ui.select.mock.calls[0] as [string, string[]];
+		expect(options).toContain(ALLOW_SESSION);
+	});
+});
+
+describe("guidance reaching the blocked tool result", () => {
+	it("puts the user's instruction in the gate's reason and writes no rule", async () => {
+		const store = recordingStore();
+		const decision = await evaluateToolCall(
+			"read",
+			{ path: "a.txt" },
+			{
+				getContract: () => contract,
+				store: store as never,
+				getMode: () => "default" as const,
+				responder: { ask: async () => ({ allow: false, guidance: "read b.txt instead" }) },
+			},
+		);
+
+		expect(decision.block).toBe(true);
+		expect(decision.reason).toContain("read b.txt instead");
+		expect(store.applied).toHaveLength(0);
+	});
+
+	it("keeps the plain decline when no guidance is given", async () => {
+		const store = recordingStore();
+		const decision = await evaluateToolCall(
+			"read",
+			{ path: "a.txt" },
+			{
+				getContract: () => contract,
+				store: store as never,
+				getMode: () => "default" as const,
+				responder: { ask: async () => ({ allow: false }) },
+			},
+		);
+
+		expect(decision.block).toBe(true);
+		expect(decision.reason).toContain("declined");
+		expect(decision.reason).not.toContain("instead");
+	});
+
+	it("bounds runaway guidance rather than pasting it whole into the transcript", async () => {
+		const decision = await evaluateToolCall(
+			"read",
+			{ path: "a.txt" },
+			{
+				getContract: () => contract,
+				store: recordingStore() as never,
+				getMode: () => "default" as const,
+				responder: { ask: async () => ({ allow: false, guidance: "x".repeat(5000) }) },
+			},
+		);
+
+		expect(decision.reason?.length ?? 0).toBeLessThan(1000);
+	});
+
+	it("tells the gate what scope it can actually offer", async () => {
+		const asked: unknown[] = [];
+		await evaluateToolCall(
+			"read",
+			{ path: "a.txt" },
+			{
+				getContract: () => contract,
+				store: recordingStore() as never,
+				getMode: () => "default" as const,
+				responder: {
+					ask: async (request) => {
+						asked.push(request);
+						return { allow: false };
+					},
+				},
+			},
+		);
+
+		expect(asked[0]).toMatchObject({ toolName: "read", sessionScope: { description: "exact:a.txt" } });
 	});
 });

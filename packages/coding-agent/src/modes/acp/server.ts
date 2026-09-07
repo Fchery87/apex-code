@@ -106,7 +106,17 @@ export class AcpServer {
 	 * the gate's answer shape. Rule persistence itself stays in the gate
 	 * (ADR 0010) -- `persist` is a request, not a written rule.
 	 */
-	askPermission(sessionId: string, toolName: string, description: string): Promise<PermissionAnswer> {
+	/**
+	 * `canPersistSession` mirrors the gate's `sessionScope`. When the tool's
+	 * `ruleForCall()` yields nothing, the gate ignores `persist`, so offering
+	 * allow-always would promise a grant nothing writes.
+	 */
+	askPermission(
+		sessionId: string,
+		toolName: string,
+		description: string,
+		canPersistSession = true,
+	): Promise<PermissionAnswer> {
 		const id = `perm_${randomUUID()}`;
 		return new Promise<PermissionAnswer>((resolve) => {
 			this.#pendingPermissions.set(id, resolve);
@@ -117,7 +127,9 @@ export class AcpServer {
 				params: {
 					sessionId,
 					toolCall: { toolCallId: id, title: `${toolName}: ${description}`, kind: "other", status: "pending" },
-					options: PERMISSION_OPTIONS,
+					options: canPersistSession
+						? PERMISSION_OPTIONS
+						: PERMISSION_OPTIONS.filter((option) => option.kind !== "allow_always"),
 				},
 			});
 		});

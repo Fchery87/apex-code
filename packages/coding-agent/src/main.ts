@@ -906,6 +906,7 @@ export async function main(args: string[], options?: MainOptions) {
 										server.currentSessionId ?? "",
 										request.toolName,
 										request.description,
+										request.sessionScope !== undefined,
 									);
 								},
 							};

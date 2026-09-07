@@ -217,4 +217,18 @@ describe("acp permission bridge", () => {
 		raw.write(serializeJsonLine({ jsonrpc: "2.0", id: request.id, result: { outcome: { outcome: "cancelled" } } }));
 		await expect(pending).resolves.toEqual({ allow: false });
 	});
+
+	it("omits the persisting allow when the tool would have no rule to write", async () => {
+		const { server, written } = startServer(fakeHost(fakeSession()));
+		server.askPermission("sess_1", "ask_user", "desc", false);
+
+		await vi.waitFor(() => {
+			expect(written.some((message) => message.method === "session/request_permission")).toBe(true);
+		});
+		const request = written.find((message) => message.method === "session/request_permission")!;
+		const options = (request.params as { options: Array<{ kind: string }> }).options;
+
+		expect(options.some((option) => option.kind === "allow_always")).toBe(false);
+		expect(options.some((option) => option.kind === "allow_once")).toBe(true);
+	});
 });
