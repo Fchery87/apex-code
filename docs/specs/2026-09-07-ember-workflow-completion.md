@@ -1,6 +1,6 @@
 # Spec: Ember carried through the working session
 
-**Status:** Draft
+**Status:** Active
 
 ## Metadata
 
@@ -311,11 +311,80 @@ right reason before its implementation exists.
 - Live. Run the real TUI and drive one full journey. Type a task, watch it work, take an
   approval prompt, inspect a change, read the result.
 
+### What the frame budget actually measured
+
+Trunk `1e0a86c17` against the finished branch, run back to back on an idle host.
+
+| Probe | Trunk | Branch |
+| --- | --- | --- |
+| Scenario 2, 20 messages, ms/frame | 1.31 | 1.03 |
+| Scenario 2, 100 messages, ms/frame | 2.51 | 3.02 |
+| Scenario 2, 300 messages, ms/frame | 7.39 | 7.87 |
+
+Two findings outlive this change.
+
+**The budget is already marginal at 300 messages on trunk**, with 1.7% of frames over
+16 ms before any of this work. The next change to `ToolExecutionComponent` or
+`AssistantMessageComponent` will be blamed for that unless the baseline is on record.
+
+**`streaming-render-bench.ts` is unreliable on a loaded host, in every row.** Run twice
+on identical code minutes apart, Scenario 2 at 300 messages returned 21.72 ms with 63.3%
+of frames over budget and then 7.59 ms with 0.0%. The 20 and 100 message rows are no
+safer: during one task they read 2.79 and 6.86 against a control of 1.06 and 3.50, then
+1.03 and 3.02 against the same control minutes later. Contamination follows any recent
+load, including a test sweep that has already exited. Measure control and head back to
+back with nothing else run shortly before, and treat a uniform multiple across scenarios
+the change cannot reach as contamination rather than a regression. Three wrong
+conclusions were drawn from this bench before that rule was written down.
+
+## What implementation settled
+
+Five things were learned building this that the design did not anticipate.
+
+**`read` hides its whole body and announces nothing.** `formatReadResult` returns an
+empty string when collapsed and not an error, so the component-owned disclosure hint is
+its only signal. Deleting that hint as a duplicate was attempted and reverted. Every
+other truncating renderer prints its own counted affordance, so the hint is now
+suppressed when the content already carries one and when the fallback knows it hid
+nothing.
+
+**`Loader.render` prepends a blank row.** It returns `["", ...lines]`, so reading row 0
+yields an empty string. The tray would have treated that as no activity and looked
+unwired while every test passed, because the first tests used a stub returning one line.
+Tests that assert a component's rendered output must use the real component.
+
+**Bash mode earns a glyph, not only a hue.** `footer.ts:241` already refuses colour-only
+signalling for context pressure. The prompt marker changes from `› ` to `! `, same cell
+count, so mode survives a monochrome terminal.
+
+**The compaction prompt is conditional.** It appears above 70% only when auto-compaction
+is off. With it on, the existing `(auto)` marker already answers the question and
+prompting for an action the session will take by itself is noise.
+
+**Two defects of the same class were found one layer down.** The permission prompt
+offered a session grant for tools whose `ruleForCall()` returns null, where the gate
+ignores `persist` entirely, and the ACP bridge dropped the request so its client saw the
+same offer. Both are fixed here.
+
+## Deferred and follow-up work
+
+Each of these was scoped, found to need its own design, and left out deliberately rather
+than half-built. None is blocked.
+
+| Item | Why it is not here |
+| --- | --- |
+| The permission preview surface | `ExtensionSelectorComponent` draws its title as one accent-bold `Text` and `select` offers no other channel. Showing a diff needs either a new review component or a new extension UI primitive, and the roadmap rules out a second TUI stack, so the choice is a design decision. |
+| Per-call tool expansion | `ToolExecutionComponent` already holds per-call state and a test proves expanding one call leaves a sibling byte-identical. What is missing is a way for a person to choose a call, which needs an inspector overlay with its own interaction design. |
+| Elapsed time in the tray | `Loader` has no elapsed concept, so a readout needs something rewriting the message every second. That is the class of work `docs/adr` records `1309e9ec9` as undoing, so it wants its own measurement. |
+| ACP "Reject always" writes nothing | `modes/acp/server.ts` maps it to `persist: true`, but `gate.ts` returns on any denial before reading `persist`. The honest repair is to persist deny rules, which is a behaviour change with its own risk. |
+| Two exported selectors bypass the jiti rule | `dynamic-border.ts` documents that components exported for extension use must pass an explicit colour function. `ExtensionSelectorComponent` and `ModelSelectorComponent` are exported at `src/index.ts:400` and `405` and call `new DynamicBorder()` bare at four sites. |
+
 ## Rollout
 
-Needs `docs/plans/2026-09-07-ember-workflow-completion.md`, because the work spans six
-independently shippable slices, one of which changes permission behavior and needs its
-own status tracking.
+Used `docs/plans/2026-09-07-ember-workflow-completion.md`, now deleted on completion per
+`AGENTS.md`. Its six tasks landed as `69038c4a8`, `26a455820`, `5b15e2027`, `be3451ef8`,
+`363d0f0a3`, and `7a6639229`. Recover it with
+`git show ea0a06fb5:docs/plans/2026-09-07-ember-workflow-completion.md`.
 
 No ADR is written up front. The rejected central controller and the two declined
 reference asks are recorded in Non-goals with their reasoning. If the controller question
