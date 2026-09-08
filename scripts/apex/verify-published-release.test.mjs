@@ -25,6 +25,16 @@ import {
 	SLSA_PROVENANCE_PREDICATE_TYPE,
 } from "./fixtures/npm-attestation-bundles.mjs";
 
+/**
+ * These tests fake `npm` with an extensionless shebang script on PATH, which
+ * Windows cannot execute and would not find with a POSIX `:` separator either.
+ * The scripts under test only ever run on ubuntu-latest and macos-latest
+ * (.github/workflows/release.yml), so porting the shim would prove something
+ * about a platform the release path never touches. Both blockers are the
+ * harness, not the behaviour, and Linux and macOS cover the behaviour.
+ */
+const posixShimOnly = process.platform === "win32" ? "release tooling is verified on Linux and macOS" : false;
+
 function fixtureMetadata(overrides = {}) {
 	return {
 		gitHead: "abc123",
@@ -282,7 +292,7 @@ function verifiedFor(records, identity, overrides = {}) {
 	}));
 }
 
-test("CLI verifies a manifest-shaped release end to end through fake npm and loopback tarball bytes", async () => {
+test("CLI verifies a manifest-shaped release end to end through fake npm and loopback tarball bytes", { skip: posixShimOnly }, async () => {
 	await withReleaseFixture("apex-verify-manifest-", async (fixture) => {
 		const tarballPort = await fixture.serve((name) => fixture.packageBytes[name]);
 		const logPath = join(fixture.root, "args.jsonl");
@@ -316,7 +326,7 @@ test("CLI verifies a manifest-shaped release end to end through fake npm and loo
 	});
 });
 
-test("CLI fails closed when the registry serves bytes that differ from the retained manifest digest", async () => {
+test("CLI fails closed when the registry serves bytes that differ from the retained manifest digest", { skip: posixShimOnly }, async () => {
 	await withReleaseFixture("apex-verify-substituted-", async (fixture) => {
 		const tarballPort = await fixture.serve(() => "substituted-bytes");
 		const logPath = join(fixture.root, "args.jsonl");
@@ -339,7 +349,7 @@ test("CLI fails closed when the registry serves bytes that differ from the retai
 	});
 });
 
-test("CLI fails closed when the signed provenance names a different workflow than the release", async () => {
+test("CLI fails closed when the signed provenance names a different workflow than the release", { skip: posixShimOnly }, async () => {
 	await withReleaseFixture("apex-verify-workflow-", async (fixture) => {
 		const tarballPort = await fixture.serve((name) => fixture.packageBytes[name]);
 		const logPath = join(fixture.root, "args.jsonl");
@@ -465,7 +475,7 @@ test("signed provenance controls fail closed on malformed, missing, or wrong pay
 	assert.equal(decodeProvenanceStatement({ dsseEnvelope: { payload: 42 } }), undefined);
 });
 
-test("npm provenance verification invokes the pinned official CLI offline and parses its signed result", async () => {
+test("npm provenance verification invokes the pinned official CLI offline and parses its signed result", { skip: posixShimOnly }, async () => {
 	const root = await mkdtemp(join(tmpdir(), "apex-npm-provenance-"));
 	try {
 		const logPath = join(root, "args.json");
@@ -507,7 +517,7 @@ test("npm provenance verification rejects an unpinned npm version", () => {
 });
 
 
-test("npm provenance verification rejects an official invalid-attestation result", async () => {
+test("npm provenance verification rejects an official invalid-attestation result", { skip: posixShimOnly }, async () => {
 	const root = await mkdtemp(join(tmpdir(), "apex-invalid-provenance-"));
 	try {
 		const fakeNpm = join(root, "npm");
