@@ -8,7 +8,7 @@
  */
 
 import type { AgentToolResult } from "apex-code-agent-core";
-import type { Static, TSchema } from "typebox";
+import { type Static, type TSchema, Type } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
 
 /** What class of thing a tool does. A set, not a single value — `bash` is `{exec}`. */
@@ -275,4 +275,22 @@ export function resolveToolContext(
 	toolName: string,
 ): Pick<ToolContract, "context"> {
 	return lookup(toolName) ?? UNCLASSIFIED;
+}
+
+/**
+ * A tool whose call shapes differ, declared so a provider can still see its fields.
+ *
+ * `Type.Union` compiles to `{ anyOf: [...] }`, which carries no top-level
+ * `properties`. The Anthropic request builder reads `properties` and `required`
+ * directly (`anthropic-messages.js`, `legacyInputSchema`), so a union reached the
+ * model as an object with no fields at all. It then guessed, and our own
+ * validation rejected the guess.
+ *
+ * The union still decides what is valid. `properties` is advertisement, listing
+ * every field across the variants so a provider that ignores `anyOf` has
+ * something to work from. It deliberately carries no `required`, because no field
+ * is required by every variant.
+ */
+export function toolUnion<T extends TSchema[]>(variants: [...T], properties: Record<string, TSchema>) {
+	return Type.Union(variants, { type: "object", properties });
 }

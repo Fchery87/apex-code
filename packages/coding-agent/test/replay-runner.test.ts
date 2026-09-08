@@ -50,7 +50,10 @@ describe("offline session replay", () => {
 		// guidelines this runner passes; restoring them adds a flat 237 tokens to
 		// every measurement in this file. Was 985 before the background-shell schema
 		// union (2026-08-31), which adds a flat 128 tokens to every measurement here.
-		expect(result.metrics.contextTokensByTurn[0]).toBe(1113);
+		// Was 1113 while that union reached the provider with no properties at all, so
+		// bash, delegate and lsp described themselves to the model as empty objects.
+		// Advertising their fields adds a flat 66 tokens to every measurement here.
+		expect(result.metrics.contextTokensByTurn[0]).toBe(1179);
 		const [turnContext] = result.contextsByTurn;
 		expect(
 			turnContext?.some(
@@ -82,7 +85,7 @@ describe("offline session replay", () => {
 		expect(result.requests).toBe(22);
 		expect(result.metrics.contextTokensByTurn).toHaveLength(22);
 		expect(result.metrics.contextTokensByTurn[18]).toBeLessThan(result.metrics.contextTokensByTurn[17]);
-		expect(result.metrics.contextTokensByTurn.slice(18)).toEqual([1099, 1117, 1135, 1153]);
+		expect(result.metrics.contextTokensByTurn.slice(18)).toEqual([1165, 1183, 1201, 1219]);
 	});
 
 	it("evicts stale recoverable tool results from the outbound context by turn 20 (long-tool-heavy)", async () => {
@@ -238,8 +241,8 @@ describe("offline session replay", () => {
 
 		expect(JSON.stringify(second)).toBe(JSON.stringify(first));
 		expect(first.metrics).toEqual({
-			contextTokensByTurn: [1124],
-			systemPromptTokens: 1072,
+			contextTokensByTurn: [1190],
+			systemPromptTokens: 1138,
 			cacheHitRate: 0,
 			toolCallsByName: { read: 2 },
 			wallTimeMs: 0,

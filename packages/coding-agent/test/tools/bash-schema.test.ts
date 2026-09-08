@@ -7,6 +7,7 @@ import { getModel } from "@earendil-works/pi-ai/compat";
 import { Agent } from "apex-code-agent-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createBashTool } from "../../src/core/tools/bash.ts";
+import { createAllTools } from "../../src/core/tools/index.ts";
 import { createFauxStreamFn, fauxModel } from "../test-harness.ts";
 
 describe("bash provider schema", () => {
@@ -102,5 +103,53 @@ describe("bash provider schema", () => {
 			isError: true,
 			content: [{ type: "text", text: expect.stringContaining('Validation failed for tool "bash"') }],
 		});
+	});
+});
+
+/**
+ * The union-schema bug reached three tools before anyone noticed, because each
+ * declared its shape independently. This asks the real request builder what every
+ * registered tool advertises, so the next union cannot ship invisible.
+ */
+describe("every tool advertises its fields to Anthropic", () => {
+	let previousCwd: string;
+	let cwd: string;
+
+	beforeEach(() => {
+		previousCwd = process.cwd();
+		cwd = mkdtempSync(join(tmpdir(), "apex-all-schema-"));
+		process.chdir(cwd);
+	});
+
+	afterEach(() => {
+		process.chdir(previousCwd);
+		rmSync(cwd, { recursive: true, force: true });
+		vi.restoreAllMocks();
+	});
+
+	it("sends a non-empty property set for each one", async () => {
+		const tools = Object.values(createAllTools(cwd));
+		const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new Error("Unexpected network request"));
+		let payload: { tools?: Array<{ name: string; input_schema?: { properties?: Record<string, unknown> } }> } = {};
+
+		await stream(
+			getModel("anthropic", "claude-sonnet-4-5")!,
+			{ messages: [{ role: "user", content: "go", timestamp: Date.now() }], tools },
+			{
+				apiKey: "unused-offline-test",
+				fetch,
+				onPayload(value) {
+					payload = value as typeof payload;
+					throw new Error("Captured tool schemas before network request");
+				},
+			},
+		).result();
+
+		expect(fetch).not.toHaveBeenCalled();
+		const empty = (payload.tools ?? [])
+			.filter((tool) => Object.keys(tool.input_schema?.properties ?? {}).length === 0)
+			.map((tool) => tool.name);
+
+		expect(empty, "these tools reach the model with no fields at all").toEqual([]);
 	});
 });

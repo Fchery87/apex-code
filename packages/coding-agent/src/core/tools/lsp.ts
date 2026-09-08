@@ -3,7 +3,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import type { AgentTool } from "apex-code-agent-core";
 import { type Static, Type } from "typebox";
 import { formatPathRelativeToCwdOrAbsolute } from "../../utils/paths.ts";
-import type { ApexToolDefinition } from "./contract.ts";
+import { type ApexToolDefinition, toolUnion } from "./contract.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
 import { resolveToCwd } from "./path-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -14,25 +14,46 @@ const MAX_SYMBOLS = 2_000;
 const MAX_DETAILS_BYTES = 256 * 1024;
 
 const lspNavigationSchema = Type.Object({
-	operation: Type.Union([Type.Literal("definition"), Type.Literal("references")], {
-		description: "Which navigation query to run.",
-	}),
-	path: Type.String({ description: "Path to the file (relative or absolute)." }),
-	line: Type.Number({ description: "One-based line number." }),
-	character: Type.Number({ description: "One-based UTF-16 character offset within the line." }),
+	operation: Type.Union([Type.Literal("definition"), Type.Literal("references")]),
+	path: Type.String(),
+	line: Type.Number(),
+	character: Type.Number(),
 });
 
 const lspDocumentSymbolsSchema = Type.Object({
-	operation: Type.Literal("document_symbols", { description: "List the symbols declared in a file." }),
-	path: Type.String({ description: "Path to the file (relative or absolute)." }),
+	operation: Type.Literal("document_symbols"),
+	path: Type.String(),
 });
 
 const lspWorkspaceSymbolsSchema = Type.Object({
-	operation: Type.Literal("workspace_symbol", { description: "Search the whole workspace for symbols by name." }),
-	query: Type.String({ description: "The symbol name query to search for." }),
+	operation: Type.Literal("workspace_symbol"),
+	query: Type.String(),
 });
 
-const lspSchema = Type.Union([lspNavigationSchema, lspDocumentSymbolsSchema, lspWorkspaceSymbolsSchema]);
+const lspSchemaProperties = {
+	operation: Type.Union(
+		[
+			Type.Literal("definition"),
+			Type.Literal("references"),
+			Type.Literal("document_symbols"),
+			Type.Literal("workspace_symbol"),
+		],
+		{ description: "Which query to run." },
+	),
+	path: Type.String({
+		description: "Path to the file (relative or absolute). Required by every operation but workspace_symbol.",
+	}),
+	line: Type.Number({ description: "One-based line number. Required by definition and references." }),
+	character: Type.Number({
+		description: "One-based UTF-16 character offset within the line. Required by definition and references.",
+	}),
+	query: Type.String({ description: "The symbol name to search for. Required by workspace_symbol." }),
+};
+
+const lspSchema = toolUnion(
+	[lspNavigationSchema, lspDocumentSymbolsSchema, lspWorkspaceSymbolsSchema],
+	lspSchemaProperties,
+);
 
 export type LspToolInput = Static<typeof lspSchema>;
 
