@@ -5,22 +5,33 @@ import { type Static, Type } from "typebox";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import type { DelegationRuntimeOptions } from "../delegation/runtime.ts";
 import { retrieveDelegationResult, runDelegation } from "../delegation/runtime.ts";
-import type { ApexToolDefinition, EvidenceRecord } from "./contract.ts";
+import { type ApexToolDefinition, type EvidenceRecord, toolUnion } from "./contract.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
-const delegateSchema = Type.Union([
-	Type.Object({
-		agentType: Type.String({ description: "The type of subagent to delegate to." }),
-		task: Type.String({ description: "The task to delegate." }),
-		background: Type.Optional(
-			Type.Boolean({ description: "Return a handle immediately instead of waiting for the child." }),
-		),
+const delegateSchemaProperties = {
+	agentType: Type.String({
+		description: "The subagent type. Required both to launch a task and to retrieve a background result.",
 	}),
-	Type.Object({
-		agentType: Type.String({ description: "The agent type that produced the background result." }),
-		handle: Type.String({ description: "A background delegation handle returned by an earlier call." }),
+	task: Type.String({ description: "The task to delegate. Supply it to launch a delegation." }),
+	background: Type.Optional(
+		Type.Boolean({ description: "Return a handle immediately instead of waiting for the child." }),
+	),
+	handle: Type.String({
+		description: "A background delegation handle returned by an earlier call. Supply it to retrieve the result.",
 	}),
-]);
+};
+
+const delegateSchema = toolUnion(
+	[
+		Type.Object({
+			agentType: Type.String(),
+			task: Type.String(),
+			background: Type.Optional(Type.Boolean()),
+		}),
+		Type.Object({ agentType: Type.String(), handle: Type.String() }),
+	],
+	delegateSchemaProperties,
+);
 
 export type DelegateInput = Static<typeof delegateSchema>;
 

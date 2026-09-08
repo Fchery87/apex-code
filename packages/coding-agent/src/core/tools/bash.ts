@@ -27,7 +27,7 @@ import {
 } from "../sandbox/rpc/command-client.ts";
 import { type BackgroundShellRegistry, createBackgroundShellRegistry } from "./background-shell.ts";
 import { classifyBashCommand } from "./bash-command-segments.ts";
-import type { ApexToolDefinition, PermissionSpec } from "./contract.ts";
+import { type ApexToolDefinition, type PermissionSpec, toolUnion } from "./contract.ts";
 import { OutputAccumulator } from "./output-accumulator.ts";
 import { getTextOutput, invalidArgText, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -49,25 +49,34 @@ function resolveTimeoutMs(timeout: number | undefined): number | undefined {
 	return timeoutMs;
 }
 
-const bashSchema = Type.Union([
-	Type.Object({
-		command: Type.String({ description: "Shell command to execute" }),
-		timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (optional, no default timeout)" })),
-		background: Type.Optional(
-			Type.Boolean({
-				description:
-					"Run in the background and return a handle immediately. Retrieve with { handle }; kill with { handle, kill: true }.",
-			}),
-		),
+const bashSchemaProperties = {
+	command: Type.String({ description: "Shell command to execute" }),
+	timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (optional, no default timeout)" })),
+	background: Type.Optional(
+		Type.Boolean({
+			description:
+				"Run in the background and return a handle immediately. Retrieve with { handle }; kill with { handle, kill: true }.",
+		}),
+	),
+	handle: Type.String({
+		description:
+			"Handle from a background launch. Supply it alone to retrieve output and status; add kill: true to terminate.",
 	}),
-	Type.Object({
-		handle: Type.String({ description: "Handle from a background launch; returns accumulated output and status." }),
-	}),
-	Type.Object({
-		handle: Type.String({ description: "Handle to terminate." }),
-		kill: Type.Literal(true),
-	}),
-]);
+	kill: Type.Literal(true, { description: "Set to true with a background handle to terminate its command." }),
+};
+
+const bashSchema = toolUnion(
+	[
+		Type.Object({
+			command: Type.String(),
+			timeout: Type.Optional(Type.Number()),
+			background: Type.Optional(Type.Boolean()),
+		}),
+		Type.Object({ handle: Type.String() }),
+		Type.Object({ handle: Type.String(), kill: Type.Literal(true) }),
+	],
+	bashSchemaProperties,
+);
 
 export const bashToolSystemPromptContribution = {
 	snippet: "Execute bash commands (ls, grep, find, etc.)",
