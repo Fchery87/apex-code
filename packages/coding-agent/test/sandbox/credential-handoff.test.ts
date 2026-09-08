@@ -1,10 +1,10 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createLinuxSandboxBackend } from "../../src/core/sandbox/linux-backend.ts";
 import { createMacosSandboxBackend } from "../../src/core/sandbox/macos-backend.ts";
+import { scratchDirSync } from "../suite/scratch.ts";
 
 const cliPath = resolve(__dirname, "../../src/cli.ts");
 const extensionPath = resolve(__dirname, "fixtures/credential-boundary-extension.ts");
@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 function temporaryDirectory(prefix: string): string {
-	const directory = mkdtempSync(join(tmpdir(), prefix));
+	const directory = scratchDirSync(prefix);
 	directories.push(directory);
 	return directory;
 }

@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
+import { typeScriptSourceConfigFiles } from "../extensions/source-runtime.ts";
 import { createCommandEscalationApprover, createCredentialReleaser, createHostApprover } from "./host-approval.ts";
 import { createSandboxNetworkProxy, type SandboxNetworkProxy } from "./network-proxy.ts";
 import {
@@ -255,7 +256,10 @@ export function createMacosSandboxBackend(options?: MacosSandboxBackendOptions):
 				...(launch.readOnlyPaths ?? []),
 				supervisorStateDirectory,
 			]);
-			const readOnlyFiles = (launch.readOnlyFiles ?? []).map((path) => {
+			// Seatbelt denies the whole home directory before re-allowing named paths,
+			// so a `.ts` extension loaded inside the sandbox fails on its tsconfig
+			// rather than on anything the extension does. Empty off a source runtime.
+			const readOnlyFiles = [...(launch.readOnlyFiles ?? []), ...typeScriptSourceConfigFiles()].map((path) => {
 				try {
 					return realpathSync(path);
 				} catch {

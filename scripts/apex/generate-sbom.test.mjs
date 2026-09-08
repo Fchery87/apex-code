@@ -10,6 +10,16 @@ import { getPublicWorkspacePackages } from "../release-packages.mjs";
 import { attachReleaseArtifactIdentity, describeTreeLockfileMismatch, generateAllSboms, generateSbomFor } from "./generate-sbom.mjs";
 import { npmSpawnArgs, npmSpawnOptions } from "./npm-command.mjs";
 
+/**
+ * These tests fake `npm` with an extensionless shebang script on PATH, which
+ * Windows cannot execute and would not find with a POSIX `:` separator either.
+ * The scripts under test only ever run on ubuntu-latest and macos-latest
+ * (.github/workflows/release.yml), so porting the shim would prove something
+ * about a platform the release path never touches. Both blockers are the
+ * harness, not the behaviour, and Linux and macOS cover the behaviour.
+ */
+const posixShimOnly = process.platform === "win32" ? "release tooling is verified on Linux and macOS" : false;
+
 const bothOwnedPackagesAreBuilt = getPublicWorkspacePackages().every((pkg) => existsSync(join(pkg.directory, "dist")));
 
 test(
@@ -139,7 +149,7 @@ async function runReleaseSbomCli(root, fakeNpmBody) {
 	return { result, outPath: join(outDir, "sbom-release-artifacts.cyclonedx.json") };
 }
 
-test("release-mode SBOM refuses an empty npm response instead of writing it as evidence", async () => {
+test("release-mode SBOM refuses an empty npm response instead of writing it as evidence", { skip: posixShimOnly }, async () => {
 	const root = await mkdtemp(join(tmpdir(), "apex-sbom-release-empty-"));
 	try {
 		const { result, outPath } = await runReleaseSbomCli(root, 'process.stdout.write("{}");');
@@ -151,7 +161,7 @@ test("release-mode SBOM refuses an empty npm response instead of writing it as e
 	}
 });
 
-test("release-mode SBOM refuses malformed npm output instead of writing it as evidence", async () => {
+test("release-mode SBOM refuses malformed npm output instead of writing it as evidence", { skip: posixShimOnly }, async () => {
 	const root = await mkdtemp(join(tmpdir(), "apex-sbom-release-malformed-"));
 	try {
 		const { result, outPath } = await runReleaseSbomCli(root, 'process.stdout.write("not json at all");');
@@ -163,7 +173,7 @@ test("release-mode SBOM refuses malformed npm output instead of writing it as ev
 	}
 });
 
-test("release-mode SBOM writes a real component set and annotates it with the retained artifact identity", async () => {
+test("release-mode SBOM writes a real component set and annotates it with the retained artifact identity", { skip: posixShimOnly }, async () => {
 	const root = await mkdtemp(join(tmpdir(), "apex-sbom-release-ok-"));
 	try {
 		const document = {

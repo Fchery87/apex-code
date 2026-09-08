@@ -6,6 +6,16 @@ import test from "node:test";
 import { createReleaseArtifactRecord, REQUIRED_STANDALONE_ARTIFACTS, writeReleaseArtifactManifest } from "./packed-product-surface.mjs";
 import { publishReleaseArtifact } from "./publish-release-artifact.mjs";
 
+/**
+ * These tests fake `npm` with an extensionless shebang script on PATH, which
+ * Windows cannot execute and would not find with a POSIX `:` separator either.
+ * The scripts under test only ever run on ubuntu-latest and macos-latest
+ * (.github/workflows/release.yml), so porting the shim would prove something
+ * about a platform the release path never touches. Both blockers are the
+ * harness, not the behaviour, and Linux and macOS cover the behaviour.
+ */
+const posixShimOnly = process.platform === "win32" ? "release tooling is verified on Linux and macOS" : false;
+
 const IDENTITY = {
 	expectedGitCommit: "0123456789abcdef0123456789abcdef01234567",
 	workflowIdentity: "https://github.com/Fchery87/apex-code/.github/workflows/release.yml@refs/tags/v1.2.3",
@@ -34,7 +44,7 @@ async function writeCompleteManifest(root) {
 	return { manifestPath, tarballPaths };
 }
 
-test("publisher passes the retained tested tarball to npm and rejects later byte changes", async () => {
+test("publisher passes the retained tested tarball to npm and rejects later byte changes", { skip: posixShimOnly }, async () => {
 	const root = await mkdtemp(join(tmpdir(), "apex-publish-artifact-"));
 	try {
 		const { manifestPath, tarballPaths } = await writeCompleteManifest(root);

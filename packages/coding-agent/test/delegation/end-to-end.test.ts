@@ -1,5 +1,4 @@
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { access, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -9,11 +8,12 @@ import { ModelRuntime } from "../../src/core/model-runtime.ts";
 import { FilePermissionRuleStore } from "../../src/core/permissions/store.ts";
 import { createAgentSession } from "../../src/core/sdk.ts";
 import { SettingsManager } from "../../src/core/settings-manager.ts";
+import { scratchDir } from "../suite/scratch.ts";
 
 let scratch: string;
 
 beforeEach(async () => {
-	scratch = await mkdtemp(join(tmpdir(), "apex-delegation-e2e-"));
+	scratch = await scratchDir("apex-delegation-e2e-");
 });
 
 afterEach(async () => {

@@ -1,9 +1,9 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { createLspToolDefinition, type LspOperations } from "../../src/core/tools/lsp.ts";
+import { scratchDir } from "../suite/scratch.ts";
 
 const workspaces: string[] = [];
 
@@ -12,7 +12,7 @@ afterEach(async () => {
 });
 
 async function workspace(): Promise<{ cwd: string; path: string }> {
-	const cwd = await mkdtemp(join(tmpdir(), "apex-lsp-tool-"));
+	const cwd = await scratchDir("apex-lsp-tool-");
 	workspaces.push(cwd);
 	const path = join(cwd, "src", "space name.ts");
 	await import("node:fs/promises").then(({ mkdir }) => mkdir(join(cwd, "src"), { recursive: true }));
