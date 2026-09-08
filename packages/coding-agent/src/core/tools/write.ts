@@ -246,7 +246,7 @@ function previewWrite(params: { path: string; content: string }): PermissionPrev
 		return { kind: "summary", lines: [`Create ${params.path} with ${incoming}`] };
 	}
 
-	const buffer = readPreparedPath(prepared);
+	const buffer = readPreparedPath(prepared, WRITE_PREVIEW_MAX_BYTES + 1);
 	if (buffer.byteLength > WRITE_PREVIEW_MAX_BYTES) {
 		return {
 			kind: "summary",

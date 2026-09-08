@@ -7,7 +7,7 @@ import {
 	ftruncateSync,
 	mkdirSync,
 	openSync,
-	readFileSync,
+	readSync,
 	realpathSync,
 	statSync,
 	writeSync,
@@ -39,7 +39,7 @@ export function preparePathOperation(filePath: string, cwd: string): PreparedPat
  * the descriptor identity captured at authorization before any byte is returned.
  * A replaced alias or an injected symlink never matches and the read aborts.
  */
-export function readPreparedPath(operation: PreparedPathOperation): Buffer {
+export function readPreparedPath(operation: PreparedPathOperation, maxBytes?: number): Buffer {
 	if (operation.kind !== "path-existing") {
 		throw new PreparedTargetChangedError("Authorized read target did not exist when permission was checked");
 	}
@@ -55,7 +55,15 @@ export function readPreparedPath(operation: PreparedPathOperation): Buffer {
 			if (stats.dev !== operation.identity.device || stats.ino !== operation.identity.inode) {
 				throw new PreparedTargetChangedError("Authorized read target changed before execution");
 			}
-			return readFileSync(fd);
+			const length = maxBytes === undefined ? stats.size : Math.min(stats.size, maxBytes);
+			const buffer = Buffer.alloc(length);
+			let offset = 0;
+			while (offset < buffer.length) {
+				const read = readSync(fd, buffer, offset, buffer.length - offset, null);
+				if (read === 0) break;
+				offset += read;
+			}
+			return offset === buffer.length ? buffer : buffer.subarray(0, offset);
 		} finally {
 			closeSync(fd);
 		}

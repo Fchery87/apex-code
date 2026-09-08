@@ -87,6 +87,20 @@ describe("the edit preview", () => {
 		expect(preview.kind).toBe("unavailable");
 		expect(preview.reason).toMatch(/binar/i);
 	});
+
+	it("does not read an oversized file beyond the preview limit", async () => {
+		const cwd = await scratchDir();
+		await writeFile(join(cwd, "large.ts"), Buffer.alloc(512 * 1024 + 100, 97));
+		const definition = createEditToolDefinition(cwd);
+
+		const preview = prepareThenPreview(definition, {
+			path: "large.ts",
+			edits: [{ oldText: "a", newText: "b" }],
+		}) as { kind: string; reason?: string };
+
+		expect(preview.kind).toBe("unavailable");
+		expect(preview.reason).toMatch(/larger/i);
+	});
 });
 
 describe("the write preview", () => {

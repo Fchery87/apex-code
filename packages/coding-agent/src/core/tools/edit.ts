@@ -162,7 +162,7 @@ function previewEdit(params: EditToolInput): PermissionPreview {
 		return { kind: "summary", lines: [`Create ${params.path}`] };
 	}
 
-	const buffer = readPreparedPath(prepared);
+	const buffer = readPreparedPath(prepared, PREVIEW_MAX_BYTES + 1);
 	if (buffer.byteLength > PREVIEW_MAX_BYTES) {
 		return { kind: "unavailable", reason: `File is larger than ${PREVIEW_MAX_BYTES / 1024}KB, so no diff is shown` };
 	}
