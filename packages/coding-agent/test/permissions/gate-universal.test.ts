@@ -406,3 +406,69 @@ describe("permission gate — decision plumbing (evaluateToolCall)", () => {
 		expect(result.block).toBe(true);
 	});
 });
+
+describe("a denial carries the user's instruction back to the model", () => {
+	it("puts the guidance in the blocked tool result and never runs the tool", async () => {
+		const store = new FilePermissionRuleStore({
+			cwd: scratch,
+			agentDir: join(scratch, "agent"),
+			policyPath: join(scratch, "missing-policy.json"),
+		});
+
+		const definitions = createAllToolDefinitions(scratch);
+		const responder: PermissionResponder = {
+			ask: async () => ({ allow: false, guidance: "edit the config instead, not the middleware" }),
+		};
+		const beforeToolCall = createPermissionGate({
+			getContract: (name) => definitions[name as ToolName]?.contract,
+			store,
+			getMode: () => "default",
+			responder,
+		});
+
+		const result = await driveOneToolCallTurn("write", REPRESENTATIVE_PARAMS.write, beforeToolCall);
+
+		// agent-loop.ts:686 turns a blocked decision's reason into the error tool
+		// result, which is the whole delivery path for guidance. Asserting it here
+		// rather than at the gate proves the model actually receives the text.
+		expect(result.toolExecuted).toBe(false);
+		expect(result.reason).toContain("edit the config instead, not the middleware");
+	});
+
+	it("offers no session grant for a tool whose contract yields no rule", async () => {
+		const store = new FilePermissionRuleStore({
+			cwd: scratch,
+			agentDir: join(scratch, "agent"),
+			policyPath: join(scratch, "missing-policy.json"),
+		});
+
+		const asked: Array<{ sessionScope?: unknown }> = [];
+		const beforeToolCall = createPermissionGate({
+			getContract: () =>
+				({
+					capabilities: new Set(),
+					permission: {
+						defaultBehavior: "ask",
+						matches: () => false,
+						describe: () => "Asking",
+						ruleForCall: () => null,
+					},
+					context: { resultRecoverable: false, deferSchema: false },
+					evidence: { emits: new Set(), capture: () => [] },
+				}) as never,
+			store,
+			getMode: () => "default",
+			responder: {
+				ask: async (request) => {
+					asked.push(request);
+					return { allow: false };
+				},
+			},
+		});
+
+		const result = await driveOneToolCallTurn("write", REPRESENTATIVE_PARAMS.write, beforeToolCall);
+
+		expect(result.toolExecuted).toBe(false);
+		expect(asked[0]?.sessionScope).toBeUndefined();
+	});
+});

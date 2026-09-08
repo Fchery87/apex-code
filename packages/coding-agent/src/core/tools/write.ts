@@ -9,12 +9,13 @@ import { getLanguageFromPath, highlightCode, type Theme } from "../../modes/inte
 import { getExperimentalToolSampling } from "../experimental.ts";
 import type { ToolRenderResultOptions } from "../extensions/types.ts";
 import { getPreparedPathOperation, type PreparedPathOperation } from "../permissions/operations.ts";
+import type { PermissionPreview } from "../permissions/responder.ts";
 import type { ApexToolDefinition, EvidenceRecord } from "./contract.ts";
 import type { DiagnosticsOperations, DiagnosticsOutcome } from "./diagnostics.ts";
 import { diagnosticEvidenceForPath, formatDiagnosticsOutcome } from "./diagnostics.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
-import { resolveToCwd, writePreparedPath } from "./path-utils.ts";
+import { readPreparedPath, resolveToCwd, writePreparedPath } from "./path-utils.ts";
 import { normalizeDisplayText, renderToolPath, replaceTabs, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
@@ -215,6 +216,49 @@ function formatWriteResult(
 	return `\n${theme.fg("error", output)}`;
 }
 
+const WRITE_PREVIEW_MAX_BYTES = 512 * 1024;
+
+/** A trailing newline terminates the last line rather than starting an empty one. */
+const countLines = (text: string): number => {
+	if (text === "") return 0;
+	const body = text.endsWith("\n") ? text.slice(0, -1) : text;
+	return body.split("\n").length;
+};
+
+const lineCount = (text: string): string => {
+	const n = countLines(text);
+	return `${n} ${n === 1 ? "line" : "lines"}`;
+};
+
+/**
+ * Describe a whole-file replacement without drawing the whole file.
+ *
+ * A diff of a write is the file twice over, which is not what a person needs in
+ * order to decide. Sizes on both sides answer the question that matters, which is
+ * whether this replaces something substantial. Read through the prepared
+ * operation, so a swapped target fails here as it fails the write (ADR 0029).
+ */
+function previewWrite(params: { path: string; content: string }): PermissionPreview {
+	const incoming = `${lineCount(params.content)}, ${Buffer.byteLength(params.content)} bytes`;
+	const prepared = getPreparedPathOperation(params);
+	if (!prepared) return { kind: "unavailable", reason: "No authorized target was prepared for this call" };
+	if (prepared.kind === "path-new") {
+		return { kind: "summary", lines: [`Create ${params.path} with ${incoming}`] };
+	}
+
+	const buffer = readPreparedPath(prepared, WRITE_PREVIEW_MAX_BYTES + 1);
+	if (buffer.byteLength > WRITE_PREVIEW_MAX_BYTES) {
+		return {
+			kind: "summary",
+			lines: [`Replace ${params.path}, over ${WRITE_PREVIEW_MAX_BYTES / 1024}KB, with ${incoming}`],
+		};
+	}
+	const existing = buffer.includes(0)
+		? `${buffer.byteLength} bytes of binary`
+		: `${lineCount(buffer.toString("utf-8"))}, ${buffer.byteLength} bytes`;
+	return { kind: "summary", lines: [`Replace ${params.path}`, `${existing} becomes ${incoming}`] };
+}
+
 export function createWriteToolDefinition(
 	cwd: string,
 	options?: WriteToolOptions,
@@ -236,6 +280,7 @@ export function createWriteToolDefinition(
 				defaultBehavior: "ask",
 				verb: "Write",
 				getPath: (params) => params.path,
+				previewCall: (params) => previewWrite(params as { path: string; content: string }),
 			}),
 			context: { resultRecoverable: true, deferSchema: false },
 			evidence: {

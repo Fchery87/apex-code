@@ -148,6 +148,7 @@ import {
 	formatAuthSelectorProviderType,
 	OAuthSelectorComponent,
 } from "./components/oauth-selector.ts";
+import { renderPermissionPreview } from "./components/permission-preview.ts";
 import { ScopedModelsSelectorComponent } from "./components/scoped-models-selector.ts";
 import { SessionSelectorComponent } from "./components/session-selector.ts";
 import { PERMISSION_MODE_OVERRIDE_HINTS, SettingsSelectorComponent } from "./components/settings-selector.ts";
@@ -432,6 +433,24 @@ export function createInteractiveTuiReference(getTui: () => TUI): TUI {
 	});
 }
 
+/**
+ * Working status rides in the footer tray; everything else keeps its own rows.
+ *
+ * The tray is a line the screen already spends, so a turn no longer costs two
+ * rows above the editor. Retry, compaction and branch summary stay in the status
+ * container. They are interruptions rather than steady state and they carry
+ * their own countdowns.
+ *
+ * A custom footer replaces the built-in one entirely, so a session running one
+ * keeps its indicator where it can still be seen.
+ *
+ * Free of `this` so the white-box prototype tests can exercise the callers
+ * without fabricating a whole InteractiveMode.
+ */
+function trayOwnsActivity(kind: StatusIndicator["kind"], hasCustomFooter: boolean): boolean {
+	return kind === "working" && !hasCustomFooter;
+}
+
 export class InteractiveMode {
 	private runtimeHost: AgentSessionRuntime;
 	/** Settled once the most recent /settings permission-mode write has hit disk. */
@@ -643,6 +662,10 @@ export class InteractiveMode {
 			autocompleteMaxVisible,
 			promptPrefix: "› ",
 			promptColor: (text) => theme.fg("accent", text),
+			// Bash mode changes the glyph as well as the hue, so the mode is still
+			// readable on a monochrome terminal. Same cell count, so nothing shifts.
+			bashPromptPrefix: "! ",
+			bashPromptColor: (text) => theme.fg("bashMode", text),
 			placeholder: "Ask anything",
 			placeholderColor: (text) => theme.fg("dim", text),
 			commandColor: (text) => theme.fg("accent", text),
@@ -2254,6 +2277,11 @@ export class InteractiveMode {
 		this.activeStatusIndicator?.dispose();
 		this.activeStatusIndicator = indicator;
 		this.statusContainer.clear();
+		if (trayOwnsActivity(indicator.kind, this.customFooter !== undefined)) {
+			this.footer.setActivity(indicator);
+			return;
+		}
+		this.footer.setActivity(undefined);
 		this.statusContainer.addChild(indicator);
 	}
 
@@ -2262,9 +2290,16 @@ export class InteractiveMode {
 			return;
 		}
 		const hadActiveStatusIndicator = this.activeStatusIndicator !== undefined;
+		const wasInTray =
+			this.activeStatusIndicator !== undefined &&
+			trayOwnsActivity(this.activeStatusIndicator.kind, this.customFooter !== undefined);
 		this.activeStatusIndicator?.dispose();
 		this.activeStatusIndicator = undefined;
+		this.footer?.setActivity(undefined);
 		this.statusContainer.clear();
+		// The tray never occupied those rows, so it must not leave the idle filler
+		// behind to reserve them.
+		if (wasInTray) return;
 		if (hadActiveStatusIndicator && this.options.tuiMode === "regular" && this.ui.getClearOnShrink()) {
 			this.statusContainer.addChild(this.idleStatus);
 		}
@@ -2645,6 +2680,7 @@ export class InteractiveMode {
 					timeout: opts?.timeout,
 					onToggleToolsExpanded: () => this.toggleToolOutputExpansion(),
 					enableSearch,
+					preamble: opts?.preview ? renderPermissionPreview(opts.preview) : undefined,
 				},
 			);
 
@@ -4391,7 +4427,9 @@ export class InteractiveMode {
 	}
 
 	private updateEditorBorderColor(): void {
-		this.defaultEditor.setModeLabel(this.isBashMode ? "bash" : this.session.isStreaming ? "busy" : undefined);
+		// Streaming no longer touches the dock. WorkingStatusIndicator already owns
+		// that signal, and a `[busy]` prefix moved the caret mid-turn.
+		this.defaultEditor.setPromptMode(this.isBashMode ? "bash" : "agent");
 		if (this.isBashMode) {
 			this.editor.borderColor = theme.getBashModeBorderColor();
 		} else {

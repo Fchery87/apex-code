@@ -124,6 +124,9 @@ capable and measurably worse.
 | Configured verification and formatting | **landed** — VF.1 through VF.6 · `f00df19e2` · three-OS CI green (run `33838960431`, repair-inclusive tree incl. Windows executor repair `e329441b1` and CI-only test repairs) · re-verified at `a0b68f368` (run `33926005862`) after models.dev retired a GitHub Copilot model id the fixtures pinned | [spec](specs/2026-09-01-configured-verification-and-formatting.md) | — |
 | Security boundary remediation | **landed** — runtime implementation `7fa4f340c13adb5ca942266eb7501c51371673a3`; release implementation `aa860294d42bbe4086d06756c861ea2071b0573d`; serial validation passed, with default parallel `npm test` limited by host scheduling and native macOS execution unavailable locally | [spec](specs/2026-09-05-security-boundary-remediation.md) | — |
 | Windows prepared paths and CI coverage | **active** · root traversal fix and platform-specific sandbox assertions under verification | [spec](specs/2026-09-08-windows-ci-path-roots.md) | — |
+| Ember workflow completion | **active** · interaction polish under verification | [spec](specs/2026-09-07-ember-workflow-completion.md) | — |
+| Permission preview | **active** · preview and standing refusal under verification | [spec](specs/2026-09-07-permission-preview.md) | — |
+| Persist a refusal | **active** · session refusal behavior under verification | [spec](specs/2026-09-07-persist-a-refusal.md) | — |
 
 ---
 

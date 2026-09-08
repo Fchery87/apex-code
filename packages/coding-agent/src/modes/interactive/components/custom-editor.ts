@@ -10,11 +10,18 @@ import {
 import type { AppKeybinding, KeybindingsManager } from "../../../core/keybindings.ts";
 import { stripAnsi } from "../../../utils/ansi.ts";
 
+/** Which marker the dock draws. The set is closed so a mode cannot arrive without a marker. */
+export type PromptMode = "agent" | "bash";
+
 export interface CustomEditorOptions extends EditorOptions {
 	/** Marker rendered at the start of the first input line, e.g. `"> "`. */
 	promptPrefix?: string;
 	/** Styles the prompt prefix. Defaults to leaving it unstyled. */
 	promptColor?: (text: string) => string;
+	/** Marker for bash mode. Defaults to `promptPrefix`, so mode is carried by colour alone. */
+	bashPromptPrefix?: string;
+	/** Styles the bash marker. Defaults to `promptColor`. */
+	bashPromptColor?: (text: string) => string;
 	/** Shown in place of the empty input line. */
 	placeholder?: string;
 	/** Styles the placeholder. Defaults to leaving it unstyled. */
@@ -156,15 +163,14 @@ function colorVisibleRange(line: string, start: number, end: number, colorFn: (t
  */
 export class CustomEditor extends Editor {
 	private keybindings: KeybindingsManager;
-	private readonly promptPrefix: string;
-	private readonly promptColor: (text: string) => string;
+	private readonly prompts: Record<PromptMode, { prefix: string; color: (text: string) => string }>;
+	private promptMode: PromptMode = "agent";
 	private readonly placeholderColor: (text: string) => string;
 	private readonly commandColor: ((text: string) => string) | undefined;
 	private readonly surfaceColor: ((text: string) => string) | undefined;
 	private readonly placeholder: string | undefined;
 	private readonly autocompleteRule: ((width: number) => string) | undefined;
 	private readonly autocompleteFooter: (() => string) | undefined;
-	private modeLabel = "";
 	public actionHandlers: Map<AppKeybinding, () => void> = new Map();
 
 	// Special handlers that can be dynamically replaced
@@ -177,8 +183,18 @@ export class CustomEditor extends Editor {
 	constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager, options?: CustomEditorOptions) {
 		super(tui, theme, options);
 		this.keybindings = keybindings;
-		this.promptPrefix = options?.promptPrefix ?? "";
-		this.promptColor = options?.promptColor ?? ((text) => text);
+		const agentPrefix = options?.promptPrefix ?? "";
+		const agentColor = options?.promptColor ?? ((text) => text);
+		const bashPrefix = options?.bashPromptPrefix ?? agentPrefix;
+		// Every marker occupies the same cells, so switching mode cannot move the
+		// caret or reflow what is already typed. Padding rather than throwing keeps
+		// a mismatched caller rendering instead of crashing its dock.
+		const cells = Math.max(visibleWidth(agentPrefix), visibleWidth(bashPrefix));
+		const pad = (text: string) => text + " ".repeat(cells - visibleWidth(text));
+		this.prompts = {
+			agent: { prefix: pad(agentPrefix), color: agentColor },
+			bash: { prefix: pad(bashPrefix), color: options?.bashPromptColor ?? agentColor },
+		};
 		this.placeholder = options?.placeholder;
 		this.placeholderColor = options?.placeholderColor ?? ((text) => text);
 		this.commandColor = options?.commandColor;
@@ -196,7 +212,7 @@ export class CustomEditor extends Editor {
 	}
 
 	private renderEditor(width: number): string[] {
-		const promptPrefix = this.modeLabel ? `[${this.modeLabel}] ${this.promptPrefix}` : this.promptPrefix;
+		const { prefix: promptPrefix, color: promptColor } = this.prompts[this.promptMode];
 		const prefixWidth = visibleWidth(promptPrefix);
 		// Reserve the prefix out of the width handed to the base Editor, so its
 		// wrapping, scrolling and cursor column all account for the space the
@@ -208,7 +224,7 @@ export class CustomEditor extends Editor {
 		const inner = this.withCommandColor(this.withPlaceholder(super.render(width - prefixWidth)));
 		const borderPad = this.borderColor(BORDER_CHAR.repeat(prefixWidth));
 		const blank = " ".repeat(prefixWidth);
-		const styledPrefix = this.promptColor(promptPrefix);
+		const styledPrefix = promptColor(promptPrefix);
 
 		// Structure is: top border, content lines, bottom border, then optional
 		// autocomplete rows. Counting borders tells the three regions apart
@@ -317,8 +333,9 @@ export class CustomEditor extends Editor {
 		return output;
 	}
 
-	setModeLabel(label: string | undefined): void {
-		this.modeLabel = label ?? "";
+	setPromptMode(mode: PromptMode): void {
+		if (this.promptMode === mode) return;
+		this.promptMode = mode;
 		this.invalidate();
 	}
 

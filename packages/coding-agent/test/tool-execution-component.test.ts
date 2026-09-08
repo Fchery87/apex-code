@@ -749,4 +749,72 @@ describe("ToolExecutionComponent parity", () => {
 		expect(collapsed).not.toContain("omitted");
 		expect(collapsed).toContain("to expand");
 	});
+
+	test("renders no expand hint when the result hides nothing", () => {
+		const component = new ToolExecutionComponent(
+			"custom_tool",
+			"tool-no-hidden",
+			{},
+			{},
+			createBaseToolDefinition(),
+			createFakeTui(),
+			process.cwd(),
+		);
+		component.markExecutionStarted();
+		component.updateResult({ content: [{ type: "text", text: "alpha\nbeta" }], details: {}, isError: false }, false);
+
+		const rendered = stripAnsi(component.render(100).join("\n"));
+
+		expect(rendered).toContain("alpha");
+		expect(rendered).not.toContain("to expand");
+	});
+
+	test("announces truncation exactly once, with its count", () => {
+		const component = new ToolExecutionComponent(
+			"custom_tool",
+			"tool-hidden",
+			{},
+			{},
+			createBaseToolDefinition(),
+			createFakeTui(),
+			process.cwd(),
+		);
+		component.markExecutionStarted();
+		const text = Array.from({ length: 20 }, (_, i) => `line ${i}`).join("\n");
+		component.updateResult({ content: [{ type: "text", text }], details: {}, isError: false }, false);
+
+		const rendered = stripAnsi(component.render(100).join("\n"));
+
+		// Every truncating renderer already prints its own counted hint. A second,
+		// count-less one told the reader less and repeated the first.
+		expect(rendered.split("to expand")).toHaveLength(2);
+		expect(rendered).toContain("10 more lines");
+	});
+
+	test("expanding one call leaves the cache of that call, and only that call, stale", () => {
+		const make = (id: string) => {
+			const component = new ToolExecutionComponent(
+				"custom_tool",
+				id,
+				{},
+				{},
+				createBaseToolDefinition(),
+				createFakeTui(),
+				process.cwd(),
+			);
+			component.markExecutionStarted();
+			const text = Array.from({ length: 20 }, (_, i) => `line ${i}`).join("\n");
+			component.updateResult({ content: [{ type: "text", text }], details: {}, isError: false }, false);
+			return component;
+		};
+
+		const first = make("a");
+		const second = make("b");
+		const before = stripAnsi(second.render(100).join("\n"));
+
+		first.setExpanded(true);
+
+		expect(stripAnsi(first.render(100).join("\n"))).toContain("line 19");
+		expect(stripAnsi(second.render(100).join("\n"))).toBe(before);
+	});
 });

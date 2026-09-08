@@ -12,9 +12,9 @@
  */
 
 import type { BeforeToolCallContext, BeforeToolCallResult } from "apex-code-agent-core";
-import { resolveToolContract, type ToolContract } from "../tools/contract.ts";
+import { type PermissionSpec, resolveToolContract, type ToolContract } from "../tools/contract.ts";
 import { resolveWithMode } from "./modes.ts";
-import type { PermissionResponder } from "./responder.ts";
+import type { PermissionPreview, PermissionResponder } from "./responder.ts";
 import { resolvePermission } from "./rules.ts";
 import type { PermissionMode, PermissionRuleStore } from "./store.ts";
 
@@ -44,6 +44,39 @@ export interface GateDecision {
 function describeDecision(contract: ToolContract, toolName: string, ruleContent: string | undefined): string {
 	if (ruleContent !== undefined) return contract.permission.describe(ruleContent);
 	return `${toolName} is not permitted by the current permission configuration.`;
+}
+
+/**
+ * A denial, plus whatever the user said to do instead.
+ *
+ * The reason becomes the blocked tool result the model reads, so guidance is
+ * bounded here rather than pasted whole: it is user-entered free text on a path
+ * that reaches the transcript.
+ */
+const MAX_GUIDANCE_CHARS = 400;
+
+/**
+ * Run the tool's preview producer, if it declares one, on the ask branch only.
+ *
+ * A producer reads a file to describe a change, so a call the user was never
+ * asked about must not pay for it. A producer that throws degrades to a stated
+ * reason rather than to silence: `readPreparedPath` throws precisely when the
+ * target changed identity since authorization, which is the case a reader most
+ * needs to see.
+ */
+function producePreview(spec: PermissionSpec, params: unknown): PermissionPreview | undefined {
+	if (!spec.previewCall) return undefined;
+	try {
+		return spec.previewCall(params as never);
+	} catch (error) {
+		return { kind: "unavailable", reason: error instanceof Error ? error.message : String(error) };
+	}
+}
+
+function describeDecline(toolName: string, guidance: string | undefined): string {
+	const trimmed = guidance?.trim().slice(0, MAX_GUIDANCE_CHARS);
+	if (!trimmed) return `${toolName} was declined.`;
+	return `${toolName} was declined. The user asked for this instead. ${trimmed}`;
 }
 
 /** Pure decision function, independent of the beforeToolCall adapter shape below — the part under direct test. */
@@ -82,18 +115,24 @@ export async function evaluateToolCall(
 	}
 	const ruleForCall = spec.ruleForCall(params as never);
 	const answer = await responder.ask({
+		preview: producePreview(spec, params),
 		toolName,
 		description: ruleForCall !== null ? spec.describe(ruleForCall) : `Run ${toolName}`,
+		// Only offer a session grant the persist branch below would actually write.
+		sessionScope: ruleForCall !== null ? { description: spec.describe(ruleForCall) } : undefined,
 	});
-	if (!answer.allow) {
-		return { block: true, reason: `${toolName} was declined.` };
-	}
+	// `persist` means the same thing on both branches: write the rule that decides
+	// this exact call the way the user just decided it. Reading it only on the allow
+	// branch is what let "Reject always" refuse once and then ask again.
 	if (answer.persist && ruleForCall !== null) {
 		await options.store.apply({
 			type: "addRules",
 			destination: "session",
-			rules: [{ toolName, behavior: "allow", ruleContent: ruleForCall }],
+			rules: [{ toolName, behavior: answer.allow ? "allow" : "deny", ruleContent: ruleForCall }],
 		});
+	}
+	if (!answer.allow) {
+		return { block: true, reason: describeDecline(toolName, answer.guidance) };
 	}
 	return { block: false };
 }

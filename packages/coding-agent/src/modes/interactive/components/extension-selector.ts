@@ -3,8 +3,17 @@
  * Displays a list of string options with keyboard navigation.
  */
 
-import { Container, fuzzyFilter, getKeybindings, Input, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
-import { theme } from "../theme/theme.ts";
+import {
+	type Component,
+	Container,
+	fuzzyFilter,
+	getKeybindings,
+	Input,
+	Spacer,
+	Text,
+	type TUI,
+} from "@earendil-works/pi-tui";
+import { paintSelectedRow, theme } from "../theme/theme.ts";
 import { CountdownTimer } from "./countdown-timer.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, rawKeyHint } from "./keybinding-hints.ts";
@@ -14,6 +23,12 @@ export interface ExtensionSelectorOptions {
 	timeout?: number;
 	onToggleToolsExpanded?: () => void;
 	enableSearch?: boolean;
+	/**
+	 * Drawn under the title and above the rows, for a prompt whose choices only
+	 * make sense beside the thing they act on. The caller owns its colouring, so
+	 * the selector stays a list and gains no rendering of its own.
+	 */
+	preamble?: Component;
 }
 
 export class ExtensionSelectorComponent extends Container {
@@ -51,6 +66,10 @@ export class ExtensionSelectorComponent extends Container {
 		this.titleText = new Text(theme.fg("accent", theme.bold(title)), 1, 0);
 		this.addChild(this.titleText);
 		this.addChild(new Spacer(1));
+		if (opts?.preamble) {
+			this.addChild(opts.preamble);
+			this.addChild(new Spacer(1));
+		}
 		if (opts?.enableSearch) {
 			this.searchInput = new Input();
 			this.addChild(this.searchInput);
@@ -91,7 +110,7 @@ export class ExtensionSelectorComponent extends Container {
 		for (let i = 0; i < this.filteredOptions.length; i++) {
 			const isSelected = i === this.selectedIndex;
 			const text = isSelected
-				? theme.fg("accent", "→ ") + theme.fg("accent", this.filteredOptions[i])
+				? paintSelectedRow(`→ ${this.filteredOptions[i]}`)
 				: `  ${theme.fg("text", this.filteredOptions[i])}`;
 			this.listContainer.addChild(new Text(text, 1, 0));
 		}

@@ -10,6 +10,7 @@
 import type { AgentToolResult } from "apex-code-agent-core";
 import type { Static, TSchema } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
+import type { PermissionPreview } from "../permissions/responder.ts";
 
 /** What class of thing a tool does. A set, not a single value — `bash` is `{exec}`. */
 export type Capability = "fs.read" | "fs.write" | "exec" | "net" | "delegate" | "ui" | "state";
@@ -46,6 +47,17 @@ export interface PermissionSpec<TParams extends TSchema = TSchema> {
 
 	/** Prepare canonical operation facts on the validated call before authorization and execution. */
 	prepareCall?(params: Static<TParams>): void;
+
+	/**
+	 * Describe, for a human about to approve it, what this call would change.
+	 *
+	 * Called by the gate only once it has resolved to `ask`, so an allowed or denied
+	 * call never pays for it. It must read through the value `prepareCall` stored
+	 * rather than re-deriving a target, which is what keeps the diff the user
+	 * approves and the bytes execution writes the same file (ADR 0029). It must not
+	 * execute the tool, write, or widen what the gate already validated.
+	 */
+	previewCall?(params: Static<TParams>): PermissionPreview;
 	/** Does this call match this rule's content as an allow rule? */
 	matches(ruleContent: string, params: Static<TParams>): boolean;
 	/** Optional deny matcher. It may identify any prohibited part of a structured call. */

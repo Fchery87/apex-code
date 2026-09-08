@@ -188,6 +188,24 @@ describe("acp permission bridge", () => {
 		await expect(pending).resolves.toEqual({ allow: true, persist: true });
 	});
 
+	it("names the persisting allow for the session it actually lasts, without moving its protocol ids", async () => {
+		const { server, written } = startServer(fakeHost(fakeSession()));
+		server.askPermission("sess_1", "bash", "desc");
+
+		await vi.waitFor(() => {
+			expect(written.some((message) => message.method === "session/request_permission")).toBe(true);
+		});
+		const request = written.find((message) => message.method === "session/request_permission")!;
+		const options = (request.params as { options: Array<{ optionId: string; name: string; kind: string }> }).options;
+		const persisting = options.find((option) => option.kind === "allow_always")!;
+
+		// optionId and kind are the wire contract the client echoes back; only the
+		// display name moves. The gate persists to `session`, never further.
+		expect(persisting.optionId).toBe("allow-always");
+		expect(persisting.name).toBe("Allow for this session");
+		expect(persisting.name).not.toMatch(/always|permanent|forever/i);
+	});
+
 	it("answers cancelled outcomes fail-closed", async () => {
 		const { server, written, raw } = startServer(fakeHost(fakeSession()));
 		const pending = server.askPermission("sess_1", "bash", "desc");
@@ -198,5 +216,34 @@ describe("acp permission bridge", () => {
 		const request = written.find((message) => message.method === "session/request_permission")!;
 		raw.write(serializeJsonLine({ jsonrpc: "2.0", id: request.id, result: { outcome: { outcome: "cancelled" } } }));
 		await expect(pending).resolves.toEqual({ allow: false });
+	});
+
+	it("omits the persisting allow when the tool would have no rule to write", async () => {
+		const { server, written } = startServer(fakeHost(fakeSession()));
+		server.askPermission("sess_1", "ask_user", "desc", false);
+
+		await vi.waitFor(() => {
+			expect(written.some((message) => message.method === "session/request_permission")).toBe(true);
+		});
+		const request = written.find((message) => message.method === "session/request_permission")!;
+		const options = (request.params as { options: Array<{ kind: string }> }).options;
+
+		expect(options.some((option) => option.kind === "allow_always")).toBe(false);
+		expect(options.some((option) => option.kind === "allow_once")).toBe(true);
+	});
+
+	it("omits the persisting refusal too when there would be no rule to write", async () => {
+		const { server, written } = startServer(fakeHost(fakeSession()));
+		server.askPermission("sess_1", "ask_user", "desc", false);
+
+		await vi.waitFor(() => {
+			expect(written.some((message) => message.method === "session/request_permission")).toBe(true);
+		});
+		const request = written.find((message) => message.method === "session/request_permission")!;
+		const options = (request.params as { options: Array<{ kind: string }> }).options;
+
+		// A standing refusal needs a rule to stand on, exactly as a standing grant does.
+		expect(options.some((option) => option.kind === "reject_always")).toBe(false);
+		expect(options.some((option) => option.kind === "reject_once")).toBe(true);
 	});
 });

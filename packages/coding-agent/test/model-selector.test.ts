@@ -7,6 +7,7 @@ import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 import { createHarness, type Harness } from "./suite/harness.ts";
 import { selectorRowIds } from "./suite/selector-rows.ts";
+import { accentOpen, paintedWidth, selectedRowOpen } from "./suite/theme-ansi.ts";
 
 const ENTER = "\r";
 const ESCAPE = "\x1b";
@@ -77,6 +78,26 @@ describe("model selector", () => {
 			const rendered = render(selector);
 			expect(rendered).toContain("Could not refresh 2 model catalogs (openai, anthropic); showing cached models.");
 		});
+	});
+
+	it("lights the selected row with a background step, not with accent text", async () => {
+		const selector = await createMultiProviderSelector();
+		const selected = selector.render(120).find((line) => stripAnsi(line).trimStart().startsWith("→ "));
+
+		expect(selected).toBeDefined();
+		expect(selected).toContain(selectedRowOpen());
+		expect(selected).not.toContain(accentOpen());
+	});
+
+	it("keeps the selected row's fill hugging its text", async () => {
+		const selector = await createMultiProviderSelector();
+		const selected = selector.render(120).find((line) => stripAnsi(line).trimStart().startsWith("→ "));
+
+		// SelectListTheme.selectedText is handed a composed row and no width, so a
+		// full-width fill is unreachable without patching pi-tui. Matching the frozen
+		// component beats diverging from it.
+		expect(paintedWidth(selected ?? "")).toBeGreaterThan(0);
+		expect(paintedWidth(selected ?? "")).toBeLessThan(120);
 	});
 
 	it("opens on the provider step and shows each provider's model count", async () => {

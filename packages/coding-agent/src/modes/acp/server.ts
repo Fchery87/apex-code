@@ -29,7 +29,9 @@ export interface AcpHost {
 
 const PERMISSION_OPTIONS = [
 	{ optionId: "allow-once", name: "Allow once", kind: "allow_once" },
-	{ optionId: "allow-always", name: "Always allow", kind: "allow_always" },
+	// `optionId` and `kind` are the wire contract; only the display name is ours to fix.
+	// The gate writes this to `session`, so "always" was never true.
+	{ optionId: "allow-always", name: "Allow for this session", kind: "allow_always" },
 	{ optionId: "reject-once", name: "Reject", kind: "reject_once" },
 	{ optionId: "reject-always", name: "Reject always", kind: "reject_always" },
 ] as const;
@@ -104,7 +106,17 @@ export class AcpServer {
 	 * the gate's answer shape. Rule persistence itself stays in the gate
 	 * (ADR 0010) -- `persist` is a request, not a written rule.
 	 */
-	askPermission(sessionId: string, toolName: string, description: string): Promise<PermissionAnswer> {
+	/**
+	 * `canPersistSession` mirrors the gate's `sessionScope`. When the tool's
+	 * `ruleForCall()` yields nothing, the gate has no rule to write, so neither
+	 * standing choice can keep its promise and neither is offered.
+	 */
+	askPermission(
+		sessionId: string,
+		toolName: string,
+		description: string,
+		canPersistSession = true,
+	): Promise<PermissionAnswer> {
 		const id = `perm_${randomUUID()}`;
 		return new Promise<PermissionAnswer>((resolve) => {
 			this.#pendingPermissions.set(id, resolve);
@@ -115,7 +127,14 @@ export class AcpServer {
 				params: {
 					sessionId,
 					toolCall: { toolCallId: id, title: `${toolName}: ${description}`, kind: "other", status: "pending" },
-					options: PERMISSION_OPTIONS,
+					// Both standing choices need a rule to stand on. Offering either when
+					// ruleForCall() yields nothing promises a decision that outlives the
+					// call and then does not.
+					options: canPersistSession
+						? PERMISSION_OPTIONS
+						: PERMISSION_OPTIONS.filter(
+								(option) => option.kind !== "allow_always" && option.kind !== "reject_always",
+							),
 				},
 			});
 		});

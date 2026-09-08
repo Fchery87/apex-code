@@ -155,6 +155,15 @@ export function createBashPermissionSpec(): PermissionSpec<typeof bashSchema> {
 			}
 			return `Run bash commands matching "${ruleContent}"`;
 		},
+		previewCall(params) {
+			// The command string is the entire effect being authorized. There is
+			// nothing to read and nothing to summarise: showing it exactly, including
+			// whitespace the rule grammar treats as significant, is the preview.
+			if (!("command" in params)) {
+				return { kind: "summary", lines: ["Retrieve or kill a background shell command"] };
+			}
+			return { kind: "summary", lines: [String(params.command)] };
+		},
 		ruleForCall(params) {
 			if (!("command" in params)) {
 				return BACKGROUND_HANDLE_RULE;
