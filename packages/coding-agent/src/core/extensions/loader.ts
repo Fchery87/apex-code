@@ -37,6 +37,7 @@ import { execCommand } from "../exec.ts";
 import { readPiManifest } from "../pi-manifest.ts";
 import { createSyntheticSourceInfo } from "../source-info.ts";
 import { time } from "../timings.ts";
+import { isTypeScriptSourceRuntime } from "./source-runtime.ts";
 import type {
 	EntryRenderer,
 	Extension,
@@ -85,7 +86,6 @@ const isNodeSeaBinary =
 	process.getBuiltinModule("node:sea")?.isSea() === true;
 declare const PI_BUNDLED_NODE: boolean;
 const isBundledNode = typeof PI_BUNDLED_NODE !== "undefined" && PI_BUNDLED_NODE;
-const isTypeScriptSourceRuntime = !isBunBinary && path.extname(fileURLToPath(import.meta.url)) === ".ts";
 
 /**
  * Get aliases for jiti (used in built Node.js mode).

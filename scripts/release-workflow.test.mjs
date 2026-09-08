@@ -7,6 +7,16 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { parse } from "yaml";
 
+/**
+ * These tests fake `npm` with an extensionless shebang script on PATH, which
+ * Windows cannot execute and would not find with a POSIX `:` separator either.
+ * The scripts under test only ever run on ubuntu-latest and macos-latest
+ * (.github/workflows/release.yml), so porting the shim would prove something
+ * about a platform the release path never touches. Both blockers are the
+ * harness, not the behaviour, and Linux and macOS cover the behaviour.
+ */
+const posixShimOnly = process.platform === "win32" ? "release tooling is verified on Linux and macOS" : false;
+
 const workflowUrl = new URL("../.github/workflows/release.yml", import.meta.url);
 const workflowDirectory = dirname(fileURLToPath(workflowUrl));
 
@@ -279,7 +289,7 @@ function matchUploadPattern(pattern, files) {
 	return files.filter((file) => expression.test(file));
 }
 
-test("the standalone artifact survives upload/download with the layout the release job actually reads", async () => {
+test("the standalone artifact survives upload/download with the layout the release job actually reads", { skip: posixShimOnly }, async () => {
 	const { createReleaseArtifactRecord, REQUIRED_STANDALONE_ARTIFACTS, writeReleaseArtifactManifest } =
 		await import("./apex/packed-product-surface.mjs");
 	const { prepareBinaryRelease } = await import("./apex/prepare-binary-release.mjs");
