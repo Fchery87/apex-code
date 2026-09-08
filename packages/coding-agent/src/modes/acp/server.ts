@@ -108,8 +108,8 @@ export class AcpServer {
 	 */
 	/**
 	 * `canPersistSession` mirrors the gate's `sessionScope`. When the tool's
-	 * `ruleForCall()` yields nothing, the gate ignores `persist`, so offering
-	 * allow-always would promise a grant nothing writes.
+	 * `ruleForCall()` yields nothing, the gate has no rule to write, so neither
+	 * standing choice can keep its promise and neither is offered.
 	 */
 	askPermission(
 		sessionId: string,
@@ -127,9 +127,14 @@ export class AcpServer {
 				params: {
 					sessionId,
 					toolCall: { toolCallId: id, title: `${toolName}: ${description}`, kind: "other", status: "pending" },
+					// Both standing choices need a rule to stand on. Offering either when
+					// ruleForCall() yields nothing promises a decision that outlives the
+					// call and then does not.
 					options: canPersistSession
 						? PERMISSION_OPTIONS
-						: PERMISSION_OPTIONS.filter((option) => option.kind !== "allow_always"),
+						: PERMISSION_OPTIONS.filter(
+								(option) => option.kind !== "allow_always" && option.kind !== "reject_always",
+							),
 				},
 			});
 		});

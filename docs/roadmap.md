@@ -125,6 +125,7 @@ capable and measurably worse.
 | Security boundary remediation | **landed** — runtime implementation `7fa4f340c13adb5ca942266eb7501c51371673a3`; release implementation `aa860294d42bbe4086d06756c861ea2071b0573d`; serial validation passed, with default parallel `npm test` limited by host scheduling and native macOS execution unavailable locally | [spec](specs/2026-09-05-security-boundary-remediation.md) | — |
 | Ember carried through the working session | **in review** — EMBER.1 through EMBER.6 · `69038c4a8`, `26a455820`, `5b15e2027`, `be3451ef8`, `363d0f0a3`, `7a6639229` | [spec](specs/2026-09-07-ember-workflow-completion.md) | — |
 | Permission prompt shows what it authorizes | **planned**, spec written | [spec](specs/2026-09-07-permission-preview.md) | — |
+| A refusal that says always persists | **planned**, spec written | [spec](specs/2026-09-07-persist-a-refusal.md) | — |
 
 ---
 

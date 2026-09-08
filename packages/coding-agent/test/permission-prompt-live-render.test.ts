@@ -30,13 +30,20 @@ async function paint(preview: PermissionPreview, columns = 80, rows = 24): Promi
 	tui.requestRender(true);
 
 	// The renderer schedules, and xterm drains its write queue on its own clock.
-	// Poll until the screen has something on it rather than guessing a delay.
+	// The bound is generous because a loaded machine is the normal case in CI, and
+	// a short one here would fail as a blank screen, which reads as a broken
+	// feature rather than as a slow one.
 	let viewport: string[] = [];
-	for (let attempt = 0; attempt < 50; attempt += 1) {
-		await new Promise((resolve) => setTimeout(resolve, 2));
+	const deadline = Date.now() + 10_000;
+	while (Date.now() < deadline) {
+		await new Promise((resolve) => setTimeout(resolve, 5));
 		viewport = terminal.getViewport().map((line) => line.replace(/\s+$/, ""));
 		if (viewport.some((line) => line.length > 0)) break;
 	}
+	expect(
+		viewport.some((line) => line.length > 0),
+		"the prompt never painted",
+	).toBe(true);
 	tui.stop();
 	return viewport;
 }

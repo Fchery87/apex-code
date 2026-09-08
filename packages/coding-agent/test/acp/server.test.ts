@@ -231,4 +231,19 @@ describe("acp permission bridge", () => {
 		expect(options.some((option) => option.kind === "allow_always")).toBe(false);
 		expect(options.some((option) => option.kind === "allow_once")).toBe(true);
 	});
+
+	it("omits the persisting refusal too when there would be no rule to write", async () => {
+		const { server, written } = startServer(fakeHost(fakeSession()));
+		server.askPermission("sess_1", "ask_user", "desc", false);
+
+		await vi.waitFor(() => {
+			expect(written.some((message) => message.method === "session/request_permission")).toBe(true);
+		});
+		const request = written.find((message) => message.method === "session/request_permission")!;
+		const options = (request.params as { options: Array<{ kind: string }> }).options;
+
+		// A standing refusal needs a rule to stand on, exactly as a standing grant does.
+		expect(options.some((option) => option.kind === "reject_always")).toBe(false);
+		expect(options.some((option) => option.kind === "reject_once")).toBe(true);
+	});
 });

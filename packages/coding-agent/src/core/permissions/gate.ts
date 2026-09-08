@@ -121,15 +121,18 @@ export async function evaluateToolCall(
 		// Only offer a session grant the persist branch below would actually write.
 		sessionScope: ruleForCall !== null ? { description: spec.describe(ruleForCall) } : undefined,
 	});
-	if (!answer.allow) {
-		return { block: true, reason: describeDecline(toolName, answer.guidance) };
-	}
+	// `persist` means the same thing on both branches: write the rule that decides
+	// this exact call the way the user just decided it. Reading it only on the allow
+	// branch is what let "Reject always" refuse once and then ask again.
 	if (answer.persist && ruleForCall !== null) {
 		await options.store.apply({
 			type: "addRules",
 			destination: "session",
-			rules: [{ toolName, behavior: "allow", ruleContent: ruleForCall }],
+			rules: [{ toolName, behavior: answer.allow ? "allow" : "deny", ruleContent: ruleForCall }],
 		});
+	}
+	if (!answer.allow) {
+		return { block: true, reason: describeDecline(toolName, answer.guidance) };
 	}
 	return { block: false };
 }

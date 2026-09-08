@@ -32,7 +32,11 @@ export interface PermissionAskRequest {
 
 export interface PermissionAnswer {
 	allow: boolean;
-	/** Persist a session-source rule via the tool's own ruleForCall(). The grant ends with the session. */
+	/**
+	 * Persist a session-source rule via the tool's own ruleForCall(), matching the
+	 * answer: an allow writes an allow rule, a refusal writes a deny one. Either
+	 * way it ends with the session.
+	 */
 	persist?: boolean;
 	/**
 	 * On a denial, what the user wants done instead. The gate bounds it and carries

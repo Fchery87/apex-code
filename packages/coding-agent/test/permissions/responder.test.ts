@@ -421,3 +421,96 @@ describe("the prompt carries the preview to whatever draws it", () => {
 		expect(opts).toBeUndefined();
 	});
 });
+
+describe("a refusal that says always", () => {
+	it("writes a session deny rule from the tool's own ruleForCall", async () => {
+		const store = recordingStore();
+		const decision = await evaluateToolCall(
+			"read",
+			{ path: "a.txt" },
+			{
+				getContract: () => contract,
+				store: store as never,
+				getMode: () => "default" as const,
+				responder: { ask: async () => ({ allow: false, persist: true }) },
+			},
+		);
+
+		expect(decision.block).toBe(true);
+		expect(store.applied).toEqual([
+			{
+				type: "addRules",
+				destination: "session",
+				rules: [{ toolName: "read", behavior: "deny", ruleContent: "a.txt" }],
+			},
+		]);
+	});
+
+	it("refuses the next identical call without asking again", async () => {
+		const rules: Array<Record<string, unknown>> = [];
+		const store = {
+			snapshot: async () => ({ rules: [...rules], modesBySource: new Map(), errors: [] }),
+			apply: async (update: { rules?: readonly Record<string, unknown>[] }) => {
+				if (update.rules) rules.push(...update.rules.map((rule) => ({ ...rule, source: "session" })));
+			},
+		};
+		let asks = 0;
+		const options = {
+			getContract: () => contract,
+			store: store as never,
+			getMode: () => "default" as const,
+			responder: {
+				ask: async () => {
+					asks += 1;
+					return { allow: false, persist: true };
+				},
+			},
+		};
+
+		await evaluateToolCall("read", { path: "a.txt" }, options);
+		const second = await evaluateToolCall("read", { path: "a.txt" }, options);
+
+		// The whole promise of the label. One refusal, then no more questions.
+		expect(second.block).toBe(true);
+		expect(asks).toBe(1);
+	});
+
+	it("writes nothing for a plain refusal", async () => {
+		const store = recordingStore();
+		await evaluateToolCall(
+			"read",
+			{ path: "a.txt" },
+			{
+				getContract: () => contract,
+				store: store as never,
+				getMode: () => "default" as const,
+				responder: { ask: async () => ({ allow: false }) },
+			},
+		);
+
+		expect(store.applied).toHaveLength(0);
+	});
+
+	it("writes nothing when the tool yields no rule to persist", async () => {
+		const store = recordingStore();
+		const nullRuleContract = {
+			capabilities: new Set(),
+			permission: { ...exactSpec, ruleForCall: () => null },
+			context: {},
+			evidence: {},
+		} as unknown as ToolContract;
+
+		await evaluateToolCall(
+			"read",
+			{ path: "a.txt" },
+			{
+				getContract: () => nullRuleContract,
+				store: store as never,
+				getMode: () => "default" as const,
+				responder: { ask: async () => ({ allow: false, persist: true }) },
+			},
+		);
+
+		expect(store.applied).toHaveLength(0);
+	});
+});
