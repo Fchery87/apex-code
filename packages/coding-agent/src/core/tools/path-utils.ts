@@ -13,7 +13,7 @@ import {
 	writeSync,
 } from "node:fs";
 import { access } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, parse, sep } from "node:path";
 import { normalizePath, resolvePath } from "../../utils/paths.ts";
 import type { PreparedPathOperation } from "../permissions/operations.ts";
 
@@ -94,10 +94,6 @@ interface OpenDirectory {
 	path: string;
 }
 
-function splitComponents(absolutePath: string): string[] {
-	return absolutePath.split(sep).filter((component) => component.length > 0);
-}
-
 function openUnder(parent: OpenDirectory, name: string, flags: number, mode?: number): number {
 	if (useProcFd()) return openSync(`${PROC_FD}/${parent.fd}/${name}`, flags, mode);
 	return openSync(join(parent.path, name), flags, mode);
@@ -140,10 +136,14 @@ function withTargetDirectory<T>(
 	options: { createMissingDirectories: boolean },
 	run: (parent: OpenDirectory, name: string) => T,
 ): T {
-	const components = splitComponents(operation.path.value);
+	const root = parse(operation.path.value).root;
+	const components = operation.path.value
+		.slice(root.length)
+		.split(sep)
+		.filter((component) => component.length > 0);
 	const name = components[components.length - 1];
 	if (name === undefined) throw new PreparedTargetChangedError("Authorized path has no final component");
-	let parent: OpenDirectory = { fd: openSync(sep, constants.O_RDONLY | constants.O_DIRECTORY), path: sep };
+	let parent: OpenDirectory = { fd: openSync(root, constants.O_RDONLY | constants.O_DIRECTORY), path: root };
 	const closeParent = (): void => {
 		try {
 			closeSync(parent.fd);

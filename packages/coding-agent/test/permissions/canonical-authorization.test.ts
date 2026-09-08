@@ -1,5 +1,4 @@
-import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import { Agent } from "apex-code-agent-core";
@@ -21,6 +20,7 @@ import { createPathPermissionSpec } from "../../src/core/tools/path-permission.t
 import { createReadToolDefinition } from "../../src/core/tools/read.ts";
 import { wrapToolDefinition } from "../../src/core/tools/tool-definition-wrapper.ts";
 import { createWriteToolDefinition } from "../../src/core/tools/write.ts";
+import { scratchDir } from "../suite/scratch.ts";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -59,7 +59,7 @@ describe("validated canonical operation values", () => {
 
 describe("canonical path authorization", () => {
 	it("uses @ and symlink aliases as the executed target", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "apex-ca-"));
+		const cwd = await scratchDir("apex-ca-");
 		dirs.push(cwd);
 		await writeFile(join(cwd, "secret.txt"), "private");
 		await symlink("secret.txt", join(cwd, "alias.txt"));
@@ -73,7 +73,7 @@ describe("canonical path authorization", () => {
 		expect(spec.matches("secret.txt", { path: "@secret.txt" } as never)).toBe(true);
 	});
 	it("does not treat literal glob characters in an exact approval as patterns", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "apex-ca-"));
+		const cwd = await scratchDir("apex-ca-");
 		dirs.push(cwd);
 		const spec = createPathPermissionSpec({
 			cwd,
@@ -87,7 +87,7 @@ describe("canonical path authorization", () => {
 		expect(spec.matches(rule!, { path: "other.txt" } as never)).toBe(false);
 	});
 	it("the public agent loop refuses a replaced authorized read target", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "apex-ca-"));
+		const cwd = await scratchDir("apex-ca-");
 		dirs.push(cwd);
 		const allowed = join(cwd, "allowed.txt");
 		const moved = join(cwd, "moved.txt");
@@ -212,7 +212,7 @@ async function expectGateAllowed(
 
 describe("gated write execution against a replaced target", () => {
 	it("refuses a write whose authorized existing target is swapped for a symlink", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "apex-ca-"));
+		const cwd = await scratchDir("apex-ca-");
 		dirs.push(cwd);
 		const allowed = join(cwd, "allowed.txt");
 		await writeFile(allowed, "allowed");
@@ -232,7 +232,7 @@ describe("gated write execution against a replaced target", () => {
 	});
 
 	it("refuses a write whose authorized existing target is swapped for a different regular file", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "apex-ca-"));
+		const cwd = await scratchDir("apex-ca-");
 		dirs.push(cwd);
 		const allowed = join(cwd, "allowed.txt");
 		await writeFile(allowed, "allowed");
@@ -253,7 +253,7 @@ describe("gated write execution against a replaced target", () => {
 	});
 
 	it("refuses a new-file write whose missing parent is replaced by a symlink before execution", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "apex-ca-"));
+		const cwd = await scratchDir("apex-ca-");
 		dirs.push(cwd);
 		await mkdir(join(cwd, "fresh"));
 		await writeFile(join(cwd, "secret.txt"), "secret");
@@ -270,7 +270,7 @@ describe("gated write execution against a replaced target", () => {
 	});
 
 	it("refuses a new-file write when the target name is pre-placed as a symlink", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "apex-ca-"));
+		const cwd = await scratchDir("apex-ca-");
 		dirs.push(cwd);
 		await writeFile(join(cwd, "secret.txt"), "secret");
 		const input = { path: "brand-new.txt", content: "attacker" };
@@ -286,7 +286,7 @@ describe("gated write execution against a replaced target", () => {
 	});
 
 	it("still writes an authorized new file and overwrites an authorized existing file when nothing is swapped", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "apex-ca-"));
+		const cwd = await scratchDir("apex-ca-");
 		dirs.push(cwd);
 		await mkdir(join(cwd, "fresh"));
 		await writeFile(join(cwd, "existing.txt"), "old");
@@ -306,7 +306,7 @@ describe("gated write execution against a replaced target", () => {
 
 describe("gated edit execution against a replaced target", () => {
 	it("refuses an edit whose authorized target is swapped before execution", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "apex-ca-"));
+		const cwd = await scratchDir("apex-ca-");
 		dirs.push(cwd);
 		const target = join(cwd, "edit.txt");
 		await writeFile(target, "hello");
@@ -335,7 +335,7 @@ describe("gated edit execution against a replaced target", () => {
 	});
 
 	it("still edits an authorized target when nothing is swapped", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "apex-ca-"));
+		const cwd = await scratchDir("apex-ca-");
 		dirs.push(cwd);
 		await writeFile(join(cwd, "edit.txt"), "hello");
 		const input = { path: "edit.txt", edits: [{ oldText: "hello", newText: "goodbye" }] };
@@ -454,7 +454,7 @@ describe("conditional mcp registry mediation through the public agent loop", () 
 	}
 
 	it("a scoped deny blocks the mcp tool before any execution", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "apex-ca-"));
+		const cwd = await scratchDir("apex-ca-");
 		dirs.push(cwd);
 		const result = await driveMcpTurn(cwd, [
 			{ source: "policy", behavior: "deny", toolName: "mcp", ruleContent: "Mcp(metadata)" },
@@ -464,7 +464,7 @@ describe("conditional mcp registry mediation through the public agent loop", () 
 	});
 
 	it("a scoped allow runs a metadata search cache-only, contacting no server", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "apex-ca-"));
+		const cwd = await scratchDir("apex-ca-");
 		dirs.push(cwd);
 		const result = await driveMcpTurn(cwd, [
 			{ source: "session", behavior: "allow", toolName: "mcp", ruleContent: "Mcp(metadata)" },

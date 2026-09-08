@@ -195,7 +195,8 @@ describe("terminal handoff", () => {
 	// human. A symlink planted at the state path -- which the child could do while the
 	// state directory lived under the workspace -- must not redirect them onto a host file
 	// the child could never reach itself.
-	it("does not follow a symlink planted at the state path", async () => {
+	// O_NOFOLLOW is a POSIX guarantee; Windows has no sandbox backend (ADR 0005).
+	it.skipIf(process.platform === "win32")("does not follow a symlink planted at the state path", async () => {
 		const directory = handoffDirectory();
 		const outside = join(handoffDirectory(), "outside.txt");
 		writeFileSync(outside, "untouched");
@@ -210,25 +211,28 @@ describe("terminal handoff", () => {
 		expect(lstatSync(join(directory, "terminal-handoff")).isSymbolicLink()).toBe(true);
 	});
 
-	it("does not read an acknowledgement through a symlink planted at the acknowledgement path", async () => {
-		const directory = handoffDirectory();
-		const acknowledgementPath = join(directory, "terminal-handoff-ack");
-		const outside = join(handoffDirectory(), "outside-ack.txt");
-		writeFileSync(outside, "suspended\n");
+	it.skipIf(process.platform === "win32")(
+		"does not read an acknowledgement through a symlink planted at the acknowledgement path",
+		async () => {
+			const directory = handoffDirectory();
+			const acknowledgementPath = join(directory, "terminal-handoff-ack");
+			const outside = join(handoffDirectory(), "outside-ack.txt");
+			writeFileSync(outside, "suspended\n");
 
-		const handoff = createTerminalHandoff(directory, { acknowledgementTimeoutMs: 800 });
-		stops.push(handoff.stop);
-		const startedAt = Date.now();
-		const elapsed = handoff.borrowTerminal(async () => Date.now() - startedAt);
-		// After the stale-acknowledgement removal, so the link is present for every read
-		// the supervisor makes while it waits.
-		await new Promise((r) => setTimeout(r, 100));
-		symlinkSync(outside, acknowledgementPath);
+			const handoff = createTerminalHandoff(directory, { acknowledgementTimeoutMs: 800 });
+			stops.push(handoff.stop);
+			const startedAt = Date.now();
+			const elapsed = handoff.borrowTerminal(async () => Date.now() - startedAt);
+			// After the stale-acknowledgement removal, so the link is present for every read
+			// the supervisor makes while it waits.
+			await new Promise((r) => setTimeout(r, 100));
+			symlinkSync(outside, acknowledgementPath);
 
-		// Followed, the planted link would satisfy the wait within one poll interval.
-		expect(await elapsed).toBeGreaterThanOrEqual(600);
-		expect(readFileSync(outside, "utf8")).toBe("suspended\n");
-	});
+			// Followed, the planted link would satisfy the wait within one poll interval.
+			expect(await elapsed).toBeGreaterThanOrEqual(600);
+			expect(readFileSync(outside, "utf8")).toBe("suspended\n");
+		},
+	);
 
 	it("separates the supervisor's command path from the child-writable acknowledgement path", async () => {
 		const commandDirectory = handoffDirectory();

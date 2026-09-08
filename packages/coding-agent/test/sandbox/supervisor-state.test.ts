@@ -36,17 +36,24 @@ const scope = (toolName: string, mode?: string) =>
 	JSON.stringify({ version: 1, rules: [{ toolName, behavior: "allow" }], ...(mode ? { mode } : {}) });
 
 describe("supervisor-private state directory", () => {
-	it("allocates a 0700 directory outside the workspace and removes it on dispose", () => {
+	it("allocates a directory outside the workspace and removes it on dispose", () => {
 		const workspace = scratch();
 		const state = createSupervisorStateDirectory();
 		disposals.push(state.dispose);
 
 		expect(existsSync(state.path)).toBe(true);
-		expect(statSync(state.path).mode & 0o777).toBe(0o700);
 		expect(state.path.startsWith(workspace)).toBe(false);
 
 		state.dispose();
 		expect(existsSync(state.path)).toBe(false);
+	});
+
+	// ADR 0005 limits sandbox enforcement to POSIX platforms with Unix file modes.
+	it.skipIf(process.platform === "win32")("restricts the directory to owner-only access", () => {
+		const state = createSupervisorStateDirectory();
+		disposals.push(state.dispose);
+
+		expect(statSync(state.path).mode & 0o777).toBe(0o700);
 	});
 });
 
