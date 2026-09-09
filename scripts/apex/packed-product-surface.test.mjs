@@ -229,7 +229,7 @@ test("clean packed installs resolve runtime dependencies from the package direct
 		const installDirectory = join(root, "install");
 		installPackedTarballs({ "apex-packed-install-fixture": tarballPath }, installDirectory);
 		assert.equal(existsSync(join(installDirectory, "node_modules", "apex-packed-install-fixture")), true);
-		assert.equal(existsSync(join(installDirectory, "node_modules", "chalk")), true);
+		assert.equal(existsSync(join(installDirectory, "node_modules", "apex-packed-install-fixture", "node_modules", "chalk")), true);
 	});
 });
 

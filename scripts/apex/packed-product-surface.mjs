@@ -16,7 +16,7 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -363,9 +363,16 @@ export function installPackedTarballs(tarballsByName, installDirectory) {
 	);
 	execFileSync(
 		"npm",
-		npmSpawnArgs(["install", "--omit=dev", "--ignore-scripts", "--package-lock=false"]),
+		npmSpawnArgs(["install", "--omit=dev", "--ignore-scripts", "--package-lock=false", "--install-strategy=nested"]),
 		npmSpawnOptions({ cwd: installDirectory, stdio: "inherit" }),
 	);
+	const cliPath = join(installDirectory, "node_modules", "apex-code");
+	const corePath = join(installDirectory, "node_modules", "apex-code-agent-core");
+	if (existsSync(cliPath) && existsSync(corePath)) {
+		const cliNodeModules = join(cliPath, "node_modules");
+		mkdirSync(cliNodeModules, { recursive: true });
+		cpSync(corePath, join(cliNodeModules, "apex-code-agent-core"), { recursive: true });
+	}
 }
 
 /**
