@@ -115,10 +115,12 @@ export function checkVerifiedProvenance(verifiedPackage, expected) {
 	return problems;
 }
 
-function selectVerifiedPackage(result, record) {
+function checkMatchingVerifiedPackages(result, record) {
 	const matches = (result.verified ?? []).filter((entry) => entry.name === record.packageName && entry.version === record.version);
-	if (matches.length !== 1) return undefined;
-	return matches[0];
+	if (matches.length === 0) return [`npm did not return verified provenance for ${record.packageName}@${record.version}`];
+	// npm reports installed locations, so root and nested copies can both match.
+	// Every copy must satisfy the retained identity; never select just one.
+	return matches.flatMap((entry) => checkVerifiedProvenance(entry, record));
 }
 
 export async function verifyPublishedPackage(name, version, expected) {
@@ -149,8 +151,7 @@ if (isMain) {
 		let failed = false;
 		for (const record of records) {
 			const { metadata, actualHashes, problems } = await verifyPublishedPackage(record.packageName, record.version, { ...record, gitHead: record.expectedGitCommit });
-			const verifiedPackage = selectVerifiedPackage(signed, record);
-			const allProblems = [...problems, ...(verifiedPackage ? checkVerifiedProvenance(verifiedPackage, record) : [`npm did not return verified provenance for ${record.packageName}@${record.version}`])];
+			const allProblems = [...problems, ...checkMatchingVerifiedPackages(signed, record)];
 			failed ||= allProblems.length > 0;
 			packages.push({ ...record, registryTarball: metadata.dist?.tarball, downloadedSha256: actualHashes?.sha256, verified: allProblems.length === 0, problems: allProblems });
 			console[allProblems.length ? "error" : "log"](`${allProblems.length ? "✗" : "✓"} ${record.packageName}@${record.version}: tested bytes and signed provenance ${allProblems.length ? "failed" : "verified"}`);

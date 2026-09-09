@@ -180,7 +180,7 @@ async function writeNpmShim(directory, config) {
 		"\tconst bytes = config.substitution === null",
 		"\t\t? fs.readFileSync(record.tarballPath)",
 		'\t\t: Buffer.from(config.substitution, "utf8");',
-		"\tprocess.stdout.write(JSON.stringify({ dist: {",
+		"\tfs.writeFileSync(1, JSON.stringify({ padding: config.outputPadding, dist: {",
 		'\t\tshasum: crypto.createHash("sha1").update(bytes).digest("hex"),',
 		'\t\tintegrity: "sha512-" + crypto.createHash("sha512").update(bytes).digest("base64"),',
 		'\t\ttarball: "http://127.0.0.1:" + config.tarballPort + "/example.tgz?name=" + encodeURIComponent(name),',
@@ -192,7 +192,7 @@ async function writeNpmShim(directory, config) {
 		"\tprocess.exit(0);",
 		"}",
 		'if (args[0] === "audit") {',
-		"\tprocess.stdout.write(JSON.stringify({ invalid: [], missing: [], verified: config.verified }));",
+		"\tfs.writeFileSync(1, JSON.stringify({ invalid: [], missing: [], verified: config.verified, padding: config.outputPadding }));",
 		"\tprocess.exit(0);",
 		"}",
 		"process.exit(1);",
@@ -255,7 +255,7 @@ async function withReleaseFixture(prefix, run) {
 							"--install-directory", join(root, "install"),
 							"--manifest-out", manifestOut,
 						],
-						{ env: { ...process.env, PATH: `${shimDirectory}${process.platform === "win32" ? ";" : ":"}${process.env.PATH}` } },
+						{ cwd: root, env: { ...process.env, PATH: `${shimDirectory}${process.platform === "win32" ? ";" : ":"}${process.env.PATH}` } },
 					);
 					let stdout = "";
 					let stderr = "";
@@ -325,6 +325,59 @@ test("CLI verifies a manifest-shaped release end to end through fake npm and loo
 		}
 	});
 });
+
+for (const scenario of [
+	{ name: "accepts valid duplicate installed copies", overrides: {} },
+	{ name: "accepts npm responses larger than 1 MiB", overrides: {}, outputPadding: "x".repeat(1024 * 1024 + 1) },
+	{ name: "rejects a duplicate with a mismatching subject", overrides: { subjectName: "pkg:npm/other@1.2.3" }, problem: /no subject named/ },
+	{ name: "rejects a duplicate with a mismatching digest", overrides: { subjectSha512: "different" }, problem: /subject digest/ },
+	{ name: "rejects a duplicate with a mismatching workflow", overrides: { workflowPath: ".github/workflows/other.yml" }, problem: /workflow identity/ },
+	{ name: "rejects a duplicate with a mismatching commit", overrides: { gitCommit: "different" }, problem: /does not resolve expected git commit/ },
+	{ name: "rejects a duplicate with missing provenance", overrides: {}, missing: true, problem: /no decodable signed SLSA provenance statement payload/ },
+	{ name: "rejects absent matching records", absent: true, overrides: {}, problem: /npm did not return verified provenance/ },
+]) {
+	for (const duplicateFirst of scenario.problem && !scenario.absent ? [false, true] : [false]) {
+		test(`CLI ${scenario.name}${duplicateFirst ? " (bad copy first)" : ""}`, { skip: posixShimOnly }, async () => {
+			await withReleaseFixture("apex-verify-duplicates-", async (fixture) => {
+				const tarballPort = await fixture.serve((name) => fixture.packageBytes[name]);
+				const verified = verifiedFor(fixture.records, fixture.identity);
+				verified[0].location = "node_modules/apex-code-agent-core";
+				const duplicate = verifiedFor(fixture.records, fixture.identity, scenario.overrides)[0];
+				duplicate.location = "node_modules/apex-code/node_modules/apex-code-agent-core";
+				if (scenario.missing) delete duplicate.attestationBundles;
+				if (scenario.absent) verified.shift();
+				else if (duplicateFirst) verified.unshift(duplicate);
+				else verified.push(duplicate);
+				const logPath = join(fixture.root, "args.jsonl");
+				await writeFile(logPath, "");
+				const shimDirectory = await writeNpmShim(join(fixture.root, "shim"), {
+					logPath,
+					npmVersion: "11.19.0",
+					manifestPath: fixture.manifestPath,
+					tarballPort,
+					substitution: null,
+					verified,
+					outputPadding: scenario.outputPadding,
+				});
+				await mkdir(join(fixture.root, "install"));
+				const manifestOut = join(fixture.root, "evidence.json");
+				const result = await fixture.runCli(shimDirectory, manifestOut);
+				assert.equal(result.status, scenario.problem ? 1 : 0, `${result.stderr}\n${result.stdout}`);
+				const evidence = JSON.parse(await readFile(manifestOut, "utf8"));
+				assert.equal(evidence.packages.length, 2);
+				const core = evidence.packages.find((entry) => entry.packageName === "apex-code-agent-core");
+				assert.equal(core.verified, !scenario.problem);
+				assert.equal(evidence.packages.find((entry) => entry.packageName === "apex-code").verified, true);
+				if (scenario.problem) {
+					assert.match(core.problems.join("\n"), scenario.problem);
+					assert.match(result.stderr, scenario.problem);
+				} else {
+					assert.deepEqual(core.problems, []);
+				}
+			});
+		});
+	}
+}
 
 test("CLI fails closed when the registry serves bytes that differ from the retained manifest digest", { skip: posixShimOnly }, async () => {
 	await withReleaseFixture("apex-verify-substituted-", async (fixture) => {
