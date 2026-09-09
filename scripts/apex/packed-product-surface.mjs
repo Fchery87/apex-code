@@ -366,6 +366,11 @@ export function installPackedTarballs(tarballsByName, installDirectory) {
 		npmSpawnArgs(["install", "--omit=dev", "--ignore-scripts", "--package-lock=false", "--install-strategy=nested"]),
 		npmSpawnOptions({ cwd: installDirectory, stdio: "inherit" }),
 	);
+	execFileSync(
+		"npm",
+		npmSpawnArgs(["install", "--package-lock-only", "--ignore-scripts"]),
+		npmSpawnOptions({ cwd: installDirectory, stdio: "inherit" }),
+	);
 	const cliPath = join(installDirectory, "node_modules", "apex-code");
 	const corePath = join(installDirectory, "node_modules", "apex-code-agent-core");
 	if (existsSync(cliPath) && existsSync(corePath)) {
