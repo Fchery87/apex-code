@@ -363,7 +363,7 @@ export function installPackedTarballs(tarballsByName, installDirectory) {
 	);
 	execFileSync(
 		"npm",
-		npmSpawnArgs(["install", "--omit=dev", "--ignore-scripts"]),
+		npmSpawnArgs(["install", "--omit=dev", "--ignore-scripts", "--package-lock=false"]),
 		npmSpawnOptions({ cwd: installDirectory, stdio: "inherit" }),
 	);
 }

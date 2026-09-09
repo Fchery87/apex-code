@@ -215,6 +215,24 @@ test("packToDirectory packs and extracts a real tarball for a synthetic package"
 	});
 });
 
+test("clean packed installs resolve runtime dependencies from the package directory", async () => {
+	await withTempDir(async (root) => {
+		const packageDirectory = join(root, "pkg");
+		await mkdir(packageDirectory, { recursive: true });
+		await writeFile(
+			join(packageDirectory, "package.json"),
+			JSON.stringify({ name: "apex-packed-install-fixture", version: "1.0.0", dependencies: { chalk: "5.6.2" } }),
+		);
+		await writeFile(join(packageDirectory, "index.js"), "import chalk from 'chalk'; export const styled = chalk.green('ok');\n");
+		const destination = join(root, "out");
+		const { tarballPath } = packToDirectory(packageDirectory, destination);
+		const installDirectory = join(root, "install");
+		installPackedTarballs({ "apex-packed-install-fixture": tarballPath }, installDirectory);
+		assert.equal(existsSync(join(installDirectory, "node_modules", "apex-packed-install-fixture")), true);
+		assert.equal(existsSync(join(installDirectory, "node_modules", "chalk")), true);
+	});
+});
+
 
 test("release artifact record retains the packed bytes after the package directory mutates", async () => {
 	await withTempDir(async (root) => {
