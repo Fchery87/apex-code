@@ -359,7 +359,7 @@ export function installPackedTarballs(tarballsByName, installDirectory) {
 	);
 	writeFileSync(
 		join(installDirectory, "package.json"),
-		`${JSON.stringify({ private: true, dependencies }, null, "\t")}\n`,
+		`${JSON.stringify({ name: "apex-packed-smoke-install", version: "0.0.0", private: true, dependencies }, null, "\t")}\n`,
 	);
 	execFileSync(
 		"npm",
