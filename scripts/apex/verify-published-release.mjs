@@ -11,9 +11,10 @@ import { npmSpawnArgs, npmSpawnOptions } from "./npm-command.mjs";
 import { readReleaseArtifactManifest } from "./packed-product-surface.mjs";
 
 export const VERIFIED_NPM_VERSION = "11.19.0";
+const NPM_OUTPUT_MAX_BYTES = 64 * 1024 * 1024;
 
 export function fetchPublishedMetadata(name, version) {
-	const output = execFileSync("npm", npmSpawnArgs(["view", `${name}@${version}`, "--json"]), npmSpawnOptions({ encoding: "utf8" }));
+	const output = execFileSync("npm", npmSpawnArgs(["view", `${name}@${version}`, "--json"]), npmSpawnOptions({ encoding: "utf8", maxBuffer: NPM_OUTPUT_MAX_BYTES }));
 	return JSON.parse(output);
 }
 
@@ -67,7 +68,7 @@ export function checkDownloadedArtifact(actualHashes, expected) {
 
 export function runNpmProvenanceVerification({ npmExecutable = "npm", npmVersion, installDirectory }) {
 	if (npmVersion !== VERIFIED_NPM_VERSION) throw new Error(`signed provenance verification requires npm ${VERIFIED_NPM_VERSION}, got ${npmVersion}`);
-	const output = execFileSync(npmExecutable, npmSpawnArgs(["audit", "signatures", "--json", "--include-attestations", "--ignore-scripts"]), npmSpawnOptions({ cwd: installDirectory, encoding: "utf8" }));
+	const output = execFileSync(npmExecutable, npmSpawnArgs(["audit", "signatures", "--json", "--include-attestations", "--ignore-scripts"]), npmSpawnOptions({ cwd: installDirectory, encoding: "utf8", maxBuffer: NPM_OUTPUT_MAX_BYTES }));
 	const result = JSON.parse(output);
 	if (result.invalid?.length || result.missing?.length) throw new Error(`npm rejected package signatures or attestations: ${JSON.stringify({ invalid: result.invalid, missing: result.missing })}`);
 	return result;
