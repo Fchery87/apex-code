@@ -8,7 +8,7 @@ import type {
 	Transport,
 } from "@earendil-works/pi-ai";
 import { runAgentLoop, runAgentLoopContinue } from "./agent-loop.ts";
-import { createRunBudgetController } from "./run-budget.ts";
+import { createCompositeBudgetController, createRunBudgetController } from "./run-budget.ts";
 import { getDefaultStreamFn } from "./stream-fn.ts";
 import type {
 	AfterToolCallContext,
@@ -20,6 +20,7 @@ import type {
 	AgentMessage,
 	AgentRunBudget,
 	AgentRunBudgetController,
+	AgentRunBudgetUsage,
 	AgentState,
 	AgentTool,
 	BeforeToolCallContext,
@@ -130,6 +131,24 @@ export interface AgentOptions {
 	 * follow-up extensions consume one budget. Absent = unlimited.
 	 */
 	runBudget?: AgentRunBudget;
+	/**
+	 * Scope of the run budget. "prompt" (default; upstream semantics) starts a
+	 * fresh controller at every `prompt()`. "session" creates one controller at
+	 * the first `prompt()`/`continue()` and reuses it for the Agent's lifetime,
+	 * so a resumed turn or a queued follow-up after a later `prompt()` continues
+	 * the same budget. Used by delegated child sessions (spec 2026-09-09,
+	 * "Shared budgets").
+	 */
+	budgetScope?: "prompt" | "session";
+	/**
+	 * A shared controller composed under this Agent's own controller (see
+	 * `createCompositeBudgetController`): every gate allows only if both allow,
+	 * and only accepted attempts record to both. The caller owns its lifetime;
+	 * prompts never reset it, and it gates every run even when `runBudget` is
+	 * absent (a family ceiling applies on its own). Used to hand delegated child
+	 * sessions their parent's family ledger (spec 2026-09-09, "Shared budgets").
+	 */
+	sharedBudgetController?: AgentRunBudgetController;
 }
 
 class PendingMessageQueue {
@@ -230,7 +249,25 @@ export class Agent {
 	 */
 	public runBudget?: AgentRunBudget;
 
+	/** Controller scope (`budgetScope` option): per prompt (default) or per session. */
+	private budgetScope: "prompt" | "session";
+
+	/** Shared controller composed under the own controller (`sharedBudgetController` option). */
+	private sharedBudgetController?: AgentRunBudgetController;
+
 	private budgetController?: AgentRunBudgetController;
+
+	/**
+	 * Point-in-time snapshot of the active run budget's counters
+	 * (spec 2026-09-09-run-and-child-session-architecture.md, "Shared budgets"):
+	 * `undefined` before the first run creates a controller. With
+	 * `budgetScope: "session"` the counters span every prompt of the session,
+	 * because one controller is reused; with the default per-prompt scope they
+	 * cover the active (or most recent) prompt's run only.
+	 */
+	public budgetUsage(): AgentRunBudgetUsage | undefined {
+		return this.budgetController?.usage();
+	}
 
 	constructor(options: AgentOptions) {
 		// Older compiled consumers may omit options or streamFn even though the current API requires them.
@@ -255,6 +292,8 @@ export class Agent {
 		this.maxRetryDelayMs = runtimeOptions.maxRetryDelayMs;
 		this.toolExecution = runtimeOptions.toolExecution ?? "parallel";
 		this.runBudget = runtimeOptions.runBudget;
+		this.budgetScope = runtimeOptions.budgetScope ?? "prompt";
+		this.sharedBudgetController = runtimeOptions.sharedBudgetController;
 	}
 
 	/**
@@ -374,6 +413,19 @@ export class Agent {
 		this.clearSteeringQueue();
 	}
 
+	/**
+	 * The controller for one logical run: the own controller from `runBudget`,
+	 * composed with `sharedBudgetController` when one was supplied. Exact for
+	 * stock controllers; see `createCompositeBudgetController`.
+	 */
+	private createBudgetController(): AgentRunBudgetController | undefined {
+		const own = this.runBudget ? createRunBudgetController(this.runBudget) : undefined;
+		const shared = this.sharedBudgetController;
+		if (!shared) return own;
+		if (!own) return shared;
+		return createCompositeBudgetController(own, shared);
+	}
+
 	/** Start a new prompt from text, a single message, or a batch of messages. */
 	async prompt(message: AgentMessage | AgentMessage[]): Promise<void>;
 	async prompt(input: string, images?: ImageContent[]): Promise<void>;
@@ -383,9 +435,16 @@ export class Agent {
 				"Agent is already processing a prompt. Use steer() or followUp() to queue messages, or wait for completion.",
 			);
 		}
-		// A new prompt is a new logical run: the budget starts over. Continuations
-		// via continue() keep the active controller so queued work shares it.
-		this.budgetController = this.runBudget ? createRunBudgetController(this.runBudget) : undefined;
+		if (this.budgetScope === "session") {
+			// Session scope: one controller for the Agent's lifetime, so a later
+			// prompt (a resumed turn or a queued follow-up) continues the budget.
+			this.budgetController ??= this.createBudgetController();
+		} else {
+			// A new prompt is a new logical run: the budget starts over.
+			// Continuations via continue() keep the active controller so queued
+			// work shares it.
+			this.budgetController = this.createBudgetController();
+		}
 		const messages = this.normalizePromptInput(input, images);
 		await this.runPromptMessages(messages);
 	}
@@ -397,7 +456,7 @@ export class Agent {
 		}
 		// A continuation belongs to the logical run already in progress: keep its
 		// controller. A continuation with no prior prompt starts its own run.
-		this.budgetController ??= this.runBudget ? createRunBudgetController(this.runBudget) : undefined;
+		this.budgetController ??= this.createBudgetController();
 
 		const lastMessage = this._state.messages[this._state.messages.length - 1];
 		if (!lastMessage) {

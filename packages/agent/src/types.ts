@@ -165,6 +165,14 @@ export interface AgentRunBudget {
 	maxWallTimeMs?: number;
 }
 
+/** Counters recorded by a budget controller, suitable for observability. */
+export interface AgentRunBudgetUsage {
+	providerRequests: number;
+	toolCalls: number;
+	maintenanceRequests: number;
+	startedAt: number;
+}
+
 /** Structured terminal outcome for a run, carried on `agent_end`. Precedence: aborted > error > budget > completed. */
 export type AgentStopReason =
 	| { kind: "completed" }
@@ -194,6 +202,8 @@ export interface AgentRunBudgetController {
 	recordMaintenanceRequest(): void;
 	/** Maintenance requests recorded so far, for observability; never blocks a limit. */
 	maintenanceRequests(): number;
+	/** A point-in-time copy of all counters and the controller start time. */
+	usage(): AgentRunBudgetUsage;
 	/** The first exhausted limit, if any. */
 	exhaustedLimit(): AgentBudgetLimit | undefined;
 }
