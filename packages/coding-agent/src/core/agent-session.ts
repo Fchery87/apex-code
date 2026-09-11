@@ -71,6 +71,19 @@ import {
 } from "./compaction/index.ts";
 import { evictionBudget, installContextPipeline, isDefaultStreamFunction } from "./context/pipeline.ts";
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVEL_OPTIONS } from "./defaults.ts";
+import type {
+	ChildRunPolicySnapshot,
+	ChildRunRecord,
+	ChildRunRegistry,
+	ChildRunStatus,
+	ChildRunUsageTotals,
+	ChildSessionStatus,
+	ChildTurnOutcome,
+	ChildWorkspaceRecoveryResult,
+	ChildWorkspaceRequest,
+	DelegationRuntimeOptions,
+} from "./delegation/runtime.ts";
+import { RESUME_CHILD_PROMPT, runDelegation } from "./delegation/runtime.ts";
 import { SessionEvidenceSink } from "./evidence.ts";
 import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.ts";
 import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
@@ -142,6 +155,7 @@ import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapp
 import { createToolSchemaToolDefinition } from "./tools/tool-schema.ts";
 import type { WebSearchOperations } from "./tools/web-search.ts";
 import { addUsageToTotals, createUsageTotals } from "./usage-totals.ts";
+import type { VerificationBoundary } from "./verification-lifecycle.ts";
 import {
 	type VerificationCompletionStatus,
 	type VerificationRecord,
@@ -245,7 +259,36 @@ function withoutDeletedHeaders(headers: ProviderHeaders | undefined): Record<str
 		: undefined;
 }
 
+/**
+ * Point-in-time snapshot of the root aggregate budget's counters for this
+ * session's whole delegation tree (spec 2026-09-09, "Shared budgets"). Reported
+ * by `AgentSession.aggregateBudgetUsage()`; `undefined` there when no aggregate
+ * budget is configured.
+ */
+export interface AggregateBudgetUsageSnapshot {
+	providerRequests: number;
+	toolCalls: number;
+	maintenanceRequests: number;
+	startedAtMs: number;
+}
+
 export interface AgentSessionConfig {
+	childRunRegistry?: ChildRunRegistry;
+	/**
+	 * The session's delegation runtime options when delegation is configured.
+	 * Required for `startChildRun`: without it (no permission gate or explicit
+	 * `delegation` option), spawning children from the protocol surfaces refuses
+	 * with an actionable error instead of silently fabricating authority.
+	 */
+	delegationRuntime?: DelegationRuntimeOptions;
+	/**
+	 * Reads the root aggregate budget's counters for this session's delegation
+	 * tree (spec 2026-09-09, "Shared budgets"). Wired by `createAgentSession`
+	 * when the tree has an aggregate budget (an explicit `aggregateBudget` on
+	 * the root, or an inherited root aggregate via `sharedBudgetController` on a
+	 * delegated child); absent means the session has no shared ceiling.
+	 */
+	aggregateBudgetUsage?: () => AggregateBudgetUsageSnapshot;
 	agent: Agent;
 	sessionManager: SessionManager;
 	settingsManager: SettingsManager;
@@ -356,6 +399,16 @@ export interface PromptOptions {
 	preflightResult?: (success: boolean) => void;
 }
 
+/** Stable lifecycle of an AgentSession. Terminal states remain queryable. */
+export type AgentSessionLifecycle =
+	| "created"
+	| "running"
+	| "waiting"
+	| "completed"
+	| "failed"
+	| "interrupted"
+	| "closed";
+
 /** Options for model/thinking mutations. */
 export interface ModelMutationOptions {
 	/** Persist the new value to global defaults. Defaults to session-only. */
@@ -432,6 +485,12 @@ export interface TreeNavigationResult {
 }
 
 export class AgentSession {
+	private _lifecycle: AgentSessionLifecycle = "created";
+	private _activePrompt = false;
+	/** Lifecycle is deliberately retained after completion/close for protocol callers. */
+	get lifecycle(): AgentSessionLifecycle {
+		return this._lifecycle;
+	}
 	readonly agent: Agent;
 	readonly sessionManager: SessionManager;
 	readonly settingsManager: SettingsManager;
@@ -514,6 +573,9 @@ export class AgentSession {
 	private readonly _checkpoints: SessionCheckpoints;
 	private readonly _hookRuntime: HookRuntime | undefined;
 	private readonly _backgroundShellRegistry: BackgroundShellRegistry | undefined;
+	private readonly _childRunRegistry: ChildRunRegistry | undefined;
+	private readonly _delegationRuntime: DelegationRuntimeOptions | undefined;
+	private readonly _aggregateBudgetUsage: (() => AggregateBudgetUsageSnapshot) | undefined;
 	private readonly _permissionResponderFactory: (() => PermissionResponder | undefined) | undefined;
 
 	/** Worktree checkpoints for this session. Inert unless `checkpoints.enabled` is set. */
@@ -571,6 +633,23 @@ export class AgentSession {
 		});
 		this._hookRuntime = config.hookRuntime;
 		this._backgroundShellRegistry = config.backgroundShellRegistry;
+		this._childRunRegistry = config.childRunRegistry;
+		this._delegationRuntime = config.delegationRuntime;
+		this._aggregateBudgetUsage = config.aggregateBudgetUsage;
+		if (this._childRunRegistry) {
+			// Install persistence before restoring history. Restoration is normally
+			// passive, but registries may reconcile lifecycle state while loading;
+			// no child transition should be able to observe an unwired registry.
+			this._childRunRegistry.setPersistence((record: ChildRunRecord) =>
+				this.sessionManager.appendCustomEntry("child_run", record),
+			);
+			const records = this.sessionManager
+				.getEntries()
+				.filter((entry) => entry.type === "custom" && entry.customType === "child_run")
+				.map((entry) => (entry as { data?: unknown }).data)
+				.filter((value): value is ChildRunRecord => !!value && typeof value === "object");
+			this._childRunRegistry.restore(records);
+		}
 		this._permissionResponderFactory = config.permissionResponderFactory;
 		this._workspaceComparePending = hasWorkspaceObservationAwaitingComparison(this.sessionManager);
 
@@ -1211,6 +1290,210 @@ export class AgentSession {
 		};
 	}
 
+	/** Child handles remain available until explicitly closed or this session is disposed. */
+	listChildRuns() {
+		return this._childRunRegistry?.list() ?? [];
+	}
+	/**
+	 * A point-in-time snapshot of the root aggregate budget's counters for this
+	 * session's whole delegation tree -- {providerRequests, toolCalls,
+	 * maintenanceRequests, startedAtMs} (spec 2026-09-09, "Shared budgets").
+	 * `undefined` when no aggregate budget is configured for the tree.
+	 */
+	aggregateBudgetUsage(): AggregateBudgetUsageSnapshot | undefined {
+		return this._aggregateBudgetUsage?.();
+	}
+	private _requireChildRuns(): ChildRunRegistry {
+		if (!this._childRunRegistry) throw new Error("Child run registry is unavailable.");
+		return this._childRunRegistry;
+	}
+	waitChildRun(id: string) {
+		return this._requireChildRuns().wait(id);
+	}
+	retrieveChildRun(id: string) {
+		return this._requireChildRuns().retrieve(id);
+	}
+	sendChildInput(id: string, input: string) {
+		return this._requireChildRuns().sendInput(id, input);
+	}
+	interruptChildRun(id: string, reason?: string): void {
+		this._requireChildRuns().interrupt(id, reason);
+	}
+	closeChildRun(id: string): void {
+		this._requireChildRuns().close(id);
+	}
+	/**
+	 * Non-blocking status snapshot for one child run (spec 2026-09-09, pollable
+	 * status): `{handleId, agentType, task, status, attempt, attempts, ...}` built
+	 * from the record/entry alone -- this never awaits a turn, so a caller can
+	 * poll a running child without blocking (`waitChildRun` stays the blocking
+	 * form). Unknown ids still error; historical records are served from the
+	 * persisted record. Observing the status lazily interrupts a running child
+	 * whose wall-clock deadline has passed.
+	 */
+	childRunStatus(id: string): ChildRunStatus {
+		return this._requireChildRuns().status(id);
+	}
+	/**
+	 * The child run's token/cost totals, rolled up from the child's OWN session
+	 * transcript (`ChildRunRegistry.usageTotals`). `undefined` -- never a throw,
+	 * never a zero-fill -- when nothing is reachable (an in-memory child without
+	 * a reachable transcript, or a legacy record without any transcript).
+	 */
+	childRunUsageTotals(id: string): ChildRunUsageTotals | undefined {
+		return this._requireChildRuns().usageTotals(id);
+	}
+	/**
+	 * Explicitly verify and reactivate a retained child worktree (spec
+	 * 2026-09-09, "Workspace states and explicit recovery"): the thinnest
+	 * pass-through over `ChildRunRegistry.recoverWorkspace`. Read-only git
+	 * inspection through the workspace owner -- the admin entry, the checked-out
+	 * branch, and the owner's layout -- never a recreate, checkout, reset, or
+	 * force. On success the workspace state becomes "active" (persisted) and the
+	 * child can be resumed in the SAME worktree; `{dirty}` reports preserved
+	 * uncommitted work. Every failed check throws an actionable error naming the
+	 * failed check and leaving the state unverified.
+	 */
+	recoverChildWorkspace(id: string): Promise<ChildWorkspaceRecoveryResult> {
+		return this._requireChildRuns().recoverWorkspace(id);
+	}
+	/**
+	 * Start a background child run through the session's own delegation runtime.
+	 * A thin pass-through over `runDelegation` (registry-backed, always
+	 * background): admission -- agent resolution, depth bound, capability
+	 * ceiling -- is the same projection the `delegate` tool uses, so a spawned
+	 * child can never hold authority the parent cannot cover. Foreground
+	 * spawning is not offered; protocol clients wait on the returned handle.
+	 *
+	 * Idempotent spawn: a supplied `idempotencyKey` that already maps to a
+	 * handle returns the EXISTING handle with `created: false` and never builds
+	 * a second child (no budget slot consumed twice); the key persists on the
+	 * record, so a restarted parent dedupes too. `timeoutMs` caps the child's
+	 * own run budget at the wall-time gate and records the deadline for lazy
+	 * status observation.
+	 */
+	async startChildRun(
+		agentType: string,
+		task: string,
+		request?: { workspace?: ChildWorkspaceRequest; idempotencyKey?: string; timeoutMs?: number },
+	): Promise<{ handleId: string; created: boolean }> {
+		const runtime = this._delegationRuntime;
+		if (!runtime) {
+			throw new Error(
+				"No delegation runtime is configured; create the session with a permission gate or options.delegation to spawn agents.",
+			);
+		}
+		const existing =
+			request?.idempotencyKey !== undefined
+				? this._childRunRegistry?.handleForIdempotencyKey(request.idempotencyKey)
+				: undefined;
+		if (existing !== undefined) return { handleId: existing, created: false };
+		const result = await runDelegation(runtime, agentType, task, {
+			background: true,
+			workspace: request?.workspace,
+			idempotencyKey: request?.idempotencyKey,
+			timeoutMs: request?.timeoutMs,
+		});
+		if (!result.handleId) {
+			throw new Error(`Delegation to agent "${agentType}" did not return a background handle.`);
+		}
+		return { handleId: result.handleId, created: true };
+	}
+	/**
+	 * Wait for a child run's latest settled turn and return its payload with the
+	 * registry status after settlement: `{ status, output, outcome }` plus the
+	 * run's additive linkage fields (`artifactDir`, `sessionFile`,
+	 * `parentSessionId`, `policy`, `sandboxEnforced`) when the registry snapshot
+	 * knows them. A failed settlement surfaces as `outcome: "failed"` with the
+	 * error message as the output rather than a rejection, so protocol waiters
+	 * get the same payload shape on every settled turn; unknown handles still
+	 * throw the registry's actionable error.
+	 */
+	async waitChildRunResult(id: string): Promise<{
+		status: ChildSessionStatus;
+		output: string;
+		outcome: ChildTurnOutcome;
+		artifactDir?: string;
+		sessionFile?: string;
+		parentSessionId?: string;
+		policy?: ChildRunPolicySnapshot;
+		sandboxEnforced?: boolean;
+	}> {
+		// Linkage comes from the same registry snapshot every status payload is
+		// built from -- never recomputed here. Unknown handles throw through the
+		// status read below only after wait itself has rethrown, so the error
+		// contract is unchanged.
+		const linkageOf = (): {
+			artifactDir?: string;
+			sessionFile?: string;
+			parentSessionId?: string;
+			policy?: ChildRunPolicySnapshot;
+			sandboxEnforced?: boolean;
+		} => {
+			try {
+				const snapshot = this.childRunStatus(id);
+				return {
+					...(snapshot.artifactDir !== undefined ? { artifactDir: snapshot.artifactDir } : {}),
+					...(snapshot.sessionFile !== undefined ? { sessionFile: snapshot.sessionFile } : {}),
+					...(snapshot.parentSessionId !== undefined ? { parentSessionId: snapshot.parentSessionId } : {}),
+					...(snapshot.policy ? { policy: snapshot.policy } : {}),
+					...(snapshot.sandboxEnforced !== undefined ? { sandboxEnforced: snapshot.sandboxEnforced } : {}),
+				};
+			} catch {
+				return {};
+			}
+		};
+		let output: string;
+		let outcome: ChildTurnOutcome;
+		try {
+			const result = await this.waitChildRun(id);
+			output = result.output;
+			outcome = result.outcome ?? "completed";
+		} catch (error) {
+			const status = this.listChildRuns().find((run) => run.handleId === id)?.status;
+			if (status === undefined) throw error;
+			return {
+				status,
+				output: error instanceof Error ? error.message : String(error),
+				outcome: "failed",
+				...linkageOf(),
+			};
+		}
+		const status = this.listChildRuns().find((run) => run.handleId === id)?.status;
+		return { status: status ?? "closed", output, outcome, ...linkageOf() };
+	}
+	/**
+	 * Resume an interrupted child run in its existing child session.
+	 *
+	 * The thinnest pass-through over the session-owned registry: the child keeps its
+	 * identity, policy ceiling, and session linkage, and no second service or registry
+	 * is involved. Returns the observed status after the resumed turn settles. The
+	 * resumed turn's output becomes the run's stored latest result, so a later
+	 * `waitChildRun` retrieves it; this call itself returns only the observed status.
+	 *
+	 * A handle known only as a persisted record (restored from this session's
+	 * `child_run` log, no live entry in this process) is historically reattached
+	 * instead: its recorded child session file is reopened through the same
+	 * construction seam a live delegation uses, then resumed. Live handles keep
+	 * the interrupted-only contract below.
+	 */
+	async resumeChildRun(id: string, input?: string): Promise<ChildSessionStatus> {
+		const registry = this._requireChildRuns();
+		const current = registry.list().find((run) => run.handleId === id)?.status;
+		if (current === undefined) throw new Error(`Unknown delegation handle "${id}".`);
+		if (registry.isHistorical(id)) return registry.resumeHistorical(id, input);
+		if (current !== "interrupted") throw new Error(`Child run "${id}" is not interrupted (status: ${current}).`);
+		// A resume is a new attempt epoch (spec 2026-09-09, "Child lifecycle"):
+		// the interrupted attempt closes with its settled outcome and the resuming
+		// turn opens a new one. Historical resume does the same inside
+		// `resumeHistorical`.
+		registry.beginResumeAttempt(id);
+		await registry.sendInput(id, input ?? RESUME_CHILD_PROMPT);
+		const status = registry.list().find((run) => run.handleId === id)?.status;
+		if (status === undefined) throw new Error(`Child run "${id}" disappeared while resuming.`);
+		return status;
+	}
+
 	/** Disconnect from agent events during disposal. */
 	private _disconnectFromAgent(): void {
 		if (this._unsubscribeAgent) {
@@ -1224,6 +1507,8 @@ export class AgentSession {
 	 * Call this when completely done with the session.
 	 */
 	dispose(): void {
+		if (this._lifecycle === "closed") return;
+		this._lifecycle = "closed";
 		try {
 			this.abortRetry();
 			this.abortCompaction();
@@ -1233,6 +1518,7 @@ export class AgentSession {
 			// Background shell children (spec 2026-08-31-background-shell.md) must
 			// never outlive the session that launched them.
 			this._backgroundShellRegistry?.dispose();
+			this._childRunRegistry?.dispose();
 		} catch {
 			// Dispose must succeed even if an abort hook throws.
 		}
@@ -1525,6 +1811,29 @@ export class AgentSession {
 	 * @throws Error if no model selected or no API key available (when not streaming)
 	 */
 	async prompt(text: string, options?: PromptOptions): Promise<void> {
+		if (this._lifecycle === "closed") throw new Error("Session is closed.");
+		if (this._activePrompt) {
+			if (!this.isStreaming) throw new Error("Session is already running.");
+			return this._prompt(text, options);
+		}
+		this._activePrompt = true;
+		this._lifecycle = "running";
+		try {
+			await this._prompt(text, options);
+			if (this.lifecycle === "running") {
+				const last = [...this.agent.state.messages].reverse().find((message) => message.role === "assistant");
+				this._lifecycle =
+					last?.stopReason === "error" ? "failed" : last?.stopReason === "aborted" ? "interrupted" : "completed";
+			}
+		} catch (error) {
+			if (this.lifecycle === "running") this._lifecycle = "failed";
+			throw error;
+		} finally {
+			this._activePrompt = false;
+		}
+	}
+
+	private async _prompt(text: string, options?: PromptOptions): Promise<void> {
 		const expandPromptTemplates = options?.expandPromptTemplates ?? true;
 		const preflightResult = options?.preflightResult;
 		let messages: AgentMessage[] | undefined;
@@ -1683,6 +1992,7 @@ export class AgentSession {
 		preflightResult?.(true);
 		await this._runWorkspaceComparisonBoundary();
 		await this._runAgentPrompt(messages);
+		if (this.lifecycle === "closed" || this.lifecycle === "interrupted") return;
 		await this._runVerificationTurnBoundary();
 	}
 
@@ -1994,6 +2304,7 @@ export class AgentSession {
 	 * Abort current operation and wait for agent to become idle.
 	 */
 	async abort(): Promise<void> {
+		if (this._activePrompt && this._lifecycle !== "closed") this._lifecycle = "interrupted";
 		this.abortRetry();
 		this.agent.abort();
 		await this.waitForIdle();
@@ -2442,6 +2753,23 @@ export class AgentSession {
 	/** The current completion status: verified, failed, unavailable, interrupted, or continued-unverified. */
 	verificationStatus(): VerificationCompletionStatus {
 		return this._verificationTracker?.completionStatus() ?? "unavailable";
+	}
+
+	/** The configured verification boundary, for execution owners enforcing it. */
+	verificationBoundary(): VerificationBoundary {
+		return this._verificationTracker?.boundary ?? "explicit";
+	}
+
+	/**
+	 * The configured verification policy ids, read through the canonical
+	 * tracker (refreshed from settings on each call, like requestVerification).
+	 * Execution owners such as the delegation child gate use the count to tell
+	 * "no policies configured" (turn proceeds unchanged) from "configured and
+	 * not verified" (turn fails) -- the completion status alone cannot express
+	 * that difference, because it reports "unavailable" for both.
+	 */
+	verificationPolicyIds(): string[] {
+		return this._ensureVerificationTracker().policyIds();
 	}
 
 	/** The live verification record with its bounded evidence, if any. */
