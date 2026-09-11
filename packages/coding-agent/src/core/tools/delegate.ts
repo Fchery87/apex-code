@@ -8,11 +8,33 @@ import { retrieveDelegationResult, runDelegation } from "../delegation/runtime.t
 import { type ApexToolDefinition, type EvidenceRecord, toolUnion } from "./contract.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
+const workspaceSchema = Type.Object({
+	isolation: Type.Union([Type.Literal("shared-read"), Type.Literal("worktree")], {
+		description:
+			'Child workspace isolation: "shared-read" runs in the parent checkout; "worktree" gives the child its own git worktree.',
+	}),
+	ownedPaths: Type.Optional(
+		Type.Array(Type.String(), {
+			description:
+				"Workspace-relative paths the child owns for writes. Advisory claims; overlapping claims are refused.",
+		}),
+	),
+});
+
 const delegateSchemaProperties = {
 	agentType: Type.String({
 		description: "The subagent type. Required both to launch a task and to retrieve a background result.",
 	}),
 	task: Type.String({ description: "The task to delegate. Supply it to launch a delegation." }),
+	workspace: Type.Optional(
+		Type.Object(
+			{
+				isolation: workspaceSchema.properties.isolation,
+				ownedPaths: workspaceSchema.properties.ownedPaths,
+			},
+			{ description: "The child's requested workspace authority. Defaults to shared-read with no owned paths." },
+		),
+	),
 	background: Type.Optional(
 		Type.Boolean({ description: "Return a handle immediately instead of waiting for the child." }),
 	),
@@ -26,6 +48,7 @@ const delegateSchema = toolUnion(
 		Type.Object({
 			agentType: Type.String(),
 			task: Type.String(),
+			workspace: Type.Optional(workspaceSchema),
 			background: Type.Optional(Type.Boolean()),
 		}),
 		Type.Object({ agentType: Type.String(), handle: Type.String() }),
@@ -86,16 +109,34 @@ export function createDelegateToolDefinition(
 			context: { resultRecoverable: false, deferSchema: true },
 			evidence: {
 				emits: new Set(["workflow"]),
-				capture: (params): EvidenceRecord[] =>
+				// capture runs in afterToolCall with the completed result, so a launch
+				// can carry its handle even though the params could not know it: the
+				// handle is the child's session id, which names the child's session
+				// file and artifact dir under the parent's delegations/. This reuses
+				// the existing WorkflowEvidenceRecord.handle field -- no contract or
+				// sink shape change (the per-child session linkage is the evidence
+				// model; see docs/plans/2026-09-09-run-and-child-session-architecture.md).
+				capture: (params, result): EvidenceRecord[] =>
 					"task" in params
-						? [{ kind: "workflow", agentType: params.agentType, task: params.task }]
+						? [
+								{
+									kind: "workflow",
+									agentType: params.agentType,
+									task: params.task,
+									handle: result.details.handle,
+								},
+							]
 						: [{ kind: "workflow", agentType: params.agentType, handle: params.handle }],
 			},
 		},
 		async execute(_toolCallId, input: DelegateInput): Promise<AgentToolResult<DelegateDetails>> {
+			const workspace =
+				"task" in input && input.workspace
+					? { isolation: input.workspace.isolation, ownedPaths: input.workspace.ownedPaths ?? [] }
+					: undefined;
 			const result =
 				"task" in input
-					? await runDelegation(runtime, input.agentType, input.task, { background: input.background })
+					? await runDelegation(runtime, input.agentType, input.task, { background: input.background, workspace })
 					: await retrieveDelegationResult(runtime, input.handle, input.agentType);
 			return {
 				content: [{ type: "text", text: result.output }],
