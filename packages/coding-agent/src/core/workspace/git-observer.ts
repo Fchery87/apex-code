@@ -46,7 +46,7 @@ export interface GitObserveOptions {
 	excludePaths?: string[];
 }
 
-interface GitRunResult {
+export interface GitRunResult {
 	ok: boolean;
 	code: number | null;
 	stdout: Buffer;
@@ -55,7 +55,14 @@ interface GitRunResult {
 	spawnError: boolean;
 }
 
-function runGit(cwd: string, args: string[], timeoutMs: number, signal?: AbortSignal): Promise<GitRunResult> {
+/**
+ * The workspace subsystem's one git exec seam: shell-less argv (no quoting
+ * bugs, Windows-safe), pinned `core.autocrlf=false`, optional index locks
+ * disabled, per-command timeout, abort support. The observer above uses it
+ * read-only; `git-worktree-owner.ts` reuses it for the worktree mutations so
+ * the subsystem never grows a second spawn pattern.
+ */
+export function runGit(cwd: string, args: string[], timeoutMs: number, signal?: AbortSignal): Promise<GitRunResult> {
 	return new Promise((resolve) => {
 		let stdout = Buffer.alloc(0);
 		let stderr = "";

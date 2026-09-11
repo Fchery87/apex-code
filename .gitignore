@@ -70,6 +70,13 @@ collect.sh
 packages/coding-agent/.apex-code/sandbox-agent/
 packages/coding-agent/.apex-code/sandbox-sessions/
 packages/coding-agent/.apex-code/sandbox-state/
+# Linked worktrees the delegation workspace owner creates for worktree-isolated
+# children when Apex Code runs inside its own repo
+# (git-worktree-owner.ts: <workspaceRoot>/.apex-code/worktrees/<sessionId>).
+# Throwaway checkouts: the child's branch ref survives for explicit
+# integration; the directory itself is never workspace content. Runtime state,
+# by path, per the no-blanket-`.apex-code/` rule above.
+.apex-code/worktrees/
 # Agent-harness telemetry (spec-extraction timeouts, pre-critical snapshot
 # outcomes). Machine state from an AI agent session, never project source.
 .harness/
