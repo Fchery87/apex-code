@@ -97,6 +97,13 @@ apex-code-*.html
 .apex-code/audit-review-2026-09-05/execution-scratch/
 .apex-code/audit-review-2026-09-05/execution-scratch-corrected/
 
+# Release-verification and session scratch: a packed-install sandbox with a
+# full vendored node_modules (264MB), Windows comparison output, and a
+# transcript-recovery trail whose recovered file is already versioned.
+.apex-code/verify-0.0.5/
+.apex-code/windows-scratch-comparison/
+.apex-code/recovery/
+
 # Secrets — never commit. See AGENTS.md § Secrets.
 .env.*
 !.env.example
