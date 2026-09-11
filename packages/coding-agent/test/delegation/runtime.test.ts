@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -1215,12 +1215,19 @@ describe("workspace states and explicit recovery (phase 3)", () => {
 			await expect(registry.recoverWorkspace(handleId)).rejects.toThrow(/unverified/);
 			expect(persisted).toHaveLength(0);
 
-			// Tampered admin entry (gitdir pointing outside the repository): the
-			// refusal names the admin-entry check.
-			const adminEntry = readFileSync(join(root, ".git"), "utf-8");
-			writeFileSync(join(root, ".git"), "gitdir: /nowhere/apex-other-worktree\n", "utf-8");
-			await expect(registry.recoverWorkspace(handleId)).rejects.toThrow(/admin entry check failed/);
-			writeFileSync(join(root, ".git"), adminEntry, "utf-8");
+			// Tampered admin entry (the entry directory is hidden from git): the
+			// refusal names the admin-entry check. Hiding the main repo's admin
+			// dir is portable; rewriting the worktree's .git pointer is not
+			// (Windows denies opening it).
+			const adminDir = join(repo, ".git", "worktrees", "rec-child");
+			const adminBackup = `${adminDir}.hidden`;
+			renameSync(adminDir, adminBackup);
+			try {
+				await expect(registry.recoverWorkspace(handleId)).rejects.toThrow(/admin entry check failed/);
+			} finally {
+				renameSync(adminBackup, adminDir);
+			}
+			await expect(registry.recoverWorkspace(handleId)).rejects.toThrow(/unverified/);
 
 			// Clean case: recovery verifies the worktree and reactivates it.
 			git(root, "checkout", "apex-child-rec-chil");
