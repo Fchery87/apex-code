@@ -175,20 +175,16 @@ export class GitWorktreeWorkspaceOwner {
 			throw new Error(`layout check failed: the recorded worktree root "${root}" does not exist.`);
 		}
 		// (a) The directory is a linked worktree of the CURRENT parent workspace:
-		// its administrative entry resolves into this repository's worktrees dir.
-		const pointerPath = join(root, ".git");
-		let gitdirRaw: string;
-		try {
-			const content = readFileSync(pointerPath, "utf-8").trim();
-			const match = /^gitdir:\s*(.+)$/.exec(content);
-			if (!match) throw new Error('not a "gitdir:" pointer');
-			gitdirRaw = match[1]!.trim();
-		} catch (error) {
+		// git resolves its administrative entry, and the resolved gitdir must sit
+		// inside this repository's worktrees dir. Git reads the pointer itself,
+		// which direct file reads cannot do portably (Windows denies the open).
+		const resolved = await runGit(root, ["rev-parse", "--absolute-git-dir"], this.timeoutMs);
+		if (!resolved.ok) {
 			throw new Error(
-				`admin entry check failed: "${pointerPath}" is not a linked-worktree git pointer (${error instanceof Error ? error.message : String(error)}).`,
+				`admin entry check failed: "${root}" is not a linked worktree (git could not resolve its administrative entry: ${describeFailure(resolved)}).`,
 			);
 		}
-		const gitdir = resolve(root, gitdirRaw);
+		const gitdir = resolve(resolved.stdout.toString("utf-8").trim());
 		const parentGitDir = await this.currentGitDir();
 		const worktreesDir = join(parentGitDir, "worktrees");
 		const rel = relative(worktreesDir, gitdir);

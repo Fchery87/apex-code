@@ -15,7 +15,7 @@
 
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import type { Usage } from "@earendil-works/pi-ai";
 import type { AgentRunBudgetUsage } from "apex-code-agent-core";
 import { type FileEntry, loadEntriesFromFile, type SessionEntry } from "../session-manager.ts";
@@ -801,7 +801,7 @@ export class ChildRunRegistry {
 		const workspace = record.workspace ?? { isolation: "shared-read" as const, ownedPaths: [] as string[] };
 		const claims = [...workspace.ownedPaths].map((p) => resolve(p));
 		for (const claim of this.activeWorkspaceClaims()) {
-			if (claims.some((path) => path === claim || path.startsWith(`${claim}/`) || claim.startsWith(`${path}/`))) {
+			if (claims.some((path) => claimPathsOverlap(path, claim))) {
 				throw new Error(`Resuming child run "${id}" overlaps an active write ownership claim.`);
 			}
 		}
@@ -1696,6 +1696,19 @@ export class ChildRunRegistry {
  * or `buildChildSession`. `buildChildSession` receives the child's depth (parent + 1)
  * so the caller can record it on the child's own session header.
  */
+/**
+ * Whether two resolved paths denote the same directory or either contains the
+ * other. Comparison is separator-correct: forward-slash prefix matching
+ * silently never matches on platforms whose resolve() produces backslashes.
+ */
+export function claimPathsOverlap(a: string, b: string): boolean {
+	if (a === b) return true;
+	const ab = relative(a, b);
+	if (ab !== "" && !ab.startsWith("..") && !isAbsolute(ab)) return true;
+	const ba = relative(b, a);
+	return ba !== "" && !ba.startsWith("..") && !isAbsolute(ba);
+}
+
 export async function runDelegation(
 	options: DelegationRuntimeOptions,
 	agentType: string,
@@ -1747,7 +1760,7 @@ export async function runDelegation(
 	}
 	const claims = [...workspace.ownedPaths].map((p) => resolve(p));
 	for (const entry of registry.activeWorkspaceClaims()) {
-		if (claims.some((path) => path === entry || path.startsWith(`${entry}/`) || entry.startsWith(`${path}/`))) {
+		if (claims.some((path) => claimPathsOverlap(path, entry))) {
 			throw new Error(`Delegation to agent "${agentType}" overlaps an active write ownership claim.`);
 		}
 	}
