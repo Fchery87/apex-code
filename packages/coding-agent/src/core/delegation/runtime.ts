@@ -15,7 +15,7 @@
 
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { Usage } from "@earendil-works/pi-ai";
 import type { AgentRunBudgetUsage } from "apex-code-agent-core";
 import { type FileEntry, loadEntriesFromFile, type SessionEntry } from "../session-manager.ts";
@@ -1702,11 +1702,10 @@ export class ChildRunRegistry {
  * silently never matches on platforms whose resolve() produces backslashes.
  */
 export function claimPathsOverlap(a: string, b: string): boolean {
-	if (a === b) return true;
 	const ab = relative(a, b);
-	if (ab !== "" && !ab.startsWith("..") && !isAbsolute(ab)) return true;
+	if (ab !== ".." && !ab.startsWith(`..${sep}`) && !isAbsolute(ab)) return true;
 	const ba = relative(b, a);
-	return ba !== "" && !ba.startsWith("..") && !isAbsolute(ba);
+	return ba !== ".." && !ba.startsWith(`..${sep}`) && !isAbsolute(ba);
 }
 
 export async function runDelegation(

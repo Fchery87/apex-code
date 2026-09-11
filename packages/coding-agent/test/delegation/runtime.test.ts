@@ -247,6 +247,67 @@ describe("runDelegation", () => {
 		).resolves.toMatchObject({ output: "scout output" });
 	});
 
+	it.each([
+		["src", "src/..cache"],
+		["src/..cache/file", "src"],
+	])("rejects overlapping ownership of %s and %s", async (first, second) => {
+		const previousCwd = process.cwd();
+		const scratch = mkdtempSync(join(tmpdir(), "apex-claim-overlap-"));
+		process.chdir(scratch);
+		const registry = new ChildRunRegistry();
+		const options = baseOptions({ childRunRegistry: registry });
+		try {
+			await runDelegation(options, "scout", "one", {
+				background: true,
+				workspace: { isolation: "shared-read", ownedPaths: [first] },
+			});
+			await expect(
+				runDelegation(options, "scout", "two", {
+					workspace: { isolation: "shared-read", ownedPaths: [second] },
+				}),
+			).rejects.toThrow(/overlaps/);
+			expect(options.buildChildSession).toHaveBeenCalledTimes(1);
+			await expect(
+				runDelegation(options, "scout", "three", {
+					workspace: { isolation: "shared-read", ownedPaths: ["other"] },
+				}),
+			).resolves.toMatchObject({ output: "scout output" });
+		} finally {
+			registry.dispose();
+			process.chdir(previousCwd);
+			await rmScratchResilient(scratch);
+		}
+	});
+
+	it.runIf(process.platform === "win32")("rejects case-equivalent Windows ownership claims", async () => {
+		const previousCwd = process.cwd();
+		const scratch = mkdtempSync(join(tmpdir(), "apex-claim-overlap-"));
+		process.chdir(scratch);
+		const registry = new ChildRunRegistry();
+		const options = baseOptions({ childRunRegistry: registry });
+		try {
+			await runDelegation(options, "scout", "one", {
+				background: true,
+				workspace: { isolation: "shared-read", ownedPaths: ["C:/Repo/src"] },
+			});
+			await expect(
+				runDelegation(options, "scout", "two", {
+					workspace: { isolation: "shared-read", ownedPaths: ["c:/repo/SRC"] },
+				}),
+			).rejects.toThrow(/overlaps/);
+			expect(options.buildChildSession).toHaveBeenCalledTimes(1);
+			await expect(
+				runDelegation(options, "scout", "three", {
+					workspace: { isolation: "shared-read", ownedPaths: ["D:/Repo/src"] },
+				}),
+			).resolves.toMatchObject({ output: "scout output" });
+		} finally {
+			registry.dispose();
+			process.chdir(previousCwd);
+			await rmScratchResilient(scratch);
+		}
+	});
+
 	it("refuses worktree isolation without a workspace owner", async () => {
 		await expect(
 			runDelegation(baseOptions(), "scout", "task", {
