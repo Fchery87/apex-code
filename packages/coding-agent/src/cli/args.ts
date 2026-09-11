@@ -11,7 +11,25 @@ import type { TuiMode } from "../core/settings-manager.ts";
 
 export type Mode = "text" | "json" | "rpc" | "acp";
 
+/** The one child-lifecycle subcommand family: `apex-code agent <operation> ...`. */
+export const AGENT_LIFECYCLE_OPERATIONS = ["list", "wait", "send", "resume", "interrupt", "close"] as const;
+export type AgentLifecycleOperation = (typeof AGENT_LIFECYCLE_OPERATIONS)[number];
+
+export function isAgentLifecycleOperation(value: string): value is AgentLifecycleOperation {
+	return (AGENT_LIFECYCLE_OPERATIONS as readonly string[]).includes(value);
+}
+
+export interface AgentLifecycleCommand {
+	operation: AgentLifecycleOperation;
+	/** Target child run id; required for every operation except `list`. */
+	childId?: string;
+	/** Follow-up text for `send`; an optional prompt override for `resume`. */
+	input?: string;
+}
+
 export interface Args {
+	/** Parsed `agent <operation>` command; executed by the loaded session's own run owner. */
+	agent?: AgentLifecycleCommand;
 	provider?: string;
 	model?: string;
 	apiKey?: string;
@@ -82,12 +100,82 @@ export type ParsedCliCommand =
 
 const HOST_COMMANDS = new Set(["auth", "config", "install", "remove", "uninstall", "update", "list"]);
 
+/**
+ * Parse the `agent <operation>` subcommand family out of the first positional token.
+ *
+ * The subcommand lives under `agent` rather than bare top-level verbs because verbs
+ * like `list` already name host commands. It is classified as a session-kind command:
+ * child lifecycle operations run against a real loaded session (children derive their
+ * authority from its permission gate), so they must take the sandboxed path like any
+ * other session startup.
+ */
+function parseAgentCommand(args: Args): void {
+	args.messages = args.messages.slice(1);
+	if (args.fileArgs.length > 0) {
+		args.fileArgs = [];
+		args.diagnostics.push({ type: "error", message: '"agent" commands do not accept @file arguments' });
+		return;
+	}
+	const [operation, childId, ...rest] = args.messages;
+	args.messages = [];
+	const usage = `Valid operations: ${AGENT_LIFECYCLE_OPERATIONS.join(", ")}. A resumable session source is required: --session <path|id> or --continue.`;
+	if (operation === undefined) {
+		args.diagnostics.push({ type: "error", message: `"agent" requires an operation. ${usage}` });
+		return;
+	}
+	if (!isAgentLifecycleOperation(operation)) {
+		args.diagnostics.push({ type: "error", message: `Unknown agent operation "${operation}". ${usage}` });
+		return;
+	}
+	if (operation === "list") {
+		if (childId !== undefined) {
+			args.diagnostics.push({ type: "error", message: `"agent list" takes no arguments. ${usage}` });
+			return;
+		}
+		args.agent = { operation };
+	} else if (operation === "send") {
+		if (childId === undefined || rest.length === 0) {
+			args.diagnostics.push({
+				type: "error",
+				message: `"agent send" requires a child run id followed by input text. ${usage}`,
+			});
+			return;
+		}
+		args.agent = { operation, childId, input: rest.join(" ") };
+	} else if (operation === "resume") {
+		if (childId === undefined) {
+			args.diagnostics.push({ type: "error", message: `"agent resume" requires a child run id. ${usage}` });
+			return;
+		}
+		args.agent = rest.length > 0 ? { operation, childId, input: rest.join(" ") } : { operation, childId };
+	} else {
+		if (childId === undefined) {
+			args.diagnostics.push({ type: "error", message: `"agent ${operation}" requires a child run id. ${usage}` });
+			return;
+		}
+		if (rest.length > 0) {
+			args.diagnostics.push({ type: "error", message: `"agent ${operation}" takes only a child run id. ${usage}` });
+			return;
+		}
+		args.agent = { operation, childId };
+	}
+	if (args.session === undefined && args.continue !== true) {
+		args.diagnostics.push({
+			type: "error",
+			message: `"agent ${operation}" requires a resumable session source: --session <path|id> or --continue.`,
+		});
+	}
+}
+
 /** Parse argv once, then classify startup behavior from the resulting values. */
 export function parseCliCommand(argv: readonly string[]): ParsedCliCommand {
 	const args = parseArgs(argv);
 	if (HOST_COMMANDS.has(argv[0] ?? "")) return { kind: "host", args };
 	if (args.help || args.version || args.export !== undefined || args.listModels !== undefined) {
 		return { kind: "metadata", args };
+	}
+	if (args.messages[0] === "agent") {
+		parseAgentCommand(args);
 	}
 	return { kind: "session", args };
 }
@@ -354,6 +442,9 @@ ${chalk.bold("Commands:")}
   ${APP_NAME} uninstall <source> [-l]   Alias for remove
   ${APP_NAME} update [source|self|pi]   Update Apex Code, extensions, or model catalogs
   ${APP_NAME} list                      List installed extensions from settings
+  ${APP_NAME} agent <operation> ...     Child run lifecycle: list | wait | send | resume | interrupt | close
+                                        Requires --session <path|id> or --continue; needs a permission
+                                        mode like any non-interactive session. Prints JSON with --mode json
   ${APP_NAME} config [-l]               Open TUI to enable/disable package resources (Tab switches scope)
   ${APP_NAME} auth <command>            Print credentials or check provider readiness
   ${APP_NAME} mcp auth <server>         Authorize an MCP server that requires OAuth

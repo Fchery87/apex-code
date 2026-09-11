@@ -9,6 +9,7 @@ import { createInterface } from "node:readline";
 import { type ImageContent, modelsAreEqual } from "@earendil-works/pi-ai";
 import { setCapabilityOverrides } from "@earendil-works/pi-tui";
 import chalk from "chalk";
+import { runAgentLifecycleCommand } from "./cli/agent-lifecycle.ts";
 import {
 	type Args,
 	type Mode,
@@ -663,6 +664,19 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	let appMode = resolveAppMode(parsed, process.stdin.isTTY, process.stdout.isTTY);
+	// `agent <operation>` is a one-shot command, never an interactive prompt: coerce it
+	// into the non-interactive flow so it runs after normal session construction.
+	if (parsed.agent && appMode === "interactive") {
+		appMode = "print";
+	}
+	if (parsed.agent && (appMode === "rpc" || appMode === "acp")) {
+		console.error(
+			chalk.red(
+				`Error: "agent ${parsed.agent.operation}" runs a one-shot session and cannot be combined with --mode ${appMode}; use the protocol's own agent/* methods instead.`,
+			),
+		);
+		process.exit(1);
+	}
 	const shouldTakeOverStdout = appMode !== "interactive" && !isPlainRuntimeMetadataCommand(parsed);
 	if (shouldTakeOverStdout) {
 		takeOverStdout();
@@ -1008,6 +1022,17 @@ export async function main(args: string[], options?: MainOptions) {
 		process.exit(1);
 	}
 	time("createAgentSession");
+
+	// Child-run lifecycle command: the session is loaded, its own registry is the sole
+	// owner, and the operation runs here in the non-interactive flow. Lifecycle
+	// operations never need a parent model, so this sits before the no-model check.
+	if (parsed.agent) {
+		const exitCode = await runAgentLifecycleCommand(session, parsed.agent, { json: appMode === "json" });
+		stopThemeWatcher();
+		restoreStdout();
+		process.exitCode = exitCode;
+		return;
+	}
 
 	if (appMode !== "interactive" && !session.model) {
 		console.error(chalk.red(formatNoModelsAvailableMessage()));
