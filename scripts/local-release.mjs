@@ -215,9 +215,8 @@ const bunInstallDirectory = join(outDir, "bun-install");
 const binaryDirectory = join(outDir, "bun");
 mkdirSync(tarballDirectory, { recursive: true });
 
-// Release artifacts always use a freshly generated, strictly validated catalog,
-// including when checks or tests are explicitly skipped.
-run("npm", ["run", "generate:models"], { cwd: repoRoot });
+// Restore the pinned snapshot without refreshing the frozen upstream package.
+run("npm", ["run", "hydrate:model-data"], { cwd: repoRoot });
 
 if (!options.skipCheck) {
 	run("npm", ["run", "check"], { cwd: repoRoot });

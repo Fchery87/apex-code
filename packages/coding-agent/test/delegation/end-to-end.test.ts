@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { access, readdir, readFile, rm } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { Usage } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
@@ -25,7 +25,7 @@ import { SessionManager } from "../../src/core/session-manager.ts";
 import { DEFAULT_MAX_TOOL_CALLS, type ResolvedRunBudget, SettingsManager } from "../../src/core/settings-manager.ts";
 import type { Capability } from "../../src/core/tools/contract.ts";
 import { GitWorktreeWorkspaceOwner } from "../../src/core/workspace/git-worktree-owner.ts";
-import { scratchDir } from "../suite/scratch.ts";
+import { rmScratchResilient, scratchDir } from "../suite/scratch.ts";
 
 function sleep(ms: number): Promise<void> {
 	return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
@@ -42,7 +42,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
 	process.chdir(previousCwd);
-	await rm(scratch, { recursive: true, force: true });
+	await rmScratchResilient(scratch);
 });
 
 const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {

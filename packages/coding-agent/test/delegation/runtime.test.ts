@@ -16,6 +16,7 @@ import { ChildRunRegistry, retrieveDelegationResult, runDelegation } from "../..
 import { SessionManager } from "../../src/core/session-manager.ts";
 import type { Capability } from "../../src/core/tools/contract.ts";
 import { GitWorktreeWorkspaceOwner } from "../../src/core/workspace/git-worktree-owner.ts";
+import { rmScratchResilient } from "../suite/scratch.ts";
 
 function caps(...values: Capability[]): ReadonlySet<Capability> {
 	return new Set(values);
@@ -1248,7 +1249,7 @@ describe("workspace states and explicit recovery (phase 3)", () => {
 			expect(existsSync(join(root, "uncommitted.txt"))).toBe(true);
 			registry.dispose();
 		} finally {
-			rmSync(repo, { recursive: true, force: true });
+			await rmScratchResilient(repo);
 		}
 	});
 });

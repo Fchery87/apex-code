@@ -1,5 +1,5 @@
 import { mkdtempSync, realpathSync } from "node:fs";
-import { mkdtemp, realpath } from "node:fs/promises";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -19,4 +19,8 @@ export async function scratchDir(prefix: string): Promise<string> {
 
 export function scratchDirSync(prefix: string): string {
 	return realpathSync(mkdtempSync(join(tmpdir(), prefix)));
+}
+
+export async function rmScratchResilient(path: string): Promise<void> {
+	await rm(path, { recursive: true, force: true, maxRetries: 6, retryDelay: 150 });
 }
