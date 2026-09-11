@@ -466,6 +466,45 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 				return success(id, "get_state", state);
 			}
 
+			case "agent/list":
+				return success(id, "agent/list", session.listChildRuns());
+			case "agent/spawn": {
+				const result = await session.startChildRun(command.agentType, command.task, {
+					workspace: command.workspace,
+					idempotencyKey: command.idempotencyKey,
+					timeoutMs: command.timeoutMs,
+				});
+				return success(id, "agent/spawn", result);
+			}
+			case "agent/wait": {
+				const result = await session.waitChildRunResult(command.childId);
+				return success(id, "agent/wait", result);
+			}
+			case "agent/status": {
+				const result = session.childRunStatus(command.childId);
+				return success(id, "agent/status", result);
+			}
+			case "agent/recover": {
+				// Explicit workspace recovery (spec 2026-09-09, "Workspace states and
+				// explicit recovery"): the pass-through verifies read-only and returns
+				// `{workspaceState, dirty}`; refusals surface as the error response.
+				const result = await session.recoverChildWorkspace(command.childId);
+				return success(id, "agent/recover", result);
+			}
+			case "agent/send":
+				await session.sendChildInput(command.childId, command.input);
+				return success(id, "agent/send");
+			case "agent/resume": {
+				const status = await session.resumeChildRun(command.childId, command.input);
+				return success(id, "agent/resume", { status });
+			}
+			case "agent/interrupt":
+				session.interruptChildRun(command.childId, command.reason);
+				return success(id, "agent/interrupt");
+			case "agent/close":
+				session.closeChildRun(command.childId);
+				return success(id, "agent/close");
+
 			// =================================================================
 			// Model
 			// =================================================================

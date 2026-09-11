@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { Readable, Writable } from "node:stream";
 import type { AgentSessionRuntime } from "../../core/agent-session-runtime.ts";
+import type {
+	ChildRunPolicySnapshot,
+	ChildRunStatus,
+	ChildTurnOutcome,
+	ChildWorkspaceRequest,
+	ChildWorkspaceState,
+} from "../../core/delegation/runtime.ts";
 import type { InputSource } from "../../core/extensions/types.ts";
 import { takeOverStdout } from "../../core/output-guard.ts";
 import type { PermissionAnswer } from "../../core/permissions/responder.ts";
@@ -14,10 +21,45 @@ import { translateJsonEvent } from "./translate.ts";
  * so tests drive it entirely through fakes.
  */
 
-/** The slice of AgentSession the protocol actually drives. */
+/** The slice of AgentSession the protocol actually drives, including the child lifecycle pass-throughs RPC calls. */
 export interface AcpPromptableSession {
 	prompt(text: string, options: { source: InputSource }): Promise<unknown>;
 	abort(): Promise<void> | void;
+	listChildRuns(): unknown[];
+	startChildRun(
+		agentType: string,
+		task: string,
+		request?: { workspace?: ChildWorkspaceRequest; idempotencyKey?: string; timeoutMs?: number },
+	): Promise<{ handleId: string; created: boolean }>;
+	waitChildRun(runId: string): Promise<unknown>;
+	/**
+	 * The awaited turn's payload with the registry status after settlement, plus
+	 * the run's additive linkage fields (`artifactDir`, `sessionFile`,
+	 * `parentSessionId`, `policy`, `sandboxEnforced`) when the registry snapshot
+	 * knows them -- identical to RPC's `agent/wait` payload.
+	 */
+	waitChildRunResult(runId: string): Promise<{
+		status: string;
+		output: string;
+		outcome: ChildTurnOutcome;
+		artifactDir?: string;
+		sessionFile?: string;
+		parentSessionId?: string;
+		policy?: ChildRunPolicySnapshot;
+		sandboxEnforced?: boolean;
+	}>;
+	/** Non-blocking status snapshot for one child run (`agent/status`). */
+	childRunStatus(runId: string): ChildRunStatus;
+	/**
+	 * Explicit recovery of a retained child worktree (`agent/recover`), the
+	 * pass-through `AgentSession.recoverChildWorkspace` calls. Identical payload
+	 * to RPC's `agent/recover`: `{workspaceState: "active", dirty}`.
+	 */
+	recoverChildWorkspace(runId: string): Promise<{ workspaceState: ChildWorkspaceState; dirty: boolean }>;
+	sendChildInput(runId: string, input: string): Promise<void>;
+	resumeChildRun(runId: string, input?: string): Promise<string>;
+	interruptChildRun(runId: string, reason?: string): void;
+	closeChildRun(runId: string): void;
 }
 
 export interface AcpHost {
@@ -238,6 +280,77 @@ export class AcpServer {
 					const mode = typeof record.mode === "string" ? record.mode : "";
 					await this.#host.setMode?.(mode);
 					this.#write({ jsonrpc: "2.0", id, result: {} });
+					return;
+				}
+				// Child lifecycle parity (spec 2026-09-09, protocol section): every
+				// operation routes through the same AgentSession pass-throughs RPC
+				// calls, with the same payload shapes and the same unknown-ID
+				// rejection surfacing as -32000 errors. There is no second,
+				// host-supplied lifecycle path.
+				case "agent/list": {
+					this.#write({ jsonrpc: "2.0", id, result: this.#host.getSession().listChildRuns() });
+					return;
+				}
+				case "agent/send": {
+					if (typeof record.runId !== "string" || typeof record.input !== "string")
+						throw new Error("agent/send requires runId and input.");
+					await this.#host.getSession().sendChildInput(record.runId, record.input);
+					this.#write({ jsonrpc: "2.0", id, result: null });
+					return;
+				}
+				case "agent/spawn": {
+					if (typeof record.agentType !== "string" || typeof record.task !== "string")
+						throw new Error("agent/spawn requires agentType and task.");
+					const workspace = record.workspace as ChildWorkspaceRequest | undefined;
+					const idempotencyKey = typeof record.idempotencyKey === "string" ? record.idempotencyKey : undefined;
+					const timeoutMs = typeof record.timeoutMs === "number" ? record.timeoutMs : undefined;
+					const spawned = await this.#host.getSession().startChildRun(record.agentType, record.task, {
+						...(workspace ? { workspace } : {}),
+						...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
+						...(timeoutMs !== undefined ? { timeoutMs } : {}),
+					});
+					this.#write({ jsonrpc: "2.0", id, result: spawned });
+					return;
+				}
+				case "agent/wait": {
+					if (typeof record.runId !== "string") throw new Error("agent/wait requires runId.");
+					// Identical to RPC's agent/wait: the awaited latest settled turn
+					// with the registry status after settlement.
+					const waited = await this.#host.getSession().waitChildRunResult(record.runId);
+					this.#write({ jsonrpc: "2.0", id, result: waited });
+					return;
+				}
+				case "agent/status": {
+					if (typeof record.runId !== "string") throw new Error("agent/status requires runId.");
+					// Non-blocking: the snapshot is built from the record/entry alone.
+					const status = this.#host.getSession().childRunStatus(record.runId);
+					this.#write({ jsonrpc: "2.0", id, result: status });
+					return;
+				}
+				case "agent/resume": {
+					if (typeof record.runId !== "string") throw new Error("agent/resume requires runId.");
+					const input = typeof record.input === "string" ? record.input : undefined;
+					const status = await this.#host.getSession().resumeChildRun(record.runId, input);
+					this.#write({ jsonrpc: "2.0", id, result: { status } });
+					return;
+				}
+				case "agent/recover": {
+					if (typeof record.runId !== "string") throw new Error("agent/recover requires runId.");
+					// Identical to RPC's agent/recover: the verified reactivation
+					// payload `{workspaceState, dirty}`; refusals surface as -32000.
+					const recovered = await this.#host.getSession().recoverChildWorkspace(record.runId);
+					this.#write({ jsonrpc: "2.0", id, result: recovered });
+					return;
+				}
+				case "agent/interrupt":
+				case "agent/close": {
+					if (typeof record.runId !== "string") throw new Error(`${method} requires runId.`);
+					const session = this.#host.getSession();
+					if (method === "agent/interrupt") {
+						const reason = typeof record.reason === "string" ? record.reason : undefined;
+						session.interruptChildRun(record.runId, reason);
+					} else session.closeChildRun(record.runId);
+					this.#write({ jsonrpc: "2.0", id, result: null });
 					return;
 				}
 				default:

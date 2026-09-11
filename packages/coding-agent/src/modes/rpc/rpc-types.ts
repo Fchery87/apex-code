@@ -10,6 +10,14 @@ import type { AgentMessage, ThinkingLevel } from "apex-code-agent-core";
 import type { SessionStats } from "../../core/agent-session.ts";
 import type { BashResult } from "../../core/bash-executor.ts";
 import type { CompactionResult } from "../../core/compaction/index.ts";
+import type {
+	ChildRunPolicySnapshot,
+	ChildRunStatus,
+	ChildSessionStatus,
+	ChildTurnOutcome,
+	ChildWorkspaceRequest,
+	ChildWorkspaceState,
+} from "../../core/delegation/runtime.ts";
 import type { SessionEntry, SessionTreeNode } from "../../core/session-manager.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
 
@@ -28,6 +36,25 @@ export type RpcCommand =
 
 	// State
 	| { id?: string; type: "get_state" }
+	| { id?: string; type: "agent/list" }
+	| {
+			id?: string;
+			type: "agent/spawn";
+			agentType: string;
+			task: string;
+			workspace?: ChildWorkspaceRequest;
+			/** Spawn dedupe key: a known key returns the existing handle (`created: false`) instead of building a second child. */
+			idempotencyKey?: string;
+			/** Wall-time cap for the child's own run budget; also recorded as the run's deadlineMs for lazy status observation. */
+			timeoutMs?: number;
+	  }
+	| { id?: string; type: "agent/wait"; childId: string }
+	| { id?: string; type: "agent/status"; childId: string }
+	| { id?: string; type: "agent/send"; childId: string; input: string }
+	| { id?: string; type: "agent/resume"; childId: string; input?: string }
+	| { id?: string; type: "agent/recover"; childId: string }
+	| { id?: string; type: "agent/interrupt"; childId: string; reason?: string }
+	| { id?: string; type: "agent/close"; childId: string }
 
 	// Model
 	| { id?: string; type: "set_model"; provider: string; modelId: string }
@@ -109,11 +136,69 @@ export interface RpcSessionState {
 }
 
 // ============================================================================
+// Child lifecycle payloads (shared with ACP; identical field names)
+// ============================================================================
+
+/** The awaited latest settled turn of a child run (`agent/wait` success payload). */
+export interface AgentWaitResult {
+	/** The child's registry status after settlement. */
+	status: ChildSessionStatus;
+	/** The latest settled turn's output text. */
+	output: string;
+	/** Terminal outcome of the latest settled turn. */
+	outcome: ChildTurnOutcome;
+	// Additive record linkage (identical to the `agent/status` snapshot fields):
+	// present when the run's record knows them, omitted otherwise.
+	/** The child's per-run artifact directory, when the child is file-backed. */
+	artifactDir?: string;
+	/** The child's transcript path, resolved lazily; absent before any transcript exists. */
+	sessionFile?: string;
+	/** The parent session id the run belongs to. */
+	parentSessionId?: string;
+	/** The derived policy the child was built with. */
+	policy?: ChildRunPolicySnapshot;
+	/** True when the OS-containment supervisor marker check passed for the parent session. */
+	sandboxEnforced?: boolean;
+}
+
+/**
+ * Non-blocking status snapshot of one child run (`agent/status` success
+ * payload). Identical field names on RPC and ACP; owned by
+ * `ChildRunRegistry.status()` through `AgentSession.childRunStatus`.
+ */
+export type AgentStatusResult = ChildRunStatus;
+
+/**
+ * Explicit recovery of a child's worktree workspace (`agent/recover` success
+ * payload). Identical field names on RPC and ACP; owned by
+ * `ChildRunRegistry.recoverWorkspace()` through
+ * `AgentSession.recoverChildWorkspace`. `workspaceState` is always "active"
+ * (the workspace was verified and reactivated); `dirty` reports preserved
+ * uncommitted work in the verified worktree.
+ */
+export interface AgentRecoverResult {
+	workspaceState: ChildWorkspaceState;
+	/** The verified worktree holds uncommitted or untracked work. */
+	dirty: boolean;
+}
+
+// ============================================================================
 // RPC Responses (stdout)
 // ============================================================================
 
 // Success responses with data
 export type RpcResponse =
+	// Child lifecycle
+	| {
+			id?: string;
+			type: "response";
+			command: "agent/spawn";
+			success: true;
+			data: { handleId: string; created: boolean };
+	  }
+	| { id?: string; type: "response"; command: "agent/wait"; success: true; data: AgentWaitResult }
+	| { id?: string; type: "response"; command: "agent/status"; success: true; data: AgentStatusResult }
+	| { id?: string; type: "response"; command: "agent/recover"; success: true; data: AgentRecoverResult }
 	// Prompting (async - events follow)
 	| { id?: string; type: "response"; command: "prompt"; success: true }
 	| { id?: string; type: "response"; command: "steer"; success: true }
