@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `budgetScope: "session"` to `AgentOptions`. The default keeps one budget controller per prompt; `"session"` reuses one controller across every prompt of the session, so counters span the whole session instead of resetting.
+- Added `sharedBudgetController` to `AgentOptions` and `createCompositeBudgetController`. A shared controller composes under the Agent's own controller: a run proceeds only if both gates allow it, and an accepted attempt records against both. This is how a delegated child session is handed its parent's family ledger, and it gates runs on its own even when `runBudget` is absent.
+- Added `Agent.budgetUsage()`, which returns a point-in-time `AgentRunBudgetUsage` snapshot of the active run budget's counters, or `undefined` before the first run creates a controller.
+
 ## [0.0.1-alpha.11] - 2026-08-30
 
 ### Added

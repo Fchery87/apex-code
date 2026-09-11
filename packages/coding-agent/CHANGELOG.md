@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- Delegated child sessions. An agent can now launch, list, wait on, resume, interrupt, and close child runs, each with its own durable record, attempt history, and workspace. The six operations are exposed identically on the CLI (`agent` subcommands), on RPC, and on ACP, and `agent/spawn` starts a background child that `agent/wait` later collects.
+- Workspace isolation for a child run. A child can be given its own git worktree; the harness creates and cleans it up, refuses a worktree it does not own, and rejects two children whose claimed paths overlap.
+- A root aggregate budget across a run tree. Token and cost usage from every child rolls up into one ledger, with a per-parent cap on how many children run at once.
+- `agent/status` for polling a child without blocking, and `agent/recover` for an explicit recovery of a child whose workspace is missing. Recovery never recreates a workspace silently.
+
 ### Removed
 
 - `AgentHarness` (and its `HarnessNotImplemented` error and lane/operation
@@ -12,6 +19,12 @@
   an API that does not work. The module stays in the package for upstream
   merge hygiene; see ADR 0027. If you were importing it, nothing you could
   have called worked.
+
+### Fixed
+
+- Fixed overlapping child-workspace ownership claims being accepted on Windows. The overlap check compared resolved paths with forward-slash prefixes, which never matched once `resolve()` produced backslashes, so two children could claim the same directory.
+- Fixed a child path such as `src/..cache/file` being treated as outside `src`. Path containment now compares whole segments, so a directory whose name merely starts with `..` no longer bypasses the ownership check.
+- Fixed `agent/recover` failing with `EPERM` on Windows. It read the worktree's `.git` pointer file directly; it now asks git for the admin entry with `rev-parse --absolute-git-dir`, which was already the authority.
 
 ## [0.0.1-alpha.11] - 2026-08-30
 
