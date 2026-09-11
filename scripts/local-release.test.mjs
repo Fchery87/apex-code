@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 
 test("local release restores pinned model data before building, including when checks are skipped", () => {
@@ -20,7 +20,7 @@ childProcess.spawnSync = () => ({ status: 42 });
 syncBuiltinESMExports();
 `);
 		const result = spawnSync(process.execPath, [
-			"--import", preload,
+			"--import", pathToFileURL(preload).href,
 			fileURLToPath(new URL("./local-release.mjs", import.meta.url)),
 			"--out", join(scratch, "artifacts"), "--skip-check", "--skip-test", "--skip-install",
 		], { cwd: workspace, encoding: "utf8" });
