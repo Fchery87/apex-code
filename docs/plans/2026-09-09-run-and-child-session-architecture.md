@@ -2,7 +2,7 @@
 
 ## Landed as
 
-Committed on 2026-09-10 as eight ordered slices; each SHA verified with `git cat-file -t` before recording.
+Committed on 2026-09-10 as eight ordered slices, then five Windows portability repairs on 2026-09-11; each SHA verified with `git cat-file -t` before recording.
 
 | Slice | SHA | Subject |
 |---|---|---|
@@ -14,8 +14,15 @@ Committed on 2026-09-10 as eight ordered slices; each SHA verified with `git cat
 | 6 | `077d0ce8b` | feat(cli): agent lifecycle subcommands over the session-owned registry |
 | 7 | `8e4117ba0` | feat(protocols): full child-run task surface on RPC and ACP |
 | 8 | `34c53156b` | test(delegation): boundary coverage for lifecycle, budgets, and recovery |
+| repair 1 | `01855109a` | fix(delegation): platform-correct claim containment and admin-entry verification |
+| repair 2 | `f74eabe73` | test(delegation): tamper the worktree admin entry from the git side |
+| repair 3 | `8d096b119` | fix(release): unblock Windows cleanup and preserve frozen model data |
+| repair 4 | `7bfd30934` | test(release): load preload module through a portable file URL |
+| repair 5 | `5473ceea9` | fix(delegation): compare ownership by exact path segments |
 
 Full `npm test` at the stack head (`34c53156b`): `EXIT:0`, 416 coding-agent test files passed (6 skipped), 3,714 tests passed (58 skipped); agent-core 25 files, 441 passed (1 skipped). Log: `.apex-code/run-logs/full-suite-2026-09-10-final.log`.
+
+The five repair commits above close Windows-only failures the first three-OS run exposed: backslash-blind claim containment, an `EPERM` read of the worktree `.git` pointer, an `EBUSY` scratch cleanup, a drive-letter preload specifier, and a `..`-prefixed child name bypassing ownership. Three-OS CI is green at `5473ceea9` (run `34562097691`: ubuntu, macos, windows, and the frozen-package job all success). Every SHA on this page was checked with `git cat-file -t`.
 
 | Task | State | Evidence |
 |---|---|---|
