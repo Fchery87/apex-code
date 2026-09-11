@@ -1,15 +1,29 @@
 import { join } from "node:path";
 import type { CredentialStore } from "@earendil-works/pi-ai";
 import { clampThinkingLevel, type Message, type Model, streamSimple } from "@earendil-works/pi-ai/compat";
-import { Agent, type AgentMessage, setDefaultStreamFn, type ThinkingLevel } from "apex-code-agent-core";
+import {
+	Agent,
+	type AgentMessage,
+	type AgentRunBudgetController,
+	type AgentStopReason,
+	createRunBudgetController,
+	setDefaultStreamFn,
+	type ThinkingLevel,
+} from "apex-code-agent-core";
 import { getAgentDir } from "../config.ts";
 import { resolvePath } from "../utils/paths.ts";
-import { AgentSession, type AgentSessionConfig } from "./agent-session.ts";
+import { AgentSession, type AgentSessionConfig, type AggregateBudgetUsageSnapshot } from "./agent-session.ts";
 import { formatNoModelsAvailableMessage } from "./auth-guidance.ts";
 import { AuthStorage } from "./auth-storage.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { createAgentDefinitionResolver } from "./delegation/agents.ts";
-import type { AgentDefinitionResolver, DelegationRuntimeOptions } from "./delegation/runtime.ts";
+import {
+	type AgentDefinitionResolver,
+	type ChildRunPolicySnapshot,
+	ChildRunRegistry,
+	type ChildTurnResult,
+	type DelegationRuntimeOptions,
+} from "./delegation/runtime.ts";
 import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
 import { loadHookRuntime } from "./hooks/loader.ts";
 import type { HookRuntime } from "./hooks/types.ts";
@@ -25,7 +39,7 @@ import { DefaultResourceLoader } from "./resource-loader.ts";
 import { SANDBOX_ENFORCEMENT_MARKER_VALUE, SANDBOX_ENFORCEMENT_MARKER_VARIABLE } from "./sandbox/cli-launch.ts";
 import { createSandboxCredentialStore } from "./sandbox/rpc/credential-client.ts";
 import { getDefaultSessionDir, SessionManager } from "./session-manager.ts";
-import { SettingsManager } from "./settings-manager.ts";
+import { type ResolvedRunBudget, SettingsManager } from "./settings-manager.ts";
 import { time } from "./timings.ts";
 import { type BackgroundShellRegistry, createBackgroundShellRegistry } from "./tools/background-shell.ts";
 import type { ApexToolDefinition, Capability, EvidenceSink } from "./tools/contract.ts";
@@ -45,6 +59,7 @@ import {
 	type ToolName,
 	withFileMutationQueue,
 } from "./tools/index.ts";
+import { GitWorktreeWorkspaceOwner } from "./workspace/git-worktree-owner.ts";
 
 // Preserve the pre-0.81 fallback for extensions that construct Agent instances
 // or invoke low-level agent loops without supplying streamFn. Agent core remains
@@ -52,6 +67,7 @@ import {
 setDefaultStreamFn(streamSimple);
 
 export interface CreateAgentSessionOptions {
+	childRunRegistry?: AgentSessionConfig["childRunRegistry"];
 	/** Working directory for project-local discovery. Default: process.cwd() */
 	cwd?: string;
 	/** Global config directory. Default: ~/.apex-code/agent */
@@ -98,6 +114,56 @@ export interface CreateAgentSessionOptions {
 
 	/** Settings manager. Default: SettingsManager.create(cwd, agentDir) */
 	settingsManager?: SettingsManager;
+	/**
+	 * Per-run budget policy override (spec 2026-09-09-run-and-child-session-architecture.md,
+	 * "Shared budgets"). When supplied, it replaces the settings read for this
+	 * session's Agent construction; `settingsManager.getRunBudget()` stays the
+	 * default. Per-run only: every session -- parent and child alike -- counts
+	 * its own runs against this policy. It never creates a shared ceiling.
+	 */
+	runBudget?: ResolvedRunBudget;
+	/**
+	 * The root aggregate budget for this session's whole delegation tree (spec
+	 * 2026-09-09, "Shared budgets"). Explicit opt-in: it is never derived from
+	 * `runBudget`. When set, this session creates ONE aggregate controller and
+	 * (a) composes it under its own Agent's controller, so the parent's own runs
+	 * consume the aggregate while the local per-prompt scope is unchanged, and
+	 * (b) hands THE SAME controller instance to every delegated child regardless
+	 * of depth, so the whole tree -- grandchildren included -- shares one
+	 * ceiling. Read it through `session.aggregateBudgetUsage()`. Absent: no
+	 * shared ceiling anywhere -- every session keeps local-only budgets (the
+	 * per-run policy is still inherited).
+	 */
+	aggregateBudget?: ResolvedRunBudget;
+	/**
+	 * Maximum simultaneously-active delegated children this session's delegation
+	 * runtime admits (spec 2026-09-09, "Shared budgets"). Checked at child
+	 * admission, BEFORE any child session is built; over the limit the admission
+	 * throws an actionable error naming the limit. An admitted run holds one
+	 * slot until terminal settlement (completed/failed/interrupted), close, or
+	 * launch failure. `undefined` (default) is unlimited. Only meaningful when
+	 * delegation is configured.
+	 */
+	maxConcurrentChildren?: number;
+	/**
+	 * Budget controller scope for this session's Agent. "prompt" (default;
+	 * upstream semantics) starts a fresh controller at every prompt();
+	 * "session" creates one controller at the first prompt/continue and reuses
+	 * it, so a resumed or follow-up turn continues the same budget. Delegated
+	 * children are built with "session" so their budget survives sendInput /
+	 * follow-up / resume turns (spec 2026-09-09, "Shared budgets").
+	 */
+	budgetScope?: "prompt" | "session";
+	/**
+	 * A shared budget controller composed under this session's own controller
+	 * (`createCompositeBudgetController`): every gate allows only if both
+	 * allow, and only accepted attempts record to both. The caller owns
+	 * the controller's lifetime; this session never resets it. This is how a
+	 * delegated child receives its root's aggregate controller (spec 2026-09-09,
+	 * "Shared budgets") -- sessions that are not delegated children normally
+	 * pass `aggregateBudget` instead and leave this unset.
+	 */
+	sharedBudgetController?: AgentRunBudgetController;
 	/** Session start event metadata for extension runtime startup. */
 	sessionStartEvent?: SessionStartEvent;
 	/** Authorization configuration for every registered tool call. */
@@ -144,6 +210,13 @@ export interface CreateAgentSessionResult {
 	session: AgentSession;
 	/** Extensions result (for UI context setup in interactive mode) */
 	extensionsResult: LoadExtensionsResult;
+	/**
+	 * The session's delegation runtime options when delegation is configured
+	 * (undefined otherwise). Exposing the one runtime the `delegate` tool uses
+	 * lets external lifecycle callers (tests) launch
+	 * children through the same authority derivation instead of re-deriving it.
+	 */
+	delegationRuntime?: DelegationRuntimeOptions;
 	/** Warning if session was restored with a different model than saved */
 	modelFallbackMessage?: string;
 	sandboxContract: SdkSandboxContract;
@@ -267,6 +340,43 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
 	const sessionManager = options.sessionManager ?? SessionManager.create(cwd, getDefaultSessionDir(cwd, agentDir));
 	const backgroundShellRegistry = options.backgroundShellRegistry ?? createBackgroundShellRegistry();
+	// One resolved per-run budget policy: the caller's override when supplied,
+	// else the settings policy. Children built below inherit this resolved value
+	// so a child run carries the same per-run policy as its parent without
+	// re-reading settings (spec 2026-09-09, "Shared budgets"). Per-run only: it
+	// never creates a shared ceiling.
+	const runBudget = options.runBudget ?? settingsManager.getRunBudget();
+	// The root aggregate budget (spec 2026-09-09, "Shared budgets"): created
+	// ONLY when the caller explicitly configures `aggregateBudget` -- never
+	// derived from the per-run policy. One controller per root tree: the
+	// parent's own Agent consumes it (composed under its per-prompt controller),
+	// and buildChildSession forwards THE SAME instance to every child regardless
+	// of depth, so a grandchild's consumption lands on the root ledger. Its wall
+	// time starts here, at root session construction, and no descendant can
+	// reset it: descendants only consume.
+	const aggregateBudgetController = options.aggregateBudget
+		? createRunBudgetController(options.aggregateBudget)
+		: undefined;
+	// The shared ceiling this session consumes and hands to its delegated
+	// children: the root aggregate when configured, else a caller-supplied
+	// controller (which is how a delegated child receives its root's aggregate).
+	// With neither there is NO shared controller at all: every session keeps
+	// local-only budgets under its inherited per-run policy.
+	const sharedBudgetController = aggregateBudgetController ?? options.sharedBudgetController;
+	// The tree-facing usage snapshot: the aggregate controller's counters cover
+	// every accepted provider request, tool call, and maintenance request of the
+	// parent's own runs and of every descendant, so one read reports the tree.
+	const aggregateBudgetUsage = sharedBudgetController
+		? (): AggregateBudgetUsageSnapshot => {
+				const usage = sharedBudgetController.usage();
+				return {
+					providerRequests: usage.providerRequests,
+					toolCalls: usage.toolCalls,
+					maintenanceRequests: usage.maintenanceRequests,
+					startedAtMs: usage.startedAt,
+				};
+			}
+		: undefined;
 
 	if (!resourceLoader) {
 		resourceLoader = new DefaultResourceLoader({ cwd, agentDir, settingsManager });
@@ -417,10 +527,16 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			thinkingLevel,
 			tools: [],
 		},
-		// One normalized budget policy from settings; every execution mode (interactive,
-		// print, JSON, RPC, ACP, SDK) runs through this session, so none counts on its
-		// own (spec 2026-09-01-tool-reliability-and-execution-budgets.md).
-		runBudget: settingsManager.getRunBudget(),
+		// The resolved budget policy from above (override or settings); every
+		// execution mode (interactive, print, JSON, RPC, ACP, SDK) runs through
+		// this session, so none counts on its own
+		// (spec 2026-09-01-tool-reliability-and-execution-budgets.md).
+		runBudget,
+		budgetScope: options.budgetScope ?? "prompt",
+		// The root aggregate when configured (the parent's own runs consume it,
+		// per-prompt local scope unchanged), else a caller-supplied shared
+		// controller, else nothing (spec 2026-09-09, "Shared budgets").
+		sharedBudgetController,
 		convertToLlm: convertToLlmWithBlockImages,
 		streamFn: async (model, context, options) => {
 			const providerRetrySettings = settingsManager.getProviderRetrySettings();
@@ -501,11 +617,13 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// must read the *live* session (active tools can change after construction),
 	// not a snapshot frozen at this point.
 	const parentSessionRef: { current?: AgentSession } = {};
+	const childRunRegistry = options.childRunRegistry ?? new ChildRunRegistry();
 	const customTools: ToolDefinition[] = options.customTools ? [...options.customTools] : [];
 	// A configured permission gate supplies the authority a child must derive, so
 	// discovery is enabled by default in real sessions. Callers that need fixture
 	// definitions may still provide an explicit resolver.
 	const delegation = options.delegation ?? (options.permissionGate ? {} : undefined);
+	let delegationRuntime: DelegationRuntimeOptions | undefined;
 	if (delegation) {
 		const parentPermissionGate = options.permissionGate;
 		const resolveAgent =
@@ -515,8 +633,17 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				agentDir,
 				isProjectTrusted: () => settingsManager.isProjectTrusted(),
 			});
-		const delegationRuntime: DelegationRuntimeOptions = {
+		let worktreeOwner: GitWorktreeWorkspaceOwner | undefined;
+		// One read of the delegation bound for this runtime; the policy snapshot
+		// below reports the same value it enforces instead of re-reading settings.
+		const delegationMaxDepth = settingsManager.getDelegationMaxDepth();
+		delegationRuntime = {
+			childRunRegistry,
 			resolveAgent,
+			// Concurrency cap (spec 2026-09-09, "Shared budgets"): the registry's
+			// admission path reads it from the runtime options. Undefined is
+			// unlimited.
+			maxConcurrentChildren: options.maxConcurrentChildren,
 			getParentCapabilities: () => {
 				const capabilities = new Set<Capability>();
 				for (const name of parentSessionRef.current?.getActiveToolNames() ?? []) {
@@ -546,9 +673,33 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			// the (possibly delegated) session this createAgentSession call is
 			// building, via the same sessionManager this closure already captures.
 			getDelegationDepth: () => sessionManager.getDelegationDepth(),
-			maxDelegationDepth: settingsManager.getDelegationMaxDepth(),
+			maxDelegationDepth: delegationMaxDepth,
 			getParentSessionDir: () => sessionManager.getSessionDir(),
-			buildChildSession: async ({ definition, toolNames, depth, sessionId, artifactDir }) => {
+			// Child-run records carry the parent session id so durable records and
+			// protocol payloads tie each child to this session's own identity.
+			getParentSessionId: () => sessionManager.getSessionId(),
+			// Worktree isolation (spec 2026-09-09, "Parallel work and ownership"):
+			// the production workspace owner, constructed on the first worktree-
+			// isolated delegation only. Shared-read delegations never read this
+			// property (the runtime consults the owner only for isolation
+			// "worktree"), so they never construct an owner and never invoke git.
+			get workspaceOwner() {
+				if (worktreeOwner === undefined) {
+					worktreeOwner = new GitWorktreeWorkspaceOwner(cwd);
+				}
+				return worktreeOwner;
+			},
+			buildChildSession: async ({
+				definition,
+				toolNames,
+				capabilities,
+				depth,
+				sessionId,
+				artifactDir,
+				workspace,
+				reattachSessionPath,
+				timeoutMs,
+			}) => {
 				if (!parentPermissionGate) {
 					throw new Error("delegate requires a permission gate configured on the parent session (ADR 0008).");
 				}
@@ -558,23 +709,83 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				if (!childModel) {
 					throw new Error(`Cannot delegate to "${definition.name}": no model is available for the child session.`);
 				}
-				const childSessionManager = artifactDir
-					? SessionManager.create(cwd, artifactDir, {
-							id: sessionId,
-							parentSession: sessionManager.getSessionId(),
-							delegationDepth: depth,
-						})
-					: SessionManager.inMemory(cwd, {
-							parentSession: sessionManager.getSessionId(),
-							delegationDepth: depth,
-						});
+				// The derived policy snapshot (spec 2026-09-09, "Derive, do not
+				// reconstruct"): the exact values this construction used -- the
+				// ceiling-checked tool allowlist, the admitted capability set from
+				// the runtime's single admission projection (never a second
+				// classification, ADR 0010), this session's sandbox contract, the
+				// delegation bound it enforces, the child's model, and the budget
+				// wiring every child is built with (session-scoped own controller;
+				// aggregate only when a shared ceiling was configured at the root).
+				// It rides on the returned handle so the registry persists it on the
+				// child-run record, and `sandboxEnforced` reports whether the
+				// OS-containment supervisor marker check passed for this parent
+				// session (always true under the "required" contract, which refuses
+				// construction without it).
+				const policy: ChildRunPolicySnapshot = {
+					tools: [...toolNames],
+					capabilities: [...capabilities].sort(),
+					sandbox: sandboxContract,
+					maxDelegationDepth: delegationMaxDepth,
+					model: childModel.id,
+					budgetScope: "session",
+					aggregateBudget: sharedBudgetController !== undefined,
+				};
+				const sandboxEnforced = markerPresent;
+				// An isolated child runs inside the workspace owner's prepared root
+				// (its linked worktree); a shared child keeps this session's cwd.
+				const childCwd = workspace?.root ?? cwd;
+				// The one reattachment seam (restart reconstruction): when the request
+				// carries the existing child session path, that transcript is OPENED
+				// rather than created; identity (header id, parentSession, depth) comes
+				// from the file's own header. Every other input below is derived
+				// exactly as for a fresh delegation -- permission store, model, tools,
+				// budget -- so there is no second construction path.
+				const childSessionManager = reattachSessionPath
+					? SessionManager.open(reattachSessionPath, artifactDir)
+					: artifactDir
+						? SessionManager.create(childCwd, artifactDir, {
+								id: sessionId,
+								parentSession: sessionManager.getSessionId(),
+								delegationDepth: depth,
+							})
+						: SessionManager.inMemory(childCwd, {
+								parentSession: sessionManager.getSessionId(),
+								delegationDepth: depth,
+							});
 				const derivedStore = new DerivedPermissionRuleStore({ parent: parentPermissionGate.store });
 				const { session: childSession } = await createAgentSession({
-					cwd,
+					cwd: childCwd,
 					agentDir,
 					model: childModel,
 					modelRuntime,
 					settingsManager,
+					// The parent's already-resolved per-run budget (override or settings),
+					// not a fresh settings read: every child run carries the same per-run
+					// policy as its parent (spec 2026-09-09, "Shared budgets").
+					//
+					// Session scope + the root aggregate: a resumed or follow-up child
+					// turn continues the same child budget (one controller per child
+					// Agent, created at its first turn), and every gate also answers
+					// to the tree's shared ceiling -- accepted consumption records to
+					// both the child's own controller and the aggregate. THE SAME
+					// aggregate instance reaches every descendant regardless of
+					// depth (a grandchild's parent forwards it onward), so there is
+					// exactly ONE aggregate per root tree and no child can reset it
+					// by resuming or spawning children (spec 2026-09-09, "Shared
+					// budgets"). Without an aggregate there is no shared controller:
+					// the child keeps local-only budgets under the inherited policy.
+					//
+					// A launch timeout (spec 2026-09-09, timeouts) overrides the
+					// child's OWN wall-time limit with the requested timeoutMs, so the
+					// existing AgentRunBudget wall-time gate enforces it mid-run; the
+					// parent policy's other limits still apply unchanged.
+					runBudget: timeoutMs === undefined ? runBudget : { ...runBudget, maxWallTimeMs: timeoutMs },
+					budgetScope: "session",
+					sharedBudgetController,
+					// The same per-parent admission cap applies to a child's own
+					// delegations (each runtime counts its direct children).
+					maxConcurrentChildren: options.maxConcurrentChildren,
 					sessionManager: childSessionManager,
 					resourceLoader,
 					tools: toolNames,
@@ -604,25 +815,184 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					sandbox: sandboxContract,
 				});
 				await childSession.bindExtensions({});
+				let status: import("./delegation/runtime.ts").ChildSessionStatus = "idle";
+				let runPromise: Promise<void> | undefined;
+				let lastTurnResult: ChildTurnResult | undefined;
+				// The captured structured terminal outcome of the run in flight
+				// (`agent_end`'s stopReason). Budget refusals emit agent_end without
+				// an assistant message, so this is the only way the settlement below
+				// can see and name them.
+				let runStopReason: AgentStopReason | undefined;
+				const ensureOpen = () => {
+					if (status === "closed") throw new Error("Child session is closed.");
+				};
+				const start = (input: string): Promise<void> => {
+					ensureOpen();
+					if (runPromise) throw new Error("Child session is already running.");
+					status = "running";
+					runStopReason = undefined;
+					// Capture the run's structured terminal outcome: a budget refusal
+					// emits agent_end without producing an assistant message, so the
+					// message-based checks below cannot see it.
+					const unsubscribeStop = childSession.subscribe((event) => {
+						if (event.type === "agent_end") runStopReason = event.stopReason;
+					});
+					const pending = childSession
+						.prompt(input)
+						.then(
+							() => {
+								unsubscribeStop();
+								if (status === "closed") {
+									lastTurnResult = { outcome: "failed", output: "" };
+									throw new Error("Child session is closed.");
+								}
+								if (status === "interrupted") {
+									lastTurnResult = { outcome: "interrupted", output: extractFinalAssistantText(childSession) };
+									throw new Error("Child session is interrupted.");
+								}
+								const lastAssistant = [...childSession.agent.state.messages]
+									.reverse()
+									.find((message) => message.role === "assistant");
+								if (
+									lastAssistant?.role === "assistant" &&
+									(lastAssistant.stopReason === "aborted" || lastAssistant.stopReason === "error")
+								) {
+									status = "interrupted";
+									lastTurnResult = {
+										outcome: lastAssistant.stopReason === "aborted" ? "interrupted" : "failed",
+										output: lastAssistant.errorMessage || extractFinalAssistantText(childSession),
+									};
+									throw new Error(lastAssistant.errorMessage || "Child session was interrupted.");
+								}
+								status = "idle";
+								lastTurnResult = { outcome: "completed", output: extractFinalAssistantText(childSession) };
+							},
+							(error) => {
+								unsubscribeStop();
+								if (status !== "closed") status = "interrupted";
+								lastTurnResult =
+									status === "closed"
+										? { outcome: "failed", output: "" }
+										: { outcome: "interrupted", output: extractFinalAssistantText(childSession) };
+								throw error;
+							},
+						)
+						.finally(() => {
+							runPromise = undefined;
+						});
+					runPromise = pending;
+					return pending;
+				};
+				const sendInput = (input: string) => {
+					ensureOpen();
+					if (runPromise) {
+						if (status !== "running") throw new Error("Child session is still stopping.");
+						// A follow-up queued onto a live run settles through that run's
+						// own loop; only turns that settle here pass through the gate.
+						return childSession.followUp(input);
+					}
+					return start(input).then(() => requireVerifiedTurn());
+				};
+				const close = () => {
+					if (status === "closed") return;
+					status = "closed";
+					childSession.dispose();
+				};
+				// Verification gate (spec 2026-09-09, "Verification at completion"):
+				// a child with configured verification policies may not settle a turn
+				// as successful unless the session's canonical tracker reports
+				// "verified". The tracker is the only verifier; no child-local one is
+				// introduced. With the "explicit" boundary the gate runs
+				// requestVerification once here; with the "post-turn" boundary the
+				// session already ran verification at its own turn boundary, so the
+				// gate only reads the status. Any other completion status --
+				// failed/unavailable/interrupted/continued-unverified -- fails the
+				// turn with the status named in the error.
+				const requireVerifiedTurn = async (): Promise<void> => {
+					const policyIds = childSession.verificationPolicyIds();
+					if (policyIds.length === 0) return;
+					const verificationStatus =
+						childSession.verificationBoundary() === "explicit"
+							? await childSession.requestVerification()
+							: childSession.verificationStatus();
+					if (verificationStatus === "verified") return;
+					const message = `Child verification failed: ${verificationStatus} (policies: ${policyIds.join(", ")}).`;
+					lastTurnResult = { outcome: "failed", output: message };
+					throw new Error(message);
+				};
 				return {
+					get status() {
+						return status;
+					},
+					latestResult: () => lastTurnResult,
+					usage: () => childSession.agent.budgetUsage(),
+					// The usage-rollup seam (spec 2026-09-09): the registry reads the
+					// child's own transcript file when one exists, and falls back to
+					// these in-memory entries only for a child that never persisted a
+					// transcript. Read-only; the child's SessionManager stays the owner.
+					sessionEntries: () => childSessionManager.getEntries(),
 					async run(task: string) {
 						const prompt = definition.systemPrompt
 							? `${definition.systemPrompt}\n\nTask: ${task}`
 							: `Task: ${task}`;
-						await childSession.prompt(prompt);
+						await start(prompt);
+						if (status === "closed" || status === "interrupted") throw new Error(`Child session is ${status}.`);
+						// The launch timeout's settlement error path (spec 2026-09-09,
+						// timeouts): a run refused at the child's own wall-time gate never
+						// started meaningful work, so the delegation settles failed with
+						// the exhausted limit named, reusing the budget's existing
+						// exhaustedLimit vocabulary. Other budget refusals keep their
+						// existing semantics (the refusal is named in the child transcript
+						// and the prior result stands).
+						if (runStopReason?.kind === "budget-exhausted" && runStopReason.limit === "wall-time") {
+							const message = `Child run stopped before completing: the run's ${runStopReason.limit} budget was exhausted.`;
+							lastTurnResult = { outcome: "failed", output: message };
+							throw new Error(message);
+						}
+						// Delegated work cannot claim success when the child has a
+						// required verification boundary and verification did not pass.
+						// Use the session's canonical tracker rather than introducing
+						// a second child-only verifier.
+						await requireVerifiedTurn();
 						return { output: extractFinalAssistantText(childSession) };
 					},
-					dispose() {
-						childSession.dispose();
+					wait: async () => {
+						while (runPromise) await runPromise;
 					},
+					interrupt: () => {
+						ensureOpen();
+						if (status === "running") {
+							status = "interrupted";
+							void childSession.abort().catch(() => undefined);
+						}
+					},
+					close,
+					sendInput,
+					followUp: sendInput,
+					dispose: close,
+					// Construction linkage (spec 2026-09-09, policy/sandbox/artifact
+					// linkage): the registry relays these onto the persisted child_run
+					// record and every status/wait payload derived from it.
+					policy,
+					sandboxEnforced,
 				};
 			},
 		};
 		customTools.push(createDelegateToolDefinition(delegationRuntime) as ToolDefinition<any, any>);
+		// Historical resume (restart reconstruction) reattaches a persisted child
+		// through THIS runtime's buildChildSession seam. Wiring it here -- not only
+		// at the first delegation -- is what makes resume work on a freshly
+		// reopened session before any new delegation has run.
+		childRunRegistry.setRuntimeOptions(delegationRuntime);
 	}
 
 	const session = new AgentSession({
+		childRunRegistry,
+		delegationRuntime,
 		agent,
+		// Root aggregate usage (spec 2026-09-09, "Shared budgets"): undefined
+		// when the tree has no aggregate budget.
+		aggregateBudgetUsage,
 		sessionManager,
 		settingsManager,
 		cwd,
@@ -660,6 +1030,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	return {
 		session,
 		extensionsResult,
+		delegationRuntime,
 		modelFallbackMessage,
 		sandboxContract,
 		sandboxDiagnostic,
