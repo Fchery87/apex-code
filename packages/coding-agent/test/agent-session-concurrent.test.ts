@@ -69,10 +69,13 @@ async function waitForStreaming(session: AgentSession, timeoutMs = 1_000): Promi
 describe("AgentSession concurrent prompt guard", () => {
 	let session: AgentSession;
 	let tempDir: string;
+	let originalCwd: string;
 
 	beforeEach(async () => {
 		tempDir = join(tmpdir(), `pi-concurrent-test-${Date.now()}`);
 		mkdirSync(tempDir, { recursive: true });
+		originalCwd = process.cwd();
+		process.chdir(tempDir);
 	});
 
 	afterEach(async () => {
@@ -81,6 +84,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		if (session) {
 			session.dispose();
 		}
+		process.chdir(originalCwd);
 		if (tempDir && existsSync(tempDir)) {
 			rmSync(tempDir, { recursive: true });
 		}
@@ -134,6 +138,27 @@ describe("AgentSession concurrent prompt guard", () => {
 
 		return session;
 	}
+
+	it("retains interrupted and closed lifecycle and rejects prompts after dispose", async () => {
+		await createSession();
+		const pending = session.prompt("Work");
+		await waitForStreaming(session);
+		expect(session.lifecycle).toBe("running");
+		await session.abort();
+		await pending;
+		expect(session.lifecycle).toBe("interrupted");
+		session.dispose();
+		session.dispose();
+		expect(session.lifecycle).toBe("closed");
+		await expect(session.prompt("Too late")).rejects.toThrow(/closed/i);
+	});
+
+	it("records preflight failure without leaving the session running", async () => {
+		await createSession();
+		session.agent.state.model = undefined as any;
+		await expect(session.prompt("Work")).rejects.toThrow();
+		expect(session.lifecycle).toBe("failed");
+	});
 
 	it("should throw when prompt() called while streaming", async () => {
 		await createSession();

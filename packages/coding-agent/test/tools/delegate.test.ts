@@ -1,6 +1,7 @@
+import { resolve } from "node:path";
 import { Text } from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import type { DelegationRuntimeOptions } from "../../src/core/delegation/runtime.ts";
+import { ChildRunRegistry, type DelegationRuntimeOptions } from "../../src/core/delegation/runtime.ts";
 import type { Capability } from "../../src/core/tools/contract.ts";
 import { createDelegateTool, createDelegateToolDefinition } from "../../src/core/tools/delegate.ts";
 import { initTheme, theme } from "../../src/modes/interactive/theme/theme.ts";
@@ -100,6 +101,79 @@ describe("delegate evidence: workflow record (task 4.6)", () => {
 			{ kind: "workflow", agentType: "explore", task: "find the config loader" },
 		]);
 	});
+
+	it("carries a background launch's handle from the completed result without changing the record shape", () => {
+		// capture runs in afterToolCall with the completed result, so the handle the
+		// launch produced is available even though the params could not know it.
+		// The handle is the child's session id: it names the child's session file
+		// and artifact dir under the parent's delegations/.
+		const definition = createDelegateToolDefinition(inertRuntime());
+		const params = { agentType: "explore", task: "find the config loader", background: true };
+		const result = {
+			content: [],
+			details: { agentType: "explore", task: "find the config loader", output: "started", handle: "h-123" },
+		};
+		expect(definition.contract.evidence.capture(params, result)).toEqual([
+			{ kind: "workflow", agentType: "explore", task: "find the config loader", handle: "h-123" },
+		]);
+	});
+
+	it("keeps a retrieval call's evidence on the params' handle, independent of the result details", () => {
+		const definition = createDelegateToolDefinition(inertRuntime());
+		const params = { agentType: "explore", handle: "h-123" };
+		const result = { content: [], details: { agentType: "explore", task: "retrieved", output: "done" } };
+		expect(definition.contract.evidence.capture(params, result)).toEqual([
+			{ kind: "workflow", agentType: "explore", handle: "h-123" },
+		]);
+	});
+
+	it("background launch evidence handle matches the child_run record handleId", async () => {
+		const registry = new ChildRunRegistry();
+		const runtime = inertRuntime({
+			resolveAgent: (agentType) =>
+				agentType === "explore"
+					? { name: "explore", description: "recon", tools: [], systemPrompt: "" }
+					: undefined,
+			getParentCapabilities: () => new Set<Capability>(["delegate"]),
+			childRunRegistry: registry,
+			buildChildSession: vi.fn(async () => ({
+				run: async (task: string) => ({ output: `explored: ${task}` }),
+				dispose: () => {},
+				close: () => {},
+				interrupt: () => {},
+				wait: async () => {},
+				sendInput: async () => {},
+				followUp: async () => {},
+				status: "idle" as const,
+				latestResult: () => undefined,
+			})),
+		});
+		const tool = createDelegateTool(runtime);
+		const definition = createDelegateToolDefinition(runtime);
+
+		const result = await tool.execute("call-1", {
+			agentType: "explore",
+			task: "find the config loader",
+			background: true,
+		});
+		const handle = result.details.handle;
+		expect(typeof handle).toBe("string");
+
+		// The launch's workflow evidence record ties to the durable child_run
+		// record of the SAME launch: one handle identifies both, so an evidence
+		// record resolves to exactly the child run (and its session file) it
+		// describes -- no second id anywhere.
+		const evidence = definition.contract.evidence.capture(
+			{ agentType: "explore", task: "find the config loader", background: true },
+			result,
+		);
+		expect(evidence).toHaveLength(1);
+		const record = evidence[0]!;
+		if (record.kind !== "workflow") throw new Error("expected a workflow evidence record");
+		expect(record).toMatchObject({ kind: "workflow", agentType: "explore", handle });
+		expect(registry.status(handle!).handleId).toBe(record.handle);
+		registry.dispose();
+	});
 });
 
 describe("delegate execution: runs a real child through the injected runtime (task 5.2)", () => {
@@ -113,6 +187,13 @@ describe("delegate execution: runs a real child through the injected runtime (ta
 			buildChildSession: vi.fn(async () => ({
 				run: async (task: string) => ({ output: `explored: ${task}` }),
 				dispose: () => {},
+				close: () => {},
+				interrupt: () => {},
+				wait: async () => {},
+				sendInput: async () => {},
+				followUp: async () => {},
+				status: "idle" as const,
+				latestResult: () => undefined,
 			})),
 		});
 		const tool = createDelegateTool(runtime);
@@ -145,5 +226,72 @@ describe("delegate execution: runs a real child through the injected runtime (ta
 		await expect(tool.execute("call-1", { agentType: "explore", task: "find the config loader" })).rejects.toThrow(
 			/unknown agent type/i,
 		);
+	});
+});
+
+describe("delegate execution: workspace request passthrough", () => {
+	interface CapturedRequest {
+		workspace?: { isolation: string; ownedPaths: readonly string[]; root?: string };
+	}
+	function workspaceRuntime() {
+		const buildChildSession = vi.fn(async (request: CapturedRequest & Record<string, unknown>) => ({
+			run: async (task: string) => ({ output: `done: ${task}` }),
+			dispose: () => {},
+			close: () => {},
+			interrupt: () => {},
+			wait: async () => {},
+			sendInput: async () => {},
+			followUp: async () => {},
+			status: "idle" as const,
+			latestResult: () => undefined,
+			...request,
+		}));
+		const prepare = vi.fn(
+			async (request: { isolation: "shared-read" | "worktree"; ownedPaths: readonly string[] }) => ({
+				...request,
+				root: "/tmp/prepared-root",
+			}),
+		);
+		const runtime = inertRuntime({
+			resolveAgent: (agentType) =>
+				agentType === "writer" ? { name: "writer", description: "writes", tools: [], systemPrompt: "" } : undefined,
+			getParentCapabilities: () => new Set<Capability>(["delegate"]),
+			buildChildSession: buildChildSession as never,
+			workspaceOwner: { prepare, release: async () => ({ removed: true }) },
+		});
+		const tool = createDelegateTool(runtime);
+		return { tool, buildChildSession, prepare };
+	}
+
+	it("passes a worktree workspace request through to runDelegation (built child sees the prepared root)", async () => {
+		const { tool, buildChildSession } = workspaceRuntime();
+		await tool.execute("call-1", {
+			agentType: "writer",
+			task: "write output",
+			workspace: { isolation: "worktree" },
+		});
+		const request = buildChildSession.mock.calls[0]?.[0] as unknown as CapturedRequest & { sessionId: string };
+		expect(request.workspace).toMatchObject({ isolation: "worktree", ownedPaths: [], root: "/tmp/prepared-root" });
+	});
+
+	it("keeps the default shared-read workspace unchanged when no workspace is supplied", async () => {
+		const { tool, buildChildSession, prepare } = workspaceRuntime();
+		await tool.execute("call-1", { agentType: "writer", task: "write output" });
+		const request = buildChildSession.mock.calls[0]?.[0] as CapturedRequest;
+		expect(request.workspace).toEqual({ isolation: "shared-read", ownedPaths: [] });
+		expect(prepare).not.toHaveBeenCalled();
+	});
+
+	it("round-trips ownedPaths to the workspace owner and the built child", async () => {
+		const { tool, buildChildSession, prepare } = workspaceRuntime();
+		await tool.execute("call-1", {
+			agentType: "writer",
+			task: "write output",
+			workspace: { isolation: "worktree", ownedPaths: ["src/feature.ts"] },
+		});
+		const prepared = prepare.mock.calls[0]?.[0];
+		expect(prepared?.ownedPaths).toEqual([resolve("src/feature.ts")]);
+		const request = buildChildSession.mock.calls[0]?.[0] as CapturedRequest;
+		expect(request.workspace?.ownedPaths).toEqual([resolve("src/feature.ts")]);
 	});
 });
