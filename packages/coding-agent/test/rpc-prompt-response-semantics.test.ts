@@ -107,7 +107,6 @@ function sleep(ms: number): Promise<void> {
 /** Optional construction linkage a fixture child may carry, exactly like the sdk's real handles. */
 interface ChildLinkageFixture {
 	policy?: ChildRunPolicySnapshot;
-	sandboxEnforced?: boolean;
 }
 
 /** A ChildSessionHandle whose turns settle only when the test resolves them. */
@@ -148,7 +147,6 @@ function deferredChild(
 		followUp: async () => {},
 		dispose: () => {},
 		...(linkage?.policy ? { policy: linkage.policy } : {}),
-		...(linkage?.sandboxEnforced !== undefined ? { sandboxEnforced: linkage.sandboxEnforced } : {}),
 	};
 	return { handle, settle: (output = defaultOutput) => resolvers.shift()!({ output }) };
 }
@@ -599,13 +597,11 @@ describe("RPC prompt response semantics", () => {
 			policy: {
 				tools: ["read"],
 				capabilities: ["fs.read"],
-				sandbox: "none",
 				maxDelegationDepth: 2,
 				model: "claude-sonnet-4-5",
 				budgetScope: "session",
 				aggregateBudget: false,
 			},
-			sandboxEnforced: true,
 		});
 		const { lineHandler, cleanup } = await startRpcMode({
 			withAuth: true,
@@ -648,8 +644,7 @@ describe("RPC prompt response semantics", () => {
 					outcome: "completed",
 					artifactDir: join(artifactRoot, "delegations", spawnedHandleId),
 					parentSessionId: "rpc-parent-session",
-					policy: { tools: ["read"], capabilities: ["fs.read"], sandbox: "none", budgetScope: "session" },
-					sandboxEnforced: true,
+					policy: { tools: ["read"], capabilities: ["fs.read"], budgetScope: "session" },
 				});
 				const sessionFile = data.sessionFile as string | undefined;
 				expect(typeof sessionFile).toBe("string");
@@ -666,8 +661,7 @@ describe("RPC prompt response semantics", () => {
 					handleId: spawnedHandleId,
 					artifactDir: join(artifactRoot, "delegations", spawnedHandleId),
 					parentSessionId: "rpc-parent-session",
-					policy: { tools: ["read"], sandbox: "none", aggregateBudget: false },
-					sandboxEnforced: true,
+					policy: { tools: ["read"], aggregateBudget: false },
 				});
 				expect(existsSync(data.sessionFile as string)).toBe(true);
 			});

@@ -133,11 +133,6 @@ export interface ChildSessionHandle {
 	 * runtime relays it onto the child-run record when present.
 	 */
 	policy?: ChildRunPolicySnapshot;
-	/**
-	 * True when the OS-containment supervisor marker check passed at this
-	 * handle's construction. Optional for the same reason as `policy`.
-	 */
-	sandboxEnforced?: boolean;
 	/** Release the child's resources. Called when the child or owning parent is closed. */
 	dispose(): void;
 }
@@ -297,8 +292,6 @@ export interface ChildRunPolicySnapshot {
 	tools: string[];
 	/** The admitted capability set from the same admission projection that gated the launch. */
 	capabilities: string[];
-	/** The sandbox contract string the child was constructed under ("required" | "external" | "none"). */
-	sandbox: string;
 	/** The delegation depth bound in force for this child's own delegations. */
 	maxDelegationDepth: number;
 	/** The child's resolved model id (its definition's model, or the parent's current model). */
@@ -860,7 +853,7 @@ export class ChildRunRegistry {
 				// through the same admission projection; the record's persisted
 				// values stand in when a fixture handle reports none.
 				policy: child.policy ?? record.policy,
-				sandboxEnforced: child.sandboxEnforced ?? record.sandboxEnforced,
+				sandboxEnforced: record.sandboxEnforced,
 				parentSessionId: record.parentSessionId,
 				attempts: [...priorAttempts, attempt],
 				activeAttemptId: attempt.id,
@@ -1826,7 +1819,6 @@ export async function runDelegation(
 			attempts: [{ id: "attempt-1", startedAt: Date.now() }],
 			activeAttemptId: "attempt-1",
 			...(child.policy ? { policy: child.policy } : {}),
-			...(child.sandboxEnforced !== undefined ? { sandboxEnforced: child.sandboxEnforced } : {}),
 			...(options.getParentSessionId ? { parentSessionId: options.getParentSessionId() } : {}),
 			...(request.idempotencyKey !== undefined ? { idempotencyKey: request.idempotencyKey } : {}),
 			...(timeoutMs !== undefined ? { deadlineMs: Date.now() + timeoutMs } : {}),

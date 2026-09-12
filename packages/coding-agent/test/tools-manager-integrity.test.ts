@@ -5,12 +5,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-	getToolPath,
-	installManagedToolArchive,
-	resolveHostToolBinary,
-	resolveManagedToolArtifact,
-} from "../src/utils/tools-manager.ts";
+import { getToolPath, installManagedToolArchive, resolveManagedToolArtifact } from "../src/utils/tools-manager.ts";
 
 const directories: string[] = [];
 
@@ -115,49 +110,9 @@ describe("managed executable artifacts", () => {
 	});
 });
 
-// A sandboxed child cannot see the host home directory, so the supervisor has to hand it
-// an absolute path for each managed tool rather than relying on the child's own PATH.
-describe.skipIf(process.platform === "win32")("host tool resolution for sandbox projection", () => {
-	it("prefers the managed tools directory over a system installation", async () => {
-		const toolsDirectory = await temporaryDirectory();
-		const systemDirectory = await temporaryDirectory();
-		writeFileSync(join(toolsDirectory, "rg"), "#!/bin/sh\n", { mode: 0o755 });
-		writeFileSync(join(systemDirectory, "rg"), "#!/bin/sh\n", { mode: 0o755 });
-
-		expect(resolveHostToolBinary("rg", { toolsDirectory, pathValue: systemDirectory })).toBe(
-			join(toolsDirectory, "rg"),
-		);
-	});
-
-	it("accepts the distribution's alternative name for a system binary", async () => {
-		const toolsDirectory = await temporaryDirectory();
-		const systemDirectory = await temporaryDirectory();
-		writeFileSync(join(systemDirectory, "fdfind"), "#!/bin/sh\n", { mode: 0o755 });
-
-		expect(resolveHostToolBinary("fd", { toolsDirectory, pathValue: systemDirectory })).toBe(
-			join(systemDirectory, "fdfind"),
-		);
-	});
-
-	it("ignores a non-executable file that merely shares the tool's name", async () => {
-		const toolsDirectory = await temporaryDirectory();
-		const systemDirectory = await temporaryDirectory();
-		writeFileSync(join(systemDirectory, "fd"), "not executable", { mode: 0o644 });
-
-		expect(resolveHostToolBinary("fd", { toolsDirectory, pathValue: systemDirectory })).toBeUndefined();
-	});
-
-	it("reports nothing to project when the tool is installed nowhere", async () => {
-		const toolsDirectory = await temporaryDirectory();
-		const systemDirectory = await temporaryDirectory();
-
-		expect(resolveHostToolBinary("rg", { toolsDirectory, pathValue: systemDirectory })).toBeUndefined();
-	});
-});
-
-// The sandbox projects host tools by bind-mounting over a file in the child's tools
-// directory. bwrap creates that mountpoint as an empty file on the host, which outlives
-// the namespace — so an unusable 0-byte stub can be sitting there on a later launch.
+// A 0-byte or unreadable file can be sitting in the managed tools directory after an
+// interrupted download or a half-finished install, and it is not the tool. Lookup has to
+// judge the file rather than trust the name.
 describe.skipIf(process.platform === "win32")("managed tool lookup ignores unusable files", () => {
 	it("does not return a leftover mountpoint stub as if it were the tool", async () => {
 		const toolsDirectory = await temporaryDirectory();

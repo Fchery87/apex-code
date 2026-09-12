@@ -1281,7 +1281,6 @@ describe("child record policy, sandbox, artifact, and evidence linkage (phase 4)
 		const expectedPolicy = {
 			tools: ["read"],
 			capabilities: ["fs.read"],
-			sandbox: "none",
 			maxDelegationDepth: delegationRuntime!.maxDelegationDepth,
 			model: faux.getModel().id,
 			budgetScope: "session",
@@ -1336,7 +1335,6 @@ describe("child record policy, sandbox, artifact, and evidence linkage (phase 4)
 			policy: {
 				tools: ["read"],
 				capabilities: ["fs.read"],
-				sandbox: "none",
 				maxDelegationDepth: delegationRuntime!.maxDelegationDepth,
 				budgetScope: "session",
 				aggregateBudget: false,
@@ -1357,7 +1355,6 @@ describe("child record policy, sandbox, artifact, and evidence linkage (phase 4)
 			policy: {
 				tools: ["read"],
 				capabilities: ["fs.read"],
-				sandbox: "none",
 				maxDelegationDepth: delegationRuntime!.maxDelegationDepth,
 				budgetScope: "session",
 				aggregateBudget: false,

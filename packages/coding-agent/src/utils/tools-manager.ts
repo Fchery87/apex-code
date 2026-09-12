@@ -488,44 +488,6 @@ function isExecutableFile(candidate: string, targetPlatform: NodeJS.Platform): b
 	}
 }
 
-/**
- * Absolute host path for a managed tool, or undefined when it is installed nowhere.
- *
- * `getToolPath` may return a bare command name because its caller spawns through PATH.
- * This resolves a real path instead, for callers that need one rather than a lookup
- * (ADR 0017).
- */
-export function resolveHostToolBinary(
-	tool: "fd" | "rg",
-	options: { toolsDirectory?: string; pathValue?: string; platform?: NodeJS.Platform } = {},
-): string | undefined {
-	const config = TOOLS[tool];
-	if (!config) return undefined;
-
-	const targetPlatform = options.platform ?? platform();
-	const executableSuffix = targetPlatform === "win32" ? ".exe" : "";
-	const managedPath = join(options.toolsDirectory ?? TOOLS_DIR, config.binaryName + executableSuffix);
-	if (isExecutableFile(managedPath, targetPlatform)) {
-		return managedPath;
-	}
-
-	const pathEntries = (options.pathValue ?? process.env.PATH ?? "")
-		.split(targetPlatform === "win32" ? ";" : ":")
-		.filter((entry) => entry.length > 0);
-	// Preference runs by name first, matching getToolPath: a real `fd` anywhere on PATH
-	// beats a `fdfind` alias, rather than whichever directory happens to come first.
-	for (const systemBinaryName of config.systemBinaryNames ?? [config.binaryName]) {
-		for (const entry of pathEntries) {
-			const candidate = join(entry, systemBinaryName + executableSuffix);
-			if (isExecutableFile(candidate, targetPlatform)) {
-				return candidate;
-			}
-		}
-	}
-
-	return undefined;
-}
-
 // Termux package names for tools
 const TERMUX_PACKAGES: Record<string, string> = {
 	fd: "fd",

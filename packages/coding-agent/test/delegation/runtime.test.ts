@@ -1061,6 +1061,21 @@ describe("attempt records, idempotent spawn, timeouts, and status (phase 2)", ()
 		registry.dispose();
 	});
 
+	// ADR 0032 deleted the OS boundary and deliberately kept this one field on the record,
+	// so a session written before the deletion still parses and still says what it said.
+	// Nothing writes it now, which is exactly why a read-path regression would be silent.
+	it("legacy records keep the sandbox flag they were written with", () => {
+		const registry = new ChildRunRegistry();
+		registry.restore([
+			{ handleId: "enforced-run", agentType: "scout", status: "interrupted", updatedAt: 1, sandboxEnforced: true },
+			{ handleId: "plain-run", agentType: "scout", status: "interrupted", updatedAt: 2 },
+		]);
+
+		expect(registry.status("enforced-run").sandboxEnforced).toBe(true);
+		expect(registry.status("plain-run").sandboxEnforced).toBeUndefined();
+		registry.dispose();
+	});
+
 	it("resume opens a new attempt and closes the prior one", async () => {
 		const artifactDir = mkdtempSync(join(tmpdir(), "apex-resume-attempt-"));
 		try {

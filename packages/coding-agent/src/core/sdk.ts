@@ -697,7 +697,6 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				const policy: ChildRunPolicySnapshot = {
 					tools: [...toolNames],
 					capabilities: [...capabilities].sort(),
-					sandbox: "none",
 					maxDelegationDepth: delegationMaxDepth,
 					model: childModel.id,
 					budgetScope: "session",

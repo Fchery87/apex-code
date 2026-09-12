@@ -51,7 +51,6 @@ function resumePassThrough(registry: ChildRunRegistry) {
 /** Optional construction linkage fixtures, exactly like the sdk's real handles supply. */
 interface ChildLinkageFixture {
 	policy?: ChildRunPolicySnapshot;
-	sandboxEnforced?: boolean;
 }
 
 /**
@@ -287,7 +286,6 @@ function deferredChild(
 		followUp: async () => {},
 		dispose: () => {},
 		...(linkage?.policy ? { policy: linkage.policy } : {}),
-		...(linkage?.sandboxEnforced !== undefined ? { sandboxEnforced: linkage.sandboxEnforced } : {}),
 	};
 	return { handle, settle: (output = defaultOutput) => resolvers.shift()!({ output }) };
 }
@@ -475,13 +473,11 @@ describe("acp server dispatch", () => {
 				policy: {
 					tools: ["read"],
 					capabilities: ["fs.read"],
-					sandbox: "none",
 					maxDelegationDepth: 2,
 					model: "claude-sonnet-4-5",
 					budgetScope: "session",
 					aggregateBudget: false,
 				},
-				sandboxEnforced: true,
 			});
 			const session = fakeSession({
 				child: child.handle,
@@ -516,11 +512,9 @@ describe("acp server dispatch", () => {
 				policy: {
 					tools: ["read"],
 					capabilities: ["fs.read"],
-					sandbox: "none",
 					budgetScope: "session",
 					aggregateBudget: false,
 				},
-				sandboxEnforced: true,
 			});
 			expect(existsSync(waited.sessionFile as string)).toBe(true);
 			expect((waited.sessionFile as string).endsWith(`_${spawned.handleId}.jsonl`)).toBe(true);
@@ -532,8 +526,7 @@ describe("acp server dispatch", () => {
 			expect(status).toMatchObject({
 				artifactDir: join(artifactRoot, "delegations", spawned.handleId),
 				parentSessionId: "acp-parent-session",
-				policy: { tools: ["read"], sandbox: "none", aggregateBudget: false },
-				sandboxEnforced: true,
+				policy: { tools: ["read"], aggregateBudget: false },
 			});
 			expect(existsSync(status.sessionFile as string)).toBe(true);
 		} finally {
