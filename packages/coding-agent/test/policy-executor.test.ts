@@ -20,7 +20,8 @@ import { WorkspaceArtifactStore } from "../src/core/workspace/artifacts.ts";
 const directories: string[] = [];
 
 afterEach(() => {
-	for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
+	for (const directory of directories.splice(0))
+		rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 function scratch(): string {

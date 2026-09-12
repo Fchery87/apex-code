@@ -36,7 +36,7 @@ describe("issue #2791 fs.watch error event crashes process", () => {
 	});
 
 	afterEach(() => {
-		rmSync(tempRoot, { recursive: true, force: true });
+		rmSync(tempRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
 	it("process should survive an error event on the theme FSWatcher", () => {

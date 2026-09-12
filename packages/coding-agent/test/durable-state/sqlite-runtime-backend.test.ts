@@ -35,7 +35,7 @@ function bunAvailable(): boolean {
 
 const tempDirs: string[] = [];
 afterEach(() => {
-	for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+	for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 describe("durable-state sqlite backend selection", () => {

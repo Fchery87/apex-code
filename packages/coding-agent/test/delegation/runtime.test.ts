@@ -223,7 +223,7 @@ describe("runDelegation", () => {
 				]),
 			);
 		} finally {
-			rmSync(scratch, { recursive: true, force: true });
+			rmSync(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 	it("rejects canonical overlapping ownership claims and permits shared reads", async () => {
@@ -976,8 +976,8 @@ describe("child run concurrency admission (maxConcurrentChildren)", () => {
 			expect(buildChildSession).toHaveBeenCalledTimes(2);
 			registry.dispose();
 		} finally {
-			rmSync(artifactDirA, { recursive: true, force: true });
-			rmSync(artifactDirB, { recursive: true, force: true });
+			rmSync(artifactDirA, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+			rmSync(artifactDirB, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 });
@@ -1102,7 +1102,7 @@ describe("attempt records, idempotent spawn, timeouts, and status (phase 2)", ()
 			expect(status.attempt.id).toBe(last.attempts![1]!.id);
 			registry.dispose();
 		} finally {
-			rmSync(artifactDir, { recursive: true, force: true });
+			rmSync(artifactDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -1400,7 +1400,7 @@ describe("child usage and cost accounting (phase 5)", () => {
 			});
 			registry.dispose();
 		} finally {
-			rmSync(parentDir, { recursive: true, force: true });
+			rmSync(parentDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 

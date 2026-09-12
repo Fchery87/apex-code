@@ -22,7 +22,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-	rmSync(scratch, { force: true, recursive: true });
+	rmSync(scratch, { force: true, recursive: true, maxRetries: 10, retryDelay: 50 });
 });
 
 function git(repo: string, ...args: string[]): string {

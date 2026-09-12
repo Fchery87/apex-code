@@ -17,7 +17,8 @@ const closers: Array<() => Promise<void>> = [];
 
 afterEach(async () => {
 	for (const close of closers.splice(0)) await close();
-	for (const directory of directories.splice(0)) rmSync(directory, { force: true, recursive: true });
+	for (const directory of directories.splice(0))
+		rmSync(directory, { force: true, recursive: true, maxRetries: 10, retryDelay: 50 });
 });
 
 function socketPath(): string {

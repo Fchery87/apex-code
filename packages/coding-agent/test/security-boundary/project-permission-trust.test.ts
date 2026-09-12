@@ -47,7 +47,7 @@ describe("2026-09-05 row 1: project permission files bypass trust", () => {
 	afterEach(() => {
 		if (originalHome === undefined) delete process.env.HOME;
 		else process.env.HOME = originalHome;
-		rmSync(tempDir, { recursive: true, force: true });
+		rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
 	it("refuses a blanket bash allow supplied by the checkout", async () => {
@@ -150,7 +150,7 @@ describe("2026-09-05 row 1: fail-closed edges", () => {
 	afterEach(() => {
 		if (originalHome === undefined) delete process.env.HOME;
 		else process.env.HOME = originalHome;
-		rmSync(tempDir, { recursive: true, force: true });
+		rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
 	it("requires trust for content it cannot parse", () => {

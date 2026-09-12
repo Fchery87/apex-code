@@ -137,7 +137,7 @@ describe("regression #2860: replaced session callbacks", () => {
 			await runtime.dispose();
 			faux.unregister();
 			if (existsSync(tempDir)) {
-				rmSync(tempDir, { recursive: true, force: true });
+				rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 			}
 		});
 
