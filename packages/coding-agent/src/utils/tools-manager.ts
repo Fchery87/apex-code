@@ -70,9 +70,9 @@ export function getToolPath(tool: "fd" | "rg", options: { toolsDirectory?: strin
 	const config = TOOLS[tool];
 	if (!config) return null;
 
-	// Check our tools directory first. Existence alone is not enough: the sandbox
-	// projects host tools by bind-mounting over a file here, and bwrap leaves that
-	// mountpoint behind as an empty, non-executable stub once the namespace is gone.
+	// Check our tools directory first. Existence alone is not enough: an interrupted
+	// download or a half-finished install leaves an empty, non-executable file here,
+	// and that file is not the tool.
 	const managedPath = join(
 		options.toolsDirectory ?? TOOLS_DIR,
 		config.binaryName + (platform() === "win32" ? ".exe" : ""),

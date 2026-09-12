@@ -43,6 +43,28 @@ const REMOVED_SYMBOLS = [
 
 const FORBIDDEN_FLAGS = ["--sandbox", "--add-dir", "--permission-profile"];
 
+/**
+ * Prose that asserts containment, in any source or test file.
+ *
+ * Symbols were not enough. The removal left comments describing a supervisor that no
+ * longer launches anything, and two user-facing strings that still promised a boundary:
+ * the bypass-permissions confirmation told the reader the OS sandbox "still confines
+ * writes to the workspace and network egress to the allowlist", and the `/share` failure
+ * steered users away from `gh auth login` because the sandbox used to hide those
+ * credentials. A false claim in a string is worse than a stale comment, and both read as
+ * ordinary prose to a symbol scan.
+ */
+const REMOVED_PHRASES = [
+	"OS sandbox",
+	"network allowlist",
+	"sandbox proxy",
+	"sandboxed child",
+	"SandboxAuthStorage",
+	"supervisor",
+	"bwrap",
+	"Seatbelt",
+];
+
 /** Documents a user reads before deciding whether to trust the harness with a repository. */
 const USER_FACING_DOCS = [
 	"README.md",
@@ -58,6 +80,10 @@ async function offendersIn(directory) {
 		const text = await readFile(file, "utf8");
 		for (const symbol of REMOVED_SYMBOLS) {
 			if (text.includes(symbol)) offenders.push(`${relative(root, file)}: ${symbol}`);
+		}
+		const lowered = text.toLowerCase();
+		for (const phrase of REMOVED_PHRASES) {
+			if (lowered.includes(phrase.toLowerCase())) offenders.push(`${relative(root, file)}: "${phrase}"`);
 		}
 	}
 	return offenders;
@@ -88,7 +114,7 @@ test("no user-facing document advertises the removed containment surface", async
 		const path = join(root, doc);
 		if (!existsSync(path)) continue;
 		const text = await readFile(path, "utf8");
-		for (const needle of [...FORBIDDEN_FLAGS, ...REMOVED_SYMBOLS]) {
+		for (const needle of [...FORBIDDEN_FLAGS, ...REMOVED_SYMBOLS, ...REMOVED_PHRASES]) {
 			if (text.includes(needle)) offenders.push(`${doc}: ${needle}`);
 		}
 	}

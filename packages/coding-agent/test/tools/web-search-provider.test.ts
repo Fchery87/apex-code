@@ -7,7 +7,6 @@ import type { WebSearchSettings } from "../../src/core/settings-manager.ts";
 import { createAllToolDefinitions, createAllTools } from "../../src/core/tools/index.ts";
 import {
 	createDeferredWebSearchOperations,
-	resolveWebSearchHost,
 	resolveWebSearchOperations,
 	unconfiguredWebSearchMessage,
 	webSearchSettingsError,
@@ -48,22 +47,6 @@ describe("web_search backend resolution", () => {
 
 	it("treats a blank key as unconfigured rather than sending an empty header", () => {
 		expect(resolveWebSearchOperations(undefined, { EXA_API_KEY: "   " })).toBeUndefined();
-	});
-});
-
-describe("web_search sandbox host", () => {
-	it("names no host until a credential is configured", () => {
-		expect(resolveWebSearchHost(undefined, {})).toBeUndefined();
-	});
-
-	it("names the backend's host once a credential is configured", () => {
-		expect(resolveWebSearchHost(undefined, { EXA_API_KEY: "env-key" })).toBe("api.exa.ai");
-	});
-
-	it("recognizes a command reference without executing it", () => {
-		// A shell spawn here would run on every supervisor launch. `false` exits
-		// non-zero, so a host coming back proves the command was never executed.
-		expect(resolveWebSearchHost({ provider: "exa", apiKey: "!false" }, {})).toBe("api.exa.ai");
 	});
 });
 
@@ -122,7 +105,6 @@ describe("web_search stored credential", () => {
 		// A user who just typed a key into the settings dialog expects it to win over
 		// a stale export they forgot about.
 		const authPath = authFileWith({ type: "api_key", key: "stored-key" });
-		expect(resolveWebSearchHost(undefined, { EXA_API_KEY: "env-key" }, authPath)).toBe("api.exa.ai");
 		expect(resolveWebSearchOperations(undefined, { EXA_API_KEY: "env-key" }, authPath)).toBeDefined();
 	});
 
@@ -141,7 +123,6 @@ describe("web_search stored credential", () => {
 	it("ignores a stored credential that is not an API key", () => {
 		const authPath = authFileWith({ type: "oauth", access: "a", refresh: "r", expires: 0 });
 		expect(resolveWebSearchOperations(undefined, {}, authPath)).toBeUndefined();
-		expect(resolveWebSearchHost(undefined, {}, authPath)).toBeUndefined();
 	});
 
 	it("falls back to the environment when auth.json holds nothing for the backend", () => {
@@ -199,7 +180,6 @@ describe("web_search literal key refusal", () => {
 		const settings = { provider: "exa", apiKey: "exa-literal-secret" } as const;
 		// Falls through to the environment rather than silently honouring the literal.
 		expect(resolveWebSearchOperations(settings, {})).toBeUndefined();
-		expect(resolveWebSearchHost(settings, {})).toBeUndefined();
 	});
 
 	it("reports the refusal to the model instead of failing as merely unconfigured", async () => {

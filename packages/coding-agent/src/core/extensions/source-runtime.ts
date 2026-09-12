@@ -33,11 +33,10 @@ function extendsTarget(configPath: string): string | undefined {
  * The tsconfig chain the extension loader reads when it compiles an extension
  * from TypeScript source.
  *
- * A sandboxed child cannot read what the profile does not grant, and the macOS
- * profile denies the whole home directory before re-allowing named paths. Without
- * these, loading a `.ts` extension inside the sandbox fails on the config rather
- * than on anything the extension does. Empty for a built or binary runtime, which
- * resolves through aliases and never opens a tsconfig.
+ * A container or VM that mounts only the workspace has to mount these too, or
+ * loading a `.ts` extension fails on the config rather than on anything the
+ * extension does. Empty for a built or binary runtime, which resolves through
+ * aliases and never opens a tsconfig.
  */
 export function typeScriptSourceConfigFiles(): readonly string[] {
 	if (!isTypeScriptSourceRuntime) return [];

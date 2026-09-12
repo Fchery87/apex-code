@@ -3,9 +3,6 @@ import type { WebSearchOperations, WebSearchResult } from "./web-search.ts";
 /** Exa's hosted search endpoint. */
 export const EXA_SEARCH_ENDPOINT = "https://api.exa.ai/search";
 
-/** Host of {@link EXA_SEARCH_ENDPOINT}, for the sandbox network allowlist. */
-export const EXA_SEARCH_HOST = "api.exa.ai";
-
 /** Exa's own default is 10; matching it keeps an unconfigured session predictable. */
 export const DEFAULT_EXA_RESULT_COUNT = 10;
 
@@ -100,10 +97,9 @@ function toWebSearchResults(payload: ExaSearchResponse, maxCharacters: number): 
  * Exa-backed `web_search` backend.
  *
  * Reaches the network through `globalThis.fetch` for the same reason `web_fetch`
- * does: that is the dispatcher `configureHttpDispatcher` made proxy-aware, so an
- * allowlisted host routes through the sandbox proxy and a disallowed one has no
- * route at all. Opening a raw socket here would sidestep a boundary this tool is
- * supposed to sit behind.
+ * does: that is the dispatcher `configureHttpDispatcher` made proxy-aware, so any
+ * transport policy the environment imposes still applies. Opening a raw socket here
+ * would sidestep it.
  */
 export function createExaWebSearchOperations(options: ExaWebSearchOptions): WebSearchOperations {
 	const apiKey = options.apiKey?.trim();
@@ -137,8 +133,8 @@ export function createExaWebSearchOperations(options: ExaWebSearchOptions): WebS
 				});
 			} catch (error) {
 				if (isAbortError(error)) throw error;
-				// `fetch failed` alone names neither the host nor the remedy. The sandbox
-				// refusal wrapper's message, when it produced one, is preserved verbatim here.
+				// `fetch failed` alone names neither the host nor the remedy, so the
+				// underlying message is preserved verbatim alongside the host.
 				const detail = error instanceof Error ? error.message : String(error);
 				throw new Error(`web_search request to ${host} failed: ${detail}`, { cause: error });
 			}

@@ -565,7 +565,7 @@ export function getModelsPath(): string {
 	return join(getAgentDir(), "models.json");
 }
 
-/** Get path to auth.json. Sandboxed children may receive an explicit read-only projection. */
+/** Get path to auth.json. */
 export function getAuthPath(): string {
 	return process.env.APEX_CODE_AUTH_PATH ?? join(getAgentDir(), "auth.json");
 }

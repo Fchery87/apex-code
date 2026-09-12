@@ -10,24 +10,21 @@ export type ShareUnavailableReason = "missing" | "unauthenticated";
 /**
  * Explain a failed `/share` preflight in terms the user can act on.
  *
- * `gh auth status` failing does not imply the user never logged in. The OS sandbox is
- * the normal startup path, and it cannot reach the host's gh credentials: `~/.config/gh`
- * sits under the tmpfs that replaces `/home`, `XDG_CONFIG_HOME` is redirected into the
- * sandbox state directory, and the token itself usually lives in a system keyring the
- * child cannot talk to. Telling that user to run `gh auth login` sends them after a
- * problem they do not have, so lead with the split-across-the-boundary workflow — which
- * works because exporting inside the workspace is allowed — and keep the plain login
- * hint for a genuinely logged-out host.
+ * A session now runs with the account's own permissions and reads the host's real
+ * `~/.config/gh`, so a failing `gh auth status` means what it says. This message used to
+ * lead with a split-across-the-boundary export workflow and steer users away from
+ * `gh auth login`, because under the OS boundary that login genuinely could not help.
+ * ADR 0032 removed the boundary, which makes logging in the correct and sufficient fix.
+ * Exporting is still offered, for a host that is deliberately logged out.
  */
 export function formatShareUnavailableMessage(reason: ShareUnavailableReason): string {
 	if (reason === "missing") {
 		return "GitHub CLI (gh) is not installed. Install it from https://cli.github.com/";
 	}
 	return [
-		"GitHub CLI has no credentials in this session.",
-		"Apex Code normally runs inside the OS sandbox, which cannot see the host's gh login:",
-		"run /export here, then 'gh gist create --public=false <file>' outside the sandbox.",
-		"If this session is not sandboxed, run 'gh auth login' first.",
+		"GitHub CLI has no credentials.",
+		"Run 'gh auth login', then try /share again.",
+		"To publish without logging in, run /export and then 'gh gist create --public=false <file>'.",
 	].join(" ");
 }
 

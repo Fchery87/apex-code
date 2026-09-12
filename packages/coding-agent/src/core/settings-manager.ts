@@ -14,12 +14,10 @@ import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-dis
 import type { LspSettings } from "./lsp/registry.ts";
 
 /**
- * `proper-lockfile` is required lazily, not imported: the supervisor loads this module
- * on every launch just to read settings, and a static import puts the lock library
- * (measured: the single largest share of the settings-manager import cost) on the
- * pre-child critical path where it is never used -- the supervisor only reads. The
- * sync `require` keeps `withLock`'s synchronous interface; the write path pays the
- * load once, on first write.
+ * `proper-lockfile` is required lazily rather than imported. It was measured as the
+ * single largest share of this module's import cost, and every startup reads settings
+ * while only a write needs the lock. The sync `require` keeps `withLock`'s synchronous
+ * interface; the write path pays the load once, on first write.
  */
 const requireFromHere = createRequire(import.meta.url);
 type ProperLockfile = typeof import("proper-lockfile");

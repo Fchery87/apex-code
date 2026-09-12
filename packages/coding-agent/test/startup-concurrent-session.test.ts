@@ -31,7 +31,7 @@ async function stopChild(child: ChildProcess): Promise<void> {
 		try {
 			process.kill(pid, "SIGKILL");
 		} catch {
-			// The supervisor may already have reaped the process.
+			// The OS may already have reaped the process.
 		}
 	}
 }
@@ -61,30 +61,11 @@ function listDescendantPids(rootPid: number | undefined): number[] {
 	return descendants;
 }
 
-function stopOrphanedConcurrentSandboxes(roots: string[]): void {
-	if (roots.length === 0) return;
-	const result = spawnSync("ps", ["-eo", "pid=,pgid=,args="], { encoding: "utf8" });
-	if (result.status !== 0) return;
-	for (const line of result.stdout.split("\n")) {
-		const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
-		if (!match || !match[3].includes("bwrap --new-session") || !roots.some((root) => match[3].includes(root))) {
-			continue;
-		}
-		const pid = Number(match[1]);
-		try {
-			process.kill(pid, "SIGKILL");
-		} catch {
-			// The test process may have already reaped the sandbox.
-		}
-	}
-}
-
 afterEach(async () => {
 	for (const child of children.splice(0)) {
 		await stopChild(child);
 		stderrByChild.delete(child);
 	}
-	stopOrphanedConcurrentSandboxes(tempDirs);
 	for (const dir of tempDirs.splice(0)) {
 		rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	}

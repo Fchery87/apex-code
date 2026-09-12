@@ -173,7 +173,7 @@ export interface BuildChildSessionRequest {
 }
 
 /** The workspace authority requested by a child. Paths are advisory claims,
- * never a replacement for the path-permission or sandbox enforcement. */
+ * never a replacement for the path-permission gate. */
 export interface ChildWorkspaceRequest {
 	isolation: "shared-read" | "worktree";
 	ownedPaths: readonly string[];
@@ -312,11 +312,10 @@ export interface ChildRunRecord {
 	/** The derived policy this child was built with, persisted so session readers describe the child without re-deriving it. Optional: legacy records predate the field. */
 	policy?: ChildRunPolicySnapshot;
 	/**
-	 * True when the SDK's OS-containment supervisor marker check passed for the
-	 * parent session (always the case under the "required" contract, which
-	 * refuses construction without it). Absent on legacy records; false means
-	 * the contract is "external"/"none" (or no supervisor marker was present)
-	 * and the SDK already allowed the run.
+	 * Legacy only. Records what a session written before ADR 0032 was told about OS
+	 * containment. Absent on records written since, because nothing sets it: the
+	 * harness ships no boundary and makes no containment claim. Retained so an older
+	 * session still parses and still reports what it reported (ADR 0006).
 	 */
 	sandboxEnforced?: boolean;
 	workspace?: ChildWorkspaceRequest;
@@ -419,7 +418,7 @@ export interface ChildRunStatus {
 	parentSessionId?: string;
 	/** The derived policy the child was built with; absent on legacy records and fixture handles that never carried one. */
 	policy?: ChildRunPolicySnapshot;
-	/** True when the OS-containment supervisor marker check passed for the parent session; absent on legacy records. */
+	/** Legacy only, surfaced from the record; nothing sets it since ADR 0032. */
 	sandboxEnforced?: boolean;
 }
 

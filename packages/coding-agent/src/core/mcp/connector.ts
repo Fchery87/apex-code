@@ -94,9 +94,8 @@ export async function connectMcpServer(server: McpServerConfig, oauthAuthorizati
 
 export interface SessionMcpConnectorOptions {
 	/**
-	 * The session's credential store: `AuthStorage` on the host, `SandboxAuthStorage`
-	 * in a sandboxed child (reads from the projection, writes through the supervisor
-	 * channel). OAuth-configured servers without one fail closed.
+	 * The session's credential store, `AuthStorage` by default. OAuth-configured
+	 * servers without one fail closed.
 	 */
 	credentials?: CredentialStore;
 	now?: () => number;

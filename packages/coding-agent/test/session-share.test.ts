@@ -70,17 +70,17 @@ describe("session sharing", () => {
 	});
 });
 
-// The OS sandbox is the normal startup path, and it cannot see the host's gh
-// credentials (~/.config/gh sits under the tmpfs that replaces /home, and the token
-// usually lives in a system keyring). The old message blamed a missing login and sent
-// users to `gh auth login`, which does not help and is not even true on the host.
+// A session reads the host's real ~/.config/gh now, so `gh auth login` is the fix and
+// the message has to say so. It used to steer users away from logging in, which was
+// right only while the OS boundary hid those credentials from the session (ADR 0032).
 describe("share preflight messaging", () => {
-	it("points an unauthenticated session at the export path that actually works", () => {
+	it("tells an unauthenticated session to log in, and offers export as the fallback", () => {
 		const message = formatShareUnavailableMessage("unauthenticated");
 
+		expect(message).toContain("gh auth login");
 		expect(message).toContain("/export");
 		expect(message).toContain("gh gist create");
-		expect(message).toMatch(/sandbox/i);
+		expect(message).not.toMatch(/sandbox/i);
 	});
 
 	it("still tells a user with no GitHub CLI where to get one", () => {
