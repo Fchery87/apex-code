@@ -8,7 +8,8 @@ import { createGitCheckpoints } from "../../src/core/checkpoints/git-checkpoints
 const directories: string[] = [];
 
 afterEach(() => {
-	for (const directory of directories.splice(0)) rmSync(directory, { force: true, recursive: true });
+	for (const directory of directories.splice(0))
+		rmSync(directory, { force: true, recursive: true, maxRetries: 10, retryDelay: 50 });
 });
 
 function temporaryDirectory(prefix: string): string {

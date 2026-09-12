@@ -73,7 +73,8 @@ function writeRawSession(root: string, id: string, mutations: Record<string, unk
 }
 
 afterEach(() => {
-	while (tempDirs.length > 0) rmSync(tempDirs.pop()!, { recursive: true, force: true });
+	while (tempDirs.length > 0)
+		rmSync(tempDirs.pop()!, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 const conformance = createSessionBackendConformance(async () => {

@@ -176,7 +176,7 @@ describe("workspace comparison boundaries", () => {
 
 	afterEach(() => {
 		session?.dispose();
-		rmSync(tempDir, { recursive: true, force: true });
+		rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
 	function git(cwd: string, ...args: string[]): string {

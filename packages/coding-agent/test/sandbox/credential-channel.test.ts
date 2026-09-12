@@ -27,7 +27,8 @@ const proxies: CredentialProxy[] = [];
 
 afterEach(async () => {
 	for (const proxy of proxies.splice(0)) await proxy.close();
-	for (const directory of directories.splice(0)) rmSync(directory, { force: true, recursive: true });
+	for (const directory of directories.splice(0))
+		rmSync(directory, { force: true, recursive: true, maxRetries: 10, retryDelay: 50 });
 	delete process.env.APEX_CREDENTIAL_PROXY_PATH;
 });
 
@@ -216,14 +217,14 @@ describe.skipIf(process.platform === "win32")("createCredentialProxy", () => {
 		const stalePid = child.pid as number;
 		await new Promise<void>((resolve) => child.once("exit", () => resolve()));
 		const staleDirectory = join("/tmp", `apex-cred-${stalePid}-stale-test`);
-		rmSync(staleDirectory, { force: true, recursive: true });
+		rmSync(staleDirectory, { force: true, recursive: true, maxRetries: 10, retryDelay: 50 });
 		mkdirSync(staleDirectory, { mode: 0o700 });
 		writeFileSync(join(staleDirectory, "channel.sock"), "stale");
 
 		const paths = resolveCredentialChannelPaths();
 
 		expect(existsSync(staleDirectory)).toBe(false);
-		rmSync(paths.hostSocketDirectory, { force: true, recursive: true });
+		rmSync(paths.hostSocketDirectory, { force: true, recursive: true, maxRetries: 10, retryDelay: 50 });
 	});
 
 	it("refuses valid JSON primitives without crashing the supervisor", async () => {

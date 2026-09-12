@@ -41,7 +41,7 @@ afterEach(async () => {
 		let retries = 12;
 		while (retries > 0) {
 			try {
-				rmSync(currentTempDir, { recursive: true, force: true });
+				rmSync(currentTempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 				break;
 			} catch (err: any) {
 				if (err.code === "EBUSY" || err.code === "ENOTEMPTY" || err.code === "EPERM") {

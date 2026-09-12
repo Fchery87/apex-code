@@ -40,7 +40,7 @@ describe.skipIf(!API_KEY)("AgentSession forking", () => {
 			await runtimeHost.dispose();
 		}
 		if (tempDir && existsSync(tempDir)) {
-			rmSync(tempDir, { recursive: true });
+			rmSync(tempDir, { recursive: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 

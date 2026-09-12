@@ -100,7 +100,7 @@ describe("DefaultPackageManager git update", () => {
 
 	afterEach(() => {
 		if (tempDir && existsSync(tempDir)) {
-			rmSync(tempDir, { recursive: true, force: true });
+			rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -239,7 +239,7 @@ describe("DefaultPackageManager git update", () => {
 			const cachedDir = managerWithPaths.getGitInstallPath(managerWithPaths.parseSource(gitSource), "temporary");
 			const extensionFile = join(cachedDir, "pi-extensions", "session-breakdown.ts");
 
-			rmSync(cachedDir, { recursive: true, force: true });
+			rmSync(cachedDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 			mkdirSync(join(cachedDir, "pi-extensions"), { recursive: true });
 			writeFileSync(
 				join(cachedDir, "package.json"),
@@ -284,7 +284,7 @@ describe("DefaultPackageManager git update", () => {
 			const cachedDir = managerWithPaths.getGitInstallPath(managerWithPaths.parseSource(gitSource), "temporary");
 			const extensionFile = join(cachedDir, "pi-extensions", "session-breakdown.ts");
 
-			rmSync(cachedDir, { recursive: true, force: true });
+			rmSync(cachedDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 			mkdirSync(join(cachedDir, "pi-extensions"), { recursive: true });
 			writeFileSync(
 				join(cachedDir, "package.json"),

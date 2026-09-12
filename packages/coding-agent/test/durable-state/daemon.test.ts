@@ -9,7 +9,7 @@ import { SessionManager } from "../../src/core/session-manager.ts";
 
 const tempDirs: string[] = [];
 afterEach(() => {
-	for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+	for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 function createDir(): string {
 	const dir = mkdtempSync(join(tmpdir(), "apex-daemon-"));
