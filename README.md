@@ -348,6 +348,11 @@ docker run --rm -it \
 Restrict the mounts and the credentials to what the task needs. Windows container and VM
 isolation works the same way.
 
+If you want a per-command boundary inside the session instead, that is an extension's job
+rather than the harness's. `packages/coding-agent/examples/extensions/sandbox/` is a
+working example that replaces the `bash` tool with one that confines it, and it is the
+shape any containment you add should take.
+
 Read [`SECURITY.md`](SECURITY.md) before relying on Apex Code for higher-risk work.
 
 ### Verification and formatter policies

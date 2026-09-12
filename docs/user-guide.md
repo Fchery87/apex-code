@@ -76,8 +76,9 @@ package installs run with the permissions of the account that started the CLI. T
 permission gate is a separate policy layer and still applies to every tool call, but it is
 not OS containment. For untrusted repositories, generated code you will not review, or
 unattended runs, run the CLI inside a container, VM, dev container, or sandbox with only
-the files and credentials the task needs. See [`SECURITY.md`](../SECURITY.md) for what
-this does and does not guarantee.
+the files and credentials the task needs. Containment inside a session is an extension's
+job, and `packages/coding-agent/examples/extensions/sandbox/` is a working example of one.
+See [`SECURITY.md`](../SECURITY.md) for what this does and does not guarantee.
 
 **Sessions.** Conversations are stored as JSONL files with a branching tree
 structure — you can fork from any earlier point (`/fork`, `/tree`) rather than only
