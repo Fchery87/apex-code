@@ -96,6 +96,11 @@ apex-code-*.html
 # Probe scratch containing throwaway git repositories, not evidence.
 .apex-code/audit-review-2026-09-05/execution-scratch/
 .apex-code/audit-review-2026-09-05/execution-scratch-corrected/
+# Dated audit working directories. These hold pointers into `/tmp` snapshots that
+# do not survive a reboot, so the tree is scratch that reads as evidence. A report
+# worth keeping is committed under `docs/research/` instead, where the lifecycle
+# validator can see it.
+.apex-code/audits/
 
 # Release-verification and session scratch: a packed-install sandbox with a
 # full vendored node_modules (264MB), Windows comparison output, and a
