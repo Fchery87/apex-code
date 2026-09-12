@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -173,4 +174,17 @@ describe("2026-09-05 row 1: fail-closed edges", () => {
 		mkdirSync(permissionsPath(), { recursive: true });
 		expect(hasTrustRequiringProjectResources(cwd)).toBe(true);
 	});
+
+	it.skipIf(process.platform === "win32")(
+		"returns without reading a FIFO, which would otherwise block startup forever",
+		() => {
+			// The checkout controls this path. Before the regular-file check, a synchronous
+			// read of a FIFO hung the process before any prompt could render: a trust check
+			// turned into a denial of service. Verified by observing the hang.
+			execFileSync("mkfifo", [permissionsPath()]);
+			const startedAt = Date.now();
+			expect(hasTrustRequiringProjectResources(cwd)).toBe(true);
+			expect(Date.now() - startedAt).toBeLessThan(2_000);
+		},
+	);
 });

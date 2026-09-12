@@ -29,13 +29,24 @@ describe("project resource paths resolve in one place", () => {
 		}
 	});
 
-	it("has no first-party source composing a gated resource path by hand", () => {
-		// Scoped to the gated resources. The sandbox backends also hardcode the config
-		// directory for their own runtime state (`sandbox-state`, `sandbox-handoff-ack`),
-		// which is written by the supervisor rather than read as project config, so it is
-		// not part of this boundary. That hardcoding is its own latent inconsistency with
-		// a `piConfig.configDir` override and belongs in its own change.
-		const gatedNames = PROJECT_RESOURCES.map((resource) => resource.name);
+	it("has no first-party source that can diverge from the classifier on a gated path", () => {
+		// The invariant is narrower than "never build a path by hand". A project-scoped path
+		// built with CONFIG_DIR_NAME cannot diverge from the classifier, which resolves the
+		// same constant, so `join(this.cwd, CONFIG_DIR_NAME, "skills")` is safe and several
+		// loaders still do it.
+		//
+		// Two shapes can diverge and are rejected here. A hardcoded config-directory literal
+		// beside a gated name drifts the moment `piConfig.configDir` is overridden, which is
+		// the bug this slice fixed. A root-scoped gated resource such as `.mcp.json` carries
+		// no config-directory literal at all, so it needs its own check.
+		//
+		// User-scope paths are out of scope: `~/.apex-code/settings.json` and
+		// `~/.apex-code/themes` share filenames with gated resources but are the user's own
+		// trusted resources, which project trust does not gate.
+		const quoteStyles = (name: string) => [`"${name}"`, `'${name}'`, `\`${name}\``];
+		const gated = PROJECT_RESOURCES.map((resource) => resource.name);
+		const rootGated = PROJECT_RESOURCES.filter((resource) => resource.scope === "root").map((r) => r.name);
+		const projectRooted = /join\(\s*[^,)]*\b(cwd|workspace|projectRoot|projectDir|projectPath)\b/i;
 		const offenders: string[] = [];
 		const files = globSync("**/*.ts", { cwd: SRC })
 			.filter((file) => !file.includes("vendor/"))
@@ -45,15 +56,17 @@ describe("project resource paths resolve in one place", () => {
 			if (file.endsWith(join("core", "project-resources.ts"))) continue;
 			const text = readFileSync(file, "utf8");
 			for (const [index, line] of text.split("\n").entries()) {
-				if (!/["'`]\.apex-code["'`]/.test(line)) continue;
-				if (!gatedNames.some((name) => line.includes(`"${name}"`))) continue;
-				offenders.push(`${relative(SRC, file)}:${index + 1}`);
+				const hardcodedConfigDir = /["'`]\.apex-code["'`]/.test(line);
+				const namesGatedHere = hardcodedConfigDir ? gated : rootGated;
+				if (!hardcodedConfigDir && !projectRooted.test(line)) continue;
+				const hit = namesGatedHere.some((name) => quoteStyles(name).some((lit) => line.includes(lit)));
+				if (hit) offenders.push(`${relative(SRC, file)}:${index + 1}`);
 			}
 		}
 
 		expect(
 			offenders,
-			`compose these through projectResourcePath/projectConfigDir so the classifier and the loader cannot diverge:\n${offenders.join("\n")}`,
+			`resolve these through projectResourcePath so the classifier and the loader cannot diverge:\n${offenders.join("\n")}`,
 		).toEqual([]);
 	});
 });

@@ -44,6 +44,10 @@ function resourceConfersAuthority(resource: ProjectResource, absolutePath: strin
 	// An unreadable file is treated the same way unparseable content is, because both
 	// leave us unable to say the resource grants nothing.
 	try {
+		// The checkout controls this path, so it may point at a FIFO or a character device.
+		// A synchronous read of one blocks the process before any prompt is rendered, which
+		// turns a trust check into a denial of service. Anything but a regular file confers.
+		if (!lstatSync(absolutePath).isFile()) return true;
 		return permissionContentConfersAuthority(stripBom(readFileSync(absolutePath, "utf8")));
 	} catch {
 		return true;
