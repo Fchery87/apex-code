@@ -1,6 +1,10 @@
 # ADR 0024 — Per-command escalation runs a second child, never widens the first
 
-**Status:** Accepted · **Date:** 2026-08-28
+**Status:** Superseded · **Date:** 2026-08-28 · **Superseded by:** [ADR 0032](0032-no-built-in-sandbox.md)
+
+> Superseded on 2026-09-12 by [ADR 0032](0032-no-built-in-sandbox.md). The mechanism
+> this ADR decides was removed with the OS boundary. It is kept as the record of what
+> was decided and why.
 
 ADR 0005's 2026-08-28 amendment delivered network escalation and explicitly did not
 deliver the filesystem half, because the two refusals are not symmetric. A refused host is

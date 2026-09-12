@@ -1,6 +1,10 @@
 # ADR 0005 — Sandbox boundary guarantees and supported platforms
 
-**Status:** Accepted · **Date:** 2026-08-12
+**Status:** Superseded · **Date:** 2026-08-12 · **Superseded by:** [ADR 0032](0032-no-built-in-sandbox.md)
+
+> Superseded on 2026-09-12 by [ADR 0032](0032-no-built-in-sandbox.md). The mechanism
+> this ADR decides was removed with the OS boundary. It is kept as the record of what
+> was decided and why.
 
 Phase 2a authorizes tool calls, but an authorization decision does not confine an
 allowed tool or its subprocesses. Phase 2b therefore places the normal Apex runtime

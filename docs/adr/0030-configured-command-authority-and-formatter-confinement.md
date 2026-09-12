@@ -83,3 +83,29 @@ not free and this ADR does not pretend it is.
 A session without a permission gate authorizes nothing, and configured commands then run as
 before. That is the documented SDK default, and ADR 0031 is where an embedder states what
 containment it actually has.
+
+## Amendment (2026-09-12): the CLI no longer has the OS backstop this ADR assumed
+
+[ADR 0032](0032-no-built-in-sandbox.md) removed the OS boundary, which changes one
+sentence in Consequences above and weakens one guarantee. This is the honest record of
+both.
+
+The sentence "Under the CLI the OS sandbox is what stops this" is no longer true. A
+formatter that writes an absolute path outside the workspace now reaches it under the
+CLI exactly as it does under an SDK embedding, and the stage diff still cannot see the
+write, so the run still reports `passed`. The CLI and the embedding are now the same
+case rather than two.
+
+Copy and restricted promotion are unchanged and still do what this ADR decided. They
+confine workspace mutation. They never confined absolute paths, and the ADR said so.
+What is gone is the second layer that made the limit case narrow in practice.
+
+The mitigation is the one [ADR 0032](0032-no-built-in-sandbox.md) names for everything
+else. Run the CLI inside a container or VM when a configured command comes from a
+repository you have not read. `test/formatter-confinement.test.ts` still carries the
+limit case, and its comment is corrected to match this amendment rather than the
+boundary it used to name.
+
+The closing reference to ADR 0031 above is also superseded. An embedder no longer
+states a containment contract to the SDK, because the SDK no longer has one to state.
+What an embedder contains is now entirely a property of where it runs the process.

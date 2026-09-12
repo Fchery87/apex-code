@@ -108,3 +108,15 @@ sandbox boundary is identical under both designs and is not the axis this ADR de
   view. Rejected because a child's `answer.persist` write would land in the parent's
   own store (`gate.ts:83-89`), meaning a child's approval widens its parent — an
   inversion of the ceiling, not merely a failure to enforce it.
+
+## Amendment (2026-09-12): the sandbox this ADR deferred to no longer exists
+
+[ADR 0032](0032-no-built-in-sandbox.md) removed the OS boundary. The paragraph above
+reasoned that an in-process child and a subprocess child sit identically inside a
+whole-CLI-launch sandbox, so containment was not the axis this ADR decided. That is
+still the right reading of the decision, and the boundary it compared against is gone.
+
+Nothing here changes. A derived in-process child was never the thing providing
+containment, and it is not the thing that stopped providing it. What changes is that
+there is now no sandbox on either side of the comparison, so the paragraph is kept as
+the record of an argument that no longer has a counterparty.

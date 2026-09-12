@@ -1,6 +1,9 @@
 # ADR 0032 — Apex Code ships no OS boundary
 
-**Status:** Accepted · **Date:** 2026-09-12
+**Status:** Accepted · **Date:** 2026-09-12 · **Supersedes:** [ADR 0005](0005-sandbox-boundary-guarantees.md),
+[ADR 0015](0015-host-owned-credential-handoff.md), [ADR 0016](0016-trust-first-supervisor-policy.md),
+[ADR 0023](0023-supervisor-owned-escalation-authority.md), [ADR 0024](0024-per-command-sandbox-escalation.md),
+and [ADR 0031](0031-sdk-sandbox-contract.md)
 
 Apex Code no longer contains an operating-system sandbox. The Bubblewrap and Seatbelt
 backends, the supervisor and its child launch, the egress allowlist proxy, the host

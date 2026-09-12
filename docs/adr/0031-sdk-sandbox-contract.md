@@ -1,6 +1,10 @@
 # ADR 0031 — SDK sandbox contract
 
-**Status:** Accepted · **Date:** 2026-09-06
+**Status:** Superseded · **Date:** 2026-09-06 · **Superseded by:** [ADR 0032](0032-no-built-in-sandbox.md)
+
+> Superseded on 2026-09-12 by [ADR 0032](0032-no-built-in-sandbox.md). The mechanism
+> this ADR decides was removed with the OS boundary. It is kept as the record of what
+> was decided and why.
 
 The SDK cannot infer whether its host process is contained. A caller may run it
 inside the Apex supervisor, inside another sandbox, or directly on the host. The

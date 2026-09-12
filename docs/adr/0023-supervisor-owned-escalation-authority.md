@@ -1,6 +1,10 @@
 # ADR 0023 — Escalation authority belongs to the supervisor, not the child
 
-**Status:** Accepted · **Date:** 2026-08-28
+**Status:** Superseded · **Date:** 2026-08-28 · **Superseded by:** [ADR 0032](0032-no-built-in-sandbox.md)
+
+> Superseded on 2026-09-12 by [ADR 0032](0032-no-built-in-sandbox.md). The mechanism
+> this ADR decides was removed with the OS boundary. It is kept as the record of what
+> was decided and why.
 
 ADR 0005 deferred interactive escalation "until supervisor/child IPC can carry a concrete
 blocked-host request without granting an unrestricted retry." That IPC now exists in

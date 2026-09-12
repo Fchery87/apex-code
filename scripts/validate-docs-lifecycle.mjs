@@ -73,6 +73,35 @@ function specStatus(markdown) {
 	return matches.length === 1 ? matches[0][1] : null;
 }
 
+// An ADR's metadata is one paragraph rather than one line. `**Supersedes:**` carrying six
+// links wraps, and ADR 0019 already showed a status that is a phrase, not a keyword.
+function adrHeader(markdown) {
+	// `$` is per-line under `m`, which would truncate a wrapped header at its first line.
+	return markdown.match(/^\*\*Status:\*\*[\s\S]*?(?=\r?\n\r?\n|(?![\s\S]))/m)?.[0] ?? null;
+}
+
+function adrStatus(header) {
+	return header.match(/^\*\*Status:\*\*\s*([^·\r\n]+)/)?.[1].trim() ?? "";
+}
+
+// `**Supersedes:** parts of [ADR 0019](...)` (ADR 0022) retires some of a decision and
+// leaves the rest standing, so it is read as a claim that asserts nothing about status.
+function supersessionClaims(header) {
+	const value = header.split("**Supersedes:**")[1];
+	if (value === undefined) return [];
+	const claims = [];
+	let cursor = 0;
+	for (const match of value.matchAll(/\[ADR (\d{4})\]\(([^)]+)\)/g)) {
+		claims.push({
+			number: match[1],
+			file: match[2],
+			partial: /parts of/i.test(value.slice(cursor, match.index)),
+		});
+		cursor = match.index + match[0].length;
+	}
+	return claims;
+}
+
 function contractSummary(markdown) {
 	const contracts = new Map();
 	for (const line of markdown.split(/\r?\n/)) {
@@ -178,6 +207,61 @@ for (const path of await markdownFiles(join(docsDir, "adr"))) {
 	const number = basename(path).match(/^(\d{4})-/)?.[1];
 	if (number && !registeredAdrs.has(number)) {
 		report(roadmapPath, `ADR ${number} is written but absent from the roadmap's allocation table`);
+	}
+}
+
+// An ADR that says it supersedes another is making a claim about a second file, and
+// nothing checked it. ADR 0032 shipped claiming six supersessions while all six targets
+// still read `Accepted`, so `docs/adr/` described a subsystem that no longer existed and
+// every gate passed. Both directions are checked, because a target marked `Superseded`
+// with nothing claiming it is the same drift seen from the other end.
+const adrs = new Map();
+for (const path of await markdownFiles(join(docsDir, "adr"))) {
+	const number = basename(path).match(/^(\d{4})-/)?.[1];
+	if (!number) continue;
+	const header = adrHeader(await readFile(path, "utf8"));
+	if (!header) {
+		report(path, "expected a `**Status:**` metadata line");
+		continue;
+	}
+	adrs.set(number, { path, header, status: adrStatus(header), supersedes: supersessionClaims(header) });
+}
+
+for (const [number, adr] of adrs) {
+	for (const claim of adr.supersedes) {
+		const target = adrs.get(claim.number);
+		if (!target) {
+			report(adr.path, `claims to supersede ADR ${claim.number}, which does not exist`);
+			continue;
+		}
+		if (basename(target.path) !== claim.file) {
+			report(adr.path, `links ADR ${claim.number} as ${claim.file}, but the file is ${basename(target.path)}`);
+		}
+		// A partial supersession leaves the target in force, so it keeps its own status.
+		if (claim.partial) continue;
+		if (target.status !== "Superseded") {
+			report(target.path, `ADR ${number} supersedes this, but its status is ${target.status}`);
+		}
+		if (!target.header.includes(`**Superseded by:** [ADR ${number}]`)) {
+			report(target.path, `ADR ${number} supersedes this, but it names no \`**Superseded by:** [ADR ${number}]\``);
+		}
+	}
+}
+
+for (const [number, adr] of adrs) {
+	if (adr.status !== "Superseded") continue;
+	const by = adr.header.match(/\*\*Superseded by:\*\*\s*\[ADR (\d{4})\]/)?.[1];
+	if (!by) {
+		report(adr.path, "is Superseded but names no `**Superseded by:** [ADR NNNN]`");
+		continue;
+	}
+	const claimant = adrs.get(by);
+	if (!claimant) {
+		report(adr.path, `names ADR ${by} as superseding it, but that ADR does not exist`);
+		continue;
+	}
+	if (!claimant.supersedes.some((claim) => claim.number === number && !claim.partial)) {
+		report(claimant.path, `ADR ${number} names this as superseding it, but its \`**Supersedes:**\` does not list it`);
 	}
 }
 
