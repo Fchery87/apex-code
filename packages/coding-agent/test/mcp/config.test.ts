@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadMcpConfig } from "../../src/core/mcp/config.ts";
+import { globalMcpConfigPath, loadMcpConfig } from "../../src/core/mcp/config.ts";
 import { serverCacheKey } from "../../src/core/mcp/metadata-cache.ts";
 import type { McpServerConfig } from "../../src/core/mcp/types.ts";
 import { ALL_CAPABILITIES } from "../../src/core/tools/contract.ts";
@@ -184,6 +184,31 @@ describe("MCP config", () => {
 
 			expect(servers.get("s")?.lifecycle).toBe("lazy");
 			expect(diagnostics).toHaveLength(1);
+		});
+	});
+
+	describe("scope isolation", () => {
+		// This suite once failed on any machine with servers in `~/.apex-code/mcp.json`,
+		// because an omitted `globalPath` meant "find the real one". Both cases below are
+		// the guard: a missing global scope contributes nothing, and the resolved path
+		// follows the agent directory rather than the home directory.
+		it("contributes no servers when no global path is given", () => {
+			const dir = createDir();
+			const file = write(dir, ".mcp.json", JSON.stringify({ mcpServers: { only: { command: "npx" } } }));
+
+			const { servers } = load(file);
+
+			expect([...servers.keys()]).toEqual(["only"]);
+		});
+
+		it("reads nothing at all when neither scope is given", () => {
+			expect(load().servers.size).toBe(0);
+		});
+
+		it("resolves the user-scope path from the agent directory", () => {
+			const dir = createDir();
+
+			expect(globalMcpConfigPath(path.join(dir, "agent"))).toBe(path.join(dir, "mcp.json"));
 		});
 	});
 

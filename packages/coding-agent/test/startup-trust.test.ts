@@ -56,7 +56,11 @@ describe("startup trust public loaders", () => {
 			JSON.stringify({ mcpServers: { bad: { command: "bad", lifecycle: "eager" } } }),
 		);
 		const connector = vi.fn();
-		expect(createMcpRuntime(cwd, connector, { projectTrusted: false })).toBeUndefined();
+		// The agent directory is its own scratch root, so the user-scope `mcp.json` this
+		// resolves cannot be the developer's real one. Without it the assertion depends on
+		// whoever runs the suite having no servers configured.
+		const agentDir = join(workspace(), "agent");
+		expect(createMcpRuntime(cwd, connector, { projectTrusted: false, agentDir })).toBeUndefined();
 		expect(connector).not.toHaveBeenCalled();
 	});
 

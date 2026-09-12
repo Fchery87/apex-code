@@ -8,13 +8,15 @@
 import { join } from "node:path";
 import type { CredentialStore } from "@earendil-works/pi-ai";
 import { AuthStorage } from "../../auth-storage.ts";
-import { loadMcpConfig, PROJECT_CONFIG_FILENAME } from "../config.ts";
+import { globalMcpConfigPath, loadMcpConfig, PROJECT_CONFIG_FILENAME } from "../config.ts";
 import { runMcpOAuthFlow } from "./flow.ts";
 
 export interface AuthorizeServerOptions {
 	serverName: string;
 	/** Project root for `.mcp.json` discovery. Default: process.cwd(). */
 	cwd?: string;
+	/** Agent directory the user-scope `mcp.json` is resolved against. Default: the host's. */
+	agentDir?: string;
 	/** Credential sink. Default: the host store (`AuthStorage.create()`). */
 	credentials?: CredentialStore;
 	openBrowser?: (url: string) => void;
@@ -24,7 +26,10 @@ export interface AuthorizeServerOptions {
 }
 
 export async function authorizeConfiguredServer(options: AuthorizeServerOptions): Promise<void> {
-	const { servers } = loadMcpConfig({ projectPath: join(options.cwd ?? process.cwd(), PROJECT_CONFIG_FILENAME) });
+	const { servers } = loadMcpConfig({
+		projectPath: join(options.cwd ?? process.cwd(), PROJECT_CONFIG_FILENAME),
+		globalPath: globalMcpConfigPath(options.agentDir),
+	});
 	const server = servers.get(options.serverName);
 	if (!server) {
 		const names = [...servers.keys()];

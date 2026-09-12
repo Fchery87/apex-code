@@ -8,7 +8,7 @@
  */
 
 import { join } from "node:path";
-import { loadMcpConfig, PROJECT_CONFIG_FILENAME } from "./config.ts";
+import { globalMcpConfigPath, loadMcpConfig, PROJECT_CONFIG_FILENAME } from "./config.ts";
 import { connectMcpServer } from "./connector.ts";
 import type { McpToolOptions } from "./mcp-tool.ts";
 import { McpMetadataCache } from "./metadata-cache.ts";
@@ -25,10 +25,11 @@ export interface McpRuntime extends McpToolOptions {
 export function createMcpRuntime(
 	cwd: string,
 	connector: McpConnector = connectMcpServer,
-	options: { projectTrusted?: boolean } = {},
+	options: { projectTrusted?: boolean; agentDir?: string } = {},
 ): McpRuntime | undefined {
 	const { servers, diagnostics } = loadMcpConfig({
 		projectPath: options.projectTrusted === false ? undefined : join(cwd, PROJECT_CONFIG_FILENAME),
+		globalPath: globalMcpConfigPath(options.agentDir),
 	});
 	if (servers.size === 0) return undefined;
 
