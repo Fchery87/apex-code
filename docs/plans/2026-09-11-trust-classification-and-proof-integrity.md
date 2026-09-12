@@ -36,4 +36,4 @@ Branch protection ran before the classifier, not second. The spec argued it shou
 
 ## Verification
 
-Task rows above carry their own evidence. No SHA is recorded yet; this plan is being written in the same branch as the first slice, and the SHAs go in once the commit exists and `git cat-file -t` resolves them.
+Task rows above carry their own evidence. Slice 1 is `62f4ee4c1`, verified with `git cat-file -t`. It carries the registry, the authority predicate, the rewritten classifier, both test files, and this plan. `npm run check` passed in the pre-commit hook at that commit.
