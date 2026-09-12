@@ -77,6 +77,21 @@ function emptyScope(): StoredPermissionScope {
 	return { version: STORE_VERSION, rules: [] };
 }
 
+/**
+ * Whether a permission file's contents grant anything. The trust classifier asks this
+ * so a `{}` file does not raise a prompt that carries no decision. Unparseable content
+ * counts as granting: a malformed or hostile file must prompt rather than pass.
+ */
+export function permissionContentConfersAuthority(content: string | undefined): boolean {
+	let scope: StoredPermissionScope;
+	try {
+		scope = parseScope(content);
+	} catch {
+		return true;
+	}
+	return scope.rules.length > 0 || scope.mode !== undefined;
+}
+
 function isPermissionBehavior(value: unknown): value is PermissionBehavior {
 	return value === "allow" || value === "deny" || value === "ask";
 }

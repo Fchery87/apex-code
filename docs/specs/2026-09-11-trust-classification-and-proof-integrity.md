@@ -1,6 +1,6 @@
 # Spec: Trust classification and proof integrity
 
-**Status:** Draft
+**Status:** Active
 
 ## Metadata
 
