@@ -32,7 +32,9 @@ export const TEST_ROOTS = ["packages/coding-agent/test", "packages/agent/test"];
 /** Anything that can leave a live or just-dead process holding a directory handle. */
 const SPAWN_CALL = /\b(spawn|spawnSync|execFile|execFileSync|runPolicyCommand|fork)\s*\(/;
 const RECURSIVE_RM = /rmSync\(([^,]+),\s*\{([^}]*\brecursive:\s*true\b[^}]*)\}\)/g;
-const RETRY_OPTIONS = "maxRetries: 10, retryDelay: 50";
+/** Word-boundary match so a similarly named key or a comment cannot pass for the real option. */
+const RETRIES_ENABLED = /\bmaxRetries\s*:/;
+const DELAY_SET = /\bretryDelay\s*:/;
 
 export function spawnsProcesses(source) {
 	return SPAWN_CALL.test(source);
@@ -41,11 +43,21 @@ export function spawnsProcesses(source) {
 /**
  * Returns the source with retry options added to every recursive `rmSync` that lacks
  * them, or the input unchanged when there is nothing to do.
+ *
+ * `maxRetries` is the switch that turns retrying on, so its presence means the site
+ * already handles the race and is left alone even if it tunes a different delay.
+ * `retryDelay` alone does nothing, because Node ignores it without `maxRetries`.
  */
 export function addRetryOptions(source) {
 	return source.replace(RECURSIVE_RM, (match, target, options) => {
-		if (options.includes("maxRetries")) return match;
-		return `rmSync(${target}, {${options.trimEnd()}, ${RETRY_OPTIONS} })`;
+		if (RETRIES_ENABLED.test(options)) return match;
+		// A trailing comma in the original object would otherwise produce `,,`.
+		const normalized = options.trimEnd().replace(/,$/, "");
+		const additions = ["maxRetries: 10"];
+		// `retryDelay` without `maxRetries` is inert, but a site may still carry one, and
+		// appending a second would leave a duplicate key.
+		if (!DELAY_SET.test(normalized)) additions.push("retryDelay: 50");
+		return `rmSync(${target}, {${normalized}, ${additions.join(", ")} })`;
 	});
 }
 

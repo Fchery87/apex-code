@@ -21,6 +21,33 @@ test("adds retry options when force is absent", () => {
 	);
 });
 
+test("strips a trailing comma instead of emitting `,,`", () => {
+	// The first version produced `{ recursive: true, force: true,, maxRetries: 10 ... }`,
+	// which is invalid TypeScript. None of the 36 rewritten files happened to carry a
+	// trailing comma, so the gate passed by luck rather than by being right.
+	assert.equal(
+		addRetryOptions("rmSync(dir, { recursive: true, force: true, })"),
+		"rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })",
+	);
+});
+
+test("leaves a site that already enables retries alone, whatever delay it tunes", () => {
+	// `maxRetries` is the switch. A deliberate `maxRetries: 3` is already race-safe, and
+	// rewriting it would churn someone's tuning and make the gate demand a specific delay.
+	const tuned = "rmSync(dir, { recursive: true, maxRetries: 3 })";
+	assert.equal(addRetryOptions(tuned), tuned);
+	assert.equal(needsRetryOptions(`spawn("node", []);\n${tuned}`), false);
+});
+
+test("does not emit a duplicate retryDelay when one is already present", () => {
+	// `retryDelay` alone is inert because Node ignores it without `maxRetries`, but a site
+	// may still carry one, and appending a second would leave a duplicate key.
+	assert.equal(
+		addRetryOptions("rmSync(dir, { recursive: true, retryDelay: 20 })"),
+		"rmSync(dir, { recursive: true, retryDelay: 20, maxRetries: 10 })",
+	);
+});
+
 test("is idempotent, so the codemod can be re-run", () => {
 	const once = addRetryOptions("rmSync(dir, { recursive: true, force: true })");
 	assert.equal(addRetryOptions(once), once);
