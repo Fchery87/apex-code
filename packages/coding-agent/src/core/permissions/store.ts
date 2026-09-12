@@ -16,6 +16,11 @@ import { join } from "node:path";
 import { getAgentDir } from "../../config.ts";
 import { resolvePath } from "../../utils/paths.ts";
 import { type AuthStorageBackend, FileAuthStorageBackend } from "../auth-storage.ts";
+import {
+	PROJECT_LOCAL_PERMISSIONS_FILE,
+	PROJECT_PERMISSIONS_FILE,
+	projectResourcePathByName,
+} from "../project-resources.ts";
 import { POLICY_SNAPSHOT_PATH_VARIABLE } from "../sandbox/cli-launch.ts";
 import type { PermissionBehavior } from "../tools/contract.ts";
 import type { PermissionRule, PermissionSource } from "./rules.ts";
@@ -75,6 +80,21 @@ interface StoredPermissionScope {
 
 function emptyScope(): StoredPermissionScope {
 	return { version: STORE_VERSION, rules: [] };
+}
+
+/**
+ * Whether a permission file's contents grant anything. The trust classifier asks this
+ * so a `{}` file does not raise a prompt that carries no decision. Unparseable content
+ * counts as granting: a malformed or hostile file must prompt rather than pass.
+ */
+export function permissionContentConfersAuthority(content: string | undefined): boolean {
+	let scope: StoredPermissionScope;
+	try {
+		scope = parseScope(content);
+	} catch {
+		return true;
+	}
+	return scope.rules.length > 0 || scope.mode !== undefined;
 }
 
 function isPermissionBehavior(value: unknown): value is PermissionBehavior {
@@ -216,8 +236,8 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 		const cwd = resolvePath(options.cwd);
 		this.backends = {
 			user: new FileAuthStorageBackend(join(agentDir, "permissions.json")),
-			project: new FileAuthStorageBackend(join(cwd, ".apex-code", "permissions.json")),
-			local: new FileAuthStorageBackend(join(cwd, ".apex-code", "permissions.local.json")),
+			project: new FileAuthStorageBackend(projectResourcePathByName(cwd, PROJECT_PERMISSIONS_FILE)),
+			local: new FileAuthStorageBackend(projectResourcePathByName(cwd, PROJECT_LOCAL_PERMISSIONS_FILE)),
 			...options.backends,
 		};
 		this.policyPath = options.policyPath ?? defaultPolicyPath();

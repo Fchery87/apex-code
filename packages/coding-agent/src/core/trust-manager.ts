@@ -1,10 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import lockfile from "proper-lockfile";
-import { CONFIG_DIR_NAME } from "../config.ts";
 import { canonicalizePath, resolvePath } from "../utils/paths.ts";
 import { stripBom } from "../utils/text.ts";
+import { permissionContentConfersAuthority } from "./permissions/store.ts";
+import { PROJECT_RESOURCES, type ProjectResource, projectResourcePath } from "./project-resources.ts";
 
 export type ProjectTrustDecision = boolean | null;
 
@@ -27,15 +28,31 @@ export interface ProjectTrustOption {
 
 type TrustFile = Record<string, boolean | null | undefined>;
 
-const TRUST_REQUIRING_PROJECT_CONFIG_RESOURCES = [
-	"settings.json",
-	"extensions",
-	"skills",
-	"prompts",
-	"themes",
-	"SYSTEM.md",
-	"APPEND_SYSTEM.md",
-] as const;
+function resourceConfersAuthority(resource: ProjectResource, absolutePath: string): boolean {
+	if (!existsSync(absolutePath)) {
+		// `existsSync` follows links, so a broken link is indistinguishable from absence.
+		// A checkout controls the link, and the loader's own lock path creates the target
+		// on first write, so a dangling link is treated as conferring rather than skipped.
+		try {
+			lstatSync(absolutePath);
+		} catch {
+			return false;
+		}
+		return true;
+	}
+	if (resource.authority === "presence") return true;
+	// An unreadable file is treated the same way unparseable content is, because both
+	// leave us unable to say the resource grants nothing.
+	try {
+		// The checkout controls this path, so it may point at a FIFO or a character device.
+		// A synchronous read of one blocks the process before any prompt is rendered, which
+		// turns a trust check into a denial of service. Anything but a regular file confers.
+		if (!lstatSync(absolutePath).isFile()) return true;
+		return permissionContentConfersAuthority(stripBom(readFileSync(absolutePath, "utf8")));
+	} catch {
+		return true;
+	}
+}
 
 function normalizeCwd(cwd: string): string {
 	return canonicalizePath(resolvePath(cwd));
@@ -176,20 +193,22 @@ function withTrustFileLock<T>(path: string, fn: () => T): T {
 }
 
 /**
- * Returns true when cwd has project-local resources that must be gated by
- * project trust: trust-requiring entries under cwd/.pi, or .agents/skills in
- * cwd or one of its ancestors. Returns false when no such project resources
- * exist. The user/global ~/.agents/skills directory is always treated as a
- * trusted user resource and is ignored here, even when cwd is $HOME.
+ * Returns true when cwd supplies a project-controlled resource that must be gated by
+ * project trust. The gated set is `PROJECT_RESOURCES`, which the loaders read too, plus
+ * a `.agents/skills` directory in cwd or one of its ancestors. Returns false when no
+ * such resource exists, or when the only ones present grant nothing (an empty
+ * permissions file). The user's own ~/.agents/skills is a trusted user resource and is
+ * ignored here, even when cwd is $HOME.
  */
 export function hasTrustRequiringProjectResources(cwd: string): boolean {
 	const homeDir = canonicalizePath(resolvePath(process.env.HOME || homedir()));
 	const userAgentsSkillsDir = join(homeDir, ".agents", "skills");
 	let currentDir = canonicalizePath(resolvePath(cwd));
 
-	const configDir = join(currentDir, CONFIG_DIR_NAME);
-	if (TRUST_REQUIRING_PROJECT_CONFIG_RESOURCES.some((entry) => existsSync(join(configDir, entry)))) {
-		return true;
+	for (const resource of PROJECT_RESOURCES) {
+		if (resourceConfersAuthority(resource, projectResourcePath(currentDir, resource))) {
+			return true;
+		}
 	}
 
 	while (true) {
