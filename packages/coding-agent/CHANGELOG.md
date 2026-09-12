@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Security.** A repository could grant itself permissions with no trust prompt. Project trust only ever gated `settings.json`, `extensions`, `skills`, `prompts`, `themes`, `SYSTEM.md`, and `APPEND_SYSTEM.md`, so a checkout supplying `.apex-code/permissions.json`, `.apex-code/permissions.local.json`, `.apex-code/agents/`, or a root `.mcp.json` was classified trusted and its rules, permission mode, agent definitions, or MCP servers loaded without a decision. Cloning such a repository and starting a session was the whole exploit. Those four resources are now gated, and every project resource path is resolved in one place so a loader cannot read a path the classifier does not check.
+
+### Changed
+
+- Starting a session in a repository that contains a `.mcp.json`, a project or local permissions file, or a `.apex-code/agents/` directory now asks for a trust decision the first time. Until it is answered, those project resources do not load. A permissions file that grants nothing (`{}`) does not prompt, so a repository that ships an empty one is unaffected. This is the security fix above; the prompt is the point.
+
 ## [0.0.6] - 2026-09-11
 
 ### Added

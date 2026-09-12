@@ -8,6 +8,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseFrontmatter } from "../../utils/frontmatter.ts";
+import { PROJECT_AGENTS_DIR, projectResourcePathByName } from "../project-resources.ts";
 import type { AgentDefinition, AgentDefinitionResolver } from "./runtime.ts";
 
 interface AgentFrontmatter extends Record<string, unknown> {
@@ -65,7 +66,7 @@ function discover(dir: string, agentType: string): AgentDefinition | undefined {
 
 export function createAgentDefinitionResolver(options: CreateAgentDefinitionResolverOptions): AgentDefinitionResolver {
 	const userDir = join(options.agentDir, "agents");
-	const projectDir = join(options.cwd, ".apex-code", "agents");
+	const projectDir = projectResourcePathByName(options.cwd, PROJECT_AGENTS_DIR);
 	return (agentType) =>
 		discover(userDir, agentType) ?? (options.isProjectTrusted() ? discover(projectDir, agentType) : undefined);
 }

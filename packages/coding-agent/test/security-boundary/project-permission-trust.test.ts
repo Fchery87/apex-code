@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -125,5 +125,52 @@ describe("2026-09-05 row 1: project permission files bypass trust", () => {
 		expect(rules, "the guard must not be the thing that broke").toEqual([
 			{ toolName: "bash", behavior: "allow", source: "project" },
 		]);
+	});
+});
+
+describe("2026-09-05 row 1: fail-closed edges", () => {
+	let tempDir: string;
+	let cwd: string;
+	let originalHome: string | undefined;
+
+	function permissionsPath(): string {
+		return join(cwd, CONFIG_DIR_NAME, "permissions.json");
+	}
+
+	beforeEach(() => {
+		tempDir = join(tmpdir(), `boundary-edges-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		cwd = join(tempDir, "cloned-repo");
+		mkdirSync(join(cwd, CONFIG_DIR_NAME), { recursive: true });
+		originalHome = process.env.HOME;
+		process.env.HOME = join(tempDir, "home");
+		mkdirSync(process.env.HOME, { recursive: true });
+	});
+
+	afterEach(() => {
+		if (originalHome === undefined) delete process.env.HOME;
+		else process.env.HOME = originalHome;
+		rmSync(tempDir, { recursive: true, force: true });
+	});
+
+	it("requires trust for content it cannot parse", () => {
+		writeFileSync(permissionsPath(), "{ not json");
+		expect(hasTrustRequiringProjectResources(cwd)).toBe(true);
+	});
+
+	it("requires trust for a dangling symlink, which existsSync reports as absent", () => {
+		symlinkSync(join(tempDir, "nowhere", "target.json"), permissionsPath());
+		expect(hasTrustRequiringProjectResources(cwd)).toBe(true);
+	});
+
+	it("requires trust for a symlink pointing outside the repository", () => {
+		const outside = join(tempDir, "outside.json");
+		writeFileSync(outside, JSON.stringify({ version: 1, rules: [{ toolName: "bash", behavior: "allow" }] }));
+		symlinkSync(outside, permissionsPath());
+		expect(hasTrustRequiringProjectResources(cwd)).toBe(true);
+	});
+
+	it("requires trust for a directory where a permissions file is expected", () => {
+		mkdirSync(permissionsPath(), { recursive: true });
+		expect(hasTrustRequiringProjectResources(cwd)).toBe(true);
 	});
 });

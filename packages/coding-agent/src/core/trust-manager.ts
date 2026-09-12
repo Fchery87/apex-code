@@ -1,12 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import lockfile from "proper-lockfile";
-import { CONFIG_DIR_NAME } from "../config.ts";
 import { canonicalizePath, resolvePath } from "../utils/paths.ts";
 import { stripBom } from "../utils/text.ts";
 import { permissionContentConfersAuthority } from "./permissions/store.ts";
-import { PROJECT_RESOURCES, type ProjectResource } from "./project-resources.ts";
+import { PROJECT_RESOURCES, type ProjectResource, projectResourcePath } from "./project-resources.ts";
 
 export type ProjectTrustDecision = boolean | null;
 
@@ -30,7 +29,17 @@ export interface ProjectTrustOption {
 type TrustFile = Record<string, boolean | null | undefined>;
 
 function resourceConfersAuthority(resource: ProjectResource, absolutePath: string): boolean {
-	if (!existsSync(absolutePath)) return false;
+	if (!existsSync(absolutePath)) {
+		// `existsSync` follows links, so a broken link is indistinguishable from absence.
+		// A checkout controls the link, and the loader's own lock path creates the target
+		// on first write, so a dangling link is treated as conferring rather than skipped.
+		try {
+			lstatSync(absolutePath);
+		} catch {
+			return false;
+		}
+		return true;
+	}
 	if (resource.authority === "presence") return true;
 	// An unreadable file is treated the same way unparseable content is, because both
 	// leave us unable to say the resource grants nothing.
@@ -192,10 +201,8 @@ export function hasTrustRequiringProjectResources(cwd: string): boolean {
 	const userAgentsSkillsDir = join(homeDir, ".agents", "skills");
 	let currentDir = canonicalizePath(resolvePath(cwd));
 
-	const configDir = join(currentDir, CONFIG_DIR_NAME);
 	for (const resource of PROJECT_RESOURCES) {
-		const base = resource.scope === "config-dir" ? configDir : currentDir;
-		if (resourceConfersAuthority(resource, join(base, resource.name))) {
+		if (resourceConfersAuthority(resource, projectResourcePath(currentDir, resource))) {
 			return true;
 		}
 	}

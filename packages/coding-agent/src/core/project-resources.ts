@@ -1,28 +1,37 @@
+import { join } from "node:path";
+import { CONFIG_DIR_NAME } from "../config.ts";
+
 /**
- * The single list of project-controlled resources a repository can supply.
+ * The single list of project-controlled resources a repository can supply, and the only
+ * place their paths are built.
  *
- * Both halves of the trust boundary read this list: the loaders resolve their paths
- * from it, and `hasTrustRequiringProjectResources` decides from it whether a project
- * needs an explicit trust decision. Before this existed the two were separate, and a
- * resource could be read without ever reaching the classifier. Four of them were
- * (`permissions.json`, `permissions.local.json`, `agents/`, and `.mcp.json`), which
- * meant a cloned repository supplying only one of those was classified trusted and
- * the guard that drops untrusted scopes was satisfied rather than triggered. See
+ * Both halves of the trust boundary resolve through here: the loaders ask for a path,
+ * and `hasTrustRequiringProjectResources` asks the same question of the same entries.
+ * Before this existed the two were independent, and four resources were read without
+ * ever reaching the classifier (`permissions.json`, `permissions.local.json`, `agents/`,
+ * and `.mcp.json`), so a cloned repository supplying one of them was classified trusted
+ * and the guard that drops untrusted scopes was satisfied rather than triggered.
+ *
+ * Relocating the list is not enough on its own. A loader that builds `join(cwd,
+ * ".apex-code", …)` by hand diverges the moment `CONFIG_DIR_NAME` is overridden, which
+ * reintroduces the same bypass with no test failing, so the path builders below are the
+ * supported way to reach a project resource. See
  * `docs/specs/2026-09-11-trust-classification-and-proof-integrity.md`.
- *
- * Adding a loader means adding an entry here, and the classifier picks it up in the
- * same commit.
  */
 
 /**
  * Where an entry's `name` is resolved from.
  *
  * `config-dir` resolves under `<cwd>/<CONFIG_DIR_NAME>`. `root` resolves at `<cwd>`,
- * which is what lets `.mcp.json` reach the classifier at all. `ancestor` walks upward
- * from `<cwd>`, which is how a skills directory in a parent repository is found while
- * the user's own `~/.agents/skills` stays excluded.
+ * which is what lets `.mcp.json` reach the classifier at all.
+ *
+ * The ancestor `.agents/skills` walk is deliberately not a scope here. It has no fixed
+ * depth and one path under the user's home is exempt, so it lives in the classifier
+ * rather than as an entry a caller could resolve to a single path. Adding an `ancestor`
+ * member without implementing the walk would let an entry silently resolve at `cwd`
+ * only, which is the narrowing this registry exists to prevent.
  */
-export type ProjectResourceScope = "config-dir" | "root" | "ancestor";
+export type ProjectResourceScope = "config-dir" | "root";
 
 /**
  * How presence maps to authority.
@@ -35,11 +44,16 @@ export type ProjectResourceScope = "config-dir" | "root" | "ancestor";
 export type ProjectResourceAuthority = "presence" | "permission-scope";
 
 export interface ProjectResource {
-	/** Path relative to the entry's scope root. */
+	/** Path relative to the entry's scope root. A single path segment. */
 	readonly name: string;
 	readonly scope: ProjectResourceScope;
 	readonly authority: ProjectResourceAuthority;
 }
+
+export const PROJECT_PERMISSIONS_FILE = "permissions.json";
+export const PROJECT_LOCAL_PERMISSIONS_FILE = "permissions.local.json";
+export const PROJECT_AGENTS_DIR = "agents";
+export const PROJECT_MCP_CONFIG_FILE = ".mcp.json";
 
 export const PROJECT_RESOURCES: readonly ProjectResource[] = [
 	{ name: "settings.json", scope: "config-dir", authority: "presence" },
@@ -49,19 +63,33 @@ export const PROJECT_RESOURCES: readonly ProjectResource[] = [
 	{ name: "themes", scope: "config-dir", authority: "presence" },
 	{ name: "SYSTEM.md", scope: "config-dir", authority: "presence" },
 	{ name: "APPEND_SYSTEM.md", scope: "config-dir", authority: "presence" },
-	{ name: "permissions.json", scope: "config-dir", authority: "permission-scope" },
-	{ name: "permissions.local.json", scope: "config-dir", authority: "permission-scope" },
-	{ name: "agents", scope: "config-dir", authority: "presence" },
-	{ name: ".mcp.json", scope: "root", authority: "presence" },
+	{ name: PROJECT_PERMISSIONS_FILE, scope: "config-dir", authority: "permission-scope" },
+	{ name: PROJECT_LOCAL_PERMISSIONS_FILE, scope: "config-dir", authority: "permission-scope" },
+	{ name: PROJECT_AGENTS_DIR, scope: "config-dir", authority: "presence" },
+	{ name: PROJECT_MCP_CONFIG_FILE, scope: "root", authority: "presence" },
 ] as const;
 
-/**
- * Resolved separately from `PROJECT_RESOURCES` because the walk has no fixed depth and
- * one path under the user's home is deliberately exempt. The classifier owns both
- * facts; callers that only need the set of gated names should read the array above.
- */
-export const ANCESTOR_PROJECT_RESOURCE = ".agents/skills" as const;
+/** The project config directory for `cwd`. Honors a `piConfig.configDir` override. */
+export function projectConfigDir(cwd: string): string {
+	return join(cwd, CONFIG_DIR_NAME);
+}
 
-export function projectResourceNames(scope: ProjectResourceScope): readonly string[] {
-	return PROJECT_RESOURCES.filter((resource) => resource.scope === scope).map((resource) => resource.name);
+/**
+ * Absolute path of one project resource. Loaders call this instead of composing the
+ * config directory themselves, so a loader cannot read a path the classifier does not
+ * check.
+ */
+export function projectResourcePath(cwd: string, resource: ProjectResource): string {
+	return join(resource.scope === "config-dir" ? projectConfigDir(cwd) : cwd, resource.name);
+}
+
+export function projectResource(name: string): ProjectResource {
+	const resource = PROJECT_RESOURCES.find((candidate) => candidate.name === name);
+	if (!resource) throw new Error(`Unknown project resource: ${name}`);
+	return resource;
+}
+
+/** Convenience for the common case: a resource addressed by name. */
+export function projectResourcePathByName(cwd: string, name: string): string {
+	return projectResourcePath(cwd, projectResource(name));
 }

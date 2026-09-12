@@ -16,6 +16,11 @@ import { join } from "node:path";
 import { getAgentDir } from "../../config.ts";
 import { resolvePath } from "../../utils/paths.ts";
 import { type AuthStorageBackend, FileAuthStorageBackend } from "../auth-storage.ts";
+import {
+	PROJECT_LOCAL_PERMISSIONS_FILE,
+	PROJECT_PERMISSIONS_FILE,
+	projectResourcePathByName,
+} from "../project-resources.ts";
 import { POLICY_SNAPSHOT_PATH_VARIABLE } from "../sandbox/cli-launch.ts";
 import type { PermissionBehavior } from "../tools/contract.ts";
 import type { PermissionRule, PermissionSource } from "./rules.ts";
@@ -231,8 +236,8 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 		const cwd = resolvePath(options.cwd);
 		this.backends = {
 			user: new FileAuthStorageBackend(join(agentDir, "permissions.json")),
-			project: new FileAuthStorageBackend(join(cwd, ".apex-code", "permissions.json")),
-			local: new FileAuthStorageBackend(join(cwd, ".apex-code", "permissions.local.json")),
+			project: new FileAuthStorageBackend(projectResourcePathByName(cwd, PROJECT_PERMISSIONS_FILE)),
+			local: new FileAuthStorageBackend(projectResourcePathByName(cwd, PROJECT_LOCAL_PERMISSIONS_FILE)),
 			...options.backends,
 		};
 		this.policyPath = options.policyPath ?? defaultPolicyPath();
