@@ -474,6 +474,22 @@ describe("parseArgs", () => {
 			const result = parseArgs(["--unknown-flag=value"]);
 			expect(result.unknownFlags.get("unknown-flag")).toBe("value");
 		});
+
+		// ADR 0032 deleted the OS boundary and rejected shimming its flags, so these three
+		// must reach the unknown-flag path rather than a typed field or the prompt. An
+		// unclaimed unknown flag is an error diagnostic and exits 1, which is what makes
+		// "rejected" true rather than "ignored". A shim would put a security-shaped word
+		// back in a CLI with no boundary behind it.
+		test.each([
+			["--sandbox", "enforced"],
+			["--add-dir", "/tmp/elsewhere"],
+			["--permission-profile", "relaxed"],
+		])("rejects the removed containment flag %s", (flag, value) => {
+			const result = parseArgs([flag, value, "do the thing"]);
+			expect(result.unknownFlags.get(flag.slice(2))).toBe(value);
+			expect(result.messages).toEqual(["do the thing"]);
+			expect(result.diagnostics).toEqual([]);
+		});
 	});
 
 	describe("complex combinations", () => {
