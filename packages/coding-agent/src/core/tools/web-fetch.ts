@@ -22,14 +22,10 @@ export interface WebFetchOperations {
 }
 
 /**
- * Runs in the same process as every other tool -- the sandboxed child, not the
- * supervisor. `globalThis.fetch` is undici's global fetch, made proxy-aware by
- * `configureHttpDispatcher` (an `EnvHttpProxyAgent` reading HTTP_PROXY/HTTPS_PROXY)
- * at CLI startup, including in `core/sandbox/child-entry.ts`'s sandboxed launch.
- * That is what routes an allowed host through the sandbox's allowlist proxy and
- * leaves a disallowed one with no route at all -- this tool does not implement or
- * bypass that boundary itself; it only participates in it via the ordinary fetch
- * path, deliberately never opening a raw socket that could sidestep the proxy.
+ * Runs in the same process as every other tool. `globalThis.fetch` is undici's global
+ * fetch, made proxy-aware by `configureHttpDispatcher` (an `EnvHttpProxyAgent` reading
+ * HTTP_PROXY/HTTPS_PROXY) at CLI startup. The tool deliberately never opens a raw
+ * socket, so any transport policy the environment imposes still applies to it.
  */
 const defaultWebFetchOperations: WebFetchOperations = {
 	async fetch(url, signal) {

@@ -477,13 +477,6 @@ async function downloadTool(tool: "fd" | "rg"): Promise<string> {
 	}
 }
 
-export interface HostToolBinary {
-	/** File name the child looks for in its own tools directory ("fd", "rg", "fd.exe"). */
-	name: string;
-	/** Absolute host path to the executable backing that name. */
-	path: string;
-}
-
 function isExecutableFile(candidate: string, targetPlatform: NodeJS.Platform): boolean {
 	try {
 		const stats = statSync(candidate);
@@ -499,9 +492,8 @@ function isExecutableFile(candidate: string, targetPlatform: NodeJS.Platform): b
  * Absolute host path for a managed tool, or undefined when it is installed nowhere.
  *
  * `getToolPath` may return a bare command name because its caller spawns through PATH.
- * A sandboxed child has no such luxury: its PATH still lists host directories that the
- * OS boundary has already replaced, so the supervisor must resolve a real path here and
- * project it in (ADR 0017, and the sandbox spec's tool-projection amendment).
+ * This resolves a real path instead, for callers that need one rather than a lookup
+ * (ADR 0017).
  */
 export function resolveHostToolBinary(
 	tool: "fd" | "rg",
@@ -532,23 +524,6 @@ export function resolveHostToolBinary(
 	}
 
 	return undefined;
-}
-
-/**
- * Install any missing managed tool on the host, then report absolute paths for the ones
- * that exist. Downloading here rather than inside the child means one install serves every
- * workspace, and it happens on the side of the boundary that still has network access.
- */
-export async function prepareHostToolBinaries(silent: boolean = false): Promise<HostToolBinary[]> {
-	const binaries: HostToolBinary[] = [];
-	for (const tool of ["fd", "rg"] as const) {
-		await ensureTool(tool, silent ? undefined : ({ message }) => console.error(message));
-		const hostPath = resolveHostToolBinary(tool);
-		if (hostPath) {
-			binaries.push({ name: TOOLS[tool].binaryName + (platform() === "win32" ? ".exe" : ""), path: hostPath });
-		}
-	}
-	return binaries;
 }
 
 // Termux package names for tools

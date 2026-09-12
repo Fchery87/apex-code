@@ -1,7 +1,7 @@
 # Apex Code
 
 A provider-agnostic agentic coding harness, forked from Pi. Apex Code combines Pi's
-provider and terminal foundations with permissions, OS sandboxing, scalable context,
+provider and terminal foundations with permissions, scalable context,
 a broader tool surface, delegation, durable execution, evidence, and cost visibility.
 
 ## Install
@@ -47,13 +47,12 @@ Sessions, settings, credentials, extensions, prompts, and other state live under
 
 ## Safety and capabilities
 
-Every tool has a declared contract and passes through the permission gate. On Linux and
-macOS, every command that can start a session runs inside the OS sandbox: the workspace is
-the only writable location, the invoking account's home directory is hidden, and egress
-goes through an allowlist proxy that permits the built-in model-provider hosts by default
-and reports anything it refuses. Add hosts with `network.allowedHosts` in global
-`settings.json`. Windows is a required build/test portability target, but its sandbox
-backend remains unsupported.
+Every tool has a declared contract and passes through the permission gate. Apex Code ships
+no built-in sandbox: built-in tools, extensions, and package installs run with the
+permissions of the account that started the CLI. The gate is a policy layer, not OS
+containment. For untrusted repositories, generated code you will not review, or unattended
+runs, run the CLI inside a container or VM. Windows container and VM isolation works the
+same way.
 Built-in capabilities include file/search tools, shell execution, web tools, user
 questions, planning, and bounded subagent delegation.
 

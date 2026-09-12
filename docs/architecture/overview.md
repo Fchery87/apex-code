@@ -48,7 +48,7 @@ Everything above the dependency line is Apex Code's to change. Nothing below it 
 | --- | --- | --- |
 | 0 Foundation | build/CI | Fork, release pipeline, upstream merge process, **replay corpus** |
 | 1 Provider | above `pi-ai` | Credential pool, model roles, fallback chains, measured routing |
-| 2 Permissions | core + apex-code | Rule engine at `beforeToolCall`; OS sandbox beneath tool execution |
+| 2 Permissions | core + apex-code | Rule engine at `beforeToolCall` |
 | 3 Context | apex-code | Tool-result eviction, deferred schemas, reactive compaction |
 | 4 Tools | apex-code | The tool surface, each with its own rule grammar |
 | 5 Delegation | apex-code | Subagents, capability ceiling, depth bound, artifact isolation |

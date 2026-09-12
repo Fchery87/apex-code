@@ -111,25 +111,6 @@ describe.skipIf(process.platform === "win32")("bash background execution", () =>
 			{ kind: "command", command: expect.stringContaining("evidence-target"), cwd, exitCode: 0 },
 		]);
 	});
-
-	it("tells the model a foreground rerun gets the escalation offer on a sandbox refusal", async () => {
-		const cwd = newCwd();
-		const definition = createBashToolDefinition(cwd);
-
-		const launch = await run(definition, "t1", {
-			command: `echo "Operation not permitted"; exit 1`,
-			background: true,
-		});
-		const handle = /handle (\S+)/.exec(textOf(launch))?.[1];
-		if (!handle) throw new Error("launch did not return a handle");
-
-		let text = "";
-		await until(async () => {
-			text = textOf(await run(definition, "t2", { handle }));
-			return !/running/.test(text);
-		});
-		expect(text).toContain("Rerun this command in the foreground");
-	});
 });
 
 describe("background shell session wiring", () => {

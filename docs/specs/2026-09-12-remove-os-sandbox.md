@@ -1,6 +1,6 @@
 # Spec: Remove the OS sandbox; isolation becomes the operator's boundary
 
-**Status:** Draft
+**Status:** Active
 
 ## Metadata
 

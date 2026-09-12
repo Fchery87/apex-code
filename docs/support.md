@@ -43,10 +43,12 @@ issue against one.
 ## Platform and runtime support
 
 - Node.js `>=22.19`
-- Linux and macOS, including the OS-level sandbox backends (Bubblewrap on Linux, Seatbelt on
-  macOS) — see [ADR 0005](adr/0005-sandbox-boundary-guarantees.md).
-- Windows: CLI, build, and test portability are supported; OS-level sandbox enforcement is
-  **not** — a standing exclusion under ADR 0005, not a gap awaiting a fix in this phase.
+- Linux and macOS, plus Windows: CLI, build, and test portability are supported on all
+  three.
+- Apex Code ships no built-in sandbox. Built-in tools, extensions, and package installs run
+  with the permissions of the account that started the CLI, so untrusted work belongs in a
+  container or VM. See [ADR 0032](adr/0032-no-built-in-sandbox.md) and
+  [`SECURITY.md`](../SECURITY.md).
 
 ## If a published release is compromised or incorrect
 

@@ -1,6 +1,10 @@
 # Spec: Skills reach the model — sandbox mounts plus a budget-bounded catalog
 
-**Status:** Landed
+**Status:** Superseded
+
+> Superseded on 2026-09-12 by [ADR 0032](../adr/0032-no-built-in-sandbox.md). The mechanism this
+> spec describes was removed with the OS boundary. It is kept as the record of what was
+> built and why.
 
 > **Term note.** `CONTEXT.md` defines **Projection** as `buildToolContractSnapshot()`.
 > This document uses "mount" for the sandbox operation to avoid overloading that term.

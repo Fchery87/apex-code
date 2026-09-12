@@ -1,9 +1,10 @@
 # Security Policy
 
-> **Pre-alpha.** The permission gate and OS-level sandbox described below landed in
-> Phase 2 and are enforced today, on Linux and macOS. "Pre-alpha" describes the
-> project's overall maturity and release process, not an unenforced security
-> boundary — see [`docs/roadmap.md`](docs/roadmap.md) for what's landed by phase.
+> **Pre-alpha.** The permission gate described below is enforced today. "Pre-alpha"
+> describes the project's overall maturity and release process, not an unenforced
+> security boundary. Apex Code ships no built-in sandbox; see
+> [ADR 0032](docs/adr/0032-no-built-in-sandbox.md) and
+> [`docs/roadmap.md`](docs/roadmap.md) for what's landed by phase.
 
 ## Maintainer and support policy
 
@@ -37,18 +38,16 @@ TypeScript modules that run with the same permissions as the process.
 Being clear about the boundary matters more than sounding secure:
 
 **In scope.** A bypass of the permission system that lets a tool run without a
-decision. A sandbox escape that grants access the configured policy denies. A
-delegated agent obtaining a capability its parent lacks. Credential leakage — keys
-written to disk in cleartext, sent to an unintended host, or exposed in logs, session
-files, or crash output. Privilege-boundary bugs that give access the local user did
-not already have.
+decision. A delegated agent obtaining a capability its parent lacks. Credential
+leakage — keys written to disk in cleartext, sent to an unintended host, or exposed
+in logs, session files, or crash output. Privilege-boundary bugs that give access the
+local user did not already have.
 
 **Out of scope.** Prompt injection from repository files, documentation, comments,
 build output, or model responses. This is expected local-agent risk and cannot be
-reliably prevented by a harness; the mitigation is the permission system and the
-sandbox, not input filtering. Also out of scope: the behavior of extensions or
-skills you chose to install, and the fact that the agent can modify files you gave
-it access to.
+reliably prevented by a harness; the mitigation is the permission system, not input
+filtering. Also out of scope: the behavior of extensions or skills you chose to
+install, and the fact that the agent can modify files you gave it access to.
 
 **Not a security boundary.** Project trust controls whether project-local settings
 and extensions are *loaded*. It is an input guard, not a sandbox, and it constrains
@@ -62,8 +61,9 @@ files and credentials the task requires. Mount workspaces read-only where you ca
 restrict network access when the task does not need it, and use short-lived
 credentials. Review diffs before copying results back to trusted systems.
 
-The Phase 2 sandbox reduces blast radius; it does not replace OS- or
-virtualization-level isolation.
+The permission gate reduces blast radius, but it is not OS containment. Apex Code ships
+no built-in sandbox, so OS- or virtualization-level isolation is your containment
+boundary.
 
 ## Credentials
 

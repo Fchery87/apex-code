@@ -9,23 +9,21 @@ import { AuthStorage } from "../../src/core/auth-storage.ts";
 import type { AgentDefinition } from "../../src/core/delegation/runtime.ts";
 import { ModelRuntime } from "../../src/core/model-runtime.ts";
 import { FilePermissionRuleStore } from "../../src/core/permissions/store.ts";
-import { requiresSandboxedChild } from "../../src/core/sandbox/cli-launch.ts";
 import { createAgentSession } from "../../src/core/sdk.ts";
 import { SettingsManager } from "../../src/core/settings-manager.ts";
 import { scratchDir } from "../suite/scratch.ts";
 
 // ---------------------------------------------------------------------------
-// Classification: parseCliCommand + requiresSandboxedChild (pure, no state)
+// Classification: parseCliCommand (pure, no state)
 // ---------------------------------------------------------------------------
 
 describe("agent lifecycle CLI classification", () => {
-	it("classifies `agent <operation>` as a session-kind command, so it runs as a sandboxed child", () => {
+	it("classifies `agent <operation>` as a session-kind command", () => {
 		const parsed = parseCliCommand(["agent", "wait", "child-1"]);
 		expect(parsed.kind).toBe("session");
 		if (parsed.kind !== "session") return;
 		expect(parsed.args.agent).toEqual({ operation: "wait", childId: "child-1" });
 		expect(parsed.args.messages).toEqual([]);
-		expect(requiresSandboxedChild(parsed)).toBe(true);
 	});
 
 	it("parses the subcommand after flags and consumes its positionals", () => {

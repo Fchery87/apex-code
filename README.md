@@ -40,9 +40,9 @@ verification evidence, and operational visibility.
 - **npm**, normally installed with Node.js.
 - A model provider account or API key. Apex Code does not provide model access or
   bundle provider credentials.
-- Linux and macOS have the supported OS-sandbox backends. Windows is a required
-  portability target and the CLI works there, but Windows sandbox enforcement remains
-  unsupported under [ADR 0005](docs/adr/0005-sandbox-boundary-guarantees.md).
+- Linux, macOS, and Windows are supported targets. Apex Code ships no built-in
+  sandbox, so run it inside a container or VM for untrusted work. See
+  [Isolation](#isolation).
 
 ### Install the prerelease from npm
 
@@ -111,8 +111,8 @@ $env:APEX_CODE_INSTALL_VERSION = "0.0.1-alpha.8"; irm https://raw.githubusercont
 ```
 
 The standalone channel does not require Node.js and does not update itself; re-run the
-installer to choose a newer GitHub Release. Windows sandbox enforcement remains
-unsupported even though the CLI and both Windows installers are supported portability paths.
+installer to choose a newer GitHub Release. The CLI and both Windows installers are
+supported portability paths.
 
 ### Install from this repository
 
@@ -242,8 +242,7 @@ normal turn follows this shape:
 4. **Check policy.** The tool's declared contract is evaluated against permission rules,
    project trust, and the active permission mode before execution.
 5. **Run the tool.** File, search, shell (foreground and background), network, question,
-   planning, and delegation tools perform the requested operation inside the applicable
-   sandbox boundary.
+   planning, and delegation tools perform the requested operation.
 6. **Capture the result.** The tool returns structured output and, where applicable,
    evidence such as an exit code, argv, patch hash, or test result.
 7. **Continue or finish.** The result is added to context; the model may request another
@@ -314,112 +313,42 @@ footer, so a session with no prompts is visibly a session in bypass.
 A permission mode is not a substitute for reviewing the requested task, the diff, or the
 commands that will run.
 
-**A permission mode governs the tool gate, not the OS sandbox.** The two are separate
-layers and only one of them can be changed from inside a session. `bypassPermissions`
-stops the gate asking; it does not widen a mount or add a host to the network allowlist,
-because both are fixed by the supervisor before the session's process starts. A tool call
-waved through by `bypassPermissions` is still refused by the boundary if it writes outside
-the workspace or reaches an unlisted host.
+**A permission mode governs the tool gate, not OS containment.** The two are separate
+layers. `bypassPermissions` stops the gate asking; it does not change what the invoking
+account is allowed to do on the machine. A tool call waved through by `bypassPermissions`
+can still do anything that account can do.
 
 Settings can also declare hooks: commands or HTTP endpoints attached to lifecycle events.
 A hook's output can return an allow, block, or ask decision, and that decision feeds the
 same permission gate. Hooks are absent until you configure them under a `hooks` key in
 settings.
 
-### OS sandbox
+### Isolation
 
-On Linux and macOS, every command that can start an agent session runs inside an OS-level
-sandbox, beneath the application-level permission decision. Commands that only inspect or
-maintain host configuration stay outside it: the host subcommands `auth`, `config`,
-`install`, `remove`, `uninstall`, `update`, and `list`, plus the metadata reads
-`--version`, `--help`, `--list-models`, and `--export`. Windows remains a portability
-target, not a sandbox-enforcement target.
+Apex Code ships no built-in sandbox. Built-in tools, extensions, and package installs run
+with the permissions of the account that started the CLI. There is no OS-level boundary
+between the session and the rest of the machine.
 
-**Filesystem.** The workspace is the only writable location. The invoking account's home
-directory is hidden, so a session cannot read `~/.ssh`, `~/.aws`, or shell history, and its
-own state lives under `<workspace>/.apex-code/`. Provider credentials are projected in
-read-only from `auth.json`. `fd` and `ripgrep` are resolved on the host and projected in
-read-only, so search works without the session needing to download anything.
+The permission gate is still real and still applies to every tool call. It is a policy
+layer, not a containment boundary, and it is not a substitute for OS isolation.
 
-**Git identity.** The supervisor reads your global `user.name` and `user.email` before the
-sandbox hides the host home, and projects a synthesized two-key config read-only. Commits
-made inside a session carry your identity without any repository-scope setup. Only those
-two keys are projected: your real `~/.gitconfig` is never mounted, so a `credential.helper`
-or an `insteadOf` rule in it cannot reach the session. Git credentials are not projected,
-so pushing still happens outside the session.
+For an untrusted repository, generated code you will not review, or unattended runs, run
+the CLI inside a container, VM, dev container, or remote sandbox with only the files and
+credentials the task needs. For example, with Docker:
 
-**Network.** All egress passes through an allowlist proxy; the session has no direct route
-out. The built-in model-provider hosts and the npm update check are permitted by default,
-so a new install can reach its provider without configuration. Add anything else in global
-`settings.json`:
-
-```json
-{
-  "network": {
-    "allowedHosts": ["registry.internal.example", "proxy.internal.example:8443"]
-  }
-}
+```bash
+docker run --rm -it \
+  -v "$PWD:/workspace" \
+  -w /workspace \
+  -e ANTHROPIC_API_KEY \
+  node:22 \
+  npx apex-code
 ```
 
-A bare hostname matches any port; `hostname:port` pins one. Adding
-`"allowDefaultHosts": false` to that block denies everything the list does not name. A
-refused request reports the host and the setting that would permit it, and the refusals
-for a session are summarised when it exits.
+Restrict the mounts and the credentials to what the task needs. Windows container and VM
+isolation works the same way.
 
-Providers whose endpoint depends on account or environment configuration — Amazon Bedrock,
-Azure OpenAI, Cloudflare, Google Vertex — are not in the default set and need an explicit
-entry. So does a mid-session `/model` switch to one of them, because the allowlist is fixed
-when the session starts.
-
-**`/share`.** Gist upload runs the GitHub CLI, whose credentials live in the host home that
-the sandbox hides. Run `/export <file>` inside the session, then
-`gh gist create --public=false <file>` outside it.
-
-**Escalation.** A request to a host the allowlist does not name pauses and asks, naming
-that exact host. Approving it permits that one host for the rest of the session and
-nothing else; it is never written to settings, and declining leaves the host refused.
-Non-interactive modes (`--print`, `--mode json`, `--mode rpc`) deny without asking, since
-there is nobody to ask. The prompt is drawn by the supervisor, not by the session, so an
-approval cannot be forged from inside the boundary.
-
-**Git and GitHub.** Commits carry your identity, and `git push` works: the session asks the
-supervisor for a credential, which reads it from your host credential store and returns it
-for that one host, once you release it. Nothing is written into the workspace. A release
-covers one host for the session only, and a host the session cannot reach gets no
-credential at all.
-
-**Profiles.** A named combination of allowed hosts and writable roots, selected with
-`--permission-profile <name>` and defined in global `settings.json`:
-
-```json
-{
-  "sandboxProfiles": {
-    "release": {
-      "allowedHosts": ["github.com", "api.github.com"],
-      "additionalWritableRoots": ["/srv/artifacts"]
-    }
-  }
-}
-```
-
-A profile is read from global scope only; the same block in a project's
-`.apex-code/settings.json` is ignored. It can widen what a session reaches and writes, and
-has no way to express a tool-gate mode or to disable the boundary.
-
-**Widening the boundary.** `--add-dir <path>` makes another directory writable, repeatable.
-`--sandbox danger-full-access` runs with no OS boundary at all, announces itself, and asks
-you to confirm at a terminal.
-
-Neither can be set from project settings, so a repository cannot grant itself either one.
-The difference between them is where else they can come from: a writable root may also
-come from a profile in your **global** settings, because that is your own configuration
-about your own machine. Turning the sandbox off cannot come from settings of any scope. It
-is only ever a flag you type, so no saved configuration can leave a session unconfined
-without you asking for it that time.
-
-For untrusted repositories or unattended generated code, use a container, VM, or micro-VM
-with only the files and credentials the task requires. Read [`SECURITY.md`](SECURITY.md)
-before relying on Apex Code for higher-risk work.
+Read [`SECURITY.md`](SECURITY.md) before relying on Apex Code for higher-risk work.
 
 ### Verification and formatter policies
 
@@ -551,10 +480,8 @@ Code to ACP clients such as Zed and the JetBrains IDEs.
 
 `/share` first asks for confirmation, then exports the complete session HTML and creates
 a **secret Gist** through the GitHub CLI. Secret means unlisted, not private or
-access-controlled; anyone with the URL can read it. Inside a sandboxed session the CLI
-cannot see your host credentials, so run `/export <file>` and then
-`gh gist create --public=false <file>` outside the session, as the sandbox section above
-describes. The export can contain
+access-controlled; anyone with the URL can read it. The upload runs your authenticated
+GitHub CLI with your host credentials. The export can contain
 prompts, tool calls and results, paths, and file content. Use `/export` to inspect a
 local copy first. By default Apex Code returns the GitHub Gist URL; configure
 `APEX_CODE_SHARE_VIEWER_URL` only for a viewer you explicitly trust.
@@ -624,10 +551,6 @@ provider, GitHub when you explicitly publish an export as a gist, and any config
 integration can still receive data required for that operation. Read the destination's
 policies and review sensitive content before sending it.
 
-Inside the OS sandbox these requests are additionally constrained by the network allowlist
-described under [OS sandbox](#os-sandbox): a host that is not permitted is refused before
-the request leaves the machine.
-
 ## Configuration and environment variables
 
 Apex-owned runtime variables use the `APEX_CODE_*` prefix:
@@ -684,9 +607,8 @@ complete export to GitHub after confirmation.
 ### I am working on an untrusted repository
 
 Use a container, VM, or micro-VM, restrict mounts and network access, use short-lived
-credentials, and review outputs before moving them into a trusted environment. The
-Apex Code sandbox reduces blast radius on supported platforms but is not a replacement
-for virtualization.
+credentials, and review outputs before moving them into a trusted environment. Apex Code
+ships no built-in sandbox, so container or VM isolation is the containment boundary.
 
 ## Developing Apex Code
 

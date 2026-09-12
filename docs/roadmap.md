@@ -84,7 +84,7 @@ capable and measurably worse.
 | 0 | Fork foundation | **landed** — 10 of 10 tasks · `9d79cc6c6b` | [spec](specs/2026-08-08-fork-foundation.md) | — |
 | 1 | Provider & model layer | **landed** — 7 of 7 tasks · `ad79a98fe` | [spec](specs/2026-08-10-provider-and-model-layer.md) | — |
 | 2a | Permissions — rule model | **landed** — live enforcement completed · `8dff33f41` | [spec](specs/2026-08-11-permission-rule-model.md) | — |
-| 2b | Permissions — OS sandbox | **landed** — Linux + macOS backends verified in CI · `b9a7bb337` | [spec](specs/2026-08-12-os-sandbox.md) | — |
+| 2b | Permissions — OS sandbox | **superseded** · removed on 2026-09-12 by [ADR 0032](adr/0032-no-built-in-sandbox.md); Phase 2a's rule model is unaffected and remains in force | [spec](specs/2026-08-12-os-sandbox.md) | — |
 | 3 | Context engineering | **landed** — eviction + deferred schemas verified against the replay corpus · `72a2fefe4` | [spec](specs/2026-08-13-context-engineering.md) | — |
 | 4 | Tool surface | **landed** — all 7 tasks (4.1–4.7) done, budget fixed at 2,150/2,300 tokens · `faffaa79e` | [spec](specs/2026-08-13-tool-surface.md) | — |
 | 5 | Delegation & multi-agent | **landed** — 7 of 7 tasks · `be00e1ab0` | [spec](specs/2026-08-14-delegation-and-multi-agent.md) | — |
@@ -104,7 +104,7 @@ capable and measurably worse.
 | Sandbox skill projection | **landed** — SKILL.1 through SKILL.9 · `cac7e49f8` | [spec](specs/2026-08-20-sandbox-skill-projection.md) | — |
 | Supervisor-mediated credential writes | **landed** — `4016794c3` | [spec](specs/2026-08-22-supervisor-mediated-credential-writes.md) | — |
 | Terminal interaction polish | **landed** — `697746b94` | [spec](specs/2026-08-23-terminal-interaction-polish.md) | — |
-| Sandbox delegation and escalation | **landed** — U1 through U7 · `6b628677a` | [spec](specs/2026-08-28-sandbox-delegation-and-escalation.md) | — |
+| Sandbox delegation and escalation | **superseded** · removed on 2026-09-12 by [ADR 0032](adr/0032-no-built-in-sandbox.md) | [spec](specs/2026-08-28-sandbox-delegation-and-escalation.md) | — |
 | Composer dock surface | **landed** — filled, cursor-safe prompt dock · `2bd3008f1` | [spec](specs/2026-08-23-composer-dock-surface.md) | — |
 | Prime-inspired gold TUI | **landed** — gold-neutral layout and permission-safe tray · `e576190a5` | [spec](specs/2026-08-23-prime-inspired-gold-tui.md) | — |
 | Ember TUI surface | **landed** — ember palette, counted startup, brand mark · `215801bfb` | [spec](specs/2026-08-25-ember-tui-surface.md) | — |
@@ -124,13 +124,13 @@ capable and measurably worse.
 | Tool reliability and execution budgets | **landed** — TR.1 through TR.7 · `cc9264873` · three-OS CI green (run `33707738039`, post-repair tree including `533de14e1`; first closure run `33705200104` failed on Windows and is superseded) | [spec](specs/2026-09-01-tool-reliability-and-execution-budgets.md) | — |
 | Unified runs and child sessions | **active** — root aggregate budget (explicit `aggregateBudget`, parent consumption, one ledger per tree), child concurrency caps, attempt records with idempotent spawn, timeouts, cancellation reasons, pollable `agent/status`, workspace states with explicit `agent/recover` (no auto recreation), policy/sandbox/artifact/evidence linkage, and token/cost rollups are committed as eight slices `8ba92f669` through `34c53156b`, plus the Windows portability repairs `01855109a`, `8d096b119`, `7bfd30934`, and `5473ceea9` · three-OS CI green (run `34562097691` at `5473ceea9`) · open decisions are settings policy only (aggregate default, parent-own budget consumption of the ceiling), and phase closure is the remaining call | [spec](specs/2026-09-09-run-and-child-session-architecture.md) | [plan](plans/2026-09-09-run-and-child-session-architecture.md) |
 | Configured verification and formatting | **landed** — VF.1 through VF.6 · `f00df19e2` · three-OS CI green (run `33838960431`, repair-inclusive tree incl. Windows executor repair `e329441b1` and CI-only test repairs) · re-verified at `a0b68f368` (run `33926005862`) after models.dev retired a GitHub Copilot model id the fixtures pinned | [spec](specs/2026-09-01-configured-verification-and-formatting.md) | — |
-| Security boundary remediation | **landed** — runtime implementation `7fa4f340c13adb5ca942266eb7501c51371673a3`; release implementation `aa860294d42bbe4086d06756c861ea2071b0573d`; serial validation passed, with default parallel `npm test` limited by host scheduling and native macOS execution unavailable locally | [spec](specs/2026-09-05-security-boundary-remediation.md) | — |
+| Security boundary remediation | **superseded** · the boundary it remediated was removed on 2026-09-12 by [ADR 0032](adr/0032-no-built-in-sandbox.md) | [spec](specs/2026-09-05-security-boundary-remediation.md) | — |
 | Windows prepared paths and CI coverage | **active** · root traversal fix and platform-specific sandbox assertions under verification | [spec](specs/2026-09-08-windows-ci-path-roots.md) | — |
 | Ember workflow completion | **active** · interaction polish under verification | [spec](specs/2026-09-07-ember-workflow-completion.md) | — |
 | Permission preview | **active** · preview and standing refusal under verification | [spec](specs/2026-09-07-permission-preview.md) | — |
 | Persist a refusal | **active** · session refusal behavior under verification | [spec](specs/2026-09-07-persist-a-refusal.md) | — |
 | Trust classification and proof integrity | **active** · the 2026-09-05 remediation shipped the untrusted-project guard and left its classifier incomplete; `hasTrustRequiringProjectResources` exists but four project-controlled resources are absent from it, so a cloned repository is classified trusted and the guard is satisfied rather than triggered, reproduced at `2afe5a517` | [spec](specs/2026-09-11-trust-classification-and-proof-integrity.md) | [plan](plans/2026-09-11-trust-classification-and-proof-integrity.md) |
-| Remove the OS sandbox; isolation becomes the operator's boundary | **draft** · spec under review, nothing implemented; reverses Phase 2b and supersedes six ADRs on implementation | [spec](specs/2026-09-12-remove-os-sandbox.md) | — |
+| Remove the OS sandbox; isolation becomes the operator's boundary | **active** · implemented on this branch; the boundary, its supervisor, its proxy, its prompt, and its SDK contract are deleted; verification in flight | [spec](specs/2026-09-12-remove-os-sandbox.md) | — |
 
 ---
 
@@ -722,6 +722,16 @@ package was split because a single ~22-minute invocation was twice terminated by
 harness mid-run, not by a failure. `npm run check` passes end to end.
 
 ---
+
+### Reversal (2026-09-12)
+
+The OS sandbox this phase built was removed, together with the supervisor, the egress
+allowlist proxy, the escalation prompt, and the SDK containment contract. Isolation is now
+the operator's boundary. [ADR 0032](adr/0032-no-built-in-sandbox.md) records the decision
+and supersedes ADRs 0005, 0015, 0016, 0023, 0024, and 0031. Phase 2a's permission rule
+model is unaffected and remains in force. Everything above is kept as the record of what
+was built and why.
+
 
 ## Phase 3 — Context engineering
 
@@ -1341,6 +1351,7 @@ takes the next free number instead of a reserved one.
 | 0029 | Authorization and execution share one prepared path operation; execution pins the target by descriptor identity | follow-up | ✅ |
 | 0030 | Configured commands are authorized through the same authority as tool calls; a formatter is confined by isolated copy and restricted promotion | follow-up | ✅ |
 | 0031 | SDK sandbox containment is an explicit `required` / `external` / `none` contract | follow-up | ✅ |
+| 0032 | Apex Code ships no OS boundary; isolation is the operator's container or VM | follow-up | ✅ |
 
 ## Cross-phase contracts
 
