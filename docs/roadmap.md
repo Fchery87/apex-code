@@ -130,7 +130,7 @@ capable and measurably worse.
 | Permission preview | **active** · preview and standing refusal under verification | [spec](specs/2026-09-07-permission-preview.md) | — |
 | Persist a refusal | **active** · session refusal behavior under verification | [spec](specs/2026-09-07-persist-a-refusal.md) | — |
 | Trust classification and proof integrity | **active** · the 2026-09-05 remediation shipped the untrusted-project guard and left its classifier incomplete; `hasTrustRequiringProjectResources` exists but four project-controlled resources are absent from it, so a cloned repository is classified trusted and the guard is satisfied rather than triggered, reproduced at `2afe5a517` | [spec](specs/2026-09-11-trust-classification-and-proof-integrity.md) | [plan](plans/2026-09-11-trust-classification-and-proof-integrity.md) |
-| Remove the OS sandbox; isolation becomes the operator's boundary | **active** · implemented on this branch; the boundary, its supervisor, its proxy, its prompt, and its SDK contract are deleted; verification in flight | [spec](specs/2026-09-12-remove-os-sandbox.md) | — |
+| Remove the OS sandbox; isolation becomes the operator's boundary | **landed** · 99 files, 12,138 deletions at `796937150`; the boundary, its supervisor, its proxy, its prompt, and its SDK contract are gone, and the eight remaining suite failures reproduce on `main` | [spec](specs/2026-09-12-remove-os-sandbox.md) | — |
 
 ---
 

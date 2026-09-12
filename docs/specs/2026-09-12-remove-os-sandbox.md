@@ -1,6 +1,6 @@
 # Spec: Remove the OS sandbox; isolation becomes the operator's boundary
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 
@@ -168,7 +168,10 @@ Prose that claims containment must not survive the code. The finding from `2026-
 
 ## Rollout
 
-Needs `docs/plans/2026-09-12-remove-os-sandbox.md`, because it spans roughly twenty source files, three test suites, six ADRs, five specs, and a CI workflow. The slices should be ordered so each one leaves the tree green and the claim true.
+Landed in one commit on `feat/container-isolation-posture`, spanning 99 files. No plan document was
+written. A plan that is born complete and deleted in the same session records nothing a reader
+can use, and AGENTS.md already puts durable content in the ADR and the roadmap. The order below
+is the order the work actually happened in, kept so a later reversal knows the seams.
 
 1. The structural absence test, written first and failing, so the deletion has a checker before it has a deletion.
 2. The settings schema and the CLI flags, with the docs that name them.

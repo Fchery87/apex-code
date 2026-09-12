@@ -131,7 +131,9 @@ function findLeaseRecords(root: string): LeaseRecord[] {
 }
 
 async function waitForLeases(dirs: CliDirs, predicate: (records: LeaseRecord[]) => boolean): Promise<LeaseRecord[]> {
-	const stateRoot = join(dirs.projectDir, ".apex-code");
+	// Session state lives under the agent directory. The boundary used to repoint that
+	// into the workspace, which is the only reason this searched the project tree.
+	const stateRoot = dirs.agentDir;
 	const deadline = Date.now() + 20_000;
 	while (Date.now() < deadline) {
 		const records = findLeaseRecords(stateRoot);
