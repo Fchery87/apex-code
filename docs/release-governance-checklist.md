@@ -12,7 +12,8 @@ any item below is enabled; read it as what to check.
 ## GitHub repository settings
 
 - [ ] **Branch protection on `main`.** Require the `ci.yml` required Ubuntu/macOS/Windows jobs
-      to pass before merging. Disallow force-push and branch deletion for `main`.
+      to pass before merging. Disallow force-push and branch deletion for `main`. The release
+      path does not satisfy this and is not meant to; see "Recorded deviations" below.
 - [ ] **The `npm` deployment environment** (referenced by `.github/workflows/release.yml`'s
       `publish` job) exists and has:
   - [ ] A deployment branch/tag policy restricted to `v*` tags — not "no restriction" and not
@@ -50,6 +51,44 @@ any item below is enabled; read it as what to check.
       the Trusted Publishing flow. An unused token is a live bypass, not a harmless leftover.
 - [ ] Two-factor authentication is required for publishing on the npm account(s) with
       maintain/owner access to both packages.
+
+## Recorded deviations
+
+Things that are true, deliberate, and would otherwise look like a finding. A checkbox above
+asks whether a setting is configured. This section answers the separate question of whether
+anything routinely goes around one.
+
+### Releases push to `main` and bypass its required checks
+
+`scripts/release.mjs` step 10 runs `git push origin main` directly. It is not a pull request,
+so the four required status checks do not run on the two commits a release creates, `Release
+vX.Y.Z` and `Add [Unreleased] section for next cycle`. GitHub reports this on every release
+push:
+
+```
+remote: Bypassed rule violations for refs/heads/main:
+remote: - 4 of 4 required status checks are expected.
+```
+
+Observed on the `v0.1.0` push, `8bb45bdc9..dcf69d284`.
+
+This is not a gap in branch protection. Protection is configured and working, and it is the
+maintainer's bypass privilege that lets the push through, which means the bypass travels with
+the person rather than with the repository.
+
+Accepted for two reasons. Both commits are mechanical, a version bump and the `[Unreleased]`
+to `[X.Y.Z]` rewrite, with no source change to review. And `release.mjs` runs `npm run check`,
+`npm run build:offline`, and the full `./test.sh` suite locally and aborts before committing
+if any of them fail, so the content is tested even though the commits are not gated.
+
+What this costs is worth naming rather than leaving implicit. The local run is one platform,
+so a release commit reaches `main` without the macOS and Windows evidence a pull request would
+have required. The tested tree is the one CI already passed before the release, and the delta
+is a version string and a changelog heading, so the exposure is small. It is not zero.
+
+Revisit this if `release.mjs` ever changes what it commits beyond the version and the
+changelog, or if release authority stops being a sole maintainer under ADR 0014's succession
+process. Routing releases through a pull request is the fix if either happens.
 
 ## Reviewing this checklist
 
