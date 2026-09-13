@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **The shipped documentation contradicted the release.** `0.1.0` removed the OS sandbox and then published four pages under `docs/` that still described it. `docs/security.md` asserted a Bubblewrap and Seatbelt boundary and scoped reportable vulnerabilities against "a real bypass of the permission gate or OS sandbox". `docs/containerization.md`, the page that answers how to confine a session, opened by telling you that you already had a sandbox. `docs/sdk.md` documented a `sandbox` option whose `"required"` value used to refuse to construct a session without containment, and which no longer exists. `docs/skills.md` claimed every session runs inside the sandbox with global skill roots mounted back in read-only. A reader who trusted the security page would have believed a session was confined when nothing confined it, which is the one kind of stale documentation that can make someone less careful rather than merely misinformed. All four now describe the posture the code actually has.
+- `packages/coding-agent/README.md` linked the containerization guide as `containerization.md` where the file is `docs/containerization.md`, so the page you are sent to for isolation was unreachable from the package README.
+
 ## [0.1.0] - 2026-09-13
 
 ### Fixed
