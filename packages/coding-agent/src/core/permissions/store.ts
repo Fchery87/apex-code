@@ -21,7 +21,6 @@ import {
 	PROJECT_PERMISSIONS_FILE,
 	projectResourcePathByName,
 } from "../project-resources.ts";
-import { POLICY_SNAPSHOT_PATH_VARIABLE } from "../sandbox/cli-launch.ts";
 import type { PermissionBehavior } from "../tools/contract.ts";
 import type { PermissionRule, PermissionSource } from "./rules.ts";
 
@@ -159,52 +158,11 @@ function defaultPolicyPath(): string {
 		: "/etc/apex-code/policy.json";
 }
 
-/**
- * The supervisor's captured host `policy` and `user` scopes (PS.3).
- *
- * Inside a sandboxed child neither source is reachable at its own path: the child's
- * environment allowlist removes `APEX_CODE_POLICY_PATH`, and `APEX_CODE_CODING_AGENT_DIR`
- * points at a directory inside the workspace that the child itself may write. Reading both
- * from one supervisor-written file outside every writable root is what makes the child's
- * effective authority equal the supervisor's, rather than equal to whatever the child last
- * wrote. Named only by `core/sandbox/cli-launch.ts`, which sets the variable on the
- * launch's own environment and keeps it out of the child-environment allowlist.
- */
-/** Raw file text per source, so the child validates exactly what the host would have. */
-interface PolicySnapshotFile {
-	version: number;
-	policy: string | null;
-	user: string | null;
-}
-
-function parseSnapshotFile(content: string): PolicySnapshotFile {
-	const parsed = JSON.parse(content);
-	if (
-		typeof parsed !== "object" ||
-		parsed === null ||
-		Array.isArray(parsed) ||
-		parsed.version !== 1 ||
-		(parsed.policy !== null && typeof parsed.policy !== "string") ||
-		(parsed.user !== null && typeof parsed.user !== "string")
-	) {
-		throw new Error("Invalid permission snapshot file: unexpected shape");
-	}
-	return parsed as PolicySnapshotFile;
-}
-
 export interface CreateFilePermissionRuleStoreOptions {
 	cwd: string;
 	agentDir?: string;
 	/** Overrides the managed policy file path. Defaults to $APEX_CODE_POLICY_PATH, else an OS-specific system location. */
 	policyPath?: string;
-	/**
-	 * The supervisor's captured host `policy` and `user` scopes. Defaults to
-	 * $APEX_CODE_POLICY_SNAPSHOT_PATH, which only a sandbox supervisor sets. When present
-	 * it replaces both `policyPath` and the `user` file for reading; `apply()` still
-	 * writes a `user` update to this process's own agent directory, which is how an
-	 * in-session approval persists without the child's copy becoming an authority source.
-	 */
-	policySnapshotPath?: string;
 	/** Test seam: inject backends for the three writable file-backed sources instead of touching real files. */
 	backends?: Partial<Record<FileBackedSource, AuthStorageBackend>>;
 	/** Immutable argv layers (`flag` / `cliArg`), validated by the CLI before construction. */
@@ -217,7 +175,6 @@ export interface CreateFilePermissionRuleStoreOptions {
 export class FilePermissionRuleStore implements PermissionRuleStore {
 	private readonly backends: Record<FileBackedSource, AuthStorageBackend>;
 	private readonly policyPath: string;
-	private readonly policySnapshotPath?: string;
 	private readonly initialRules: readonly PermissionRule[];
 	private readonly runtimeRules: Record<RuntimeSource, StoredPermissionRule[]> = { command: [], session: [] };
 	private readonly runtimeModes: Partial<Record<RuntimeSource, PermissionMode>> = {};
@@ -225,10 +182,6 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 	private readonly fileScopes: Partial<
 		Record<FileBackedSource, Promise<{ scope: StoredPermissionScope; error?: Error }>>
 	> = {};
-	private snapshotScope?: Promise<{
-		policy: { scope: StoredPermissionScope; error?: Error };
-		user: { scope: StoredPermissionScope; error?: Error };
-	}>;
 	private readonly fileScopeUpdates: Partial<Record<FileBackedSource, Promise<void>>> = {};
 
 	constructor(options: CreateFilePermissionRuleStoreOptions) {
@@ -241,7 +194,6 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 			...options.backends,
 		};
 		this.policyPath = options.policyPath ?? defaultPolicyPath();
-		this.policySnapshotPath = options.policySnapshotPath ?? process.env[POLICY_SNAPSHOT_PATH_VARIABLE];
 		this.initialRules = options.initialRules ?? [];
 		this.projectTrusted = options.projectTrusted ?? true;
 		if (!this.projectTrusted) {
@@ -283,37 +235,14 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 		}
 	}
 
-	private async readPolicySnapshot(): Promise<{
-		policy: { scope: StoredPermissionScope; error?: Error };
-		user: { scope: StoredPermissionScope; error?: Error };
-	}> {
-		try {
-			const snapshot = parseSnapshotFile(await readFile(this.policySnapshotPath as string, "utf-8"));
-			return {
-				policy: { scope: parseScope(snapshot.policy ?? undefined) },
-				user: { scope: parseScope(snapshot.user ?? undefined) },
-			};
-		} catch (error) {
-			const failure = error instanceof Error ? error : new Error(String(error));
-			return {
-				policy: { scope: emptyScope(), error: failure },
-				user: { scope: emptyScope() },
-			};
-		}
-	}
-
 	private capturedPolicyAndUser(): Promise<{
 		policy: { scope: StoredPermissionScope; error?: Error };
 		user: { scope: StoredPermissionScope; error?: Error };
 	}> {
-		if (!this.policySnapshotPath) {
-			return Promise.all([this.readPolicy(), this.capturedFileBackedScope("user")]).then(([policy, user]) => ({
-				policy,
-				user,
-			}));
-		}
-		this.snapshotScope ??= this.readPolicySnapshot();
-		return this.snapshotScope;
+		return Promise.all([this.readPolicy(), this.capturedFileBackedScope("user")]).then(([policy, user]) => ({
+			policy,
+			user,
+		}));
 	}
 
 	async snapshot(): Promise<PermissionStoreSnapshot> {
@@ -366,22 +295,13 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 		const destination = update.destination;
 		const previousUpdate = this.fileScopeUpdates[destination]?.catch(() => undefined) ?? Promise.resolve();
 		const nextUpdate = previousUpdate.then(async () => {
-			const current =
-				destination === "user" && this.policySnapshotPath
-					? (await this.capturedPolicyAndUser()).user
-					: await this.capturedFileBackedScope(destination);
+			const current = await this.capturedFileBackedScope(destination);
 			const next = applyToScope(current.scope, update);
 			await this.backends[destination].withLockAsync(async () => ({
 				result: undefined,
 				next: JSON.stringify(next, null, 2),
 			}));
 			this.fileScopes[destination] = Promise.resolve({ scope: next });
-			if (destination === "user" && this.policySnapshotPath) {
-				this.snapshotScope = this.capturedPolicyAndUser().then((snapshot) => ({
-					...snapshot,
-					user: { scope: next },
-				}));
-			}
 		});
 		this.fileScopeUpdates[destination] = nextUpdate;
 		await nextUpdate;

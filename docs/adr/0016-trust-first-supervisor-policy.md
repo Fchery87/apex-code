@@ -1,6 +1,10 @@
 # ADR 0016 — Trust-first supervisor policy inputs
 
-**Status:** Accepted · **Date:** 2026-08-16
+**Status:** Superseded · **Date:** 2026-08-16 · **Superseded by:** [ADR 0032](0032-no-built-in-sandbox.md)
+
+> Superseded on 2026-09-12 by [ADR 0032](0032-no-built-in-sandbox.md). The mechanism
+> this ADR decides was removed with the OS boundary. It is kept as the record of what
+> was decided and why.
 
 ## Decision
 

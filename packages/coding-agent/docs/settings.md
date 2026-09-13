@@ -117,13 +117,8 @@ below only matter if you want to override a default.
 ```
 
 A credential stored under `exa` in `auth.json` is also used, and takes precedence over
-the environment variable. Note that nothing writes it for you today: every interactive
-session runs inside the OS sandbox, which mounts the credential file read-only, so
-`auth.json` can only be edited outside a running session. `EXA_API_KEY` is the
-supported path.
-
-The backend's host is added to the sandbox network allowlist automatically once a
-credential is configured, so `network.allowedHosts` needs no entry for it.
+the environment variable. Note that nothing writes it for you today, so edit `auth.json`
+yourself or use `EXA_API_KEY`, which is the supported path.
 
 ### Warnings
 

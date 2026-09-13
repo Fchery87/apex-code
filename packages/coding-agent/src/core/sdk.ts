@@ -36,8 +36,6 @@ import { DerivedPermissionRuleStore } from "./permissions/store.ts";
 import { mergeProviderAttributionHeaders } from "./provider-attribution.ts";
 import type { ResourceLoader } from "./resource-loader.ts";
 import { DefaultResourceLoader } from "./resource-loader.ts";
-import { SANDBOX_ENFORCEMENT_MARKER_VALUE, SANDBOX_ENFORCEMENT_MARKER_VARIABLE } from "./sandbox/cli-launch.ts";
-import { createSandboxCredentialStore } from "./sandbox/rpc/credential-client.ts";
 import { getDefaultSessionDir, SessionManager } from "./session-manager.ts";
 import { type ResolvedRunBudget, SettingsManager } from "./settings-manager.ts";
 import { time } from "./timings.ts";
@@ -194,15 +192,10 @@ export interface CreateAgentSessionOptions {
 	delegation?: { resolveAgent?: AgentDefinitionResolver };
 	/**
 	 * Credential store the MCP OAuth connector uses (spec 2026-09-01-mcp-oauth).
-	 * Default: the sandbox channel store in a sandboxed child, else the host
-	 * AuthStorage — the same fallback chain the model runtime applies.
+	 * Default: the host AuthStorage, the same fallback the model runtime applies.
 	 */
 	mcpCredentials?: CredentialStore;
-	/** The caller's assertion about OS sandbox containment. */
-	sandbox?: SdkSandboxContract;
 }
-
-export type SdkSandboxContract = "required" | "external" | "none";
 
 /** Result from createAgentSession */
 export interface CreateAgentSessionResult {
@@ -219,12 +212,7 @@ export interface CreateAgentSessionResult {
 	delegationRuntime?: DelegationRuntimeOptions;
 	/** Warning if session was restored with a different model than saved */
 	modelFallbackMessage?: string;
-	sandboxContract: SdkSandboxContract;
-	sandboxDiagnostic?: string;
 }
-
-export const SDK_SANDBOX_ENFORCEMENT_MARKER_VARIABLE = SANDBOX_ENFORCEMENT_MARKER_VARIABLE;
-export const SDK_SANDBOX_ENFORCEMENT_MARKER_VALUE = SANDBOX_ENFORCEMENT_MARKER_VALUE;
 
 // Re-exports
 
@@ -318,17 +306,6 @@ function extractFinalAssistantText(session: AgentSession): string {
 }
 
 export async function createAgentSession(options: CreateAgentSessionOptions = {}): Promise<CreateAgentSessionResult> {
-	const sandboxContract = options.sandbox ?? "none";
-	const markerPresent = process.env[SDK_SANDBOX_ENFORCEMENT_MARKER_VARIABLE] === SDK_SANDBOX_ENFORCEMENT_MARKER_VALUE;
-	if (sandboxContract === "required" && !markerPresent) {
-		throw new Error("SDK sandbox contract requires OS containment, but no enforcing supervisor marker is present.");
-	}
-	const sandboxDiagnostic =
-		sandboxContract === "external"
-			? "Sandbox containment is external to the SDK; the SDK cannot verify OS containment."
-			: sandboxContract === "none"
-				? "No OS containment is asserted by the SDK sandbox contract."
-				: undefined;
 	const cwd = resolvePath(options.cwd ?? options.sessionManager?.getCwd() ?? process.cwd());
 	const agentDir = options.agentDir ? resolvePath(options.agentDir) : getDefaultAgentDir();
 	let resourceLoader = options.resourceLoader;
@@ -450,15 +427,14 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	}
 
 	// OAuth-capable MCP servers resolve tokens through the session's own credential
-	// seam: direct and lock-serialized on the host, supervisor-mediated in a sandboxed
-	// child, fail-closed when neither applies (spec 2026-09-01-mcp-oauth). Servers
-	// without `auth: "oauth"` never touch it.
+	// seam: direct and lock-serialized, fail-closed when no store applies
+	// (spec 2026-09-01-mcp-oauth). Servers without `auth: "oauth"` never touch it.
 	const mcpRuntime = createMcpRuntime(
 		cwd,
 		createSessionMcpConnector({
-			credentials: options.mcpCredentials ?? createSandboxCredentialStore() ?? AuthStorage.create(authPath),
+			credentials: options.mcpCredentials ?? AuthStorage.create(authPath),
 		}),
-		{ projectTrusted: settingsManager.isProjectTrusted() },
+		{ projectTrusted: settingsManager.isProjectTrusted(), agentDir },
 	);
 
 	// `web_search`, `lsp`, and `mcp` join the core four only when configured. All stay
@@ -713,25 +689,19 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				// reconstruct"): the exact values this construction used -- the
 				// ceiling-checked tool allowlist, the admitted capability set from
 				// the runtime's single admission projection (never a second
-				// classification, ADR 0010), this session's sandbox contract, the
-				// delegation bound it enforces, the child's model, and the budget
-				// wiring every child is built with (session-scoped own controller;
-				// aggregate only when a shared ceiling was configured at the root).
-				// It rides on the returned handle so the registry persists it on the
-				// child-run record, and `sandboxEnforced` reports whether the
-				// OS-containment supervisor marker check passed for this parent
-				// session (always true under the "required" contract, which refuses
-				// construction without it).
+				// classification, ADR 0010), the delegation bound it enforces, the
+				// child's model, and the budget wiring every child is built with
+				// (session-scoped own controller; aggregate only when a shared ceiling
+				// was configured at the root). It rides on the returned handle so the
+				// registry persists it on the child-run record.
 				const policy: ChildRunPolicySnapshot = {
 					tools: [...toolNames],
 					capabilities: [...capabilities].sort(),
-					sandbox: sandboxContract,
 					maxDelegationDepth: delegationMaxDepth,
 					model: childModel.id,
 					budgetScope: "session",
 					aggregateBudget: sharedBudgetController !== undefined,
 				};
-				const sandboxEnforced = markerPresent;
 				// An isolated child runs inside the workspace owner's prepared root
 				// (its linked worktree); a shared child keeps this session's cwd.
 				const childCwd = workspace?.root ?? cwd;
@@ -812,7 +782,6 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					// header on its next createAgentSession call) -- otherwise recursion
 					// would be silently capped at one level regardless of maxDelegationDepth.
 					delegation,
-					sandbox: sandboxContract,
 				});
 				await childSession.bindExtensions({});
 				let status: import("./delegation/runtime.ts").ChildSessionStatus = "idle";
@@ -970,11 +939,10 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					sendInput,
 					followUp: sendInput,
 					dispose: close,
-					// Construction linkage (spec 2026-09-09, policy/sandbox/artifact
+					// Construction linkage (spec 2026-09-09, policy/artifact
 					// linkage): the registry relays these onto the persisted child_run
 					// record and every status/wait payload derived from it.
 					policy,
-					sandboxEnforced,
 				};
 			},
 		};
@@ -1032,7 +1000,5 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		extensionsResult,
 		delegationRuntime,
 		modelFallbackMessage,
-		sandboxContract,
-		sandboxDiagnostic,
 	};
 }

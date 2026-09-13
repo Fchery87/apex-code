@@ -382,7 +382,7 @@ export function installPackedTarballs(tarballsByName, installDirectory) {
 
 /**
  * Run a provider-independent functional smoke test against an installed CLI:
- * a real sandboxed session, a scripted fake-provider turn, no network call to
+ * a real session, a scripted fake-provider turn, no network call to
  * any real model provider. Proves the packed-and-installed artifact actually
  * runs, not just that its static content passes the identity check above.
  */
@@ -392,9 +392,9 @@ export function runPackedFunctionalSmoke(installDirectory, options = {}) {
 	const workspace = options.workspace ?? mkdtempSync(join(tmpdir(), "apex-packed-smoke-workspace-"));
 	const agentDirectory = options.agentDirectory ?? mkdtempSync(join(tmpdir(), "apex-packed-smoke-agent-"));
 
-	// The sandboxed child can only read the workspace and the installed
-	// package's own directory (never the source checkout), so the extension
-	// fixture is copied into the workspace rather than referenced in place.
+	// The child runs with the workspace as its working directory, so the
+	// extension fixture is copied into the workspace rather than referenced
+	// from the source checkout.
 	const extensionPath = join(workspace, "packed-smoke-extension.mjs");
 	copyFileSync(SMOKE_EXTENSION_PATH, extensionPath);
 

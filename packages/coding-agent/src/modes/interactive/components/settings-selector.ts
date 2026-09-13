@@ -309,7 +309,7 @@ class PermissionModeSubmenu extends Container {
 		this.setContent(
 			new SelectSubmenu(
 				"Bypass all permission checks?",
-				"Every tool call runs without asking, in every project, until you change this back. The OS sandbox still confines writes to the workspace and network egress to the allowlist.",
+				"Every tool call runs without asking, in every project, until you change this back. Nothing else confines the session: it writes anywhere your account can and reaches any host. Run inside a container or VM if the work is untrusted.",
 				[
 					{ value: "no", label: `No, keep ${this.current}`, description: "Return to the mode list" },
 					{ value: "yes", label: "Yes, bypass", description: "Allow every tool call without asking" },

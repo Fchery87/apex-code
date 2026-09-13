@@ -133,11 +133,6 @@ export interface ChildSessionHandle {
 	 * runtime relays it onto the child-run record when present.
 	 */
 	policy?: ChildRunPolicySnapshot;
-	/**
-	 * True when the OS-containment supervisor marker check passed at this
-	 * handle's construction. Optional for the same reason as `policy`.
-	 */
-	sandboxEnforced?: boolean;
 	/** Release the child's resources. Called when the child or owning parent is closed. */
 	dispose(): void;
 }
@@ -178,7 +173,7 @@ export interface BuildChildSessionRequest {
 }
 
 /** The workspace authority requested by a child. Paths are advisory claims,
- * never a replacement for the path-permission or sandbox enforcement. */
+ * never a replacement for the path-permission gate. */
 export interface ChildWorkspaceRequest {
 	isolation: "shared-read" | "worktree";
 	ownedPaths: readonly string[];
@@ -297,8 +292,6 @@ export interface ChildRunPolicySnapshot {
 	tools: string[];
 	/** The admitted capability set from the same admission projection that gated the launch. */
 	capabilities: string[];
-	/** The sandbox contract string the child was constructed under ("required" | "external" | "none"). */
-	sandbox: string;
 	/** The delegation depth bound in force for this child's own delegations. */
 	maxDelegationDepth: number;
 	/** The child's resolved model id (its definition's model, or the parent's current model). */
@@ -319,11 +312,10 @@ export interface ChildRunRecord {
 	/** The derived policy this child was built with, persisted so session readers describe the child without re-deriving it. Optional: legacy records predate the field. */
 	policy?: ChildRunPolicySnapshot;
 	/**
-	 * True when the SDK's OS-containment supervisor marker check passed for the
-	 * parent session (always the case under the "required" contract, which
-	 * refuses construction without it). Absent on legacy records; false means
-	 * the contract is "external"/"none" (or no supervisor marker was present)
-	 * and the SDK already allowed the run.
+	 * Legacy only. Records what a session written before ADR 0032 was told about OS
+	 * containment. Absent on records written since, because nothing sets it: the
+	 * harness ships no boundary and makes no containment claim. Retained so an older
+	 * session still parses and still reports what it reported (ADR 0006).
 	 */
 	sandboxEnforced?: boolean;
 	workspace?: ChildWorkspaceRequest;
@@ -426,7 +418,7 @@ export interface ChildRunStatus {
 	parentSessionId?: string;
 	/** The derived policy the child was built with; absent on legacy records and fixture handles that never carried one. */
 	policy?: ChildRunPolicySnapshot;
-	/** True when the OS-containment supervisor marker check passed for the parent session; absent on legacy records. */
+	/** Legacy only, surfaced from the record; nothing sets it since ADR 0032. */
 	sandboxEnforced?: boolean;
 }
 
@@ -860,7 +852,7 @@ export class ChildRunRegistry {
 				// through the same admission projection; the record's persisted
 				// values stand in when a fixture handle reports none.
 				policy: child.policy ?? record.policy,
-				sandboxEnforced: child.sandboxEnforced ?? record.sandboxEnforced,
+				sandboxEnforced: record.sandboxEnforced,
 				parentSessionId: record.parentSessionId,
 				attempts: [...priorAttempts, attempt],
 				activeAttemptId: attempt.id,
@@ -1826,7 +1818,6 @@ export async function runDelegation(
 			attempts: [{ id: "attempt-1", startedAt: Date.now() }],
 			activeAttemptId: "attempt-1",
 			...(child.policy ? { policy: child.policy } : {}),
-			...(child.sandboxEnforced !== undefined ? { sandboxEnforced: child.sandboxEnforced } : {}),
 			...(options.getParentSessionId ? { parentSessionId: options.getParentSessionId() } : {}),
 			...(request.idempotencyKey !== undefined ? { idempotencyKey: request.idempotencyKey } : {}),
 			...(timeoutMs !== undefined ? { deadlineMs: Date.now() + timeoutMs } : {}),

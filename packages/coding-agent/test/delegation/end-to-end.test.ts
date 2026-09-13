@@ -16,11 +16,7 @@ import type {
 import { ChildRunRegistry, runDelegation } from "../../src/core/delegation/runtime.ts";
 import { ModelRuntime } from "../../src/core/model-runtime.ts";
 import { FilePermissionRuleStore } from "../../src/core/permissions/store.ts";
-import {
-	createAgentSession,
-	SDK_SANDBOX_ENFORCEMENT_MARKER_VALUE,
-	SDK_SANDBOX_ENFORCEMENT_MARKER_VARIABLE,
-} from "../../src/core/sdk.ts";
+import { createAgentSession } from "../../src/core/sdk.ts";
 import { SessionManager } from "../../src/core/session-manager.ts";
 import { DEFAULT_MAX_TOOL_CALLS, type ResolvedRunBudget, SettingsManager } from "../../src/core/settings-manager.ts";
 import type { Capability } from "../../src/core/tools/contract.ts";
@@ -1280,20 +1276,18 @@ describe("child record policy, sandbox, artifact, and evidence linkage (phase 4)
 
 		// The live child carries exactly the policy its construction used: the
 		// restricted (read-only) definition's tools, the admitted capability set,
-		// the sdk's sandbox contract, the delegation bound, the child model, and
+		// the sandbox assertion, the delegation bound, the child model, and
 		// the budget fields -- aggregate true because the parent configured one.
 		const expectedPolicy = {
 			tools: ["read"],
 			capabilities: ["fs.read"],
-			sandbox: "none",
 			maxDelegationDepth: delegationRuntime!.maxDelegationDepth,
 			model: faux.getModel().id,
 			budgetScope: "session",
 			aggregateBudget: true,
 		};
 		expect(session.childRunStatus(handleId).policy).toEqual(expectedPolicy);
-		// No enforcing supervisor marker: the OS-containment check did not pass.
-		expect(session.childRunStatus(handleId).sandboxEnforced).toBe(false);
+		expect(session.childRunStatus(handleId).sandboxEnforced).toBeUndefined();
 
 		// The durable child_run record persists it: flush the buffered records
 		// with a parent turn, then read them back from the parent session file.
@@ -1311,7 +1305,7 @@ describe("child record policy, sandbox, artifact, and evidence linkage (phase 4)
 		expect(records.length).toBeGreaterThan(0);
 		const persisted = records[records.length - 1]!;
 		expect(persisted.policy).toEqual(expectedPolicy);
-		expect(persisted.sandboxEnforced).toBe(false);
+		expect(persisted.sandboxEnforced).toBeUndefined();
 		expect(persisted.parentSessionId).toBeDefined();
 
 		// Reopening the parent loads the record with the same snapshot intact.
@@ -1320,29 +1314,8 @@ describe("child record policy, sandbox, artifact, and evidence linkage (phase 4)
 		});
 		const restored = reopened.session.childRunStatus(handleId);
 		expect(restored.policy).toEqual(expectedPolicy);
-		expect(restored.sandboxEnforced).toBe(false);
+		expect(restored.sandboxEnforced).toBeUndefined();
 		reopened.session.dispose();
-
-		// With the enforcing supervisor marker present, the flag reports true:
-		// the sdk's OS-containment check passed for this parent session.
-		const previousMarker = process.env[SDK_SANDBOX_ENFORCEMENT_MARKER_VARIABLE];
-		process.env[SDK_SANDBOX_ENFORCEMENT_MARKER_VARIABLE] = SDK_SANDBOX_ENFORCEMENT_MARKER_VALUE;
-		try {
-			const supervised = await buildParentSession("policy-sandbox-marker-e2e");
-			const markerHandle = "policy-marker-child";
-			supervised.faux.setResponses([fauxAssistantMessage("supervised recon done", { stopReason: "stop" })]);
-			await runDelegation(supervised.delegationRuntime!, "scout", "recon under supervision", {
-				background: true,
-				handleId: markerHandle,
-			});
-			const markerStatus = supervised.session.childRunStatus(markerHandle);
-			expect(markerStatus.sandboxEnforced).toBe(true);
-			expect(markerStatus.policy?.sandbox).toBe("none");
-			supervised.session.dispose();
-		} finally {
-			if (previousMarker === undefined) delete process.env[SDK_SANDBOX_ENFORCEMENT_MARKER_VARIABLE];
-			else process.env[SDK_SANDBOX_ENFORCEMENT_MARKER_VARIABLE] = previousMarker;
-		}
 	});
 
 	it("wait and status surface artifact, session file, parent linkage, policy, and sandbox", async () => {
@@ -1362,12 +1335,10 @@ describe("child record policy, sandbox, artifact, and evidence linkage (phase 4)
 			policy: {
 				tools: ["read"],
 				capabilities: ["fs.read"],
-				sandbox: "none",
 				maxDelegationDepth: delegationRuntime!.maxDelegationDepth,
 				budgetScope: "session",
 				aggregateBudget: false,
 			},
-			sandboxEnforced: false,
 		});
 		// The transcript path resolves lazily to the child's real session file,
 		// which exists on disk under the per-child artifact directory.
@@ -1384,12 +1355,10 @@ describe("child record policy, sandbox, artifact, and evidence linkage (phase 4)
 			policy: {
 				tools: ["read"],
 				capabilities: ["fs.read"],
-				sandbox: "none",
 				maxDelegationDepth: delegationRuntime!.maxDelegationDepth,
 				budgetScope: "session",
 				aggregateBudget: false,
 			},
-			sandboxEnforced: false,
 		});
 		expect(status.sessionFile).toBe(waited.sessionFile);
 		session.dispose();

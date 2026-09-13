@@ -577,7 +577,6 @@ async function promptForMissingSessionCwd(
 
 export interface MainOptions {
 	extensionFactories?: InlineExtension[];
-	sessionLeaseOwner?: "main" | "supervisor";
 	/** Already-parsed public CLI boundary value. */
 	parsedCommand?: ParsedCliCommand;
 }
@@ -730,8 +729,7 @@ export async function main(args: string[], options?: MainOptions) {
 		(envSessionDir ? expandTildePath(envSessionDir) : undefined) ??
 		startupSettingsManager.getSessionDir();
 	const wantsPersistentSession = !parsed.noSession && !parsed.help && parsed.listModels === undefined;
-	const mainOwnsSessionLease = options?.sessionLeaseOwner !== "supervisor";
-	if (mainOwnsSessionLease && wantsPersistentSession && !parsed.allowConcurrent) {
+	if (wantsPersistentSession && !parsed.allowConcurrent) {
 		const liveSessions = readLiveSessionLeases(sessionDir ?? getDefaultSessionDirPath(cwd), cwd);
 		if (liveSessions.length > 0) {
 			reportConcurrentSessionRefusal(liveSessions, cwd);
@@ -740,7 +738,7 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	let sessionManager = await createSessionManager(parsed, cwd, sessionDir, startupSettingsManager);
-	if (mainOwnsSessionLease && wantsPersistentSession) {
+	if (wantsPersistentSession) {
 		const lease = acquireSessionLease(sessionManager.getSessionDir(), cwd, sessionManager.getSessionId());
 		process.once("exit", () => lease.release());
 	}

@@ -13,7 +13,8 @@
  *
  * What this does NOT confine, deliberately and recorded rather than implied:
  * a formatter writing to an absolute path outside the workspace, or reaching
- * the network. Those are the OS sandbox's job. Copy plus restricted promotion
+ * the network. Nothing in the harness confines either since ADR 0032 removed the
+ * OS boundary, so that is the operator's container. Copy plus restricted promotion
  * confines workspace mutation, nothing wider.
  *
  * Promotion refuses any file whose live bytes changed during the run, because

@@ -2,12 +2,10 @@
  * The MCP credential seam: how an MCP server's OAuth token is keyed, read, and
  * refreshed through the session's existing `CredentialStore`.
  *
- * Which store instance that is depends on where the session runs. On the host it is
- * `AuthStorage` (direct, lock-serialized writes); in a sandboxed child it is
- * `SandboxAuthStorage` (reads from the read-only projection, writes through the
- * supervisor-mediated channel, ADR 0015). A session with neither has a read-only
- * store whose `modify` throws, which is the fail-closed path: refresh never
- * silently degrades to "pretend it worked".
+ * That store is `AuthStorage` (direct, lock-serialized writes) unless an embedder
+ * supplies its own. A session with neither has a read-only store whose `modify`
+ * throws, which is the fail-closed path: refresh never silently degrades to
+ * "pretend it worked".
  */
 
 import type { Credential, CredentialStore } from "@earendil-works/pi-ai";
@@ -168,7 +166,7 @@ export async function ensureFreshServerToken(options: {
 		await credentials.modify(mcpCredentialKey(serverName), async () => credential);
 	} catch (error) {
 		// The fresh access token works for this connection, but the store could not
-		// record the rotation — for a sandboxed child, that is the channel refusing.
+		// record the rotation, which a read-only store does by throwing.
 		// Fail this call closed rather than run ahead of what the store knows.
 		throw new McpOAuthRefreshError(
 			`MCP server "${serverName}" was refreshed but the session cannot store the new token: ${oauthErrorMessage(error)}`,

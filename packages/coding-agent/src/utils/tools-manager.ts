@@ -70,9 +70,9 @@ export function getToolPath(tool: "fd" | "rg", options: { toolsDirectory?: strin
 	const config = TOOLS[tool];
 	if (!config) return null;
 
-	// Check our tools directory first. Existence alone is not enough: the sandbox
-	// projects host tools by bind-mounting over a file here, and bwrap leaves that
-	// mountpoint behind as an empty, non-executable stub once the namespace is gone.
+	// Check our tools directory first. Existence alone is not enough: an interrupted
+	// download or a half-finished install leaves an empty, non-executable file here,
+	// and that file is not the tool.
 	const managedPath = join(
 		options.toolsDirectory ?? TOOLS_DIR,
 		config.binaryName + (platform() === "win32" ? ".exe" : ""),
@@ -477,13 +477,6 @@ async function downloadTool(tool: "fd" | "rg"): Promise<string> {
 	}
 }
 
-export interface HostToolBinary {
-	/** File name the child looks for in its own tools directory ("fd", "rg", "fd.exe"). */
-	name: string;
-	/** Absolute host path to the executable backing that name. */
-	path: string;
-}
-
 function isExecutableFile(candidate: string, targetPlatform: NodeJS.Platform): boolean {
 	try {
 		const stats = statSync(candidate);
@@ -493,62 +486,6 @@ function isExecutableFile(candidate: string, targetPlatform: NodeJS.Platform): b
 	} catch {
 		return false;
 	}
-}
-
-/**
- * Absolute host path for a managed tool, or undefined when it is installed nowhere.
- *
- * `getToolPath` may return a bare command name because its caller spawns through PATH.
- * A sandboxed child has no such luxury: its PATH still lists host directories that the
- * OS boundary has already replaced, so the supervisor must resolve a real path here and
- * project it in (ADR 0017, and the sandbox spec's tool-projection amendment).
- */
-export function resolveHostToolBinary(
-	tool: "fd" | "rg",
-	options: { toolsDirectory?: string; pathValue?: string; platform?: NodeJS.Platform } = {},
-): string | undefined {
-	const config = TOOLS[tool];
-	if (!config) return undefined;
-
-	const targetPlatform = options.platform ?? platform();
-	const executableSuffix = targetPlatform === "win32" ? ".exe" : "";
-	const managedPath = join(options.toolsDirectory ?? TOOLS_DIR, config.binaryName + executableSuffix);
-	if (isExecutableFile(managedPath, targetPlatform)) {
-		return managedPath;
-	}
-
-	const pathEntries = (options.pathValue ?? process.env.PATH ?? "")
-		.split(targetPlatform === "win32" ? ";" : ":")
-		.filter((entry) => entry.length > 0);
-	// Preference runs by name first, matching getToolPath: a real `fd` anywhere on PATH
-	// beats a `fdfind` alias, rather than whichever directory happens to come first.
-	for (const systemBinaryName of config.systemBinaryNames ?? [config.binaryName]) {
-		for (const entry of pathEntries) {
-			const candidate = join(entry, systemBinaryName + executableSuffix);
-			if (isExecutableFile(candidate, targetPlatform)) {
-				return candidate;
-			}
-		}
-	}
-
-	return undefined;
-}
-
-/**
- * Install any missing managed tool on the host, then report absolute paths for the ones
- * that exist. Downloading here rather than inside the child means one install serves every
- * workspace, and it happens on the side of the boundary that still has network access.
- */
-export async function prepareHostToolBinaries(silent: boolean = false): Promise<HostToolBinary[]> {
-	const binaries: HostToolBinary[] = [];
-	for (const tool of ["fd", "rg"] as const) {
-		await ensureTool(tool, silent ? undefined : ({ message }) => console.error(message));
-		const hostPath = resolveHostToolBinary(tool);
-		if (hostPath) {
-			binaries.push({ name: TOOLS[tool].binaryName + (platform() === "win32" ? ".exe" : ""), path: hostPath });
-		}
-	}
-	return binaries;
 }
 
 // Termux package names for tools

@@ -6,9 +6,8 @@
  *
  * The decision vocabulary is restriction-only: `block` short-circuits, `ask`
  * defers to the permission gate, and `allow` is recorded but never bypasses
- * the gate. A hook can narrow what runs, never widen it -- which is what makes
- * trust-gated project-scope hooks safe where project-sandbox profiles are not
- * (ADR 0016).
+ * the gate. A hook can narrow what runs, never widen it, which is what makes
+ * trust-gated project-scope hooks safe to load from a project at all.
  */
 
 export const HOOK_EVENT_NAMES = [

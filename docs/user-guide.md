@@ -33,9 +33,9 @@ SHA-256 manifest before extraction, adds its per-user command directory to `PATH
 prints the one command to run after you open a new terminal session. The full install
 instructions, including version pinning, are in the [README](../README.md#install-the-standalone-binary-from-github-releases).
 
-**Supported platforms:** Linux and macOS have the supported OS sandbox backends. Windows
-is a supported portability/install target, but sandbox enforcement remains unsupported
-under [ADR 0005](adr/0005-sandbox-boundary-guarantees.md).
+**Supported platforms:** Linux, macOS, and Windows are all supported. Apex Code ships no
+built-in sandbox, so isolation is your container or VM. See
+[`SECURITY.md`](../SECURITY.md) and the [Isolation](../README.md#isolation) section.
 
 ## First run
 
@@ -71,15 +71,14 @@ json`, `--mode rpc`) require an explicit `--permission-mode`. In an interactive 
 `/settings` > **Permission mode** changes it without restarting; the choice is saved to
 `~/.apex-code/agent/permissions.json` and applies to the next tool call.
 
-**Sandbox.** On Linux and macOS, the whole session runs inside an OS-level sandbox
-restricting filesystem writes to the workspace and network access to an allowlist — not
-just an application-level check. It is a **separate layer from the permission gate**, and
-the one you cannot change from inside a session: its mounts and its allowlist are fixed by
-the supervisor before the session's process starts, so no permission mode, including
-`bypassPermissions`, widens either. A tool call the gate waves through is still refused by
-the boundary if it writes outside the workspace or reaches an unlisted host. See
-[`SECURITY.md`](../SECURITY.md) for exactly what this does and does not guarantee;
-it is not a substitute for container/VM isolation when running fully untrusted work.
+**Isolation.** Apex Code ships no built-in sandbox. Built-in tools, extensions, and
+package installs run with the permissions of the account that started the CLI. The
+permission gate is a separate policy layer and still applies to every tool call, but it is
+not OS containment. For untrusted repositories, generated code you will not review, or
+unattended runs, run the CLI inside a container, VM, dev container, or sandbox with only
+the files and credentials the task needs. Containment inside a session is an extension's
+job, and `packages/coding-agent/examples/extensions/sandbox/` is a working example of one.
+See [`SECURITY.md`](../SECURITY.md) for what this does and does not guarantee.
 
 **Sessions.** Conversations are stored as JSONL files with a branching tree
 structure — you can fork from any earlier point (`/fork`, `/tree`) rather than only

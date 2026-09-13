@@ -8,9 +8,8 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { CONFIG_DIR_NAME } from "../../config.ts";
+import { dirname, join } from "node:path";
+import { getAgentDir } from "../../config.ts";
 import { ALL_CAPABILITIES, type Capability } from "../tools/contract.ts";
 import {
 	DEFAULT_IDLE_TIMEOUT_MINUTES,
@@ -26,8 +25,18 @@ const LIFECYCLES: readonly McpLifecycle[] = ["lazy", "eager", "keep-alive", "laz
 
 export const PROJECT_CONFIG_FILENAME = ".mcp.json";
 
-export function globalMcpConfigPath(): string {
-	return join(homedir(), CONFIG_DIR_NAME, "mcp.json");
+/**
+ * The user-scope `mcp.json`, which sits beside the agent directory rather than inside it.
+ *
+ * Derived from `agentDir` and not from `homedir()`, so that injecting an agent directory
+ * isolates MCP config the way it already isolates settings, auth, and sessions. Reading
+ * the home directory directly made this the one user-scope resolver that ignored the
+ * injection seam, which is why suites asserting "no server is configured" picked up the
+ * developer's real servers and failed. For the default agent directory the resolved path
+ * is unchanged.
+ */
+export function globalMcpConfigPath(agentDir: string = getAgentDir()): string {
+	return join(dirname(agentDir), "mcp.json");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -172,11 +181,19 @@ function readServers(path: string, diagnostics: McpConfigDiagnostic[]): Map<stri
 	return servers;
 }
 
+/**
+ * Both sources are explicit, and an omitted one means "no config from that scope" rather
+ * than "go and find the real one". Defaulting `globalPath` to the user's home made every
+ * caller that forgot it read the developer's own servers, which is how suites asserting
+ * an empty registry started failing on a configured machine. A boundary resolves the
+ * path; this does not reach for one.
+ */
 export function loadMcpConfig(options: { projectPath?: string; globalPath?: string } = {}): McpConfig {
 	const diagnostics: McpConfigDiagnostic[] = [];
-	const globalPath = options.globalPath ?? globalMcpConfigPath();
 
-	const servers = readServers(globalPath, diagnostics);
+	const servers = options.globalPath
+		? readServers(options.globalPath, diagnostics)
+		: new Map<string, McpServerConfig>();
 	if (options.projectPath) {
 		for (const [name, config] of readServers(options.projectPath, diagnostics)) {
 			servers.set(name, config);

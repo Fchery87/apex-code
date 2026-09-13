@@ -157,7 +157,7 @@ export interface AgentWaitResult {
 	parentSessionId?: string;
 	/** The derived policy the child was built with. */
 	policy?: ChildRunPolicySnapshot;
-	/** True when the OS-containment supervisor marker check passed for the parent session. */
+	/** Legacy only. Records what a pre-ADR-0032 session was told about OS containment; nothing sets it now. */
 	sandboxEnforced?: boolean;
 }
 

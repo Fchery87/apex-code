@@ -190,8 +190,9 @@ describe("formatter confinement", () => {
 	 * A recorded limit, not a guarantee. Copy plus restricted promotion confines
 	 * workspace mutation. It cannot stop a formatter writing an absolute path
 	 * outside the workspace, and the stage diff cannot see that write, so the
-	 * run still reports `passed`. Under the CLI the OS sandbox is what blocks
-	 * this. An unsandboxed SDK embedding has no such boundary.
+	 * run still reports `passed`. Nothing in the harness blocks this. ADR 0032
+	 * removed the OS boundary, so the CLI and an SDK embedding are the same case,
+	 * and containment is the operator's container or VM.
 	 *
 	 * This case exists so the limit cannot silently become a false claim.
 	 */

@@ -20,7 +20,8 @@ test("docs/support.md publishes the maintainer, targets, supported-version line,
 	assert.match(support, /only the latest non-deprecated Apex Code prerelease receives security support/);
 	assert.match(support, /Node\.js `>=22\.19`/);
 	assert.match(support, /Linux and macOS/);
-	assert.match(support, /Windows.*sandbox enforcement is\s*\n?\s*\*\*not\*\*/is);
+	assert.match(support, /ships no built-in sandbox/);
+	assert.match(support, /ADR 0032/);
 	assert.match(support, /ADR 0014/);
 	assert.match(support, /succession/i);
 	assert.match(support, /release-integrity-runbook\.md/);

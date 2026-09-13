@@ -28,6 +28,11 @@ no-follow guarantees. Any Windows exclusions require evidence that the tested
 supervisor behavior is outside the supported Windows execution path. Windows
 fail-closed sandbox selection remains tested.
 
+**Amendment (2026-09-12).** The sandbox suites this paragraph constrains were deleted with
+the OS boundary, so the paragraph is satisfied vacuously and is kept only as history. See
+[ADR 0032](../adr/0032-no-built-in-sandbox.md). The prepared-path work is unaffected and
+stays open.
+
 ## Verification
 
 Exercise the public prepared-read and prepared-write functions with Windows path

@@ -4,7 +4,7 @@ import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai/compat
  * Provider-independent functional smoke fixture for the packed-artifact gate
  * (ADR 0018, task 12.8). Scripts a single completed turn with no real network
  * call, proving the packed-and-installed CLI resolves its full dependency
- * graph and runs a real session through the real sandbox.
+ * graph and runs a real session.
  */
 export default function (pi) {
 	const faux = fauxProvider({ provider: "apex-packed-smoke", models: [{ id: "scripted" }] });

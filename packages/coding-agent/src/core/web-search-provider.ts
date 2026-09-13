@@ -1,13 +1,8 @@
 import { readStoredCredential } from "./auth-storage.ts";
-import {
-	getConfigValueEnvVarNames,
-	isCommandConfigValue,
-	isConfigValueConfigured,
-	resolveConfigValue,
-} from "./resolve-config-value.ts";
+import { getConfigValueEnvVarNames, isCommandConfigValue, resolveConfigValue } from "./resolve-config-value.ts";
 import type { WebSearchSettings } from "./settings-manager.ts";
 import type { WebSearchOperations } from "./tools/web-search.ts";
-import { createExaWebSearchOperations, EXA_SEARCH_HOST } from "./tools/web-search-exa.ts";
+import { createExaWebSearchOperations } from "./tools/web-search-exa.ts";
 
 export type WebSearchProviderId = "exa";
 
@@ -26,8 +21,6 @@ interface WebSearchProviderDefinition {
 	 * writes back.
 	 */
 	readonly defaultApiKeyReference: string;
-	/** Host the sandbox must allow before this backend can reach anything. */
-	readonly host: string;
 	/** `auth.json` key holding a credential saved from the settings panel. */
 	readonly credentialId: string;
 	create(options: {
@@ -41,7 +34,6 @@ interface WebSearchProviderDefinition {
 const WEB_SEARCH_PROVIDERS: Record<WebSearchProviderId, WebSearchProviderDefinition> = {
 	exa: {
 		defaultApiKeyReference: "$EXA_API_KEY",
-		host: EXA_SEARCH_HOST,
 		credentialId: "exa",
 		create: createExaWebSearchOperations,
 	},
@@ -113,24 +105,6 @@ function apiKeyReferenceFor(settings: WebSearchSettings | undefined, authPath?: 
 	// inert instead of quietly working for whoever cloned the repository.
 	const configured = webSearchSettingsError(settings) ? undefined : settings?.apiKey?.trim();
 	return configured || storedApiKeyReference(settings, authPath) || definitionFor(settings).defaultApiKeyReference;
-}
-
-/**
- * The host `web_search` needs on the sandbox allowlist, or undefined when no
- * credential is configured for the selected backend.
- *
- * Deliberately checks whether the key *reference* resolves rather than resolving it:
- * the supervisor calls this on every launch, and a `!command` reference would
- * otherwise spawn a shell before the child even starts. That check is an environment
- * lookup for a `$VAR` reference and free for a command reference.
- */
-export function resolveWebSearchHost(
-	settings: WebSearchSettings | undefined,
-	env?: Record<string, string>,
-	authPath?: string,
-): string | undefined {
-	const definition = definitionFor(settings);
-	return isConfigValueConfigured(apiKeyReferenceFor(settings, authPath), env) ? definition.host : undefined;
 }
 
 /**
