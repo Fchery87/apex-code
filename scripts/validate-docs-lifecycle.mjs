@@ -300,14 +300,22 @@ const packageDirs = existsSync(join(root, "packages"))
 const sourceRoots = [root, ...packageDirs, ...packageDirs.map((dir) => join(dir, "src"))];
 
 for (const path of await currentDocs(root)) {
-	const prose = (await readFile(path, "utf8")).replace(/```[\s\S]*?```/g, "");
-	for (const match of prose.matchAll(/\[[^\]]*\]\(([^)\s]+)\)/g)) {
+	// Two variants on purpose. A link shown inside a fence or a code span is an example of
+	// a link, not one, so the link scan reads neither. The source-file scan reads inside
+	// code spans by design, because a backticked path is exactly what it looks for, so it
+	// sees everything outside fences. Markdown fences come in backtick and tilde forms.
+	const outsideFences = (await readFile(path, "utf8"))
+		.replace(/^~~~[\s\S]*?^~~~/gm, "")
+		.replace(/```[\s\S]*?```/g, "");
+	const outsideCode = outsideFences.replace(/`[^`\n]*`/g, "");
+
+	for (const match of outsideCode.matchAll(/\[[^\]]*\]\(([^)\s]+)\)/g)) {
 		const target = match[1].split("#")[0];
 		if (!target || /^(?:[a-z][a-z0-9+.-]*:|<)/i.test(target)) continue;
 		if (!existsSync(join(path, "..", target))) report(path, `links ${target}, which does not exist`);
 	}
 
-	for (const match of prose.matchAll(/`((?:src|core|scripts|test|packages)\/[A-Za-z0-9_./-]+\.(?:ts|mjs|js))(?::\d+)?`/g)) {
+	for (const match of outsideFences.matchAll(/`((?:src|core|scripts|test|packages)\/[A-Za-z0-9_./-]+\.(?:ts|mjs|js))(?::\d+)?`/g)) {
 		const named = match[1];
 		if (!sourceRoots.some((dir) => existsSync(join(dir, named)))) {
 			report(path, `names the source file ${named}, which does not exist`);
