@@ -4,11 +4,27 @@
 
 ### Fixed
 
+- **The bypass-permissions confirmation told you a sandbox was still protecting you.** Choosing to bypass all permission checks displayed "The OS sandbox still confines writes to the workspace and network egress to the allowlist". That claim appeared at the moment you turned off your last check, and it was false. It now states plainly that nothing else confines the session and that untrusted work belongs in a container.
+- **`/share` sent you away from the fix.** When `gh auth status` failed, the message blamed the sandbox for hiding your GitHub login, pointed you at an export-and-publish-elsewhere workflow, and specifically told you not to run `gh auth login`. A session reads your real `~/.config/gh` now, so logging in is the fix and the message leads with it.
+- **An explicit agent directory did not isolate MCP config.** The user-scope `mcp.json` was always read from your home directory whatever `APEX_CODE_CODING_AGENT_DIR` said, unlike settings, credentials, and sessions, which all follow it. Running with a separate agent directory still picked up your everyday MCP servers. The lookup now follows the agent directory, so a custom one moves it too. For the default agent directory the path is unchanged.
 - **Security.** A repository could grant itself permissions with no trust prompt. Project trust only ever gated `settings.json`, `extensions`, `skills`, `prompts`, `themes`, `SYSTEM.md`, and `APPEND_SYSTEM.md`, so a checkout supplying `.apex-code/permissions.json`, `.apex-code/permissions.local.json`, `.apex-code/agents/`, or a root `.mcp.json` was classified trusted and its rules, permission mode, agent definitions, or MCP servers loaded without a decision. Cloning such a repository and starting a session was the whole exploit. Those four resources are now gated, and every project resource path is resolved in one place so a loader cannot read a path the classifier does not check.
 
 ### Changed
 
 - Starting a session in a repository that contains a `.mcp.json`, a project or local permissions file, or a `.apex-code/agents/` directory now asks for a trust decision the first time. Until it is answered, those project resources do not load. A permissions file that grants nothing (`{}`) does not prompt, so a repository that ships an empty one is unaffected. This is the security fix above; the prompt is the point.
+- **Breaking. Isolation is now yours to provide.** Apex Code ships no built-in sandbox. Built-in tools, extensions, and package installs run with the permissions of the account that started the CLI. For an untrusted repository, generated code you will not review, or an unattended run, start the CLI inside a container, VM, dev container, or remote sandbox holding only the files and credentials the task needs. `README.md` and `docs/user-guide.md` show the Docker shape. This is the trade Prime Agent and Atomic both make, and it is recorded in ADR 0032.
+- **Your home directory is visible to a session again.** It can read `~/.ssh`, `~/.aws`, and your shell history, and it can write anywhere your account can. Under the old boundary a tmpfs hid `/home` and the write boundary stopped at the workspace. Neither exists now. Treat a session as having your access, because it does.
+- **`git push` works with your own git credentials again.** Pushing previously required releasing a host credential through a supervisor prompt, because the boundary mounted the credential file read-only. That path is gone and git behaves as it does in any other terminal. This is a capability gain inside a session, not a regression.
+- **Sessions no longer stop to ask about a host.** There is no network allowlist, so there is no per-host approval prompt and no refusal to answer. Egress is whatever your environment permits.
+- **The permission gate is unchanged.** Its rule model, eight-source precedence, and five modes still decide every tool call, and project trust still gates what a repository may load. Both are policy layers rather than containment, and neither was touched. ADR 0004 still holds.
+- **A session no longer runs in a child process.** Skill discovery returns to its host-side roots, because nothing repoints `HOME` or the agent directory any more.
+
+### Removed
+
+- **Breaking.** `--sandbox`, `--add-dir`, and `--permission-profile` are removed. They are rejected rather than accepted and ignored, so a script that still passes one fails loudly instead of running on with a boundary it believes is there.
+- **Breaking.** `network.allowedHosts`, `network.allowDefaultHosts`, and `sandboxProfiles` are no longer read from settings. Delete them. They do nothing.
+- **Breaking.** The SDK's `sandbox` option, its `SdkSandboxContract` type, and the `sandboxContract` and `sandboxDiagnostic` fields on the result are removed. An embedder no longer states a containment contract, because the SDK has none to verify. What an embedding contains is now entirely a property of where it runs the process.
+- The Bubblewrap and Seatbelt backends, the supervisor and its child launch, the egress allowlist proxy, the host approval prompt, and the supervisor-mediated git credential channel are deleted.
 
 ## [0.0.6] - 2026-09-11
 
