@@ -1,4 +1,4 @@
-import { Box, Container, Markdown, type MarkdownTheme } from "@earendil-works/pi-tui";
+import { Box, Container, Markdown, type MarkdownTheme, truncateToWidth } from "@earendil-works/pi-tui";
 import type { MarkdownTransformer } from "../../../core/extensions/types.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
 import { createMarkdownTransform } from "./markdown-transform.ts";
@@ -37,7 +37,10 @@ export class UserMessageComponent extends Container {
 
 	private rebuild(): void {
 		this.clear();
-		const contentBox = new Box(this.outputPad, 1, (content: string) => theme.bg("userMessageBg", content));
+		const contentBox = new Box(this.outputPad, 1, (content: string) => {
+			const spine = theme.fg("accent", "│");
+			return theme.bg("userMessageBg", truncateToWidth(spine + content, Math.max(1, content.length)));
+		});
 		contentBox.addChild(
 			new Markdown(
 				this.text,

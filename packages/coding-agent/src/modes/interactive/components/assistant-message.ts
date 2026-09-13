@@ -1,5 +1,5 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import { Container, Markdown, type MarkdownTheme, Spacer, Text } from "@earendil-works/pi-tui";
+import { Container, Markdown, type MarkdownTheme, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import type { MarkdownTransformer } from "../../../core/extensions/types.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
 import { createMarkdownTransform } from "./markdown-transform.ts";
@@ -172,6 +172,16 @@ export class AssistantMessageComponent extends Container {
 			return lines;
 		}
 
+		// Keep conversational messages on one visual axis. Tool panels own
+		// their lifecycle spine; assistant text uses the quieter accent rail.
+		if (this.outputPad > 0) {
+			const spine = theme.fg("accent", "│");
+			for (let i = 0; i < lines.length; i++) {
+				if (lines[i].trim().length > 0) {
+					lines[i] = truncateToWidth(spine + lines[i], width);
+				}
+			}
+		}
 		lines[0] = OSC133_ZONE_START + lines[0];
 		lines[lines.length - 1] = OSC133_ZONE_END + OSC133_ZONE_FINAL + lines[lines.length - 1];
 		return lines;
