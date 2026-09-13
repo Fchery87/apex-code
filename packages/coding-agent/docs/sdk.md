@@ -49,30 +49,23 @@ The main factory function for a single `AgentSession`.
 
 `createAgentSession()` uses a `ResourceLoader` to supply extensions, skills, prompt templates, themes, and context files. If you do not provide one, it uses `DefaultResourceLoader` with standard discovery.
 
-#### Sandbox contract
+#### Isolation
 
-The SDK cannot determine whether its host process is contained. Choose the
-contract that describes how the embedding runs:
+The SDK asserts nothing about containment, because it has nothing to assert. A session
+runs in your process, with your process's permissions, and no option changes that.
 
-```typescript
-const { session, sandboxContract, sandboxDiagnostic } = await createAgentSession({
-  sandbox: "required",
-});
-```
+Earlier versions accepted a `sandbox` option of `"required"`, `"external"`, or `"none"`
+and reported the resolved contract and a diagnostic on the result. All of it is removed.
+`"required"` used to refuse to create the session unless the CLI had launched it inside
+the old boundary, so if you depended on that refusal, note that nothing throws now and
+the check has to move into your own startup. In TypeScript the removed option is a
+compile error; in JavaScript it is ignored silently. The changelog entry for the release
+names the exact fields. See [ADR 0032](../../../docs/adr/0032-no-built-in-sandbox.md).
 
-* `"required"` refuses to create the session unless Apex's enforcing supervisor
-  marker is present. Use this when the SDK runs inside an Apex CLI child.
-* `"external"` creates the session and reports that containment belongs to
-  another system. The SDK does not verify that system.
-* `"none"` creates the session without asserting OS containment. This is the
-  default for compatibility.
-
-The result always reports `sandboxContract`. It includes `sandboxDiagnostic` for
-`"external"` and `"none"`. Delegated children inherit the selected contract.
-Do not treat a normal SDK process, a permission gate, or a read-only tool list
-as an OS sandbox. See [ADR 0031](../../docs/adr/0031-sdk-sandbox-contract.md)
-and [ADR 0005](../../docs/adr/0005-sandbox-boundary-guarantees.md) for the
-platform limits.
+Confine the process instead. Run the embedding inside a container or VM holding only the
+files and credentials the task needs. Do not treat the permission gate or a read-only
+tool list as containment: the gate decides whether a tool runs, not what an allowed tool
+can reach once it does.
 
 ```typescript
 import { createAgentSession, SessionManager } from "apex-code";

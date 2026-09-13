@@ -265,6 +265,56 @@ for (const [number, adr] of adrs) {
 	}
 }
 
+// A document that names a file is making a checkable claim, and nothing checked it. Four
+// pages npm publishes kept describing a deleted subsystem, a plan carried a "not started"
+// task pointing at `core/sandbox/cli-supervisor.ts` after that file was gone, and a README
+// linked `containerization.md` one directory away from the file. All three are the same
+// failure: prose outliving what it describes. Code fences are skipped, because an example
+// of how to write a link is not a link.
+const HISTORICAL_DOCS = ["docs/specs/", "docs/adr/", "docs/research/", "docs/roadmap.md", "docs/upstream-log.md"];
+const UNREAD_DOC_DIRS = new Set([".git", ".worktrees", ".apex-code", ".pi", "node_modules", "dist", "vendor", "examples"]);
+
+async function currentDocs(directory) {
+	const found = [];
+	for (const entry of await readdir(directory, { withFileTypes: true })) {
+		const path = join(directory, entry.name);
+		if (entry.isDirectory()) {
+			if (UNREAD_DOC_DIRS.has(entry.name)) continue;
+			found.push(...(await currentDocs(path)));
+			continue;
+		}
+		if (!entry.name.endsWith(".md") || entry.name === "CHANGELOG.md") continue;
+		const rel = relative(root, path).split(sep).join("/");
+		if (HISTORICAL_DOCS.some((skip) => rel === skip || rel.startsWith(skip))) continue;
+		found.push(path);
+	}
+	return found;
+}
+
+// A fixture tree has no `packages/`, and this check must not depend on the repo's shape.
+const packageDirs = existsSync(join(root, "packages"))
+	? (await readdir(join(root, "packages"), { withFileTypes: true }))
+			.filter((entry) => entry.isDirectory())
+			.map((entry) => join(root, "packages", entry.name))
+	: [];
+const sourceRoots = [root, ...packageDirs, ...packageDirs.map((dir) => join(dir, "src"))];
+
+for (const path of await currentDocs(root)) {
+	const prose = (await readFile(path, "utf8")).replace(/```[\s\S]*?```/g, "");
+	for (const match of prose.matchAll(/\[[^\]]*\]\(([^)\s]+)\)/g)) {
+		const target = match[1].split("#")[0];
+		if (!target || /^(?:[a-z][a-z0-9+.-]*:|<)/i.test(target)) continue;
+		if (!existsSync(join(path, "..", target))) report(path, `links ${target}, which does not exist`);
+	}
+
+	for (const match of prose.matchAll(/`((?:src|core|scripts|test|packages)\/[A-Za-z0-9_./-]+\.(?:ts|mjs|js))(?::\d+)?`/g)) {
+		const named = match[1];
+		if (!sourceRoots.some((dir) => existsSync(join(dir, named)))) {
+			report(path, `names the source file ${named}, which does not exist`);
+		}
+	}
+}
+
 const contracts = await readFile(contractsPath, "utf8");
 const summaries = contractSummary(contracts);
 const sections = contractSections(contracts);

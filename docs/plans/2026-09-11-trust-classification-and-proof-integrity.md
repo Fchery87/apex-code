@@ -33,7 +33,7 @@ Branch protection ran before the classifier, not second. The spec argued it shou
 | Correct the 2026-09-05 checked criterion | not started | Reword line 50 to what was verified, and point the classifier half at this spec. |
 | Atomic publish for `edit` and `write` | not started | The change belongs in `writePreparedPath` (`core/tools/path-utils.ts:193`), which truncates then writes and is the default path, not only in the two `writeFile` fallbacks. Its device and inode identity check has to survive. |
 | Default `bash` timeout | not started | Blocked on an ADR and on a measurement. The spec requires the default to come from recorded long runs with the host named, not from taste. |
-| Windows sandbox startup message | not started | `core/sandbox/cli-supervisor.ts:161` prints the reason with no next step, and neither `README.md` nor `docs/user-guide.md` says a Windows session needs an explicit unsandboxed mode. |
+| Windows sandbox startup message | dropped | The message, its file, and the mode it asked about were deleted with the OS boundary on 2026-09-12 (ADR 0032). There is no sandbox to report on and no unsandboxed mode to document, so the task has no subject rather than a new owner. `README.md` and `docs/user-guide.md` now state that isolation is the operator's container or VM on every platform, Windows included. |
 
 ## Carried forward, not fixed here
 

@@ -84,7 +84,7 @@ upstream vocabulary, not executable or product branding.
 ## Documentation
 
 - [`docs/`](docs/) — CLI, extension, provider, theme, and integration reference
-- [`containerization.md`](containerization.md) — container usage
+- [`docs/containerization.md`](docs/containerization.md) — how to confine a session, and the patterns for doing it
 - [`CHANGELOG.md`](CHANGELOG.md) — current Apex Code changes and upstream history
 - [Source repository](https://github.com/Fchery87/apex-code)
 

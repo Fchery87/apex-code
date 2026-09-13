@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -65,14 +65,47 @@ const REMOVED_PHRASES = [
 	"Seatbelt",
 ];
 
-/** Documents a user reads before deciding whether to trust the harness with a repository. */
-const USER_FACING_DOCS = [
-	"README.md",
-	"docs/user-guide.md",
-	"docs/support.md",
-	"packages/coding-agent/README.md",
-	"packages/coding-agent/docs/settings.md",
+/**
+ * Every markdown file a reader takes as a current description of the harness.
+ *
+ * This was five hand-listed paths, and the list was the bug. Only one of the five lived
+ * under `packages/coding-agent/docs/`, which npm publishes, so four shipped pages kept
+ * advertising the boundary after it was deleted. `security.md` scoped vulnerability
+ * reporting against it, and `sdk.md` documented a fail-closed contract that no longer
+ * refuses anything. Discovering the set is the fix; enumerating it is what failed.
+ *
+ * The exemptions are the records that exist to say what was removed, which have to be
+ * able to name it.
+ */
+const HISTORICAL_RECORDS = [
+	"docs/adr/",
+	"docs/specs/",
+	"docs/plans/",
+	"docs/research/",
+	"docs/roadmap.md",
+	"docs/upstream-log.md",
 ];
+
+/** Upstream's tree, build output, and scratch: not ours to describe and not read as current. */
+const UNREAD_DIRECTORIES = new Set([".git", ".worktrees", ".apex-code", "node_modules", "dist", "vendor", "examples"]);
+
+async function currentMarkdownFiles(directory) {
+	const found = [];
+	for (const entry of await readdir(directory, { withFileTypes: true })) {
+		if (entry.name.startsWith(".") && entry.name !== ".github") continue;
+		const path = join(directory, entry.name);
+		if (entry.isDirectory()) {
+			if (UNREAD_DIRECTORIES.has(entry.name)) continue;
+			found.push(...(await currentMarkdownFiles(path)));
+		} else if (entry.name.endsWith(".md")) {
+			// A changelog at any depth is a record of what changed, so it names removals by design.
+			if (entry.name === "CHANGELOG.md") continue;
+			const rel = relative(root, path).split(sep).join("/");
+			if (!HISTORICAL_RECORDS.some((skip) => rel === skip || rel.startsWith(skip))) found.push(path);
+		}
+	}
+	return found;
+}
 
 async function offendersIn(directory) {
 	const offenders = [];
@@ -108,11 +141,10 @@ test("the CLI parses and documents no containment flag", async () => {
 	}
 });
 
-test("no user-facing document advertises the removed containment surface", async () => {
+test("no current document advertises the removed containment surface", async () => {
 	const offenders = [];
-	for (const doc of USER_FACING_DOCS) {
-		const path = join(root, doc);
-		if (!existsSync(path)) continue;
+	for (const path of await currentMarkdownFiles(root)) {
+		const doc = relative(root, path).split(sep).join("/");
 		const text = await readFile(path, "utf8");
 		for (const needle of [...FORBIDDEN_FLAGS, ...REMOVED_SYMBOLS, ...REMOVED_PHRASES]) {
 			if (text.includes(needle)) offenders.push(`${doc}: ${needle}`);

@@ -34,13 +34,10 @@ Apex Code loads skills from:
 - Settings: `skills` array with files or directories
 - CLI: `--skill <path>` (repeatable, additive even with `--no-skills`)
 
-> **Sandbox note:** every session runs inside Apex Code's OS sandbox (see
-> [Security](security.md#os-sandbox-and-permissions)), which hides your home
-> directory from the child process by default. The two global roots above are
-> mounted back in, read-only, at their original host paths, so they work the same as
-> everywhere else. Project skills already work without a mount, since the workspace
-> itself is mounted read-write. Packages, settings, and `--skill` paths follow
-> whichever of these roots they resolve under.
+> **Isolation note:** skills are read from these roots on the host, with no projection
+> or remapping in between (see [Security](security.md#permissions-and-isolation)). If you
+> run Apex Code inside a container, a global skill root only exists in the session when
+> you mount it, and a skill runs with whatever access that environment grants.
 
 Discovery rules:
 - In `~/.apex-code/agent/skills/` and `.apex-code/skills/`, direct root `.md` files are discovered as individual skills when they have valid skill frontmatter with a non-empty `description`
