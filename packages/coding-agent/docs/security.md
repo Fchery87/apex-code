@@ -30,15 +30,17 @@ Declining trust skips protected resources. Context files such as `AGENTS.overrid
 
 Non-interactive modes (`-p`, `--mode json`, and `--mode rpc`) do not show a trust prompt. Without an applicable saved trust decision, `defaultProjectTrust: "ask"` and `"never"` ignore such resources, while `"always"` trusts them. Use `--approve`/`-a` or `--no-approve`/`-na` to override project trust for one run.
 
-## OS Sandbox and Permissions
+## Permissions and Isolation
 
-Unlike upstream Pi, Apex Code adds a permission gate in front of every tool call and an OS-level sandbox on Linux and macOS (Bubblewrap and Seatbelt respectively) — see [ADR 0005](https://github.com/Fchery87/apex-code/blob/main/docs/adr/0005-sandbox-boundary-guarantees.md) for exactly what that boundary does and does not guarantee, and the root [`SECURITY.md`](https://github.com/Fchery87/apex-code/blob/main/SECURITY.md) for what counts as a reportable bypass. Windows has no supported sandbox backend. Outside of the permission gate and OS sandbox, built-in tools, extensions, package installs, shell commands, language servers, and other developer tools still run with the permissions of the Apex Code process.
+Unlike upstream Pi, Apex Code adds a permission gate in front of every tool call. It decides whether a tool runs, on every platform, in the process you started — see the root [`SECURITY.md`](https://github.com/Fchery87/apex-code/blob/main/SECURITY.md) for what counts as a reportable bypass.
 
-Project trust is only an input-loading guard, layered underneath the permission gate and sandbox. It prevents a repository from silently changing Apex Code's settings or extensions before you approve it. It does not make untrusted code, untrusted prompts, or untrusted model output safe by itself. Prompt injection from repository files, comments, documentation, context files, or build output is expected local-agent risk and cannot be reliably prevented by Apex Code.
+Apex Code ships no built-in sandbox. There is no OS-level boundary between a session and the rest of your machine on any platform, and the permission gate is a policy layer rather than containment. Built-in tools, extensions, package installs, shell commands, language servers, and other developer tools run with the permissions of the account that started Apex Code. Containment is the operator's container or VM; [ADR 0032](https://github.com/Fchery87/apex-code/blob/main/docs/adr/0032-no-built-in-sandbox.md) records that decision and its consequences.
+
+Project trust is only an input-loading guard, layered alongside the permission gate. It prevents a repository from silently changing Apex Code's settings or extensions before you approve it. It does not make untrusted code, untrusted prompts, or untrusted model output safe by itself. Prompt injection from repository files, comments, documentation, context files, or build output is expected local-agent risk and cannot be reliably prevented by Apex Code.
 
 ## Running Untrusted or Unmonitored Work
 
-For untrusted repositories, generated code you do not intend to monitor closely, or unattended automation, run Apex Code in a contained environment in addition to its own sandbox. Use a container, VM, micro-VM, remote sandbox, or policy-controlled sandbox with only the files and credentials required for the task.
+For untrusted repositories, generated code you do not intend to monitor closely, or unattended automation, run Apex Code in a contained environment. It has no boundary of its own, so this is the containment boundary rather than an extra one. Use a container, VM, micro-VM, remote sandbox, or policy-controlled sandbox with only the files and credentials required for the task.
 
 Common patterns are documented in [Containerization](containerization.md):
 
@@ -56,4 +58,4 @@ If you bind-mount a host workspace read/write, writes from inside the container 
 
 To report a security issue, follow Apex Code's own [Security Policy](https://github.com/Fchery87/apex-code/blob/main/SECURITY.md) — private disclosure via [GitHub private vulnerability reporting](https://github.com/Fchery87/apex-code/security/advisories/new). Do not open a public issue for security-sensitive reports.
 
-Expected local-agent behavior, prompt injection from untrusted content, and behavior of user-installed extensions or skills are generally outside the security boundary unless the report demonstrates a real bypass of the permission gate or OS sandbox, or shows how Apex Code grants access that the local user did not already have. See `SECURITY.md`'s "In scope"/"Out of scope" sections for the current, authoritative boundary.
+Expected local-agent behavior, prompt injection from untrusted content, and behavior of user-installed extensions or skills are generally outside the security boundary unless the report demonstrates a real bypass of the permission gate, or shows how Apex Code grants access that the local user did not already have. See `SECURITY.md`'s "In scope"/"Out of scope" sections for the current, authoritative boundary.

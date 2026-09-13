@@ -1,9 +1,13 @@
 # Containerization
 
-Apex Code has its own permission gate and, on Linux and macOS, an OS-level sandbox (see
-[Security](security.md)); Windows has no supported sandbox backend, and even where the
-built-in sandbox applies, you may want stronger or environment-level control over what
-directories Apex Code can write to and which accesses it has.
+Apex Code ships no built-in sandbox. A session runs with the permissions of the account
+that started it, on every platform, so containment is something you provide rather than
+something to add on top. The permission gate decides whether a tool runs, but it is policy
+rather than a boundary (see [Security](security.md)).
+
+Read this page before pointing Apex Code at an untrusted repository, at generated code you
+will not review, or at an unattended run. It is the answer to "how do I confine this",
+not an optional hardening step.
 
 There are two general options. You can either
 1. run the whole `apex-code` process inside an isolated environment, or
