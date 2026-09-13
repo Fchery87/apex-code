@@ -100,12 +100,17 @@ external setting is most likely to be found.
 
 ## npm dist-tags
 
-The release workflow publishes prereleases under `next` and stable versions under `latest` (ADR 0026).
-An authenticated maintainer must move the existing tags once so bare installs stop selecting the deprecated alpha. Run:
+`.github/workflows/release.yml` maintains these. It publishes a prerelease under `next` and a
+stable version under `latest` (ADR 0026), so a normal release needs no manual tag move.
 
-```sh
-npm dist-tag add apex-code@0.0.1-alpha.10 latest
-npm dist-tag add apex-code-agent-core@0.0.1-alpha.10 latest
-```
+- [ ] **`latest` points at the newest stable version** on both `apex-code` and
+      `apex-code-agent-core`, and never at a prerelease. Check with
+      `npm view <package> dist-tags --json`.
 
-Verify both with `npm view <package> dist-tags --json`. Do not commit npm credentials or tokens.
+Do not commit npm credentials or tokens.
+
+This section once carried two `npm dist-tag add ... 0.0.1-alpha.10 latest` commands, a
+one-time migration to move `latest` off a deprecated alpha. That migration is finished.
+Running those commands now would point `latest` back at `0.0.1-alpha.10` and downgrade every
+bare install, so they are deleted rather than left as history. As of `v0.1.0` both packages
+report `latest` as `0.1.0` and neither carries a `next` tag.
