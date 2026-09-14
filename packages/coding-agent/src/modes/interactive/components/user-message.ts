@@ -1,7 +1,8 @@
-import { Box, Container, Markdown, type MarkdownTheme, truncateToWidth } from "@earendil-works/pi-tui";
+import { Box, Container, Markdown, type MarkdownTheme } from "@earendil-works/pi-tui";
 import type { MarkdownTransformer } from "../../../core/extensions/types.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
 import { createMarkdownTransform } from "./markdown-transform.ts";
+import { withAccentSpine } from "./message-spine.ts";
 
 const OSC133_ZONE_START = "\x1b]133;A\x07";
 const OSC133_ZONE_END = "\x1b]133;B\x07";
@@ -38,8 +39,7 @@ export class UserMessageComponent extends Container {
 	private rebuild(): void {
 		this.clear();
 		const contentBox = new Box(this.outputPad, 1, (content: string) => {
-			const spine = theme.fg("accent", "│");
-			return theme.bg("userMessageBg", truncateToWidth(spine + content, Math.max(1, content.length)));
+			return theme.bg("userMessageBg", this.outputPad > 0 ? withAccentSpine(content) : content);
 		});
 		contentBox.addChild(
 			new Markdown(

@@ -32,6 +32,10 @@
 - **An explicit agent directory did not isolate MCP config.** The user-scope `mcp.json` was always read from your home directory whatever `APEX_CODE_CODING_AGENT_DIR` said, unlike settings, credentials, and sessions, which all follow it. Running with a separate agent directory still picked up your everyday MCP servers. The lookup now follows the agent directory, so a custom one moves it too. For the default agent directory the path is unchanged.
 - **Security.** A repository could grant itself permissions with no trust prompt. Project trust only ever gated `settings.json`, `extensions`, `skills`, `prompts`, `themes`, `SYSTEM.md`, and `APPEND_SYSTEM.md`, so a checkout supplying `.apex-code/permissions.json`, `.apex-code/permissions.local.json`, `.apex-code/agents/`, or a root `.mcp.json` was classified trusted and its rules, permission mode, agent definitions, or MCP servers loaded without a decision. Cloning such a repository and starting a session was the whole exploit. Those four resources are now gated, and every project resource path is resolved in one place so a loader cannot read a path the classifier does not check.
 
+### Added
+
+- Conversational messages carry an accent spine down their left edge, so user and assistant text share one visual axis. The spine occupies the existing padding column rather than being added beside it, so a message still renders at exactly the width it was given.
+
 ### Changed
 
 - Starting a session in a repository that contains a `.mcp.json`, a project or local permissions file, or a `.apex-code/agents/` directory now asks for a trust decision the first time. Until it is answered, those project resources do not load. A permissions file that grants nothing (`{}`) does not prompt, so a repository that ships an empty one is unaffected. This is the security fix above; the prompt is the point.
