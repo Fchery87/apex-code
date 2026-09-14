@@ -106,6 +106,14 @@ describe("the read-shaped tools refuse the agent directory's credential file", (
 	 */
 	describe("the other three read-shaped tools, decided at the gate", () => {
 		const agentDir = () => join(scratch, "agent");
+		// A sibling of the agent directory, not `scratch` itself. `scratch` is a true
+		// ancestor of the credential file and is therefore protected on purpose, which is
+		// what the first draft of these controls got wrong.
+		const ordinaryDir = () => {
+			const dir = join(scratch, "ordinary");
+			mkdirSync(dir, { recursive: true });
+			return dir;
+		};
 
 		async function behaviorFor(
 			definition: { contract: { permission: unknown } },
@@ -122,20 +130,20 @@ describe("the read-shaped tools refuse the agent directory's credential file", (
 
 		it("grep is allowed on an ordinary path and refused on the credential directory", async () => {
 			const definition = createGrepToolDefinition(scratch);
-			expect(await behaviorFor(definition, "grep", { pattern: "x", path: scratch })).toBe(false);
+			expect(await behaviorFor(definition, "grep", { pattern: "x", path: ordinaryDir() })).toBe(false);
 			expect(await behaviorFor(definition, "grep", { pattern: "x", path: agentDir() })).toBe(true);
 			expect(await behaviorFor(definition, "grep", { pattern: "x", path: authPath })).toBe(true);
 		});
 
 		it("ls is allowed on an ordinary path and refused on the credential directory", async () => {
 			const definition = createLsToolDefinition(scratch);
-			expect(await behaviorFor(definition, "ls", { path: scratch })).toBe(false);
+			expect(await behaviorFor(definition, "ls", { path: ordinaryDir() })).toBe(false);
 			expect(await behaviorFor(definition, "ls", { path: agentDir() })).toBe(true);
 		});
 
 		it("find is allowed on an ordinary path and refused on the credential directory", async () => {
 			const definition = createFindToolDefinition(scratch);
-			expect(await behaviorFor(definition, "find", { pattern: "*", path: scratch })).toBe(false);
+			expect(await behaviorFor(definition, "find", { pattern: "*", path: ordinaryDir() })).toBe(false);
 			expect(await behaviorFor(definition, "find", { pattern: "*", path: agentDir() })).toBe(true);
 		});
 	});

@@ -55,6 +55,13 @@ export interface PermissionSpec<TParams extends TSchema = TSchema> {
 	 */
 	withinWorkspace?(params: Static<TParams>): boolean;
 
+	/**
+	 * Why this call's target must not be handed over without an explicit decision, or
+	 * undefined for an ordinary target. Outranks every rule source but `policy`, and is
+	 * not lifted by `bypassPermissions`.
+	 */
+	protectedTarget?(params: Static<TParams>): string | undefined;
+
 	/** Prepare canonical operation facts on the validated call before authorization and execution. */
 	prepareCall?(params: Static<TParams>): void;
 

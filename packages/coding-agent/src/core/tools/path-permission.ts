@@ -4,6 +4,7 @@ import { minimatch } from "minimatch";
 import type { Static, TSchema } from "typebox";
 import { formatPathRelativeToCwdOrAbsolute, resolvesInsideDirectory } from "../../utils/paths.ts";
 import { setPreparedPathOperation } from "../permissions/operations.ts";
+import { describeProtectedTarget } from "../permissions/protected-paths.ts";
 import type { PermissionPreview } from "../permissions/responder.ts";
 import type { PermissionBehavior, PermissionSpec } from "./contract.ts";
 import { preparePathOperation, resolveToCwd } from "./path-utils.ts";
@@ -38,6 +39,9 @@ export function createPathPermissionSpec<TParams extends TSchema>(options: {
 			setPreparedPathOperation(params as object, preparePathOperation(getPath(params) ?? ".", cwd));
 		},
 		...(previewCall ? { previewCall } : {}),
+		protectedTarget(params) {
+			return describeProtectedTarget(resolveToCwd(getPath(params)?.trim() ? (getPath(params) as string) : ".", cwd));
+		},
 		withinWorkspace(params) {
 			return resolvesInsideDirectory(
 				resolveToCwd(getPath(params)?.trim() ? (getPath(params) as string) : ".", cwd),
