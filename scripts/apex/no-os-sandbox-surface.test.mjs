@@ -101,12 +101,48 @@ const REMOVED_PHRASES = [
  */
 const HISTORICAL_RECORDS = [
 	"docs/adr/",
-	"docs/specs/",
-	"docs/plans/",
 	"docs/research/",
 	"docs/roadmap.md",
 	"docs/upstream-log.md",
+	// A plan's task table records what was built, task by task, and says so in the past
+	// tense by design. The check that matters for a plan is that the source files it names
+	// still exist, which `scripts/validate-docs-lifecycle.mjs` already enforces.
+	"docs/plans/",
 ];
+
+/**
+ * Directories whose documents are exempt only once they are finished.
+ *
+ * A `Superseded` or `Landed` spec has to be able to name what it built, and exempting the
+ * directory was the cheap way to allow that. It also exempted every *live* document in it.
+ * `2026-09-11-trust-classification-and-proof-integrity.md` is `Active`, governs open work,
+ * and still says "on Linux and macOS the OS sandbox still confines the resulting execution
+ * to the workspace and the allowlisted hosts" -- the sentence that sets the severity of a
+ * finding someone is meant to act on. The guard passed five of five while it said that.
+ *
+ * Status is the right key, not the directory. A document that describes the past may name
+ * the past; one that describes the present may not.
+ */
+const FINISHED_ONLY_RECORDS = ["docs/specs/"];
+const FINISHED_STATUS = /^\*\*Status:\*\*\s*(Superseded|Landed)\b/m;
+
+/**
+ * An `Active` spec may still name the removed surface, but only after saying out loud that
+ * it has been read against the removal. Status alone is too blunt: a spec can be `Active`
+ * because its phase is unfinished while its prose has already been reconciled. Requiring
+ * the sentence is what makes that a claim someone made rather than a directory they
+ * happened to sit in.
+ */
+const RECONCILED = /^> \*\*Reconciled with \[ADR 0032\]/m;
+
+/**
+ * Workflow files. They are neither source nor prose and were scanned as neither, which is
+ * how `release.yml` kept installing Bubblewrap and describing "bubblewrap for OS sandbox
+ * enforcement" for a boundary deleted a day earlier. The 2026-09-12 deletion inventory
+ * recorded that step as "removed from `.github/workflows/ci.yml`" and named one of the two
+ * workflows that had it.
+ */
+const WORKFLOW_DIR = ".github/workflows";
 
 /** Upstream's tree, build output, and scratch: not ours to describe and not read as current. */
 const UNREAD_DIRECTORIES = new Set([".git", ".worktrees", ".apex-code", "node_modules", "dist", "vendor", "examples"]);
@@ -123,7 +159,12 @@ async function currentMarkdownFiles(directory) {
 			// A changelog at any depth is a record of what changed, so it names removals by design.
 			if (entry.name === "CHANGELOG.md") continue;
 			const rel = relative(root, path).split(sep).join("/");
-			if (!HISTORICAL_RECORDS.some((skip) => rel === skip || rel.startsWith(skip))) found.push(path);
+			if (HISTORICAL_RECORDS.some((skip) => rel === skip || rel.startsWith(skip))) continue;
+			if (FINISHED_ONLY_RECORDS.some((prefix) => rel.startsWith(prefix))) {
+				const text = await readFile(path, "utf8");
+				if (FINISHED_STATUS.test(text) || RECONCILED.test(text)) continue;
+			}
+			found.push(path);
 		}
 	}
 	return found;
@@ -164,6 +205,28 @@ test("the CLI parses and documents no containment flag", async () => {
 	for (const flag of FORBIDDEN_FLAGS) {
 		assert.equal(args.includes(flag), false, `${flag} is still handled by the parser`);
 	}
+});
+
+async function workflowFiles() {
+	const directory = join(root, WORKFLOW_DIR);
+	if (!existsSync(directory)) return [];
+	const found = [];
+	for (const entry of await readdir(directory, { withFileTypes: true })) {
+		if (entry.isFile() && /\.ya?ml$/.test(entry.name)) found.push(join(directory, entry.name));
+	}
+	return found;
+}
+
+test("no workflow installs or describes the removed containment surface", async () => {
+	const offenders = [];
+	for (const path of await workflowFiles()) {
+		const doc = relative(root, path).split(sep).join("/");
+		const text = await readFile(path, "utf8");
+		for (const needle of [...FORBIDDEN_FLAGS, ...REMOVED_SYMBOLS, ...REMOVED_PHRASES, "bubblewrap"]) {
+			if (text.toLowerCase().includes(needle.toLowerCase())) offenders.push(`${doc}: ${needle}`);
+		}
+	}
+	assert.deepEqual(offenders, []);
 });
 
 test("no current document advertises the removed containment surface", async () => {

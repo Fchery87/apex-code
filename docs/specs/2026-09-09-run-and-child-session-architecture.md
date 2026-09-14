@@ -2,6 +2,17 @@
 
 **Status:** Active
 
+> **Reconciled with [ADR 0032](../adr/0032-no-built-in-sandbox.md) on 2026-09-13.** This
+> spec predates the removal of the OS boundary and integrates with it in four places: the
+> collaborating-systems list, the Windows non-goal and its exit criterion, the boundary row
+> of the integration table, and the `sandboxEnforced` derivation. Every one of those is now
+> vacuous rather than wrong-in-effect. There is no boundary to pass a child policy through,
+> no marker to check, and no Windows exclusion to disclaim, because no platform has
+> enforcement now. `sandboxEnforced` survives on the persisted record as an optional field
+> that nothing sets, which ADR 0032 records as a deliberate cost of ADR 0006's migration
+> guarantee. The phase's own subject, child run lifecycle and budgets, never depended on
+> the boundary and is unaffected.
+
 ## Metadata
 
 | Field | Value |

@@ -2,6 +2,14 @@
 
 **Status:** Active
 
+> **Reconciled with [ADR 0032](../adr/0032-no-built-in-sandbox.md) on 2026-09-13.** This spec
+> was written on 2026-09-11, while an OS boundary still existed. The boundary was deleted the
+> next day. Sentences that rested on it were load-bearing here, not decorative: one of them set
+> the severity of the trust finding, and one goal asked for a message on a startup path that no
+> longer exists. They are corrected below rather than left for a reader to discount. Goal 8, the
+> credential refusal, moved to
+> the 2026-09-13 permission-gate recalibration spec, because its cause is now ADR 0032.
+
 ## Metadata
 
 | Field | Value |
@@ -21,8 +29,8 @@ The 2026-09-05 security-boundary remediation landed the guard that makes an untr
 
 - `docs/research/2026-09-05-apex-code-audit-review-and-architecture-critique.md` lines 55 to 79 hold the confirmed-findings table this acts on. Its first row is "Project permission files bypass trust, Real defect, Confirmed statically."
 - `docs/specs/2026-09-05-security-boundary-remediation.md` is the remediation for that table. It is marked landed. Its goal on line 50 reads "Untrusted projects cannot load project or local authorization grants, modes, eager MCP, hooks, or other project-controlled startup authority" and is checked.
-- `docs/adr/0004-permission-rule-model.md` and `docs/adr/0016-trust-first-supervisor-policy.md` own the precedence and supervisor-input decisions this change must not disturb.
-- `docs/adr/0005-sandbox-boundary-guarantees.md` owns the standing Windows exclusion. This change improves the Windows message and does not revisit the exclusion.
+- `docs/adr/0004-permission-rule-model.md` owns the precedence this change must not disturb. `docs/adr/0016-trust-first-supervisor-policy.md` owned the other half and is superseded by ADR 0032.
+- `docs/adr/0005-sandbox-boundary-guarantees.md` owned the standing Windows exclusion when this was written. ADR 0032 superseded it and removed the boundary on every platform, so there is no exclusion left to revisit.
 - `docs/release-governance-checklist.md` holds thirteen unchecked external controls. Line 14 is branch protection.
 
 A 2026-09-11 audit reproduced the first row at `HEAD`. The reproduction is a script rather than a reading, and it is the acceptance test for goal 1.
@@ -56,7 +64,7 @@ Neither `edit` nor `write` publishes atomically, and the default path is the wor
 
 `core/tools/bash.ts:54` declares `timeout` optional with the description "no default timeout", and `core/tools/bash.ts:281` only arms a timer when the model supplied one.
 
-On Windows, `cli.ts:112` routes every session command into the sandbox path, `core/sandbox/cli-supervisor.ts:33-36` selects the macOS or Linux backend, the Linux backend self-reports unavailable off Linux, and `core/sandbox/supervisor.ts:71` raises `SandboxUnavailableError`. `cli-supervisor.ts:161` prints the reason with no remediation. Neither `README.md` nor `docs/user-guide.md` states that a Windows session requires `--sandbox danger-full-access` to start.
+On Windows there was no startup message worth fixing once the boundary went, because the startup path it printed from was deleted with it. `README.md` and `docs/user-guide.md` now say that isolation is the operator's container or VM on every platform, Windows included.
 
 Branch protection is absent rather than unverified. The public API reports `protected: false` for `main` and an empty ruleset list. Four commits landed on `main` with red CI on 2026-09-11 (`0b791ead8`, `01855109a`, `f74eabe73`, `8d096b119`) before `7bfd30934` returned it to green.
 
@@ -66,7 +74,7 @@ A hand-maintained allowlist of trust-requiring filenames lives in a different fi
 
 The reproduction is `git clone && cd && apex-code`. A blanket `{"toolName":"bash","behavior":"allow"}` resolves an arbitrary piped command to `allow` under the `default` and `acceptEdits` modes with no prompt rendered. `plan` mode denies it because its floor is capability-based and does not consult rules. `SECURITY.md:39` places "a bypass of the permission system that lets a tool run without a decision" in scope.
 
-The same file cuts the other way and the spec should say so. `SECURITY.md:53-55` states that project trust is "an input guard, not a sandbox, and it constrains nothing once a turn is running," so trust was never claimed to be the boundary. That does not rescue this defect, because the rules the untrusted file supplies are consumed by the permission gate itself rather than by the trust layer, and the gate is a boundary. It does mean the honest severity is a bypass of the gate reached through a weak input guard, not a collapsed sandbox: on Linux and macOS the OS sandbox still confines the resulting execution to the workspace and the allowlisted hosts. On Windows, where ADR 0005 provides no backend, nothing else is holding.
+The same file cuts the other way and the spec should say so. `SECURITY.md:53-55` states that project trust is "an input guard, not a sandbox, and it constrains nothing once a turn is running," so trust was never claimed to be the boundary. That does not rescue this defect, because the rules the untrusted file supplies are consumed by the permission gate itself rather than by the trust layer, and the gate is a boundary. It does mean the honest severity is a bypass of the gate reached through a weak input guard. When this was written a second layer stood underneath on Linux and macOS and this paragraph leaned on it. ADR 0032 removed that layer on every platform, so nothing else is holding anywhere, which raises the severity rather than lowering it.
 
 The test that should have caught this cannot. `packages/coding-agent/test/trust-manager.test.ts` asserts that `settings.json` and `.agents/skills` make the detector return true. It enumerates members of the array, so it passes whether or not the array is complete. A test shaped like the code it tests inherits the code's blind spot.
 
@@ -76,27 +84,27 @@ Two smaller defects reach users directly. A crash during an edit truncates the u
 
 ## Goals
 
-- [ ] The reproduction script exits zero. A directory whose only project resource is `.apex-code/permissions.json`, `.apex-code/permissions.local.json`, `.apex-code/agents/`, or `.mcp.json` requires an explicit trust decision whenever that resource confers authority. "Confers authority" is defined in the Authority, not presence section below, and an empty scope is the one case that does not.
-- [ ] `hasTrustRequiringProjectResources` derives its answer from the same registry the loaders resolve their paths from, so no loader can read a project-scoped path that the classifier does not know about.
-- [ ] A test enumerates the registry and asserts every entry triggers the classifier. Adding a registry entry without gating it fails that test.
-- [ ] A project-scoped resource outside `.apex-code` reaches the classifier. `.mcp.json` at the repository root is the case that proves it.
-- [ ] The ancestor `.agents/skills` walk survives the rewrite. A skills directory in a parent of the working directory still raises a prompt, and the user-level `~/.agents/skills` still does not.
-- [ ] A resource that confers no authority does not raise a prompt. A `permissions.json` parsing to an empty scope is the case that proves it, and a resource that fails to parse does raise one.
+- [x] The reproduction script exits zero. A directory whose only project resource is `.apex-code/permissions.json`, `.apex-code/permissions.local.json`, `.apex-code/agents/`, or `.mcp.json` requires an explicit trust decision whenever that resource confers authority. "Confers authority" is defined in the Authority, not presence section below, and an empty scope is the one case that does not.
+- [x] `hasTrustRequiringProjectResources` derives its answer from the same registry the loaders resolve their paths from, so no loader can read a project-scoped path that the classifier does not know about.
+- [x] A test enumerates the registry and asserts every entry triggers the classifier. Adding a registry entry without gating it fails that test.
+- [x] A project-scoped resource outside `.apex-code` reaches the classifier. `.mcp.json` at the repository root is the case that proves it.
+- [x] The ancestor `.agents/skills` walk survives the rewrite. A skills directory in a parent of the working directory still raises a prompt, and the user-level `~/.agents/skills` still does not.
+- [x] A resource that confers no authority does not raise a prompt. A `permissions.json` parsing to an empty scope is the case that proves it, and a resource that fails to parse does raise one.
 - [ ] `projectTrusted` is a required argument on the permission store, the settings manager, and the MCP runtime. No call site can omit it and receive trusted.
-- [ ] `read`, `grep`, `ls`, and `find` refuse the agent directory's `auth.json` without an explicit decision, and that refusal is not expressible as a project or local rule.
+- [x] ~~`read`, `grep`, `ls`, and `find` refuse the agent directory's `auth.json`.~~ Moved to the 2026-09-13 permission-gate recalibration spec and implemented there.
 - [ ] Every row of the 2026-09-05 confirmed-findings table has one committed probe that fails while the finding is open and passes once it is closed. Each probe names its row.
 - [ ] `docs/specs/2026-09-05-security-boundary-remediation.md` line 50 states what was actually verified, and the classifier half is tracked as open work rather than as a checked box.
-- [ ] `main` requires the Ubuntu, macOS, and Windows `ci.yml` jobs before merge, and force-push and deletion are disallowed.
+- [x] `main` requires the Ubuntu, macOS, and Windows `ci.yml` jobs before merge, and force-push and deletion are disallowed.
 - [ ] Every item in `docs/release-governance-checklist.md` is either ticked with the evidence that settles it or annotated with why it cannot be settled yet.
 - [ ] `edit` and `write` publish through the same atomic path the session storage uses, preserving the destination file's mode.
 - [ ] `bash` applies a default wall-clock timeout, and the timeout that fires names itself and the escape hatch.
-- [ ] A Windows session that cannot be sandboxed prints the reason and the supported next step.
+- [x] ~~A Windows session that cannot be sandboxed prints the reason and the supported next step.~~ Dropped on 2026-09-12. The startup path that printed it, the mode it named, and the exclusion behind it were deleted with the boundary. `README.md` and `docs/user-guide.md` now state the operator's container or VM on every platform.
 
 ## Non-goals
 
 - [ ] This does not rework permission precedence or the capability-based mode model. `permissions/rules.ts` and `permissions/modes.ts` are the parts of this subsystem that are correctly shaped, and the resolver's source ordering is settled in ADR 0004. Touching them would enlarge the reviewable surface for no defect.
-- [ ] This does not add Windows OS-level sandbox enforcement. ADR 0005 makes that a standing exclusion. This change only stops a Windows user from meeting a bare error with no path forward.
-- [ ] This does not attempt prompt-injection defense. `SECURITY.md` places it out of scope and names the permission gate and the sandbox as the mitigation, which is the position this change strengthens. The one related repair here is that `AGENTS.md` and `CLAUDE.md` reach the system prompt through a gate rather than through no gate, which is a trust inconsistency and not an injection defense.
+- [ ] This does not add platform isolation of any kind. When written that meant Windows specifically, under ADR 0005's exclusion; since ADR 0032 it means every platform.
+- [ ] This does not attempt prompt-injection defense. `SECURITY.md` places it out of scope and named the permission gate and the boundary as the mitigation. Since ADR 0032 the gate is the whole of it, which this change strengthens and does not complete. The one related repair here is that `AGENTS.md` and `CLAUDE.md` reach the system prompt through a gate rather than through no gate, which is a trust inconsistency and not an injection defense.
 - [ ] This does not add a coverage gate. The only coverage configuration in the repository is `packages/agent/vitest.harness.config.ts`, whose `coverage.include` at line 18 names `src/harness/**` plus two files, and no workflow invokes the `coverage:harness` script that uses it. It is scoped to `packages/agent`, so it could never have measured `packages/coding-agent` whatever its include list said. The gap is that no configuration measures that package at all, which is real and is not a security boundary. Folding it in would make one spec carry two unrelated arguments. It belongs in its own follow-up.
 - [ ] This does not re-verify the 2026-09-05 rows itself. Goal 7 delivers the probes; what each probe reports is an outcome, not a commitment made in advance. A probe that passes closes its row here. A probe that fails opens a repair that gets its own spec if it is not already covered above.
 - [ ] This does not fix the concurrent-session hazard. `core/session-lease.ts` documents that two sessions in one worktree overwrite each other behind an advisory lease. It is a real limitation, it is honestly recorded, and a real fix is a locking design rather than a line.
@@ -139,7 +147,7 @@ A test that lists filenames cannot catch a missing filename. Replace it with a t
 
 ### Credential paths are not a rule's business
 
-`read`, `grep`, `ls`, and `find` default to allow at `core/tools/read.ts:229`, `grep.ts:148`, `ls.ts:120`, and `find.ts:141`, and `core/tools/path-permission.ts` performs no containment check, so any absolute path resolves. The supervisor bind-mounts the credential file read-only at its real host path and exports `APEX_CODE_AUTH_PATH` naming it, so the file is reachable and discoverable inside the boundary. `core/auth-storage.ts:25` stores it as cleartext JSON.
+Goal 8 moved to the 2026-09-13 permission-gate recalibration spec and is implemented there. It was scoped here to one file the boundary deliberately mounted; ADR 0032 widened it to the whole home directory, which is a different problem with a different cause.
 
 Add a refusal for the agent directory's `auth.json` that no project or local rule can express, in the same spirit as the managed `policy` source surviving `bypassPermissions` at `modes.ts:52-55`. The narrow version is a denied-path set consulted before rule resolution. The alternative, routing credential reads exclusively through the existing credential proxy and dropping the bind mount, is the better end state and the larger change; prefer the refusal now and record the proxy-only direction as the follow-up.
 
@@ -171,7 +179,7 @@ Branch protection is the item that is genuinely absent, and it is the one the ro
 
 ### The two small defects and the message
 
-`edit` and `write` publish through the same temp-file-and-rename path the session storage uses, preserving the destination mode so a rename does not silently reset permissions. The change belongs in `writePreparedPath`, not only in the two fallback branches, because the prepared path is the default and is the one that truncates. Its existing device and inode identity check has to survive, since that check is what makes the authorized target the written target. `bash` gains a generous default timeout, long enough that ordinary builds and test runs are unaffected, with the firing message naming both the explicit `timeout` argument and the background shell. The Windows sandbox error names the platform exclusion, cites ADR 0005, and states the supported next step, and `README.md` and `docs/user-guide.md` say that a Windows session requires an explicit unsandboxed mode.
+`edit` and `write` publish through the same temp-file-and-rename path the session storage uses, preserving the destination mode so a rename does not silently reset permissions. The change belongs in `writePreparedPath`, not only in the two fallback branches, because the prepared path is the default and is the one that truncates. Its existing device and inode identity check has to survive, since that check is what makes the authorized target the written target. `bash` gains a generous default timeout, long enough that ordinary builds and test runs are unaffected, with the firing message naming both the explicit `timeout` argument and the background shell.
 
 ## Deletion inventory
 
@@ -227,7 +235,6 @@ Required focused checks.
 - One probe per row of the 2026-09-05 confirmed-findings table, each observed failing before it is committed.
 - Atomic publish tests for an existing file, a new file, a preserved mode, a symlinked destination, and a simulated crash between write and rename.
 - `bash` timeout tests for the default firing, an explicit larger value, an explicit smaller value, and the message naming both escape hatches.
-- A Windows startup test asserting the unsandboxed-required message names ADR 0005 and the next step.
 - `npx tsgo --noEmit`, the narrowest relevant test files, then `npm test`, then `npm run check`.
 - One required three-OS CI run on the finished branch, recorded by run id, after branch protection is enabled so the run is the gate rather than a report.
 
