@@ -35,7 +35,21 @@ commits. Targeted sweep of `test/permissions` and `test/security-boundary`, 275 
 Wider sweep of `test/tools`, `test/suite`, `policy-authorization`, and
 `formatter-confinement`, 104 files and 541 passed.
 
-That wider sweep failed two files on its first run and passed all 104 on a rerun of the
+Slice 2 is `631b2da55`, verified with `git cat-file -t`. It carries
+`core/permissions/protected-paths.ts`, the `PermissionSpec.protectedTarget` hook, the gate
+and mode wiring, the refusal message, and the kept probe at
+`test/security-boundary/credential-read-refusal.test.ts`.
+
+Probe observed failing first at `3a4ad051a`, seven of eight cases. Two of its controls
+earned their place. A `grep` case passed while the defect was open because the suite
+harness has no `grep` in its base tool set, so the three directory-taking tools moved to
+gate-level decisions with their own controls. Then the gate controls failed because the
+scratch root chosen as the "ordinary" path is a true ancestor of the credential file and
+is protected on purpose. After the fix, eight passed. Sweep of `test/permissions`,
+`test/security-boundary`, and `test/tools`, 38 files and 517 passed. The dangling-symlink
+repair found in review is `27859f482`; `test/security-boundary` passes 18 with its case added.
+
+That earlier wider sweep failed two files on its first run and passed all 104 on a rerun of the
 identical command, with every file also passing when run in smaller groups. The box was at
 load 12.7 on four cores. Recorded rather than dropped, because a flake that is never
 written down gets rediscovered. Three-OS CI is the evidence that settles it.
