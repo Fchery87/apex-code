@@ -96,12 +96,14 @@ export async function evaluateToolCall(
 			reason: `Permission configuration could not be loaded (${sources}); refusing to run ${toolName}.`,
 		};
 	}
+	const protectedTarget = spec.protectedTarget?.(params as never);
 	const ruleResolution = resolvePermission(snapshot.rules, toolName, spec, params as never);
 	const resolution = resolveWithMode(
 		await options.getMode(),
 		ruleResolution,
 		contract.capabilities,
 		spec.withinWorkspace?.(params as never),
+		protectedTarget,
 	);
 
 	if (resolution.behavior === "allow") return { block: false };
@@ -115,7 +117,10 @@ export async function evaluateToolCall(
 	if (!responder) {
 		return {
 			block: true,
-			reason: `${toolName} requires approval, and no responder is available in this session.`,
+			reason:
+				protectedTarget !== undefined
+					? `${toolName} was refused: ${protectedTarget}. No rule can grant this path; supply the contents deliberately if you need them.`
+					: `${toolName} requires approval, and no responder is available in this session.`,
 		};
 	}
 	const ruleForCall = spec.ruleForCall(params as never);

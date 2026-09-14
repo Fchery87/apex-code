@@ -44,6 +44,7 @@ export function resolveWithMode(
 	ruleResolution: PermissionResolution,
 	capabilities: ReadonlySet<Capability>,
 	withinWorkspace?: boolean,
+	protectedTarget?: string,
 ): PermissionResolution {
 	// Plan mode is a hard mutating safety floor. Managed policy is otherwise
 	// explicitly non-overridable (ADR 0004); bypass remains an escape hatch only
@@ -53,6 +54,13 @@ export function resolveWithMode(
 	}
 	if (ruleResolution.rule?.source === "policy") {
 		return ruleResolution;
+	}
+	// After `policy`, so the machine owner's managed file can still grant it, and before
+	// everything else, so a rule a repository can write cannot and neither can a mode.
+	// `ask` rather than `deny`: the owner of the credential may legitimately want it read,
+	// and a session with no responder turns this into a refusal anyway.
+	if (protectedTarget !== undefined) {
+		return { behavior: "ask" };
 	}
 	if (mode === "bypassPermissions") {
 		return { behavior: "allow" };

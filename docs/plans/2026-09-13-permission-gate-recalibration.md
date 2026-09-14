@@ -12,8 +12,8 @@ Execution breakdown for [`docs/specs/2026-09-13-permission-gate-recalibration.md
 | Scope `acceptEdits` to the workspace | complete | `PermissionSpec.withinWorkspace`, implemented in `core/tools/path-permission.ts`, called from `core/permissions/gate.ts` and consumed by `core/permissions/modes.ts`. |
 | Make the workspace test resist a symlink | complete | Resolve the nearest existing ancestor with `realpathSync`, re-append the remainder, compare against the resolved cwd. The nearest existing ancestor rather than the target, because a `path-new` write has no target yet. A dangling link is reported outside: `existsSync` follows links so it reads as absent, and judging it by where the link sits rather than where it points would auto-allow a write the executor then refuses. Found in review. |
 | Correct the mode's description | complete | Both said "plain file edits", wording the mounts used to make true. `modes/interactive/components/settings-selector.ts` now reads "Auto-allow file edits inside the workspace; still ask for anything outside it, commands and network", and `README.md` says the mode auto-allows edits whose target stays inside the workspace and still asks for one that leaves it. |
-| Refuse the agent directory's `auth.json` on the read-shaped tools | not started | A denied-path set consulted before rule resolution, beside the managed `policy` check in `core/permissions/modes.ts`. Resolved through `getAuthPath()` so an `APEX_CODE_AUTH_PATH` override is covered. |
-| Keep one probe per goal | in progress | Each under `packages/coding-agent/test/security-boundary/`, driving a real session, observed failing before its fix. |
+| Refuse the agent directory's `auth.json` on the read-shaped tools | complete | A denied-path set consulted before rule resolution, beside the managed `policy` check in `core/permissions/modes.ts`. Resolved through `getAuthPath()` so an `APEX_CODE_AUTH_PATH` override is covered. |
+| Keep one probe per goal | complete | Each under `packages/coding-agent/test/security-boundary/`, driving a real session, observed failing before its fix. |
 
 ## Carried forward, not fixed here
 
@@ -35,7 +35,21 @@ commits. Targeted sweep of `test/permissions` and `test/security-boundary`, 275 
 Wider sweep of `test/tools`, `test/suite`, `policy-authorization`, and
 `formatter-confinement`, 104 files and 541 passed.
 
-That wider sweep failed two files on its first run and passed all 104 on a rerun of the
+Slice 2 is `631b2da55`, verified with `git cat-file -t`. It carries
+`core/permissions/protected-paths.ts`, the `PermissionSpec.protectedTarget` hook, the gate
+and mode wiring, the refusal message, and the kept probe at
+`test/security-boundary/credential-read-refusal.test.ts`.
+
+Probe observed failing first at `3a4ad051a`, seven of eight cases. Two of its controls
+earned their place. A `grep` case passed while the defect was open because the suite
+harness has no `grep` in its base tool set, so the three directory-taking tools moved to
+gate-level decisions with their own controls. Then the gate controls failed because the
+scratch root chosen as the "ordinary" path is a true ancestor of the credential file and
+is protected on purpose. After the fix, eight passed. Sweep of `test/permissions`,
+`test/security-boundary`, and `test/tools`, 38 files and 517 passed. The dangling-symlink
+repair found in review is `27859f482`; `test/security-boundary` passes 18 with its case added.
+
+That earlier wider sweep failed two files on its first run and passed all 104 on a rerun of the
 identical command, with every file also passing when run in smaller groups. The box was at
 load 12.7 on four cores. Recorded rather than dropped, because a flake that is never
 written down gets rediscovered. Three-OS CI is the evidence that settles it.

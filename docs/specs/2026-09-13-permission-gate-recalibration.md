@@ -52,7 +52,7 @@ Neither is a containment failure, because there is no containment to fail. Both 
 - [ ] `acceptEdits` auto-allows a write only when the target resolves inside the workspace. A target outside it falls through to the behavior the rules and the mode would otherwise give, which is `ask`.
 - [ ] The workspace test resists a symlink. A path inside the workspace that resolves outside it is outside it.
 - [ ] `acceptEdits` is described in terms that match what it does, in the settings selector and in `README.md`.
-- [ ] `read`, `grep`, `ls`, and `find` refuse the agent directory's `auth.json` without an explicit decision, and that refusal is not expressible as a project or local rule.
+- [ ] `read`, `grep`, `ls`, and `find` refuse the agent directory's `auth.json` without an explicit decision, and that refusal is not expressible as a project or local rule. A directory that contains the file is refused on the same terms, because the recursive tools reach it by naming a parent.
 - [ ] The refusal names the file and states the alternative, so a user who legitimately wants that content knows how to supply it.
 - [ ] Every change above is pinned by a probe that drives a real session, not a unit call, and each probe is observed failing before its fix lands.
 
@@ -78,7 +78,13 @@ The alternative, moving the `acceptEdits` overlay into `gate.ts` where `params` 
 
 `bypassPermissions` does not lift the refusal. The 2026-09-11 design note asked for exactly this, and the mode's own confirmation already tells the user that nothing else confines the session, which is an argument for keeping one floor rather than none. The cost is that a user debugging their own credential file is refused by their agent; the message names the file and says to supply the contents deliberately instead. Recorded here so it is a decision rather than an oversight.
 
-**What is refused.** The agent directory's `auth.json`, resolved through `getAuthPath()` so an `APEX_CODE_AUTH_PATH` override is covered, compared after the same symlink-resistant resolution the workspace test uses. Not the whole agent directory: sessions, settings, and themes live there and are ordinary reads.
+**What is refused.** The agent directory's `auth.json`, resolved through `getAuthPath()` so an `APEX_CODE_AUTH_PATH` override is covered, compared after realpath on both sides so a symlink to it is it.
+
+Directory targets are refused too, but only directories that actually contain the credential file: the agent directory and its true ancestors. `grep`, `ls`, and `find` take a directory and reach everything beneath it, so refusing the exact file alone would leave the contents reachable by naming a parent. Sibling files in the agent directory stay ordinary reads, so `settings.json` and a session transcript are unaffected.
+
+The consequence worth naming is a session whose working directory is the home directory. `~` is a true ancestor of `~/.apex-code/auth.json`, so a whole-home `grep` or `ls` asks once instead of running silently. That is the right side to err on, since scanning an entire home directory is exactly the operation a checkpoint is for, and it is why the decision is `ask` rather than `deny`.
+
+**Why `ask` and not `deny`.** The goal is that the file is not handed over without an explicit decision, and an ask is an explicit decision. A deny would also refuse the owner of the credential, who may legitimately want it read, and a session with no responder already turns an ask into a refusal, so the fail-closed case is covered either way.
 
 ## Deletion inventory
 
