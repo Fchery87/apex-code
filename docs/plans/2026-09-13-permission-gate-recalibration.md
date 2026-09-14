@@ -24,3 +24,18 @@ The read-shaped tools keep their `allow` default for every path but the one refu
 ## Verification
 
 Task rows carry their own evidence as they land.
+
+Slice 1 is `daa117546`, verified with `git cat-file -t`. It carries the workspace
+predicate, the `PermissionSpec` hook, the gate and mode wiring, both description fixes,
+and the kept probe at `test/security-boundary/accept-edits-workspace-scope.test.ts`.
+
+Probe observed failing first at `ec73337d5`: two of its four cases failed, and the two
+controls passed in both states. `npm run check` passed in the pre-commit hook at both
+commits. Targeted sweep of `test/permissions` and `test/security-boundary`, 275 passed.
+Wider sweep of `test/tools`, `test/suite`, `policy-authorization`, and
+`formatter-confinement`, 104 files and 541 passed.
+
+That wider sweep failed two files on its first run and passed all 104 on a rerun of the
+identical command, with every file also passing when run in smaller groups. The box was at
+load 12.7 on four cores. Recorded rather than dropped, because a flake that is never
+written down gets rediscovered. Three-OS CI is the evidence that settles it.
