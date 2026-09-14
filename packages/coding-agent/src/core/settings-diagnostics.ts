@@ -1,11 +1,27 @@
 import type { AgentSessionRuntimeDiagnostic } from "./agent-session-services.ts";
-import type { SettingsManager } from "./settings-manager.ts";
+import { findRemovedSettings, removedSettingsMessage } from "./removed-settings.ts";
+import type { SettingsManager, SettingsScope } from "./settings-manager.ts";
 
 export function collectSettingsDiagnostics(settingsManager: SettingsManager): AgentSessionRuntimeDiagnostic[] {
-	return settingsManager.drainErrors().map(({ scope, path, error }) => ({
+	const diagnostics: AgentSessionRuntimeDiagnostic[] = settingsManager.drainErrors().map(({ scope, path, error }) => ({
 		type: "warning",
 		message: path ? `Invalid settings file ${path}: ${error.message}` : `Invalid ${scope} settings: ${error.message}`,
 	}));
+
+	const scopes: ReadonlyArray<[SettingsScope, object]> = [
+		["global", settingsManager.getGlobalSettings()],
+		["project", settingsManager.getProjectSettings()],
+	];
+	for (const [scope, settings] of scopes) {
+		const names = findRemovedSettings(settings);
+		if (names.length === 0) continue;
+		diagnostics.push({
+			type: "warning",
+			message: removedSettingsMessage(scope, settingsManager.getSettingsPath(scope), names),
+		});
+	}
+
+	return diagnostics;
 }
 
 /**

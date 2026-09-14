@@ -700,6 +700,11 @@ export class SettingsManager {
 		return this.settings.policies;
 	}
 
+	/** The file backing a scope, when the storage is file-backed. */
+	getSettingsPath(scope: SettingsScope): string | undefined {
+		return this.settingsPaths[scope];
+	}
+
 	getGlobalSettings(): Settings {
 		return structuredClone(this.globalSettings);
 	}
