@@ -97,7 +97,12 @@ export async function evaluateToolCall(
 		};
 	}
 	const ruleResolution = resolvePermission(snapshot.rules, toolName, spec, params as never);
-	const resolution = resolveWithMode(await options.getMode(), ruleResolution, contract.capabilities);
+	const resolution = resolveWithMode(
+		await options.getMode(),
+		ruleResolution,
+		contract.capabilities,
+		spec.withinWorkspace?.(params as never),
+	);
 
 	if (resolution.behavior === "allow") return { block: false };
 

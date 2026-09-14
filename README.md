@@ -297,7 +297,8 @@ Permission modes change the default interaction posture:
 
 - `default` asks for operations that policy does not already allow.
 - `plan` blocks mutating operations while you investigate or design a change.
-- `acceptEdits` reduces prompts for file edits while retaining other checks.
+- `acceptEdits` auto-allows file edits whose target stays inside the workspace, and still
+  asks for an edit that leaves it, for commands, and for network access.
 - `dontAsk` declines operations that would require an interactive decision.
 - `bypassPermissions` is intentionally powerful and should be used only in a trusted,
   controlled environment.

@@ -2,7 +2,7 @@
 
 import { minimatch } from "minimatch";
 import type { Static, TSchema } from "typebox";
-import { formatPathRelativeToCwdOrAbsolute } from "../../utils/paths.ts";
+import { formatPathRelativeToCwdOrAbsolute, resolvesInsideDirectory } from "../../utils/paths.ts";
 import { setPreparedPathOperation } from "../permissions/operations.ts";
 import type { PermissionPreview } from "../permissions/responder.ts";
 import type { PermissionBehavior, PermissionSpec } from "./contract.ts";
@@ -38,6 +38,12 @@ export function createPathPermissionSpec<TParams extends TSchema>(options: {
 			setPreparedPathOperation(params as object, preparePathOperation(getPath(params) ?? ".", cwd));
 		},
 		...(previewCall ? { previewCall } : {}),
+		withinWorkspace(params) {
+			return resolvesInsideDirectory(
+				resolveToCwd(getPath(params)?.trim() ? (getPath(params) as string) : ".", cwd),
+				cwd,
+			);
+		},
 		matches(ruleContent, params) {
 			return ruleContent.startsWith("exact:")
 				? normalize(getPath(params)) === ruleContent.slice("exact:".length)
