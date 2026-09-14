@@ -1,6 +1,6 @@
 # Security Policy
 
-> **Stable on the `0.1.x` line** ([ADR 0033](docs/adr/0033-stable-release-line.md)). The
+> **Stable releases** ([ADR 0033](docs/adr/0033-stable-release-line.md)). The
 > permission gate described below is enforced today. Stability describes the release
 > process and compatibility expectations, not the presence of a containment boundary.
 > Apex Code ships no built-in sandbox; see

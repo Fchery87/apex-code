@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **The shipped docs named a version line that `0.2.0` had already left.** `0.1.1` retired the pre-alpha label by saying Apex Code is "stable on the `0.1.x` line", and six pages copied that phrasing, two of which ship inside the npm tarball. `0.2.0` shipped the next day and made all six wrong. The pre-alpha graduation was never about a particular minor, so the pages now say "stable" without naming one, and the support policy covers the latest non-deprecated release rather than the latest `0.1.x`.
+
 ## [0.2.0] - 2026-09-14
 
 ### Added
