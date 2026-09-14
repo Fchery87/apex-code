@@ -1,4 +1,4 @@
-import { existsSync, realpathSync, statSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve as nodeResolvePath, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -130,6 +130,14 @@ export function resolvesInsideDirectory(filePath: string, directory: string): bo
 	let existing = nodeResolvePath(resolvedDirectory, filePath);
 	const remainder: string[] = [];
 	while (!existsSync(existing)) {
+		// `existsSync` follows links, so a dangling symlink reads as absent and would be
+		// treated as a missing directory. That judges the target by where the link sits
+		// rather than by where it points. The link may well point outside, and nothing here
+		// can prove otherwise, so it is outside.
+		try {
+			lstatSync(existing);
+			return false;
+		} catch {}
 		const parent = dirname(existing);
 		if (parent === existing) break;
 		remainder.unshift(basename(existing));

@@ -84,6 +84,27 @@ describe("acceptEdits is scoped to the workspace", () => {
 		}
 	});
 
+	it("does not auto-allow a write through a dangling symlink", async () => {
+		// `existsSync` follows links, so a dangling one reads as absent. Judged by where the
+		// link sits it looked inside the workspace; judged by where it points, nothing can
+		// say. The executor refuses it either way, so the cost of getting this wrong is an
+		// auto-allow that turns into a confusing failure rather than an escape.
+		const harness = await session("acceptEdits");
+		const cwd = workspace(harness);
+		symlinkSync(join(cwd, "..", `absent-${Date.now()}`), join(cwd, "dangling"));
+		const definition = createWriteToolDefinition(cwd);
+		const decision = await evaluateToolCall(
+			"write",
+			{ path: join(cwd, "dangling", "planted.txt"), content: "WRITTEN" },
+			{
+				getContract: () => definition.contract as never,
+				store: new FilePermissionRuleStore({ cwd, projectTrusted: true }),
+				getMode: () => "acceptEdits",
+			},
+		);
+		expect(decision.block, "a dangling link cannot be proven to stay inside").toBe(true);
+	});
+
 	/**
 	 * Decided at the gate rather than by attempting the write. `writePreparedPath` refuses
 	 * every symlinked parent by design, so an execution-level refusal here could not tell
