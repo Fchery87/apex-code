@@ -51,7 +51,7 @@ const DEFAULT_PROJECT_TRUST_BY_LABEL = new Map(
 const PERMISSION_MODE_DESCRIPTIONS: Record<PermissionMode, string> = {
 	default: "Ask for anything policy does not already allow",
 	plan: "Block file writes, commands, and delegation while you investigate",
-	acceptEdits: "Auto-allow plain file edits; still ask for commands and network",
+	acceptEdits: "Auto-allow file edits inside the workspace; still ask for anything outside it, commands and network",
 	dontAsk: "Never prompt; deny anything not already permitted",
 	bypassPermissions: "Allow every tool call without asking",
 };

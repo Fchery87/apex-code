@@ -1,6 +1,6 @@
-import { realpathSync, statSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve as nodeResolvePath, relative, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve as nodeResolvePath, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnProcessSync } from "./child-process.ts";
 
@@ -114,6 +114,37 @@ export function getCwdRelativePath(filePath: string, cwd: string): string | unde
 		(relativePath !== ".." && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath));
 
 	return isInsideCwd ? relativePath || "." : undefined;
+}
+
+/**
+ * True when `filePath` resolves inside `directory` once symlinks are followed.
+ *
+ * `getCwdRelativePath` compares lexically. That is right for display and wrong for a
+ * boundary, because a link inside the directory that points outside it still compares as
+ * inside. The target itself may not exist yet, which is the ordinary case for a new file,
+ * so the nearest existing ancestor is resolved and the remaining segments are re-appended
+ * rather than resolving the target directly.
+ */
+export function resolvesInsideDirectory(filePath: string, directory: string): boolean {
+	const resolvedDirectory = canonicalizePath(nodeResolvePath(directory));
+	let existing = nodeResolvePath(resolvedDirectory, filePath);
+	const remainder: string[] = [];
+	while (!existsSync(existing)) {
+		// `existsSync` follows links, so a dangling symlink reads as absent and would be
+		// treated as a missing directory. That judges the target by where the link sits
+		// rather than by where it points. The link may well point outside, and nothing here
+		// can prove otherwise, so it is outside.
+		try {
+			lstatSync(existing);
+			return false;
+		} catch {}
+		const parent = dirname(existing);
+		if (parent === existing) break;
+		remainder.unshift(basename(existing));
+		existing = parent;
+	}
+	const resolved = join(canonicalizePath(existing), ...remainder);
+	return getCwdRelativePath(resolved, resolvedDirectory) !== undefined;
 }
 
 export function formatPathRelativeToCwdOrAbsolute(filePath: string, cwd: string): string {

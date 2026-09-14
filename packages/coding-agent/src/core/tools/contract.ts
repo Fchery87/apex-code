@@ -45,6 +45,16 @@ export interface PermissionSpec<TParams extends TSchema = TSchema> {
 	 */
 	defaultBehaviorFor?(params: Static<TParams>): PermissionBehavior | undefined;
 
+	/**
+	 * True when this call's target resolves inside the session's workspace.
+	 *
+	 * Only `acceptEdits` consults it, to auto-allow an edit that stays in the workspace
+	 * and no other. A tool that cannot answer leaves it undefined and is not auto-allowed,
+	 * which is the fail-closed side: a tool that cannot say where it writes is not a tool
+	 * a mode named for edits should approve unattended.
+	 */
+	withinWorkspace?(params: Static<TParams>): boolean;
+
 	/** Prepare canonical operation facts on the validated call before authorization and execution. */
 	prepareCall?(params: Static<TParams>): void;
 

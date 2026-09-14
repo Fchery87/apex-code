@@ -43,6 +43,7 @@ export function resolveWithMode(
 	mode: PermissionMode,
 	ruleResolution: PermissionResolution,
 	capabilities: ReadonlySet<Capability>,
+	withinWorkspace?: boolean,
 ): PermissionResolution {
 	// Plan mode is a hard mutating safety floor. Managed policy is otherwise
 	// explicitly non-overridable (ADR 0004); bypass remains an escape hatch only
@@ -63,8 +64,10 @@ export function resolveWithMode(
 	if (mode === "dontAsk" && ruleResolution.behavior === "ask") {
 		return { behavior: "deny" };
 	}
+	// `withinWorkspace` must be explicitly true. A tool that cannot say where it writes is
+	// not auto-allowed, which is what the mounts used to decide before ADR 0032 removed them.
 	if (mode === "acceptEdits" && ruleResolution.behavior === "ask" && isEditShaped(capabilities)) {
-		return { behavior: "allow" };
+		if (withinWorkspace === true) return { behavior: "allow" };
 	}
 	return ruleResolution;
 }

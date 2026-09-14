@@ -66,11 +66,22 @@ describe("resolveWithMode", () => {
 	});
 
 	describe("acceptEdits", () => {
-		it("auto-allows a pure edit-shaped tool (fs.write, no exec/net/delegate/state) whose default was ask", () => {
-			expect(resolveWithMode("acceptEdits", noRule("ask"), caps("fs.write"))).toEqual({ behavior: "allow" });
-			expect(resolveWithMode("acceptEdits", noRule("ask"), caps("fs.read", "fs.write"))).toEqual({
+		it("auto-allows a pure edit-shaped tool (fs.write, no exec/net/delegate/state) inside the workspace", () => {
+			expect(resolveWithMode("acceptEdits", noRule("ask"), caps("fs.write"), true)).toEqual({ behavior: "allow" });
+			expect(resolveWithMode("acceptEdits", noRule("ask"), caps("fs.read", "fs.write"), true)).toEqual({
 				behavior: "allow",
 			});
+		});
+
+		it("leaves an edit-shaped tool asking when its target is outside the workspace", () => {
+			expect(resolveWithMode("acceptEdits", noRule("ask"), caps("fs.write"), false)).toEqual(noRule("ask"));
+		});
+
+		it("leaves an edit-shaped tool asking when it cannot say where it writes", () => {
+			// Undefined is the fail-closed side. Before ADR 0032 the mounts answered this
+			// question for every tool; now a tool that declares fs.write and supplies no
+			// path is not something a mode named for edits should approve unattended.
+			expect(resolveWithMode("acceptEdits", noRule("ask"), caps("fs.write"), undefined)).toEqual(noRule("ask"));
 		});
 
 		it("leaves an exec-capable tool asking — it never becomes edit-shaped by name", () => {

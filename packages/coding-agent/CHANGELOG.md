@@ -6,6 +6,10 @@
 
 - **A removed egress setting stopped restricting anything without saying so.** `0.1.0` removed `network.allowedHosts`, `network.allowDefaultHosts`, and `sandboxProfiles` and said to delete them. The removed CLI flags enforce that, because an unrecognized flag exits non-zero before a session starts. A settings file had no equivalent, since the loader keeps keys it does not recognize and reads none of them. An operator who had restricted egress in `0.0.6` upgraded, kept their file, and lost the restriction with nothing said, which is the one shape of removal that leaves someone less careful rather than merely out of date. Startup now warns once per scope, names every removed key in the file and the file's path, and says the keys no longer restrict anything. The keys stay ignored; only the silence is fixed.
 
+### Changed
+
+- **`acceptEdits` now stays inside the workspace.** The mode auto-allowed any edit-shaped tool call on capability alone, with no path in the decision at all. While the process boundary existed its mounts supplied the scope the mode's name implies, so the missing test cost nothing. `0.1.0` removed the mounts and the mode quietly became a standing grant over every path your account can write, including one that creates missing parent directories from the filesystem root. It now auto-allows an edit only when the target resolves inside the workspace, and asks for anything outside it. The test follows symlinks, so a link in a checkout that points at your home directory does not count as inside. An extension tool that declares `fs.write` and cannot say where it writes is no longer auto-allowed either; it asks. The selector and `README.md` said "plain file edits", which was true under the mounts and is now said precisely.
+
 ## [0.1.1] - 2026-09-13
 
 ### Fixed
