@@ -2,19 +2,21 @@
 
 ## [Unreleased]
 
+### Added
+
+- Conversational messages carry an accent spine down their left edge, so user and assistant text share one visual axis. The spine occupies the existing padding column rather than sitting beside it, so a message still renders at exactly the width it was given.
+
 ### Changed
 
 - **The `0.1.x` line is documented as stable.** `0.1.1` was published as a plain SemVer version, so npm's `latest` already pointed at it and a plain `npm install apex-code` already resolved it, while the README, `SECURITY.md`, `docs/user-guide.md`, and `docs/support.md` all still called the project pre-alpha with "no stable version published". A test pinned the stale sentence in place. The artifact was right and the labels were wrong, so the labels changed. Recorded in [ADR 0033](../../docs/adr/0033-stable-release-line.md). Security support now follows the latest non-deprecated `0.1.x` release. This is not a 1.0; the `0.x` major still signals that the shape of the product is moving, and what it commits to is that a removal ships with its migration stated rather than only a changelog line.
+
+- **`acceptEdits` now stays inside the workspace.** The mode auto-allowed any edit-shaped tool call on capability alone, with no path in the decision at all. While the process boundary existed its mounts supplied the scope the mode's name implies, so the missing test cost nothing. `0.1.0` removed the mounts and the mode quietly became a standing grant over every path your account can write, including one that creates missing parent directories from the filesystem root. It now auto-allows an edit only when the target resolves inside the workspace, and asks for anything outside it. The test follows symlinks, so a link in a checkout that points at your home directory does not count as inside. An extension tool that declares `fs.write` and cannot say where it writes is no longer auto-allowed either; it asks. The selector and `README.md` said "plain file edits", which was true under the mounts and is now said precisely.
 
 ### Fixed
 
 - **A removed egress setting stopped restricting anything without saying so.** `0.1.0` removed `network.allowedHosts`, `network.allowDefaultHosts`, and `sandboxProfiles` and said to delete them. The removed CLI flags enforce that, because an unrecognized flag exits non-zero before a session starts. A settings file had no equivalent, since the loader keeps keys it does not recognize and reads none of them. An operator who had restricted egress in `0.0.6` upgraded, kept their file, and lost the restriction with nothing said, which is the one shape of removal that leaves someone less careful rather than merely out of date. Startup now warns once per scope, names every removed key in the file and the file's path, and says the keys no longer restrict anything. The keys stay ignored; only the silence is fixed.
 
 - **The agent could read its own credential file with no decision.** `read`, `grep`, `ls`, and `find` default to allow and nothing checked what path they were given, so `~/.apex-code/auth.json`, which holds your provider keys in cleartext, was an ordinary tool call. Its `0600` mode protects it from other accounts, not from the session running as you. While the process boundary existed the home directory was hidden and that one file was deliberately mounted; `0.1.0` removed the boundary and left the default, so a repository that talks an agent into reading one file could take the key. Those four tools now require an explicit decision for that file, and for a directory that contains it, since the recursive ones reach it by naming a parent. No project, local, or user rule can pre-approve it and `bypassPermissions` does not lift it; a managed `policy` file still can, because that is the machine owner's. Sibling files in the agent directory are unaffected, so settings and session transcripts still read normally. A session working in your home directory will now ask once before scanning all of it.
-
-### Changed
-
-- **`acceptEdits` now stays inside the workspace.** The mode auto-allowed any edit-shaped tool call on capability alone, with no path in the decision at all. While the process boundary existed its mounts supplied the scope the mode's name implies, so the missing test cost nothing. `0.1.0` removed the mounts and the mode quietly became a standing grant over every path your account can write, including one that creates missing parent directories from the filesystem root. It now auto-allows an edit only when the target resolves inside the workspace, and asks for anything outside it. The test follows symlinks, so a link in a checkout that points at your home directory does not count as inside. An extension tool that declares `fs.write` and cannot say where it writes is no longer auto-allowed either; it asks. The selector and `README.md` said "plain file edits", which was true under the mounts and is now said precisely.
 
 ## [0.1.1] - 2026-09-13
 
