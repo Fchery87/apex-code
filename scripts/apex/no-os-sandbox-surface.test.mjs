@@ -44,6 +44,24 @@ const REMOVED_SYMBOLS = [
 const FORBIDDEN_FLAGS = ["--sandbox", "--add-dir", "--permission-profile"];
 
 /**
+ * Files allowed to name a removed identifier, and exactly which ones.
+ *
+ * A deprecation notice has to name what it deprecates. the test that pins this
+ * behavior asserts an upgrader is told three settings keys stopped restricting anything
+ * (ADR 0032), and it cannot assert that without writing them down. Without this the guard forbids the one message that
+ * makes the removal survivable, which is the opposite of what it exists for.
+ *
+ * Keyed by file *and* symbol so it cannot widen into a general amnesty. Any other removed
+ * identifier in the same file still fails, and these three still fail everywhere else.
+ */
+const NAMING_EXEMPTIONS = new Map([
+	[
+		"packages/coding-agent/test/settings-diagnostics.test.ts",
+		["allowedHosts", "allowDefaultHosts", "sandboxProfiles"],
+	],
+]);
+
+/**
  * Prose that asserts containment, in any source or test file.
  *
  * Symbols were not enough. The removal left comments describing a supervisor that no
@@ -111,7 +129,10 @@ async function offendersIn(directory) {
 	const offenders = [];
 	for (const file of await typescriptFiles(directory)) {
 		const text = await readFile(file, "utf8");
+		const rel = relative(root, file).split(sep).join("/");
+		const permitted = NAMING_EXEMPTIONS.get(rel) ?? [];
 		for (const symbol of REMOVED_SYMBOLS) {
+			if (permitted.includes(symbol)) continue;
 			if (text.includes(symbol)) offenders.push(`${relative(root, file)}: ${symbol}`);
 		}
 		const lowered = text.toLowerCase();
