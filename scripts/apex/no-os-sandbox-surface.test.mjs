@@ -46,15 +46,19 @@ const FORBIDDEN_FLAGS = ["--sandbox", "--add-dir", "--permission-profile"];
 /**
  * Files allowed to name a removed identifier, and exactly which ones.
  *
- * A deprecation notice has to name what it deprecates. the test that pins this
- * behavior asserts an upgrader is told three settings keys stopped restricting anything
- * (ADR 0032), and it cannot assert that without writing them down. Without this the guard forbids the one message that
+ * A deprecation notice has to name what it deprecates. `core/removed-settings.ts` tells an
+ * upgrader that three settings keys stopped restricting anything (ADR 0032), and it cannot
+ * say so without writing them down. Without this the guard forbids the one message that
  * makes the removal survivable, which is the opposite of what it exists for.
  *
  * Keyed by file *and* symbol so it cannot widen into a general amnesty. Any other removed
  * identifier in the same file still fails, and these three still fail everywhere else.
  */
 const NAMING_EXEMPTIONS = new Map([
+	[
+		"packages/coding-agent/src/core/removed-settings.ts",
+		["allowedHosts", "allowDefaultHosts", "sandboxProfiles"],
+	],
 	[
 		"packages/coding-agent/test/settings-diagnostics.test.ts",
 		["allowedHosts", "allowDefaultHosts", "sandboxProfiles"],

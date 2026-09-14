@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A removed egress setting stopped restricting anything without saying so.** `0.1.0` removed `network.allowedHosts`, `network.allowDefaultHosts`, and `sandboxProfiles` and said to delete them. The removed CLI flags enforce that, because an unrecognized flag exits non-zero before a session starts. A settings file had no equivalent, since the loader keeps keys it does not recognize and reads none of them. An operator who had restricted egress in `0.0.6` upgraded, kept their file, and lost the restriction with nothing said, which is the one shape of removal that leaves someone less careful rather than merely out of date. Startup now warns once per scope, names every removed key in the file and the file's path, and says the keys no longer restrict anything. The keys stay ignored; only the silence is fixed.
+
 ## [0.1.1] - 2026-09-13
 
 ### Fixed
