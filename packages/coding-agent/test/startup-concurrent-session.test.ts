@@ -95,8 +95,19 @@ function findLeaseRecords(root: string): LeaseRecord[] {
 		return [];
 	}
 	const records: LeaseRecord[] = [];
+	// The other session is running while this walks, and `proper-lockfile` locks are
+	// directories. One can be listed here and released before the recursion reaches it,
+	// which surfaces as `ENOENT: scandir .../models-store.json.lock`. Observed on macOS CI,
+	// run 34798241767. A directory that disappears mid-walk held no lease.
+	const readEntries = (dir: string) => {
+		try {
+			return readdirSync(dir, { withFileTypes: true });
+		} catch {
+			return [];
+		}
+	};
 	const visit = (dir: string): void => {
-		for (const entry of readdirSync(dir, { withFileTypes: true })) {
+		for (const entry of readEntries(dir)) {
 			const path = join(dir, entry.name);
 			if (entry.isDirectory()) {
 				visit(path);
