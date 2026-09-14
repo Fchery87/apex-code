@@ -6,10 +6,9 @@ a broader tool surface, delegation, durable execution, evidence, and cost visibi
 
 ## Install
 
-Apex Code is pre-alpha and has published no stable version, so `latest` names the
-newest verified prerelease and a plain install resolves it. It requires Node.js 22.19
-or newer. It installs the same way with npm, pnpm, Yarn, or Bun — all
-resolve it from the same npm registry:
+`latest` names the newest stable release on the `0.1.x` line and a plain install resolves
+it. It requires Node.js 22.19 or newer. It installs the same way with npm, pnpm, Yarn, or
+Bun — all resolve it from the same npm registry:
 
 ```bash
 npm install --global apex-code      # npm

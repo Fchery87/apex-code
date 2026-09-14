@@ -1,8 +1,7 @@
 # User guide
 
-Apex Code is pre-alpha. This page covers install, first run, and where to go next —
-not a full reference. For what's built and what's still planned, see
-[`docs/roadmap.md`](roadmap.md).
+This page covers install, first run, and where to go next — not a full reference. For
+what's built and what's still planned, see [`docs/roadmap.md`](roadmap.md).
 
 ## Install
 
@@ -11,9 +10,8 @@ npm install --global apex-code
 apex-code --version
 ```
 
-This project has published no stable version yet, so `latest` names the newest
-verified prerelease and a plain install resolves it (ADR 0026). Requires Node.js
-≥ 22.19.0.
+`latest` names the newest stable release on the `0.1.x` line and a plain install resolves
+it (ADR 0026). Requires Node.js ≥ 22.19.0.
 
 Or install the standalone binary without Node.js. The POSIX installer supports macOS,
 Linux, and **Git Bash on Windows**:
