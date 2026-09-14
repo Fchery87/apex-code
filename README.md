@@ -348,10 +348,13 @@ docker run --rm -it \
 Restrict the mounts and the credentials to what the task needs. Windows container and VM
 isolation works the same way.
 
-If you want a per-command boundary inside the session instead, that is an extension's job
-rather than the harness's. `packages/coding-agent/examples/extensions/sandbox/` is a
-working example that replaces the `bash` tool with one that confines it, and it is the
-shape any containment you add should take.
+An extension can add a boundary inside the session, but read what it covers before you
+rely on it. `packages/coding-agent/examples/extensions/sandbox/` replaces the `bash` tool
+only, so its `denyRead` list does not apply to `read`, `grep`, `find`, or `ls`, which reach
+the filesystem in-process. ADR 0005 declined that shape for the harness itself for this
+reason. `examples/extensions/gondolin/` re-creates the file tools as well and is the
+closer model. Either way the container is what actually holds; see
+[`docs/containerization.md`](packages/coding-agent/docs/containerization.md).
 
 Read [`SECURITY.md`](SECURITY.md) before relying on Apex Code for higher-risk work.
 

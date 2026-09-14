@@ -2,6 +2,12 @@
 
 **Status:** Active
 
+> **Reconciled with [ADR 0032](../adr/0032-no-built-in-sandbox.md) on 2026-09-13.** The
+> paragraph naming supervisor behavior and fail-closed selection already carries a
+> 2026-09-12 amendment recording that the suites it constrains were deleted with the
+> boundary. This line states that the reconciliation happened, so the document is checked
+> on its content rather than exempted for sitting in `docs/specs/`.
+
 **Date:** 2026-09-08
 
 ## Problem
