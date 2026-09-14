@@ -102,6 +102,11 @@ apex-code-*.html
 # validator can see it.
 .apex-code/audits/
 
+# Design scratch: rendered prototype pages and their screenshots, written while
+# exploring a surface and not part of the product. Listed by path rather than as a
+# blanket rule, per the note above.
+.apex-code/prototypes/
+
 # Release-verification and session scratch: a packed-install sandbox with a
 # full vendored node_modules (264MB), Windows comparison output, and a
 # transcript-recovery trail whose recovered file is already versioned.
