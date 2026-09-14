@@ -1,4 +1,5 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, test } from "vitest";
 import { AssistantMessageComponent } from "../src/modes/interactive/components/assistant-message.ts";
 import { UserMessageComponent } from "../src/modes/interactive/components/user-message.ts";
@@ -33,6 +34,28 @@ function createAssistantMessage(
 }
 
 describe("AssistantMessageComponent", () => {
+	test("uses the same conversational message spine as user messages", () => {
+		initTheme("dark");
+
+		const component = new AssistantMessageComponent({
+			role: "assistant",
+			content: [{ type: "text", text: "hello" }],
+			api: "test",
+			provider: "test",
+			model: "test",
+			usage: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 0,
+			},
+			stopReason: "stop",
+			timestamp: Date.now(),
+		} as never);
+
+		expect(stripAnsi(component.render(20).join("\n"))).toContain("│hello");
+	});
 	test("adds OSC 133 zone markers to assistant messages without tool calls", () => {
 		initTheme("dark");
 
@@ -91,6 +114,27 @@ describe("AssistantMessageComponent", () => {
 		expect(rendered).toContain("answer");
 	});
 
+	test("never renders wider than the width it was given", () => {
+		// The spine was prefixed rather than placed in the padding column, so every
+		// conversational line came out one column too wide and the terminal wrapped it.
+		// Nothing measured width, so the suite stayed green while the layout broke.
+		initTheme("dark");
+
+		const component = new AssistantMessageComponent(
+			createAssistantMessage([{ type: "text", text: "hello" }]),
+			false,
+			undefined,
+			"Thinking...",
+			1,
+		);
+
+		for (const width of [20, 40, 80]) {
+			for (const line of component.render(width)) {
+				expect(visibleWidth(line), `width ${width}`).toBeLessThanOrEqual(width);
+			}
+		}
+	});
+
 	test("uses configured output padding for text and thinking", () => {
 		initTheme("dark");
 
@@ -106,13 +150,16 @@ describe("AssistantMessageComponent", () => {
 		);
 		const lines = component.render(80).map((line) => stripAnsi(line));
 
-		expect(lines.some((line) => line.includes(" hello"))).toBe(true);
-		expect(lines.some((line) => line.includes(" reasoning"))).toBe(true);
+		// The spine occupies the single padding column rather than sitting beside it, so the
+		// line keeps the width it was rendered for.
+		expect(lines.some((line) => line.includes("│hello"))).toBe(true);
+		expect(lines.some((line) => line.includes("│reasoning"))).toBe(true);
 
 		component.setOutputPad(0);
 		const updatedLines = component.render(80).map((line) => stripAnsi(line));
 		expect(updatedLines.some((line) => line.startsWith("hello"))).toBe(true);
 		expect(updatedLines.some((line) => line.startsWith("reasoning"))).toBe(true);
+		expect(updatedLines.some((line) => line.includes("│"))).toBe(false);
 	});
 
 	test("chains Markdown transformers in registration order", () => {
@@ -232,10 +279,10 @@ describe("AssistantMessageComponent", () => {
 
 		const paddedComponent = new UserMessageComponent("hello", undefined, 1);
 		const paddedLines = paddedComponent.render(40).map((line) => stripAnsi(line));
-		expect(paddedLines.some((line) => line.startsWith(" hello"))).toBe(true);
+		expect(paddedLines.some((line) => line.includes("│hello"))).toBe(true);
 
 		const unpaddedComponent = new UserMessageComponent("hello", undefined, 0);
 		const unpaddedLines = unpaddedComponent.render(40).map((line) => stripAnsi(line));
-		expect(unpaddedLines.some((line) => line.startsWith("hello"))).toBe(true);
+		expect(unpaddedLines.some((line) => line.includes("hello"))).toBe(true);
 	});
 });

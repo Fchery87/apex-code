@@ -1,3 +1,4 @@
+import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, test } from "vitest";
 import { UserMessageComponent } from "../src/modes/interactive/components/user-message.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
@@ -19,9 +20,22 @@ describe("UserMessageComponent", () => {
 		expect(lines[0]).toContain(OSC133_ZONE_START);
 		expect(lines[0].endsWith(BG_RESET)).toBe(true);
 		expect(lines[0]).not.toContain(OSC133_ZONE_END);
-		expect(lines[1]).toContain("hello");
+		expect(stripAnsi(lines[1])).toContain("│hello");
 		expect(lines[2].startsWith(OSC133_ZONE_END + OSC133_ZONE_FINAL)).toBe(true);
 		expect(lines[2].endsWith(BG_RESET)).toBe(true);
+	});
+
+	test("never renders wider than the width it was given", () => {
+		// The spine was prefixed onto a line Box had already padded to the full width, so the
+		// content row came out one column wider than the padding rows above and below it and
+		// the terminal wrapped it. The suite passed because it only checked the text.
+		initTheme("dark");
+
+		for (const width of [20, 40, 80]) {
+			for (const line of new UserMessageComponent("hello").render(width)) {
+				expect(visibleWidth(line), `width ${width}`).toBeLessThanOrEqual(width);
+			}
+		}
 	});
 
 	test("chains Markdown transformers with user message context", () => {

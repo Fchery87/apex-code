@@ -3,6 +3,7 @@ import { Container, Markdown, type MarkdownTheme, Spacer, Text } from "@earendil
 import type { MarkdownTransformer } from "../../../core/extensions/types.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
 import { createMarkdownTransform } from "./markdown-transform.ts";
+import { withAccentSpine } from "./message-spine.ts";
 
 const OSC133_ZONE_START = "\x1b]133;A\x07";
 const OSC133_ZONE_END = "\x1b]133;B\x07";
@@ -172,6 +173,15 @@ export class AssistantMessageComponent extends Container {
 			return lines;
 		}
 
+		// Keep conversational messages on one visual axis. Tool panels own
+		// their lifecycle spine; assistant text uses the quieter accent rail.
+		if (this.outputPad > 0) {
+			for (let i = 0; i < lines.length; i++) {
+				if (lines[i].trim().length > 0) {
+					lines[i] = withAccentSpine(lines[i]);
+				}
+			}
+		}
 		lines[0] = OSC133_ZONE_START + lines[0];
 		lines[lines.length - 1] = OSC133_ZONE_END + OSC133_ZONE_FINAL + lines[lines.length - 1];
 		return lines;
