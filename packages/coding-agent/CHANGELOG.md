@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **The `0.1.x` line is documented as stable.** `0.1.1` was published as a plain SemVer version, so npm's `latest` already pointed at it and a plain `npm install apex-code` already resolved it, while the README, `SECURITY.md`, `docs/user-guide.md`, and `docs/support.md` all still called the project pre-alpha with "no stable version published". A test pinned the stale sentence in place. The artifact was right and the labels were wrong, so the labels changed. Recorded in [ADR 0033](../../docs/adr/0033-stable-release-line.md). Security support now follows the latest non-deprecated `0.1.x` release. This is not a 1.0; the `0.x` major still signals that the shape of the product is moving, and what it commits to is that a removal ships with its migration stated rather than only a changelog line.
+
 ### Fixed
 
 - **A removed egress setting stopped restricting anything without saying so.** `0.1.0` removed `network.allowedHosts`, `network.allowDefaultHosts`, and `sandboxProfiles` and said to delete them. The removed CLI flags enforce that, because an unrecognized flag exits non-zero before a session starts. A settings file had no equivalent, since the loader keeps keys it does not recognize and reads none of them. An operator who had restricted egress in `0.0.6` upgraded, kept their file, and lost the restriction with nothing said, which is the one shape of removal that leaves someone less careful rather than merely out of date. Startup now warns once per scope, names every removed key in the file and the file's path, and says the keys no longer restrict anything. The keys stay ignored; only the silence is fixed.

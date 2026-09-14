@@ -1,8 +1,9 @@
 # Security Policy
 
-> **Pre-alpha.** The permission gate described below is enforced today. "Pre-alpha"
-> describes the project's overall maturity and release process, not an unenforced
-> security boundary. Apex Code ships no built-in sandbox; see
+> **Stable on the `0.1.x` line** ([ADR 0033](docs/adr/0033-stable-release-line.md)). The
+> permission gate described below is enforced today. Stability describes the release
+> process and compatibility expectations, not the presence of a containment boundary.
+> Apex Code ships no built-in sandbox; see
 > [ADR 0032](docs/adr/0032-no-built-in-sandbox.md) and
 > [`docs/roadmap.md`](docs/roadmap.md) for what's landed by phase.
 

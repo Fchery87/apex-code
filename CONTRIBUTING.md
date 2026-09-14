@@ -1,6 +1,6 @@
 # Contributing to Apex Code
 
-Apex Code is pre-alpha and moving fast. Before investing in a large change, open an issue
+Apex Code is stable on the `0.1.x` line and still moving fast. Before investing in a large change, open an issue
 — the roadmap phase order is deliberate and dependency-driven, and work that jumps
 ahead of its phase usually has to be redone.
 

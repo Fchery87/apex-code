@@ -10,10 +10,11 @@ boundary around the upstream provider and terminal foundations. It keeps the bre
 Pi's provider layer while adding a safety floor, a larger tool surface, durable state,
 verification evidence, and operational visibility.
 
-> **Status: pre-alpha — Phases 0 through 12 have landed.** The product is usable and
-> actively developed, but APIs, configuration, and release practices may still change.
-> The [roadmap](docs/roadmap.md) records what is implemented and how each phase was
-> verified.
+> **Status: stable on the `0.1.x` line — Phases 0 through 12 have landed.** Releases carry
+> the ordinary compatibility expectations of a published package, and a removal ships with
+> its migration stated ([ADR 0033](docs/adr/0033-stable-release-line.md)). The `0.x` major
+> still signals that the shape of the product is moving. The [roadmap](docs/roadmap.md)
+> records what is implemented and how each phase was verified.
 
 ## Contents
 
@@ -44,11 +45,11 @@ verification evidence, and operational visibility.
   sandbox, so run it inside a container or VM for untrusted work. See
   [Isolation](#isolation).
 
-### Install the prerelease from npm
+### Install from npm
 
-Apex Code is pre-alpha and has published no stable version, so `latest` names the
-newest verified prerelease and a plain install resolves it (ADR 0026). It installs the
-same way with npm, pnpm, Yarn, or Bun — all resolve it from the same npm registry:
+`latest` names the newest stable release and a plain install resolves it (ADR 0026). It
+installs the same way with npm, pnpm, Yarn, or Bun — all resolve it from the same npm
+registry:
 
 ```bash
 npm install --global apex-code      # npm

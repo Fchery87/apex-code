@@ -17,7 +17,7 @@ test("docs/support.md publishes the maintainer, targets, supported-version line,
 	const support = await read("docs/support.md");
 	assert.match(support, /Frantz Chery/);
 	assert.match(support, /best-effort/i);
-	assert.match(support, /only the latest non-deprecated Apex Code prerelease receives security support/);
+	assert.match(support, /only the latest non-deprecated Apex Code `0\.1\.x` release receives security\s+support/);
 	assert.match(support, /Node\.js `>=22\.19`/);
 	assert.match(support, /Linux and macOS/);
 	assert.match(support, /ships no built-in sandbox/);

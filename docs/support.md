@@ -36,9 +36,9 @@ staffing that does not exist.
 
 ## Supported versions
 
-Before 1.0, **only the latest non-deprecated Apex Code prerelease receives security support**.
-Older alpha versions are test artifacts, not supported releases — upgrade before reporting an
-issue against one.
+Before 1.0, **only the latest non-deprecated Apex Code `0.1.x` release receives security
+support** ([ADR 0033](adr/0033-stable-release-line.md)). Older `0.0.x` versions are test
+artifacts, not supported releases — upgrade before reporting an issue against one.
 
 ## Platform and runtime support
 

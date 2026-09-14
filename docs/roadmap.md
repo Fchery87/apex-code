@@ -1353,6 +1353,7 @@ takes the next free number instead of a reserved one.
 | 0030 | Configured commands are authorized through the same authority as tool calls; a formatter is confined by isolated copy and restricted promotion | follow-up | ✅ |
 | 0031 | SDK sandbox containment is an explicit `required` / `external` / `none` contract | follow-up | ✅ |
 | 0032 | Apex Code ships no OS boundary; isolation is the operator's container or VM | follow-up | ✅ |
+| 0033 | 0.1.x is a stable release line; the pre-alpha label is retired | follow-up | ✅ |
 
 ## Cross-phase contracts
 
