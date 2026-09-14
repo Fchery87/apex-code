@@ -10,7 +10,7 @@ boundary around the upstream provider and terminal foundations. It keeps the bre
 Pi's provider layer while adding a safety floor, a larger tool surface, durable state,
 verification evidence, and operational visibility.
 
-> **Status: stable on the `0.1.x` line — Phases 0 through 12 have landed.** Releases carry
+> **Status: stable — Phases 0 through 12 have landed.** Releases carry
 > the ordinary compatibility expectations of a published package, and a removal ships with
 > its migration stated ([ADR 0033](docs/adr/0033-stable-release-line.md)). The `0.x` major
 > still signals that the shape of the product is moving. The [roadmap](docs/roadmap.md)

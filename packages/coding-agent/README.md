@@ -6,7 +6,7 @@ a broader tool surface, delegation, durable execution, evidence, and cost visibi
 
 ## Install
 
-`latest` names the newest stable release on the `0.1.x` line and a plain install resolves
+`latest` names the newest stable release and a plain install resolves
 it. It requires Node.js 22.19 or newer. It installs the same way with npm, pnpm, Yarn, or
 Bun — all resolve it from the same npm registry:
 

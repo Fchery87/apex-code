@@ -1,6 +1,15 @@
 # ADR 0033 — 0.1.x is a stable release line
 
-**Status:** Accepted · **Date:** 2026-09-13
+**Status:** Accepted · **Date:** 2026-09-13 · **Amended:** 2026-09-14 (the decision is about
+leaving pre-alpha, not about one minor line — see Amendment)
+
+> **Amendment (2026-09-14).** This was written as "0.1.x is a stable release line" and the
+> pages it changed copied that phrasing. `0.2.0` shipped the next day and every one of them
+> became wrong, including two that ship inside the npm tarball. The decision never depended
+> on the minor number: what graduated is the published line, whatever its version. The
+> pages now say "stable" without naming a minor, and the support policy covers the latest
+> non-deprecated release rather than the latest `0.1.x`. The title is left as written,
+> because an ADR records what was decided on the day it was decided.
 
 Apex Code's published versions are stable releases. `0.1.1` and everything after it on the
 `0.1.x` line carry the ordinary compatibility expectations of a released package. The

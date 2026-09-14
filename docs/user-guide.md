@@ -10,7 +10,7 @@ npm install --global apex-code
 apex-code --version
 ```
 
-`latest` names the newest stable release on the `0.1.x` line and a plain install resolves
+`latest` names the newest stable release and a plain install resolves
 it (ADR 0026). Requires Node.js ≥ 22.19.0.
 
 Or install the standalone binary without Node.js. The POSIX installer supports macOS,
