@@ -25,11 +25,11 @@ The read-shaped tools keep their `allow` default for every path but the one refu
 
 Task rows carry their own evidence as they land.
 
-Slice 1 is `daa117546`, verified with `git cat-file -t`. It carries the workspace
+Slice 1 is `18697ca93`, verified with `git cat-file -t`. It carries the workspace
 predicate, the `PermissionSpec` hook, the gate and mode wiring, both description fixes,
 and the kept probe at `test/security-boundary/accept-edits-workspace-scope.test.ts`.
 
-Probe observed failing first at `ec73337d5`: two of its four cases failed, and the two
+Probe observed failing first at `b03588f76`: two of its four cases failed, and the two
 controls passed in both states. `npm run check` passed in the pre-commit hook at both
 commits. Targeted sweep of `test/permissions` and `test/security-boundary`, 275 passed.
 Wider sweep of `test/tools`, `test/suite`, `policy-authorization`, and
