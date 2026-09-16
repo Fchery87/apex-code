@@ -449,25 +449,32 @@ function formatDuration(ms: number): string {
 	return `${(ms / 1000).toFixed(1)}s`;
 }
 
-function formatShellCall(
+export function formatShellCall(
 	args: { command?: string; timeout?: number; handle?: string; kill?: boolean } | undefined,
 	prompt: string,
 ): string {
+	const invalid = () => theme.fg("toolTitle", theme.bold(`${prompt} ${invalidArgText(theme)}`));
 	const command = str(args?.command);
 	const handle = str(args?.handle);
-	// A call carrying both names two operations and is rejected at execution.
-	// Showing its command would name something that never runs.
-	if (command && handle) {
-		return theme.fg("toolTitle", theme.bold(`${prompt} ${invalidArgText(theme)}`));
+	if (command === null || handle === null) return invalid();
+
+	const parsed = parseShellOperation(args ?? {});
+	if (!parsed.ok) {
+		// Arguments still arriving name no operation yet, so they render as a
+		// placeholder. Anything that already names one and still fails to parse is
+		// rejected at execution, and naming its command would describe something
+		// that never runs.
+		if (!command && !handle) {
+			return theme.fg("toolTitle", theme.bold(`${prompt} ${theme.fg("toolOutput", "...")}`));
+		}
+		return invalid();
 	}
-	if (!command && handle) {
-		const suffix = args?.kill === true ? " · kill" : "";
-		return theme.fg("toolTitle", theme.bold(`${prompt} ${handle}${suffix}`));
+	if (parsed.operation.kind !== "run") {
+		const suffix = parsed.operation.kind === "kill" ? " · kill" : "";
+		return theme.fg("toolTitle", theme.bold(`${prompt} ${parsed.operation.handle}${suffix}`));
 	}
-	const timeout = args?.timeout as number | undefined;
-	const timeoutSuffix = timeout ? theme.fg("muted", ` (timeout ${timeout}s)`) : "";
-	const commandDisplay = command === null ? invalidArgText(theme) : command ? command : theme.fg("toolOutput", "...");
-	return theme.fg("toolTitle", theme.bold(`${prompt} ${commandDisplay}`)) + timeoutSuffix;
+	const timeoutSuffix = parsed.operation.timeout ? theme.fg("muted", ` (timeout ${parsed.operation.timeout}s)`) : "";
+	return theme.fg("toolTitle", theme.bold(`${prompt} ${parsed.operation.command}`)) + timeoutSuffix;
 }
 
 function rebuildBashResultRenderComponent(

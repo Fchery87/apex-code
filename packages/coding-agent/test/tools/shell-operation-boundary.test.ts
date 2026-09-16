@@ -2,9 +2,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { validateToolArguments } from "@earendil-works/pi-ai";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { evaluateToolCall } from "../../src/core/permissions/gate.ts";
-import { type BashOperations, createBashToolDefinition } from "../../src/core/tools/bash.ts";
+import { type BashOperations, createBashToolDefinition, formatShellCall } from "../../src/core/tools/bash.ts";
+import { initTheme } from "../../src/modes/interactive/theme/theme.ts";
 
 const directories: string[] = [];
 
@@ -85,6 +86,8 @@ function gateOptions(definition: BashDefinition) {
 }
 
 describe("shell operation boundary", () => {
+	beforeAll(() => initTheme("dark"));
+
 	it("does not let an allowed command smuggle a denied background kill past the gate", async () => {
 		const { definition } = stubbedShell(newCwd());
 		const handle = await launchHandle(definition);
@@ -135,6 +138,21 @@ describe("shell operation boundary", () => {
 
 		const captured = evidence.capture(params as never, result as never) as Array<{ command?: string }>;
 		expect(captured[0]?.command).toBe("printf original");
+	});
+
+	it.each([
+		[{ command: "pwd", kill: true }, "a kill that names a command"],
+		[{ handle: "h", timeout: 5 }, "a handle carrying another operation's timeout"],
+		[{ command: "pwd", handle: "h" }, "a call naming two operations"],
+	])("displays %o as invalid because execution rejects it: %s", (args, _reason) => {
+		expect(formatShellCall(args, "$")).toContain("[invalid arg]");
+	});
+
+	it("displays the operation that will actually run", () => {
+		expect(formatShellCall({ command: "pwd" }, "$")).toContain("pwd");
+		expect(formatShellCall({ handle: "h" }, "$")).toContain("h");
+		expect(formatShellCall({ handle: "h", kill: true }, "$")).toContain("kill");
+		expect(formatShellCall({}, "$")).toContain("...");
 	});
 
 	it("rejects the recorded placeholder shape instead of silently running the command", async () => {
