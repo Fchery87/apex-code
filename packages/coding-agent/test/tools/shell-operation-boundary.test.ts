@@ -93,7 +93,6 @@ describe("shell operation boundary", () => {
 		const pure = await evaluateToolCall("bash", validate(definition, { handle, kill: true }) as never, options);
 		expect(pure.block).toBe(true);
 
-		// Adding an allowed `command` must not change which operation the gate sees.
 		const mixed = await evaluateToolCall(
 			"bash",
 			validate(definition, { command: "pwd", handle, kill: true }) as never,
@@ -117,6 +116,25 @@ describe("shell operation boundary", () => {
 			return;
 		}
 		expect(evidence[0]?.command).not.toBe("pwd");
+	});
+
+	it("agrees across preview, rule, execution, and evidence for one kill call", async () => {
+		const { definition } = stubbedShell(newCwd());
+		const handle = await launchHandle(definition);
+		const params = { handle, kill: true };
+		const { permission, evidence } = definition.contract;
+
+		expect(permission.previewCall?.(params as never)).toEqual({
+			kind: "summary",
+			lines: [`Kill background shell command ${handle}`],
+		});
+		expect(permission.ruleForCall?.(params as never)).toBe("background-handle");
+
+		const result = await run(definition, "kill", params);
+		expect(textOf(result)).toContain("kill signal sent");
+
+		const captured = evidence.capture(params as never, result as never) as Array<{ command?: string }>;
+		expect(captured[0]?.command).toBe("printf original");
 	});
 
 	it("rejects the recorded placeholder shape instead of silently running the command", async () => {

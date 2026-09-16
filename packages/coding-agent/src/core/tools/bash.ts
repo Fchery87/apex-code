@@ -24,6 +24,7 @@ import { classifyBashCommand } from "./bash-command-segments.ts";
 import { type ApexToolDefinition, type PermissionSpec, toolUnion } from "./contract.ts";
 import { OutputAccumulator } from "./output-accumulator.ts";
 import { getTextOutput, invalidArgText, str } from "./render-utils.ts";
+import { parseShellOperation } from "./shell-operation.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, type TruncationResult } from "./truncate.ts";
 
@@ -131,26 +132,36 @@ export function createBashPermissionSpec(): PermissionSpec<typeof bashSchema> {
 	return {
 		defaultBehavior: "ask",
 		defaultBehaviorFor(params) {
-			return "command" in params ? undefined : "allow";
+			const parsed = parseShellOperation(params);
+			if (!parsed.ok) return undefined;
+			return parsed.operation.kind === "run" ? undefined : "allow";
 		},
 		matches(ruleContent, params) {
-			if (!("command" in params)) return ruleContent === BACKGROUND_HANDLE_RULE;
-			const classification = classifyBashCommand(params.command);
+			const parsed = parseShellOperation(params);
+			// An unparseable call is never authorized by an allow rule; `isUnknown`
+			// keeps it out of them and pulls every deny rule onto it.
+			if (!parsed.ok) return false;
+			if (parsed.operation.kind !== "run") return ruleContent === BACKGROUND_HANDLE_RULE;
+			const classification = classifyBashCommand(parsed.operation.command);
 			return (
 				classification.type === "segments" &&
 				classification.segments.every((segment) => segmentMatchesRule(segment, ruleContent))
 			);
 		},
 		matchesDeny(ruleContent, params) {
-			if (!("command" in params)) return ruleContent === BACKGROUND_HANDLE_RULE;
-			const classification = classifyBashCommand(params.command);
+			const parsed = parseShellOperation(params);
+			if (!parsed.ok) return false;
+			if (parsed.operation.kind !== "run") return ruleContent === BACKGROUND_HANDLE_RULE;
+			const classification = classifyBashCommand(parsed.operation.command);
 			return (
 				classification.type === "segments" &&
 				classification.segments.some((segment) => segmentMatchesRule(segment, ruleContent))
 			);
 		},
 		isUnknown(params) {
-			return "command" in params && classifyBashCommand(params.command).type !== "segments";
+			const parsed = parseShellOperation(params);
+			if (!parsed.ok) return true;
+			return parsed.operation.kind === "run" && classifyBashCommand(parsed.operation.command).type !== "segments";
 		},
 		describe(ruleContent) {
 			if (ruleContent === BACKGROUND_HANDLE_RULE) {
@@ -162,16 +173,26 @@ export function createBashPermissionSpec(): PermissionSpec<typeof bashSchema> {
 			// The command string is the entire effect being authorized. There is
 			// nothing to read and nothing to summarise: showing it exactly, including
 			// whitespace the rule grammar treats as significant, is the preview.
-			if (!("command" in params)) {
-				return { kind: "summary", lines: ["Retrieve or kill a background shell command"] };
+			const parsed = parseShellOperation(params);
+			if (!parsed.ok) return { kind: "summary", lines: [parsed.reason] };
+			if (parsed.operation.kind === "kill") {
+				return { kind: "summary", lines: [`Kill background shell command ${parsed.operation.handle}`] };
 			}
-			return { kind: "summary", lines: [String(params.command)] };
+			if (parsed.operation.kind === "retrieve") {
+				return {
+					kind: "summary",
+					lines: [`Retrieve output from background shell command ${parsed.operation.handle}`],
+				};
+			}
+			return { kind: "summary", lines: [parsed.operation.command] };
 		},
 		ruleForCall(params) {
-			if (!("command" in params)) {
+			const parsed = parseShellOperation(params);
+			if (!parsed.ok) return null;
+			if (parsed.operation.kind !== "run") {
 				return BACKGROUND_HANDLE_RULE;
 			}
-			const classification = classifyBashCommand(params.command);
+			const classification = classifyBashCommand(parsed.operation.command);
 			if (classification.type !== "segments" || classification.segments.length !== 1) return null;
 			const segment = classification.segments[0];
 			return hasGrammarSensitiveStructure(segment) ? segment : normalizeSegment(segment);
@@ -434,6 +455,11 @@ function formatShellCall(
 ): string {
 	const command = str(args?.command);
 	const handle = str(args?.handle);
+	// A call carrying both names two operations and is rejected at execution.
+	// Showing its command would name something that never runs.
+	if (command && handle) {
+		return theme.fg("toolTitle", theme.bold(`${prompt} ${invalidArgText(theme)}`));
+	}
 	if (!command && handle) {
 		const suffix = args?.kill === true ? " · kill" : "";
 		return theme.fg("toolTitle", theme.bold(`${prompt} ${handle}${suffix}`));
@@ -559,9 +585,9 @@ export function createShellToolDefinition(
 		);
 	};
 	const executeHandleCall = async (
-		handleInput: { handle: string } | { handle: string; kill: true },
+		handleInput: { kind: "retrieve"; handle: string } | { kind: "kill"; handle: string },
 	): Promise<AgentToolResult<BashToolDetails | undefined>> => {
-		if ("kill" in handleInput && handleInput.kill) {
+		if (handleInput.kind === "kill") {
 			const status = registry.kill(handleInput.handle);
 			if (!status) throw unknownHandleError(handleInput.handle);
 			const state = status.running ? "kill signal sent" : `already exited (code ${status.exitCode})`;
@@ -609,18 +635,24 @@ export function createShellToolDefinition(
 					const execution = result.details?.execution;
 					// Retrieve and kill calls carry a handle; resolve it back to the
 					// command that produced the output so the record shows what ran.
-					const command =
-						"command" in params ? params.command : (registry.commandFor(params.handle) ?? params.handle);
+					const parsed = parseShellOperation(params);
+					const command = !parsed.ok
+						? "(rejected shell call)"
+						: parsed.operation.kind === "run"
+							? parsed.operation.command
+							: (registry.commandFor(parsed.operation.handle) ?? parsed.operation.handle);
 					return execution ? [{ kind: "command", command, ...execution }] : [{ kind: "command", command }];
 				},
 			},
 		},
 		constrainedSampling: getExperimentalToolSampling(),
 		async execute(_toolCallId, input: BashToolInput, signal?: AbortSignal, onUpdate?, ctx?) {
-			if ("handle" in input) {
-				return await executeHandleCall(input);
+			const parsed = parseShellOperation(input);
+			if (!parsed.ok) throw new ToolExecutionError(parsed.reason, undefined);
+			if (parsed.operation.kind !== "run") {
+				return await executeHandleCall(parsed.operation);
 			}
-			const { command, timeout, background } = input;
+			const { command, timeout, background } = parsed.operation;
 			const resolvedCommand = commandPrefix ? `${commandPrefix}\n${command}` : command;
 			const spawnContext = resolveSpawnContext(resolvedCommand, cwd, spawnHook, exposeSessionEnvironment, ctx);
 
