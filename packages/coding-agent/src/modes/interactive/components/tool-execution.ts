@@ -39,6 +39,7 @@ export class ToolExecutionComponent extends Container {
 	private toolCallId: string;
 	private args: any;
 	private expanded = false;
+	private editDiffsExpanded = true;
 	private showImages: boolean;
 	private imageWidthCells: number;
 	private isPartial = true;
@@ -155,6 +156,7 @@ export class ToolExecutionComponent extends Container {
 			argsComplete: this.argsComplete,
 			isPartial: this.isPartial,
 			expanded: this.expanded,
+			editDiffsExpanded: this.editDiffsExpanded,
 			showImages: this.showImages,
 			isError: this.result?.isError ?? false,
 		};
@@ -257,6 +259,12 @@ export class ToolExecutionComponent extends Container {
 				}
 			});
 		}
+	}
+
+	setEditDiffsExpanded(expanded: boolean): void {
+		if (this.editDiffsExpanded === expanded) return;
+		this.editDiffsExpanded = expanded;
+		this.updateDisplay();
 	}
 
 	setExpanded(expanded: boolean): void {
