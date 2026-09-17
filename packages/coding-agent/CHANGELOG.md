@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`ctrl+o` now cycles three readings of the transcript instead of toggling two.** Tool output expansion and edit-diff visibility were separate concerns with only one control between them, so the diff of every edit was always on screen whether or not you were reading it, and the only lever moved tool output. The key now walks `overview`, `details`, `all`. At `overview` a diff reduces to its `+N -M` counts and tool output stays a counted preview, which is the quiet read for scrolling back through a long session. `details` is the default and renders exactly what the previous default rendered, so an upgrade changes nothing until the key is pressed and the new rung exists in both directions rather than only one. `all` expands tool output as the old toggle did. The three rungs derive from one `ChatDetail` value rather than from independently settable booleans, because only three of the eight combinations are coherent and the order between them is the whole point.
+
+- **Thinking blocks stay a persisted preference, and the top rung borrows them.** `all` shows thinking even when the setting hides it, and cycling back down restores the setting. The override is never written to settings, so `ctrl+o` cannot silently rewrite a durable preference, and the dedicated toggle still persists as it always did. The extension-facing `setToolsExpanded(false)` lands on `details` rather than `overview`, because an extension asking to collapse tool output has not asked to hide diffs.
+
 ## [0.2.1] - 2026-09-16
 
 ### Fixed
