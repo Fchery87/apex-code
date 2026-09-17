@@ -11,6 +11,9 @@ import { accentOpen, paintedWidth, selectedRowOpen } from "./suite/theme-ansi.ts
 
 const ENTER = "\r";
 const ESCAPE = "\x1b";
+const RIGHT = "\x1b[C";
+const LEFT = "\x1b[D";
+const DOWN = "\x1b[B";
 
 function createFakeTui(): TUI {
 	return { requestRender: () => {} } as unknown as TUI;
@@ -134,7 +137,7 @@ describe("model selector", () => {
 		const rendered = render(selector);
 
 		expect(rendered).toContain("All providers › select a model");
-		expect(rendered).toContain("[openai]");
+		expect(rendered).toContain("openai · gpt-5");
 		expect(selectorRowIds(rendered)).toEqual(["gpt-5"]);
 	});
 
@@ -158,6 +161,93 @@ describe("model selector", () => {
 
 		expect(rendered).not.toContain("Select a provider");
 		expect(rendered).toContain("select a model");
+	});
+
+	async function createReasoningSelector(onSelect = vi.fn()) {
+		harness = await createHarness();
+		const base = harness.getModel();
+		const models = [
+			{ ...base, provider: "anthropic", id: "claude-opus-5", name: "Claude Opus 5", reasoning: true },
+			{ ...base, provider: "anthropic", id: "claude-sonnet-5", name: "Claude Sonnet 5", reasoning: true },
+		] as unknown as Model<any>[];
+		vi.spyOn(harness.session.modelRuntime, "getAvailableSnapshot").mockReturnValue(models);
+		vi.spyOn(harness.session.modelRuntime, "refresh").mockResolvedValue({ aborted: false, errors: new Map() });
+		const selector = new ModelSelectorComponent(
+			createFakeTui(),
+			undefined,
+			harness.session.modelRuntime,
+			[],
+			onSelect,
+			() => {},
+		);
+		return { selector, onSelect };
+	}
+
+	it("names the model on the row and keeps its id in the trailing context", async () => {
+		const selector = await createMultiProviderSelector();
+		selector.handleInput(ENTER);
+		const rendered = render(selector);
+
+		expect(rendered).toContain("Claude Opus 5");
+		expect(rendered).toContain("claude-opus-5");
+		expect(selectorRowIds(rendered)).toEqual(["claude-opus-5", "claude-sonnet-5"]);
+	});
+
+	it("carries the selected model row's fill to the right edge", async () => {
+		const selector = await createMultiProviderSelector();
+		selector.handleInput(ENTER);
+		const selected = selector.render(120).find((line) => stripAnsi(line).startsWith("→ "));
+
+		// Unlike a provider row, a model row right-aligns its trailing context, so
+		// a fill that stopped at the last glyph would change shape row to row.
+		expect(paintedWidth(selected ?? "")).toBe(120);
+	});
+
+	it("prices the highlighted model instead of repeating its name", async () => {
+		const selector = await createMultiProviderSelector();
+		selector.handleInput(ENTER);
+		const rendered = render(selector);
+
+		expect(rendered).toContain("$ / 1M tokens");
+		expect(rendered).toContain("Cached input");
+		expect(rendered).not.toContain("Model Name:");
+	});
+
+	it("dials the highlighted model's effort with left and right", async () => {
+		const { selector } = await createReasoningSelector();
+		expect(render(selector)).toContain("off");
+
+		selector.handleInput(RIGHT);
+		expect(render(selector)).toContain("minimal");
+
+		selector.handleInput(LEFT);
+		expect(render(selector)).toContain("off");
+	});
+
+	it("hands back the dialled effort, and nothing when it was left alone", async () => {
+		const dialled = await createReasoningSelector();
+		dialled.selector.handleInput(RIGHT);
+		dialled.selector.handleInput(RIGHT);
+		dialled.selector.handleInput(ENTER);
+		expect(dialled.onSelect.mock.calls[0][1]).toBe("low");
+
+		harness?.cleanup();
+		harness = undefined;
+
+		const untouched = await createReasoningSelector();
+		untouched.selector.handleInput(ENTER);
+		expect(untouched.onSelect.mock.calls[0][1]).toBeUndefined();
+	});
+
+	it("leaves left and right to the search cursor until the list is entered", async () => {
+		const { selector } = await createReasoningSelector();
+		selector.handleInput("o");
+		selector.handleInput(RIGHT);
+		expect(render(selector)).toContain("off");
+
+		selector.handleInput(DOWN);
+		selector.handleInput(RIGHT);
+		expect(render(selector)).toContain("minimal");
 	});
 
 	it("selects a model with enter on the second step", async () => {

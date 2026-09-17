@@ -34,6 +34,19 @@ depended on the two packages Apex Code renames.
 The fork point and every subsequent upstream merge are recorded in
 docs/upstream-log.md.
 --------------------------------------------------------------------------------
+Prime Agent
+https://github.com/PrimeIntellect-ai/prime-agent
+Copyright (c) 2025 Mario Zechner
+Copyright (c) 2026 Prime Intellect
+Licensed under the MIT License.
+
+A separate Pi-derived fork. Apex Code does not redistribute it. The model
+picker's row layout in
+packages/coding-agent/src/modes/interactive/components/model-row.ts adapts the
+effort-cluster placement and price panel from that fork's
+modes/interactive/components/model-selector.ts, as permitted for MIT prior art
+by ADR 0002.
+--------------------------------------------------------------------------------
 
 Additional third-party dependencies are declared in package.json and their
 licenses are distributed with those packages in node_modules. A consolidated
