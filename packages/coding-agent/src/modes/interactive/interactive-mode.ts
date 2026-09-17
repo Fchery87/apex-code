@@ -181,6 +181,46 @@ import {
 } from "./theme/theme.ts";
 import { InteractiveThemeController } from "./theme/theme-controller.ts";
 
+/**
+ * How much of the transcript is on screen.
+ *
+ * One cycled value rather than a set of independent booleans, because the
+ * readings are ordered and only three of the eight combinations are coherent.
+ * `details` is the default and reproduces the pre-cycle behaviour exactly, so
+ * the rung exists in both directions and an upgrade changes nothing until the
+ * key is pressed.
+ */
+export type ChatDetail = "overview" | "details" | "all";
+
+const CHAT_DETAIL_ORDER: readonly ChatDetail[] = ["overview", "details", "all"];
+
+/** The next rung, wrapping from `all` back to `overview`. */
+export function nextChatDetail(detail: ChatDetail): ChatDetail {
+	return CHAT_DETAIL_ORDER[(CHAT_DETAIL_ORDER.indexOf(detail) + 1) % CHAT_DETAIL_ORDER.length] ?? "details";
+}
+
+export interface ChatDetailView {
+	/** Tool output is shown in full rather than as a counted preview. */
+	toolOutputExpanded: boolean;
+	/** Inline diffs are shown rather than reduced to their line counts. */
+	editDiffsExpanded: boolean;
+	/**
+	 * Thinking blocks are shown even when the user's persisted setting hides them.
+	 * Only `all` does this, because only `all` is an unambiguous request for
+	 * everything; the override is never written back to settings.
+	 */
+	revealThinking: boolean;
+}
+
+/** The single place the three rungs turn into rendering flags. */
+export function chatDetailView(detail: ChatDetail): ChatDetailView {
+	return {
+		toolOutputExpanded: detail === "all",
+		editDiffsExpanded: detail !== "overview",
+		revealThinking: detail === "all",
+	};
+}
+
 /** Interface for components that can be expanded/collapsed */
 interface Expandable {
 	setExpanded(expanded: boolean): void;
@@ -188,6 +228,20 @@ interface Expandable {
 
 function isExpandable(obj: unknown): obj is Expandable {
 	return typeof obj === "object" && obj !== null && "setExpanded" in obj && typeof obj.setExpanded === "function";
+}
+
+/** Components that show inline diffs, which the cycle reveals a rung before tool output. */
+interface EditDiffsExpandable {
+	setEditDiffsExpanded(expanded: boolean): void;
+}
+
+function hasEditDiffsExpansion(obj: unknown): obj is EditDiffsExpandable {
+	return (
+		typeof obj === "object" &&
+		obj !== null &&
+		"setEditDiffsExpanded" in obj &&
+		typeof obj.setEditDiffsExpanded === "function"
+	);
 }
 
 class ExpandableText extends Text implements Expandable {
@@ -514,7 +568,9 @@ export class InteractiveMode {
 	private pendingTools = new Map<string, ToolExecutionComponent>();
 
 	// Tool output expansion state
+	private chatDetail: ChatDetail = "details";
 	private toolOutputExpanded = false;
+	private editDiffsExpanded = true;
 
 	// Thinking block visibility state
 	private hideThinkingBlock = false;
@@ -2673,7 +2729,7 @@ export class InteractiveMode {
 				{
 					tui: this.ui,
 					timeout: opts?.timeout,
-					onToggleToolsExpanded: () => this.toggleToolOutputExpansion(),
+					onToggleToolsExpanded: () => this.cycleChatDetail(),
 					enableSearch,
 					preamble: opts?.preview ? renderPermissionPreview(opts.preview) : undefined,
 				},
@@ -3106,7 +3162,7 @@ export class InteractiveMode {
 		// Global debug handler on TUI (works regardless of focus)
 		this.ui.onDebug = () => this.handleDebugCommand();
 		this.defaultEditor.onAction("app.model.select", () => this.showModelSelector());
-		this.defaultEditor.onAction("app.tools.expand", () => this.toggleToolOutputExpansion());
+		this.defaultEditor.onAction("app.tools.expand", () => this.cycleChatDetail());
 		this.defaultEditor.onAction("app.thinking.toggle", () => this.toggleThinkingBlockVisibility());
 		this.defaultEditor.onAction("app.editor.external", () => void this.handleOpenExternalEditor());
 		this.defaultEditor.onAction(
@@ -3479,7 +3535,7 @@ export class InteractiveMode {
 				} else if (event.message.role === "assistant") {
 					this.streamingComponent = new AssistantMessageComponent(
 						undefined,
-						this.hideThinkingBlock,
+						this.isThinkingHidden(),
 						this.getMarkdownThemeWithSettings(),
 						this.hiddenThinkingLabel,
 						this.outputPad,
@@ -3513,7 +3569,7 @@ export class InteractiveMode {
 									this.ui,
 									this.sessionManager.getCwd(),
 								);
-								component.setExpanded(this.toolOutputExpanded);
+								this.adoptChatDetail(component);
 								this.chatContainer.addChild(component);
 								this.pendingTools.set(content.id, component);
 								this.offerFirstUseHint("tool-expand");
@@ -3589,7 +3645,7 @@ export class InteractiveMode {
 						this.ui,
 						this.sessionManager.getCwd(),
 					);
-					component.setExpanded(this.toolOutputExpanded);
+					this.adoptChatDetail(component);
 					this.chatContainer.addChild(component);
 					this.pendingTools.set(event.toolCallId, component);
 				}
@@ -3813,7 +3869,7 @@ export class InteractiveMode {
 			return;
 		}
 		const component = new CustomEntryComponent(entry, renderer);
-		component.setExpanded(this.toolOutputExpanded);
+		this.adoptChatDetail(component);
 		if (!component.hasContent()) {
 			return;
 		}
@@ -3854,7 +3910,7 @@ export class InteractiveMode {
 						this.getMarkdownThemeWithSettings(),
 						this.outputPad,
 					);
-					component.setExpanded(this.toolOutputExpanded);
+					this.adoptChatDetail(component);
 					this.chatContainer.addChild(component);
 				}
 				break;
@@ -3862,14 +3918,14 @@ export class InteractiveMode {
 			case "compactionSummary": {
 				this.chatContainer.addChild(new Spacer(1));
 				const component = new CompactionSummaryMessageComponent(message, this.getMarkdownThemeWithSettings());
-				component.setExpanded(this.toolOutputExpanded);
+				this.adoptChatDetail(component);
 				this.chatContainer.addChild(component);
 				break;
 			}
 			case "branchSummary": {
 				this.chatContainer.addChild(new Spacer(1));
 				const component = new BranchSummaryMessageComponent(message, this.getMarkdownThemeWithSettings());
-				component.setExpanded(this.toolOutputExpanded);
+				this.adoptChatDetail(component);
 				this.chatContainer.addChild(component);
 				break;
 			}
@@ -3886,7 +3942,7 @@ export class InteractiveMode {
 							skillBlock,
 							this.getMarkdownThemeWithSettings(),
 						);
-						component.setExpanded(this.toolOutputExpanded);
+						this.adoptChatDetail(component);
 						this.chatContainer.addChild(component);
 						// Render user message separately if present
 						if (skillBlock.userMessage) {
@@ -3917,7 +3973,7 @@ export class InteractiveMode {
 			case "assistant": {
 				const assistantComponent = new AssistantMessageComponent(
 					message,
-					this.hideThinkingBlock,
+					this.isThinkingHidden(),
 					this.getMarkdownThemeWithSettings(),
 					this.hiddenThinkingLabel,
 					this.outputPad,
@@ -3982,7 +4038,7 @@ export class InteractiveMode {
 							this.ui,
 							this.sessionManager.getCwd(),
 						);
-						component.setExpanded(this.toolOutputExpanded);
+						this.adoptChatDetail(component);
 						this.chatContainer.addChild(component);
 
 						if (message.stopReason === "aborted" || message.stopReason === "error") {
@@ -4433,33 +4489,79 @@ export class InteractiveMode {
 		}
 	}
 
-	private toggleToolOutputExpansion(): void {
-		this.setToolsExpanded(!this.toolOutputExpanded);
+	/**
+	 * Bring a freshly created transcript component up to the current detail level.
+	 *
+	 * Components are constructed collapsed and adopted here, so a new component
+	 * type joins the cycle by having the methods rather than by its call site
+	 * remembering to set every axis.
+	 */
+	private adoptChatDetail(component: unknown): void {
+		if (isExpandable(component)) component.setExpanded(this.toolOutputExpanded);
+		if (hasEditDiffsExpansion(component)) component.setEditDiffsExpanded(this.editDiffsExpanded);
 	}
 
-	private setToolsExpanded(expanded: boolean): void {
-		if (expanded === this.toolOutputExpanded) return;
+	private cycleChatDetail(): void {
+		this.setChatDetail(nextChatDetail(this.chatDetail));
+	}
 
-		this.toolOutputExpanded = expanded;
+	/**
+	 * Presentation only. This never rewrites messages, settings, or the session
+	 * transcript, which is why it may override the persisted thinking preference
+	 * at `all` without saving that override.
+	 */
+	private setChatDetail(detail: ChatDetail): void {
+		if (detail === this.chatDetail) return;
+		this.chatDetail = detail;
+		const view = chatDetailView(detail);
+		this.toolOutputExpanded = view.toolOutputExpanded;
+		this.editDiffsExpanded = view.editDiffsExpanded;
+		this.applyChatDetail();
+		this.showStatus(`Conversation detail: ${detail}`);
+	}
+
+	/** True when thinking blocks are hidden right now, setting and detail level combined. */
+	private isThinkingHidden(): boolean {
+		return this.hideThinkingBlock && !chatDetailView(this.chatDetail).revealThinking;
+	}
+
+	private applyChatDetail(): void {
 		const activeHeader = this.customHeader ?? this.builtInHeader;
 		if (isExpandable(activeHeader)) {
-			activeHeader.setExpanded(expanded);
+			activeHeader.setExpanded(this.toolOutputExpanded);
 		}
 		for (const container of [this.loadedResourcesContainer, this.chatContainer]) {
 			for (const child of container.children) {
+				if (child instanceof AssistantMessageComponent) {
+					child.setHideThinkingBlock(this.isThinkingHidden());
+				}
 				if (isExpandable(child)) {
-					child.setExpanded(expanded);
+					child.setExpanded(this.toolOutputExpanded);
+				}
+				if (hasEditDiffsExpansion(child)) {
+					child.setEditDiffsExpanded(this.editDiffsExpanded);
 				}
 			}
 		}
-		this.showStatus(`Tool output: ${expanded ? "expanded" : "collapsed"}`);
+		this.ui.requestRender();
+	}
+
+	/**
+	 * The extension-facing boolean, which names one axis of three.
+	 *
+	 * Collapsing maps to `details` rather than `overview`, because an extension
+	 * asking to collapse tool output has not asked to hide edit diffs, and
+	 * `details` is the level where only tool output is collapsed.
+	 */
+	private setToolsExpanded(expanded: boolean): void {
+		this.setChatDetail(expanded ? "all" : "details");
 	}
 
 	/** Update rendered assistant messages without rebuilding live tool components. */
 	private updateThinkingBlockVisibility(): void {
 		for (const child of this.chatContainer.children) {
 			if (child instanceof AssistantMessageComponent) {
-				child.setHideThinkingBlock(this.hideThinkingBlock);
+				child.setHideThinkingBlock(this.isThinkingHidden());
 			}
 		}
 		this.ui.requestRender();
@@ -6757,7 +6859,7 @@ export class InteractiveMode {
 | \`${cycleThinkingLevel}\` | Cycle thinking level |
 | \`${cycleModelForward}\` / \`${cycleModelBackward}\` | Cycle models |
 | \`${selectModel}\` | Open model selector |
-| \`${expandTools}\` | Toggle tool output expansion |
+| \`${expandTools}\` | Cycle conversation detail (overview / details / all) |
 | \`${toggleThinking}\` | Toggle thinking block visibility |
 | \`${externalEditor}\` | Edit message in external editor |
 | \`${copyMessage}\` | Copy last assistant message |
