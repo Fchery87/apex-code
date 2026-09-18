@@ -1,5 +1,7 @@
 # Apex Code changelog
 
+## [Unreleased]
+
 ## [0.3.0] - 2026-09-18
 
 ### Changed
