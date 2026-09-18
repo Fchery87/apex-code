@@ -1,5 +1,12 @@
-import { type Model, modelsAreEqual } from "@earendil-works/pi-ai";
 import {
+	clampThinkingLevel,
+	getSupportedThinkingLevels,
+	type Model,
+	type ModelThinkingLevel,
+	modelsAreEqual,
+} from "@earendil-works/pi-ai";
+import {
+	type Component,
 	Container,
 	type Focusable,
 	fuzzyFilter,
@@ -14,9 +21,18 @@ import {
 import type { ModelRuntime } from "../../../core/model-runtime.ts";
 import { refreshModelCatalogs } from "../model-catalog-refresh.ts";
 import { getModelSelectorSearchText } from "../model-search.ts";
-import { paintSelectedRow, theme } from "../theme/theme.ts";
+import { paintSelectedRow, paintSelectedRowToWidth, theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, keyText, rawKeyHint } from "./keybinding-hints.ts";
+import {
+	composeModelRow,
+	type EffortLayout,
+	type EffortLayoutRow,
+	getEffortLayout,
+	NO_EFFORT_CLUSTER,
+	renderPricePanel,
+	type TrailingSegment,
+} from "./model-row.ts";
 
 interface ModelItem {
 	provider: string;
@@ -74,8 +90,8 @@ export class ModelSelectorComponent extends Container implements Focusable {
 	private selectedIndex: number = 0;
 	private currentModel?: Model<any>;
 	private modelRuntime: ModelRuntime;
-	private onSelectCallback: (model: Model<any>) => void;
-	private onSelectAsDefaultCallback?: (model: Model<any>) => void;
+	private onSelectCallback: (model: Model<any>, thinkingLevel?: ModelThinkingLevel) => void;
+	private onSelectAsDefaultCallback?: (model: Model<any>, thinkingLevel?: ModelThinkingLevel) => void;
 	private onCancelCallback: () => void;
 	private errorMessage?: string;
 	private refreshStatusMessage = "Refreshing model catalogs…";
@@ -88,21 +104,34 @@ export class ModelSelectorComponent extends Container implements Focusable {
 	private readonly refreshAbortController = new AbortController();
 	private refreshTimeout?: ReturnType<typeof setTimeout>;
 	private closed = false;
+	/** Effort dialled per model in this session of the picker, keyed by `provider/id`. */
+	private readonly effortLevels = new Map<string, ModelThinkingLevel>();
+	/** Models whose effort the user actually moved. Only those override the session level. */
+	private readonly editedEffortModels = new Set<string>();
+	private readonly initialThinkingLevel?: ModelThinkingLevel;
+	/**
+	 * True once up or down has moved the selection into the list. Until then
+	 * left and right belong to the search field's cursor, which is where they
+	 * are needed while a query is still being typed.
+	 */
+	private navigatedIntoList = false;
 
 	constructor(
 		tui: TUI,
 		currentModel: Model<any> | undefined,
 		modelRuntime: ModelRuntime,
 		scopedModels: ReadonlyArray<ScopedModelItem>,
-		onSelect: (model: Model<any>) => void,
+		onSelect: (model: Model<any>, thinkingLevel?: ModelThinkingLevel) => void,
 		onCancel: () => void,
 		initialSearchInput?: string,
-		onSelectAsDefault?: (model: Model<any>) => void,
+		onSelectAsDefault?: (model: Model<any>, thinkingLevel?: ModelThinkingLevel) => void,
 		defaultModel?: DefaultModelReference,
+		options: { thinkingLevel?: ModelThinkingLevel } = {},
 	) {
 		super();
 
 		this.tui = tui;
+		this.initialThinkingLevel = options.thinkingLevel;
 		this.currentModel = currentModel;
 		this.modelRuntime = modelRuntime;
 		this.scopedModels = scopedModels;
@@ -288,6 +317,7 @@ export class ModelSelectorComponent extends Container implements Focusable {
 
 	private setStep(step: Step): void {
 		this.step = step;
+		this.navigatedIntoList = false;
 		this.searchInput.setValue("");
 		this.rebuildRows();
 		this.selectedIndex = this.defaultSelectedIndex();
@@ -343,6 +373,11 @@ export class ModelSelectorComponent extends Container implements Focusable {
 			rawKeyHint(`${keyText("tui.select.up")}/${keyText("tui.select.down")}`, "move"),
 			keyHint("tui.select.confirm", "select"),
 		];
+		if (this.hasAdjustableEffort()) {
+			const left = keyText("tui.editor.cursorLeft", { primaryOnly: true });
+			const right = keyText("tui.editor.cursorRight", { primaryOnly: true });
+			hints.push(rawKeyHint(`${left}/${right}`, "effort"));
+		}
 		if (this.scopedModelItems.length > 0) {
 			hints.push(keyHint("tui.input.tab", "scope") + theme.fg("muted", " (all/scoped)"));
 		}
@@ -350,6 +385,68 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		if (this.canGoBack()) hints.push(rawKeyHint("escape", "providers"), rawKeyHint("ctrl+c", "close"));
 		else hints.push(keyHint("tui.select.cancel", "close"));
 		return hints.join(theme.fg("borderMuted", " · "));
+	}
+
+	/** Levels worth dialling. A model with nothing but "off" has no cluster to show. */
+	private getSelectableLevels(item: ModelItem): ModelThinkingLevel[] {
+		const levels = getSupportedThinkingLevels(item.model);
+		if (levels.length === 1 && levels[0] === "off") return [];
+		return levels;
+	}
+
+	private getEffort(item: ModelItem): ModelThinkingLevel | undefined {
+		const levels = this.getSelectableLevels(item);
+		if (levels.length === 0) return undefined;
+		const key = `${item.provider}/${item.id}`;
+		const stored = this.effortLevels.get(key);
+		if (stored !== undefined && levels.includes(stored)) return stored;
+		const requested = this.initialThinkingLevel ?? "off";
+		const clamped = levels.includes(requested) ? requested : clampThinkingLevel(item.model, requested);
+		const resolved = levels.includes(clamped) ? clamped : levels[0]!;
+		this.effortLevels.set(key, resolved);
+		return resolved;
+	}
+
+	private adjustEffort(item: ModelItem, direction: number): boolean {
+		const levels = this.getSelectableLevels(item);
+		if (levels.length === 0) return false;
+		const key = `${item.provider}/${item.id}`;
+		const current = this.getEffort(item) ?? levels[0]!;
+		const next = levels[(levels.indexOf(current) + direction + levels.length) % levels.length]!;
+		this.effortLevels.set(key, next);
+		this.editedEffortModels.add(key);
+		return true;
+	}
+
+	/** The effort to hand back on select, or undefined when the user left it alone. */
+	private getChosenEffort(item: ModelItem): ModelThinkingLevel | undefined {
+		return this.editedEffortModels.has(`${item.provider}/${item.id}`) ? this.getEffort(item) : undefined;
+	}
+
+	private hasAdjustableEffort(): boolean {
+		return this.filteredRows.some((row) => row.kind === "model" && this.getSelectableLevels(row.item).length > 0);
+	}
+
+	/**
+	 * Context that trails a model row, right-aligned, in reading order.
+	 *
+	 * Each segment carries what it costs to lose, because a narrow row drops by
+	 * that and not by position. `current` outranks the id: the row already shows
+	 * the model's name, so the id is largely recoverable from it, while nothing
+	 * else on screen says which model the session is on. The provider badge goes
+	 * first, being the least you lose.
+	 */
+	private getTrailingSegments(item: ModelItem): TrailingSegment[] {
+		const segments: TrailingSegment[] = [];
+		if (this.step.kind === "models" && this.step.provider === null) {
+			segments.push({ text: theme.fg("muted", item.provider), priority: 0 });
+		}
+		segments.push({ text: theme.fg("muted", item.id), priority: 2 });
+		if (this.isDefaultModel(item.model)) segments.push({ text: theme.fg("muted", "default"), priority: 1 });
+		if (modelsAreEqual(this.currentModel, item.model)) {
+			segments.push({ text: theme.fg("success", "current"), priority: 3 });
+		}
+		return segments;
 	}
 
 	private isDefaultModel(model: Model<any>): boolean {
@@ -399,23 +496,59 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		// match is highlighted. When the query is cleared, keep the current position
 		// clamped to the (restored) list length.
 		this.selectedIndex = query ? 0 : Math.min(this.selectedIndex, Math.max(0, this.filteredRows.length - 1));
+		// The effort hint depends on what survived the filter, so the footer is
+		// rebuilt here rather than with the header, which runs before filtering.
+		this.renderFooter();
 		this.updateList();
 	}
 
-	private renderRow(row: Row, isSelected: boolean): string {
+	private renderProviderRow(row: Extract<Row, { kind: "provider" }>, isSelected: boolean): string {
 		const prefix = isSelected ? "→ " : "  ";
-		if (row.kind === "provider") {
-			const count = theme.fg("muted", ` (${row.count} model${row.count === 1 ? "" : "s"})`);
-			const checkmark = row.hasCurrent ? theme.fg("success", " ✓") : "";
-			const composed = `${prefix}${row.provider}${count}${checkmark}`;
-			return isSelected ? paintSelectedRow(composed) : composed;
-		}
-		const showProvider = this.step.kind === "models" && this.step.provider === null;
-		const badge = showProvider ? ` ${theme.fg("muted", `[${row.item.provider}]`)}` : "";
-		const defaultBadge = this.isDefaultModel(row.item.model) ? theme.fg("muted", " · default") : "";
-		const checkmark = modelsAreEqual(this.currentModel, row.item.model) ? theme.fg("success", " ✓") : "";
-		const composed = `${prefix}${row.item.id}${badge}${defaultBadge}${checkmark}`;
+		const count = theme.fg("muted", ` (${row.count} model${row.count === 1 ? "" : "s"})`);
+		const checkmark = row.hasCurrent ? theme.fg("success", " ✓") : "";
+		const composed = `${prefix}${row.provider}${count}${checkmark}`;
 		return isSelected ? paintSelectedRow(composed) : composed;
+	}
+
+	/**
+	 * The visible page of rows, rendered together because the effort cluster is
+	 * placed once for the whole page rather than per row.
+	 */
+	private createRowsComponent(startIndex: number, endIndex: number): Component {
+		const rows = this.filteredRows.slice(startIndex, endIndex);
+		return {
+			render: (width: number): string[] => {
+				const layout = this.pageEffortLayout(rows, width);
+				return rows.map((row, offset) => {
+					const isSelected = startIndex + offset === this.selectedIndex;
+					if (row.kind === "provider") return this.renderProviderRow(row, isSelected);
+					const composed = composeModelRow({
+						name: row.item.model.name,
+						levels: this.getSelectableLevels(row.item),
+						effort: this.getEffort(row.item),
+						trailingSegments: this.getTrailingSegments(row.item),
+						selected: isSelected,
+						layout,
+						width,
+					});
+					return isSelected ? paintSelectedRowToWidth(composed, width) : composed;
+				});
+			},
+			invalidate: () => {},
+		};
+	}
+
+	private pageEffortLayout(rows: ReadonlyArray<Row>, width: number): EffortLayout {
+		const layoutRows: EffortLayoutRow[] = [];
+		for (const row of rows) {
+			if (row.kind !== "model") continue;
+			layoutRows.push({
+				name: row.item.model.name,
+				levels: this.getSelectableLevels(row.item),
+				trailingSegments: this.getTrailingSegments(row.item),
+			});
+		}
+		return layoutRows.length > 0 ? getEffortLayout(layoutRows, width) : NO_EFFORT_CLUSTER;
 	}
 
 	private updateList(): void {
@@ -427,10 +560,8 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		);
 		const endIndex = Math.min(startIndex + MAX_VISIBLE_ROWS, this.filteredRows.length);
 
-		for (let i = startIndex; i < endIndex; i++) {
-			const row = this.filteredRows[i];
-			if (!row) continue;
-			this.listContainer.addChild(new Text(this.renderRow(row, i === this.selectedIndex), 0, 0));
+		if (endIndex > startIndex) {
+			this.listContainer.addChild(this.createRowsComponent(startIndex, endIndex));
 		}
 
 		// Add scroll indicator if needed
@@ -452,8 +583,11 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		} else {
 			const selected = this.filteredRows[this.selectedIndex];
 			if (selected?.kind === "model") {
-				this.listContainer.addChild(new Spacer(1));
-				this.listContainer.addChild(new Text(theme.fg("muted", `  Model Name: ${selected.item.model.name}`), 0, 0));
+				const cost = selected.item.model.cost;
+				this.listContainer.addChild({
+					render: (width: number) => renderPricePanel(cost, width),
+					invalidate: () => {},
+				});
 			}
 		}
 		if (this.refreshStatusMessage) {
@@ -472,15 +606,31 @@ export class ModelSelectorComponent extends Container implements Focusable {
 			}
 			return;
 		}
+		// Left/right dial the highlighted model's effort, but only once they are
+		// free to: while a query is being typed they still drive the search cursor.
+		if (
+			(this.searchInput.getValue() === "" || this.navigatedIntoList) &&
+			(kb.matches(keyData, "tui.editor.cursorLeft") || kb.matches(keyData, "tui.editor.cursorRight"))
+		) {
+			const row = this.filteredRows[this.selectedIndex];
+			const direction = kb.matches(keyData, "tui.editor.cursorLeft") ? -1 : 1;
+			if (row?.kind === "model" && this.adjustEffort(row.item, direction)) {
+				this.updateList();
+				this.tui.requestRender();
+				return;
+			}
+		}
 		// Up arrow - wrap to bottom when at top
 		if (kb.matches(keyData, "tui.select.up")) {
 			if (this.filteredRows.length === 0) return;
+			this.navigatedIntoList = true;
 			this.selectedIndex = this.selectedIndex === 0 ? this.filteredRows.length - 1 : this.selectedIndex - 1;
 			this.updateList();
 		}
 		// Down arrow - wrap to top when at bottom
 		else if (kb.matches(keyData, "tui.select.down")) {
 			if (this.filteredRows.length === 0) return;
+			this.navigatedIntoList = true;
 			this.selectedIndex = this.selectedIndex === this.filteredRows.length - 1 ? 0 : this.selectedIndex + 1;
 			this.updateList();
 		}
@@ -503,12 +653,16 @@ export class ModelSelectorComponent extends Container implements Focusable {
 			const row = this.filteredRows[this.selectedIndex];
 			if (row?.kind === "model") {
 				this.dispose();
-				this.onSelectAsDefaultCallback(row.item.model);
+				this.onSelectAsDefaultCallback(row.item.model, this.getChosenEffort(row.item));
 			}
 		}
 		// Pass everything else to search input
 		else {
+			const previousQuery = this.searchInput.getValue();
 			this.searchInput.handleInput(keyData);
+			if (previousQuery !== this.searchInput.getValue()) {
+				this.navigatedIntoList = false;
+			}
 			this.filterRows(this.searchInput.getValue());
 		}
 	}
@@ -520,12 +674,8 @@ export class ModelSelectorComponent extends Container implements Focusable {
 			this.setStep({ kind: "models", provider: row.provider });
 			return;
 		}
-		this.handleSelect(row.item.model);
-	}
-
-	private handleSelect(model: Model<any>): void {
 		this.dispose();
-		this.onSelectCallback(model);
+		this.onSelectCallback(row.item.model, this.getChosenEffort(row.item));
 	}
 
 	getSearchInput(): Input {

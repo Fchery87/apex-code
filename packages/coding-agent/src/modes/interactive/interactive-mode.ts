@@ -7,7 +7,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { AuthEvent, AuthPrompt } from "@earendil-works/pi-ai";
+import type { AuthEvent, AuthPrompt, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type { AssistantMessage, ImageContent, Message, Model, Usage } from "@earendil-works/pi-ai/compat";
 import type {
 	AutocompleteItem,
@@ -5374,14 +5374,22 @@ export class InteractiveMode {
 
 	private showModelSelector(initialSearchInput?: string): void {
 		this.showSelector((done) => {
-			const selectModel = async (model: Model<any>, persist: boolean) => {
+			const selectModel = async (model: Model<any>, persist: boolean, thinkingLevel?: ModelThinkingLevel) => {
 				try {
 					await this.session.setModel(model, { persist });
+					// setModel already applied the level this model switches to, so this
+					// only overrides it when the picker's effort was actually dialled. The
+					// cast is the session's own: it stores and clamps "off" but types the
+					// field as ThinkingLevel, which does not name it.
+					if (thinkingLevel !== undefined) this.session.setThinkingLevel(thinkingLevel as ThinkingLevel);
 					this.updateAvailableProviderCount();
 					this.footer.invalidate();
 					this.updateEditorBorderColor();
 					done();
-					this.showStatus(persist ? `Default model: ${model.provider}/${model.id}` : `Model: ${model.id}`);
+					const effort = thinkingLevel === undefined ? "" : ` · ${thinkingLevel}`;
+					this.showStatus(
+						persist ? `Default model: ${model.provider}/${model.id}${effort}` : `Model: ${model.id}${effort}`,
+					);
 					void this.maybeWarnAboutAnthropicSubscriptionAuth(model);
 					this.checkDaxnutsEasterEgg(model);
 				} catch (error) {
@@ -5396,14 +5404,15 @@ export class InteractiveMode {
 				this.session.model,
 				this.session.modelRuntime,
 				this.session.scopedModels,
-				(model) => selectModel(model, false),
+				(model, thinkingLevel) => selectModel(model, false, thinkingLevel),
 				() => {
 					done();
 					this.ui.requestRender();
 				},
 				initialSearchInput,
-				(model) => selectModel(model, true),
+				(model, thinkingLevel) => selectModel(model, true, thinkingLevel),
 				defaultProvider && defaultModel ? { provider: defaultProvider, id: defaultModel } : undefined,
+				{ thinkingLevel: this.session.thinkingLevel },
 			);
 			return { component: selector, focus: selector, dispose: () => selector.dispose() };
 		});

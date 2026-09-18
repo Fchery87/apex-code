@@ -1,17 +1,31 @@
 /**
  * Parsing helpers for rendered model-selector rows.
  *
- * The selector renders a row as `<cursor> <id>`, with an optional ` [provider]` badge and an
- * optional ` ✓` on the current model. The badge only appears when the list spans more than one
- * provider, so tests must not use it to find rows.
+ * A model row is `<cursor> <display name>` with a right-aligned trailing cluster
+ * of ` · `-joined context: an optional provider badge, then the model id, then
+ * any of `default` and `current`. The name and the cluster are always separated
+ * by at least two spaces, which is what tells them apart here.
+ *
+ * Other lines in the overlay also open with two leading columns — the scroll
+ * indicator, the price panel, the refresh status — so a candidate cluster only
+ * counts when every one of its segments looks like an identifier.
  */
 
-const ROW = /^(?:→|\s) (\S+?)(?: \[[^\]]+\])?(?: ✓)?$/;
+const CURSOR = /^(?:→|\s) /;
+const IDENTIFIER = /^[A-Za-z0-9._:/-]+$/;
+const STATUS_SEGMENTS = new Set(["default", "current"]);
 
 function rowId(line: string): string | undefined {
-	const id = ROW.exec(line.replace(/\s+$/, ""))?.[1];
-	// The scroll indicator ("(3/12)") shares the row shape but names no model.
-	return id?.startsWith("(") ? undefined : id;
+	if (!CURSOR.test(line)) return undefined;
+	const body = line.slice(2).replace(/\s+$/, "");
+	if (body.length === 0) return undefined;
+	const chunks = body.split(/\s{2,}/);
+	const cluster = chunks[chunks.length - 1];
+	if (cluster === undefined) return undefined;
+	const segments = cluster.split(" · ");
+	if (!segments.every((segment) => IDENTIFIER.test(segment))) return undefined;
+	while (segments.length > 1 && STATUS_SEGMENTS.has(segments[segments.length - 1] ?? "")) segments.pop();
+	return segments[segments.length - 1];
 }
 
 /** Model ids of every rendered row, in render order. */

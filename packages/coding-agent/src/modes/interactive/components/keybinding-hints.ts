@@ -7,6 +7,12 @@ import { theme } from "../theme/theme.ts";
 
 export interface KeyTextFormatOptions {
 	capitalize?: boolean;
+	/**
+	 * Name only the first binding. A hint sitting alongside several others has
+	 * no room to list every alias, and "left/ctrl+b/right/ctrl+f effort" is
+	 * longer than the thing it explains.
+	 */
+	primaryOnly?: boolean;
 }
 
 function formatKeyPart(part: string, options: KeyTextFormatOptions): string {
@@ -31,8 +37,9 @@ function formatKeys(keys: KeyId[], options: KeyTextFormatOptions = {}): string {
 	return formatKeyText(keys.join("/"), options);
 }
 
-export function keyText(keybinding: Keybinding): string {
-	return formatKeys(getKeybindings().getKeys(keybinding));
+export function keyText(keybinding: Keybinding, options: KeyTextFormatOptions = {}): string {
+	const keys = getKeybindings().getKeys(keybinding);
+	return formatKeys(options.primaryOnly ? keys.slice(0, 1) : keys, options);
 }
 
 export function keyDisplayText(keybinding: Keybinding): string {
