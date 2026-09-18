@@ -7,6 +7,7 @@ import {
 	type RgbColor,
 	type SelectListTheme,
 	type SettingsListTheme,
+	visibleWidth,
 } from "@earendil-works/pi-tui";
 import type { ThinkingLevel } from "apex-code-agent-core";
 import chalk from "chalk";
@@ -1361,9 +1362,28 @@ export function paintBackground(line: string, background: ThemeBg): string {
  * `SelectListTheme.selectedText` is handed a row and no width and pi-tui is
  * frozen (ADR 0001). Lists that compose their own rows call this directly, so
  * they match the frozen component instead of becoming the odd ones out.
+ *
+ * See {@link paintSelectedRowToWidth} for the one case that cannot: a row whose
+ * content is right-aligned.
  */
 export function paintSelectedRow(text: string): string {
 	return paintBackground(theme.fg("text", text), "selectedBg");
+}
+
+/**
+ * The same treatment, carried out to a known width.
+ *
+ * A list that composes its own rows does receive the render width, so it can do
+ * what the frozen component cannot. Only a row that right-aligns part of its
+ * content needs that: a hugging fill would stop at the last glyph on a row with
+ * no trailing context and reach the terminal edge on the row below it, so the
+ * highlight would change shape as you arrow down the list.
+ *
+ * The text is painted as given rather than forced to `fg("text")`, because a
+ * row composed this way already colours its own segments.
+ */
+export function paintSelectedRowToWidth(text: string, width: number): string {
+	return paintBackground(text + " ".repeat(Math.max(0, width - visibleWidth(text))), "selectedBg");
 }
 
 export function getSelectListTheme(): SelectListTheme {
