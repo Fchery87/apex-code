@@ -442,6 +442,13 @@ export interface ToolRenderContext<TState = any, TArgs = any> {
 	isPartial: boolean;
 	/** Whether the result view is expanded. */
 	expanded: boolean;
+	/**
+	 * Whether inline diffs are shown. A second, coarser axis than `expanded`:
+	 * the conversation detail cycle reveals diffs one rung before it expands
+	 * tool output, so a renderer that shows a diff reads this rather than
+	 * `expanded`.
+	 */
+	editDiffsExpanded: boolean;
 	/** Whether inline images are currently shown in the TUI. */
 	showImages: boolean;
 	/** Whether the current result is an error. */

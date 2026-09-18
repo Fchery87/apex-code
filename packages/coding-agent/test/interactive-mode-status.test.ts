@@ -166,28 +166,85 @@ describe("InteractiveMode.showManagedToolStatus", () => {
 	});
 });
 
-describe("InteractiveMode.setToolsExpanded", () => {
-	test("applies expansion state to the active header and chat entries", () => {
+describe("InteractiveMode conversation detail", () => {
+	/**
+	 * A stand-in whose prototype is the real class, so detail methods that call
+	 * each other resolve without booting a terminal.
+	 */
+	function createMode() {
 		const header = { setExpanded: vi.fn() };
 		const loadedResourcesChild = { setExpanded: vi.fn() };
-		const chatChild = { setExpanded: vi.fn() };
-		const fakeThis: any = {
+		const chatChild = { setExpanded: vi.fn(), setEditDiffsExpanded: vi.fn() };
+		const mode: any = Object.assign(Object.create((InteractiveMode as any).prototype), {
+			chatDetail: "details",
 			toolOutputExpanded: false,
+			editDiffsExpanded: true,
+			hideThinkingBlock: false,
 			customHeader: undefined,
 			builtInHeader: header,
 			loadedResourcesContainer: { children: [loadedResourcesChild] },
 			chatContainer: { children: [chatChild] },
 			ui: { requestRender: vi.fn() },
 			showStatus: vi.fn(),
-		};
+		});
+		return { mode, header, loadedResourcesChild, chatChild };
+	}
 
-		(InteractiveMode as any).prototype.setToolsExpanded.call(fakeThis, true);
+	test("applies expansion state to the active header and chat entries", () => {
+		const { mode, header, loadedResourcesChild, chatChild } = createMode();
 
-		expect(fakeThis.toolOutputExpanded).toBe(true);
+		mode.setToolsExpanded(true);
+
+		expect(mode.toolOutputExpanded).toBe(true);
 		expect(header.setExpanded).toHaveBeenCalledWith(true);
 		expect(loadedResourcesChild.setExpanded).toHaveBeenCalledWith(true);
 		expect(chatChild.setExpanded).toHaveBeenCalledWith(true);
-		expect(fakeThis.showStatus).toHaveBeenCalledWith("Tool output: expanded");
+		expect(mode.showStatus).toHaveBeenCalledWith("Conversation detail: all");
+	});
+
+	test("collapsing through the boolean API stops at details, keeping diffs", () => {
+		// An extension asking to collapse tool output has not asked to hide diffs.
+		const { mode, chatChild } = createMode();
+		mode.setChatDetail("all");
+
+		mode.setToolsExpanded(false);
+
+		expect(mode.chatDetail).toBe("details");
+		expect(mode.editDiffsExpanded).toBe(true);
+		expect(chatChild.setEditDiffsExpanded).toHaveBeenLastCalledWith(true);
+	});
+
+	test("cycles through all three rungs and back", () => {
+		const { mode } = createMode();
+
+		mode.cycleChatDetail();
+		expect(mode.chatDetail).toBe("all");
+		mode.cycleChatDetail();
+		expect(mode.chatDetail).toBe("overview");
+		mode.cycleChatDetail();
+		expect(mode.chatDetail).toBe("details");
+	});
+
+	test("collapses diffs only at overview", () => {
+		const { mode, chatChild } = createMode();
+
+		mode.setChatDetail("overview");
+
+		expect(mode.editDiffsExpanded).toBe(false);
+		expect(chatChild.setEditDiffsExpanded).toHaveBeenLastCalledWith(false);
+	});
+
+	test("reveals a hidden thinking preference at all, and restores it on the way down", () => {
+		const { mode } = createMode();
+		mode.hideThinkingBlock = true;
+
+		expect(mode.isThinkingHidden()).toBe(true);
+		mode.setChatDetail("all");
+		expect(mode.isThinkingHidden()).toBe(false);
+		mode.setChatDetail("overview");
+		expect(mode.isThinkingHidden()).toBe(true);
+		// The override is presentation only; the preference itself is untouched.
+		expect(mode.hideThinkingBlock).toBe(true);
 	});
 });
 

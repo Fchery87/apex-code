@@ -90,6 +90,9 @@ export function createToolHtmlRenderer(deps: ToolHtmlRendererDeps): ToolHtmlRend
 			argsComplete: true,
 			isPartial,
 			expanded,
+			// A static export has no detail cycle to reveal a diff later, so it
+			// always carries the full one.
+			editDiffsExpanded: true,
 			showImages: false,
 			isError,
 		};

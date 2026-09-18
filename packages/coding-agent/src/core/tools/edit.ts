@@ -286,6 +286,34 @@ function getRenderablePreviewInput(args: RenderableEditArgs | undefined): { path
 	return null;
 }
 
+/**
+ * Added and removed line counts read off a unified diff.
+ *
+ * `+++`/`---` file headers open with the same characters as content lines, so
+ * they are skipped explicitly rather than by counting the first two lines,
+ * which a diff without headers would not have.
+ */
+function countChangedLines(diff: string): { added: number; removed: number } {
+	let added = 0;
+	let removed = 0;
+	for (const line of diff.split("\n")) {
+		if (line.startsWith("+++") || line.startsWith("---")) continue;
+		if (line.startsWith("+")) added++;
+		else if (line.startsWith("-")) removed++;
+	}
+	return { added, removed };
+}
+
+/** The one line a collapsed diff leaves behind, so the edit is still legible as an edit. */
+function formatChangeSummary(diff: string, theme: Theme): string {
+	const { added, removed } = countChangedLines(diff);
+	const parts: string[] = [];
+	if (added > 0) parts.push(theme.fg("toolDiffAdded", `+${added}`));
+	if (removed > 0) parts.push(theme.fg("toolDiffRemoved", `-${removed}`));
+	if (parts.length === 0) return theme.fg("dim", "no line changes");
+	return parts.join(theme.fg("dim", " "));
+}
+
 function formatEditCall(args: RenderableEditArgs | undefined, theme: Theme, cwd: string): string {
 	const pathDisplay = renderToolPath(str(args?.file_path ?? args?.path), theme, cwd);
 	return `${theme.fg("toolTitle", theme.bold("edit"))} ${pathDisplay}`;
@@ -297,6 +325,7 @@ function formatEditResult(
 	result: EditToolResultLike,
 	theme: Theme,
 	isError: boolean,
+	diffsExpanded: boolean,
 ): string | undefined {
 	const rawPath = str(args?.file_path ?? args?.path);
 	const previewDiff = preview && !("error" in preview) ? preview.diff : undefined;
@@ -314,7 +343,9 @@ function formatEditResult(
 
 	const resultDiff = result.details?.diff;
 	if (resultDiff && resultDiff !== previewDiff) {
-		return renderDiff(resultDiff, { filePath: rawPath ?? undefined });
+		return diffsExpanded
+			? renderDiff(resultDiff, { filePath: rawPath ?? undefined })
+			: formatChangeSummary(resultDiff, theme);
 	}
 
 	return undefined;
@@ -342,6 +373,7 @@ function buildEditCallComponent(
 	args: RenderableEditArgs | undefined,
 	theme: Theme,
 	cwd: string,
+	diffsExpanded: boolean,
 ): EditCallRenderComponent {
 	component.setBgFn(getEditHeaderBg(component.preview, component.settledError, theme));
 	component.clear();
@@ -351,8 +383,14 @@ function buildEditCallComponent(
 		return component;
 	}
 
+	// An error always shows, whatever the detail level. A collapsed diff still
+	// leaves its counts behind, so the row never becomes a bare filename.
 	const body =
-		"error" in component.preview ? theme.fg("error", component.preview.error) : renderDiff(component.preview.diff);
+		"error" in component.preview
+			? theme.fg("error", component.preview.error)
+			: diffsExpanded
+				? renderDiff(component.preview.diff)
+				: formatChangeSummary(component.preview.diff, theme);
 	component.addChild(new Spacer(1));
 	component.addChild(new Text(body, 0, 0));
 	return component;
@@ -509,7 +547,7 @@ export function createEditToolDefinition(
 				});
 			}
 
-			return buildEditCallComponent(component, args, theme, context.cwd);
+			return buildEditCallComponent(component, args, theme, context.cwd, context.editDiffsExpanded);
 		},
 		renderResult(result, _options, theme, context) {
 			const callComponent = context.state.callComponent;
@@ -539,11 +577,19 @@ export function createEditToolDefinition(
 						context.args as RenderableEditArgs | undefined,
 						theme,
 						context.cwd,
+						context.editDiffsExpanded,
 					);
 				}
 			}
 
-			const output = formatEditResult(context.args, callComponent?.preview, typedResult, theme, context.isError);
+			const output = formatEditResult(
+				context.args,
+				callComponent?.preview,
+				typedResult,
+				theme,
+				context.isError,
+				context.editDiffsExpanded,
+			);
 			const component = (context.lastComponent as Container | undefined) ?? new Container();
 			component.clear();
 			if (!output) {
