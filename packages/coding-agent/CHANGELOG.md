@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-18
+
 ### Changed
 
 - **The model step of `/model` now names models and prices them, and dials reasoning effort in place.** The two-step flow is unchanged: you still pick a provider, then a model. What changed is the second step. A row led with the raw model id and repeated the display name on a single line under the list, which spent the widest part of the row on the string you already typed to get there and the line under it on the one piece of information that was never in question. The row now leads with the model's name and carries its id, provider, and `default`/`current` badges in a right-aligned cluster that sheds the cheapest context first as the terminal narrows, so the active marker outlives the id, which the row's name already implies. Under the list, the repeated name is replaced by input, cached-input, and output prices per million tokens, which is what you actually weigh when two models are otherwise interchangeable. Reasoning models carry a square gauge for thinking effort that left and right adjust on the highlighted row, so choosing a model and the effort to run it at is one decision rather than a model switch followed by a trip through `/thinking`. Effort is handed to the session only when it was moved; leaving it alone keeps whatever the model switch would have applied on its own. Left and right still belong to the search field's cursor until up or down moves you into the list. The gauge is placed once per rendered page rather than per row, so the squares hold one column while you arrow down, and it gives up its label and then itself as the terminal narrows, in that order. The provider step is untouched.
