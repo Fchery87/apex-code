@@ -122,11 +122,37 @@ function findLeaseRecords(root: string): LeaseRecord[] {
 	return records;
 }
 
+/**
+ * How long a spawned CLI gets to write its lease.
+ *
+ * A deadline, not a budget. The wait polls every 25ms and returns the moment
+ * the lease appears, so a generous value costs nothing when the machine is
+ * healthy; it only bounds how long a genuinely broken case takes to fail.
+ * Sized as though it were a budget, it became the binding constraint whenever
+ * the suite saturated the machine, because these tests spawn real Node CLIs
+ * and are the first thing starved when every core is already busy.
+ */
+const LEASE_WAIT_MS = 60_000;
+/** How long a spawned CLI gets to exit on its own. Same reasoning. */
+const CLI_EXIT_WAIT_MS = 45_000;
+/**
+ * Each test's budget, derived from the waits it performs rather than set by hand.
+ *
+ * These tests spawn real CLI processes, so they are the slowest thing in the
+ * suite and the first to suffer when the runner saturates the machine. They
+ * previously allowed 30s while performing up to 45s of inner waiting, so vitest
+ * always killed them before their own diagnostics could fire: a genuine failure
+ * reported "Test timed out in 30000ms" instead of naming the lease directory or
+ * dumping the child's stderr. Deriving the budget keeps the two from drifting
+ * apart again.
+ */
+const TEST_TIMEOUT_MS = LEASE_WAIT_MS + CLI_EXIT_WAIT_MS + 15_000;
+
 async function waitForLeases(dirs: CliDirs, predicate: (records: LeaseRecord[]) => boolean): Promise<LeaseRecord[]> {
 	// Session state lives under the agent directory. The boundary used to repoint that
 	// into the workspace, which is the only reason this searched the project tree.
 	const stateRoot = dirs.agentDir;
-	const deadline = Date.now() + 20_000;
+	const deadline = Date.now() + LEASE_WAIT_MS;
 	while (Date.now() < deadline) {
 		const records = findLeaseRecords(stateRoot);
 		if (predicate(records)) {
@@ -161,7 +187,7 @@ async function waitForExit(child: ChildProcess): Promise<{ code: number | null; 
 		const timeout = setTimeout(() => {
 			child.kill("SIGKILL");
 			reject(new Error(`CLI timed out. Stderr: ${stderrByChild.get(child) ?? ""}`));
-		}, 25_000);
+		}, CLI_EXIT_WAIT_MS);
 		child.once("error", (error) => {
 			clearTimeout(timeout);
 			reject(error);
@@ -181,48 +207,60 @@ function startPersistentCli(dirs: CliDirs, extraArgs: string[] = []): ChildProce
 const REFUSAL = "Another Apex Code session is already running here";
 
 describe.skipIf(process.platform === "win32")("concurrent session startup gate", () => {
-	it("refuses to start while another real session holds the working directory", async () => {
-		const dirs = setup();
-		const first = startPersistentCli(dirs);
-		const [firstLease] = await waitForLeases(dirs, (records) => records.length === 1);
-		expect(first.exitCode).toBeNull();
+	it(
+		"refuses to start while another real session holds the working directory",
+		async () => {
+			const dirs = setup();
+			const first = startPersistentCli(dirs);
+			const [firstLease] = await waitForLeases(dirs, (records) => records.length === 1);
+			expect(first.exitCode).toBeNull();
 
-		const second = startCli(["-p", "hi", "--permission-mode", "dontAsk"], dirs);
-		const result = await waitForExit(second);
+			const second = startCli(["-p", "hi", "--permission-mode", "dontAsk"], dirs);
+			const result = await waitForExit(second);
 
-		expect(result.stderr).toContain(REFUSAL);
-		expect(result.stderr).toContain(`pid ${firstLease.lease.pid}`);
-		expect(result.code).toBe(1);
-	}, 30_000);
+			expect(result.stderr).toContain(REFUSAL);
+			expect(result.stderr).toContain(`pid ${firstLease.lease.pid}`);
+			expect(result.code).toBe(1);
+		},
+		TEST_TIMEOUT_MS,
+	);
 
-	it("starts a second real session when the operator passes --allow-concurrent", async () => {
-		const dirs = setup();
-		const first = startPersistentCli(dirs);
-		await waitForLeases(dirs, (records) => records.length === 1);
+	it(
+		"starts a second real session when the operator passes --allow-concurrent",
+		async () => {
+			const dirs = setup();
+			const first = startPersistentCli(dirs);
+			await waitForLeases(dirs, (records) => records.length === 1);
 
-		const second = startPersistentCli(dirs, ["--allow-concurrent"]);
-		await waitForLeases(dirs, (records) => records.length === 2);
+			const second = startPersistentCli(dirs, ["--allow-concurrent"]);
+			await waitForLeases(dirs, (records) => records.length === 2);
 
-		expect(first.exitCode).toBeNull();
-		expect(second.exitCode).toBeNull();
-		expect(stderrByChild.get(second)).not.toContain(REFUSAL);
-	}, 30_000);
+			expect(first.exitCode).toBeNull();
+			expect(second.exitCode).toBeNull();
+			expect(stderrByChild.get(second)).not.toContain(REFUSAL);
+		},
+		TEST_TIMEOUT_MS,
+	);
 
-	it("starts normally and reclaims the lease once the other real session is gone", async () => {
-		const dirs = setup();
-		const first = startPersistentCli(dirs);
-		const [firstLease] = await waitForLeases(dirs, (records) => records.length === 1);
-		await stopChild(first);
+	it(
+		"starts normally and reclaims the lease once the other real session is gone",
+		async () => {
+			const dirs = setup();
+			const first = startPersistentCli(dirs);
+			const [firstLease] = await waitForLeases(dirs, (records) => records.length === 1);
+			await stopChild(first);
 
-		const second = startPersistentCli(dirs);
-		const [secondLease] = await waitForLeases(
-			dirs,
-			(records) => records.length === 1 && records[0]?.lease.pid !== firstLease.lease.pid,
-		);
+			const second = startPersistentCli(dirs);
+			const [secondLease] = await waitForLeases(
+				dirs,
+				(records) => records.length === 1 && records[0]?.lease.pid !== firstLease.lease.pid,
+			);
 
-		expect(second.exitCode).toBeNull();
-		expect(stderrByChild.get(second)).not.toContain(REFUSAL);
-		expect(secondLease.lease.pid).not.toBe(firstLease.lease.pid);
-		expect(existsSync(firstLease.path)).toBe(false);
-	}, 30_000);
+			expect(second.exitCode).toBeNull();
+			expect(stderrByChild.get(second)).not.toContain(REFUSAL);
+			expect(secondLease.lease.pid).not.toBe(firstLease.lease.pid);
+			expect(existsSync(firstLease.path)).toBe(false);
+		},
+		TEST_TIMEOUT_MS,
+	);
 });

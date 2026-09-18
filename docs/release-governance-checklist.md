@@ -90,6 +90,38 @@ Revisit this if `release.mjs` ever changes what it commits beyond the version an
 changelog, or if release authority stops being a sole maintainer under ADR 0014's succession
 process. Routing releases through a pull request is the fix if either happens.
 
+### The `npm` environment has no required reviewers
+
+Decided, not overlooked. The environment gates publication on a `v*` tag and nothing else; no
+human approval stands between `npm run release:minor` and a live publish.
+
+Release authority is a single person under ADR 0014. A required reviewer would therefore be
+that same person approving their own deployment, which is a self-approval wearing a review's
+clothes. It would add a prompt to every release and stop nothing, because whoever can create
+the tag can also click the button.
+
+What does the work instead is a chain of automated gates that a person clicking approve would
+not replicate. Publication authenticates through npm Trusted Publishing over OIDC with no
+stored credential, so there is no token to leak or reuse. The workflow validates that the tag
+identifies the commit it claims. A packed-artifact smoke test runs on macOS before publication,
+a clean install is verified after it, and registry state is checked against the tag's commit
+SHA once both publish steps finish. Only `publish-binaries` holds `contents: write`.
+
+The environment's `v*` tag restriction is load-bearing for the above and was absent until it
+was added ahead of `v0.3.0`; every release through `v0.2.1` ran against an environment with no
+branch or tag policy at all. `v0.3.0` is the first release to exercise the restriction, and it
+published cleanly through it.
+
+What this costs is worth naming rather than leaving implicit. A required reviewer on a second
+account is the only gate that would stop a compromised maintainer machine from publishing,
+since the tag push and any approval would otherwise both originate there. That gate does not
+exist and cannot exist while there is one maintainer. The window between tag push and publish
+is the last point at which a release could be stopped, and nothing watches it.
+
+Revisit this the moment a second maintainer exists under ADR 0014's succession process. That
+is exactly when a required reviewer stops being a self-approval and becomes a real one, and it
+is the cheapest point at which to turn it on.
+
 ## Reviewing this checklist
 
 Re-check this list whenever `.github/workflows/release.yml`'s `environment:` name changes, a
