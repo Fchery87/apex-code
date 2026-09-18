@@ -31,6 +31,7 @@ import {
 	getEffortLayout,
 	NO_EFFORT_CLUSTER,
 	renderPricePanel,
+	type TrailingSegment,
 } from "./model-row.ts";
 
 interface ModelItem {
@@ -427,19 +428,24 @@ export class ModelSelectorComponent extends Container implements Focusable {
 	}
 
 	/**
-	 * Context that trails a model row, right-aligned, in drop-first order.
+	 * Context that trails a model row, right-aligned, in reading order.
 	 *
-	 * The id is last because it is the row's identity: everything in front of it
-	 * is context that can be squeezed out before the row stops being readable.
+	 * Each segment carries what it costs to lose, because a narrow row drops by
+	 * that and not by position. `current` outranks the id: the row already shows
+	 * the model's name, so the id is largely recoverable from it, while nothing
+	 * else on screen says which model the session is on. The provider badge goes
+	 * first, being the least you lose.
 	 */
-	private getTrailingSegments(item: ModelItem): string[] {
-		const segments: string[] = [];
+	private getTrailingSegments(item: ModelItem): TrailingSegment[] {
+		const segments: TrailingSegment[] = [];
 		if (this.step.kind === "models" && this.step.provider === null) {
-			segments.push(theme.fg("muted", item.provider));
+			segments.push({ text: theme.fg("muted", item.provider), priority: 0 });
 		}
-		segments.push(theme.fg("muted", item.id));
-		if (this.isDefaultModel(item.model)) segments.push(theme.fg("muted", "default"));
-		if (modelsAreEqual(this.currentModel, item.model)) segments.push(theme.fg("success", "current"));
+		segments.push({ text: theme.fg("muted", item.id), priority: 2 });
+		if (this.isDefaultModel(item.model)) segments.push({ text: theme.fg("muted", "default"), priority: 1 });
+		if (modelsAreEqual(this.currentModel, item.model)) {
+			segments.push({ text: theme.fg("success", "current"), priority: 3 });
+		}
 		return segments;
 	}
 

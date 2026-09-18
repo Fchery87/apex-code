@@ -8,13 +8,18 @@ import {
 	getTrailingWidth,
 	NO_EFFORT_CLUSTER,
 	renderPricePanel,
+	type TrailingSegment,
 } from "../src/modes/interactive/components/model-row.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
 const LEVELS: ModelThinkingLevel[] = ["off", "minimal", "low", "medium", "high"];
 
-function reasoningRow(name: string, trailing: string[] = ["claude-opus-5"]): EffortLayoutRow {
+const ID = (text: string): TrailingSegment => ({ text, priority: 2 });
+const PROVIDER = (text: string): TrailingSegment => ({ text, priority: 0 });
+const CURRENT = (text: string): TrailingSegment => ({ text, priority: 3 });
+
+function reasoningRow(name: string, trailing: TrailingSegment[] = [ID("claude-opus-5")]): EffortLayoutRow {
 	return { name, levels: LEVELS, trailingSegments: trailing };
 }
 
@@ -23,10 +28,41 @@ describe("model row", () => {
 		initTheme("dark");
 	});
 
-	it("drops trailing context from the front so the id survives a squeeze", () => {
-		const segments = ["anthropic", "claude-opus-5"];
+	it("drops the cheapest context first, not the leftmost", () => {
+		const segments = [PROVIDER("anthropic"), ID("claude-opus-5")];
 		expect(getTrailingWidth(segments, 120)).toBe(visibleWidth("anthropic · claude-opus-5"));
 		expect(getTrailingWidth(segments, 30)).toBe(visibleWidth("claude-opus-5"));
+	});
+
+	it("keeps the active marker over the id, which the row's name already implies", () => {
+		// Reading order stays id-then-status; only the drop order is by priority.
+		const segments = [ID("claude-sonnet-4-5"), CURRENT("current")];
+		const wide = stripAnsi(
+			composeModelRow({
+				name: "Claude Sonnet 4.5",
+				levels: [],
+				effort: undefined,
+				trailingSegments: segments,
+				selected: false,
+				layout: NO_EFFORT_CLUSTER,
+				width: 80,
+			}),
+		);
+		expect(wide).toMatch(/claude-sonnet-4-5 · current$/);
+
+		const narrow = stripAnsi(
+			composeModelRow({
+				name: "Claude Sonnet 4.5",
+				levels: [],
+				effort: undefined,
+				trailingSegments: segments,
+				selected: false,
+				layout: NO_EFFORT_CLUSTER,
+				width: 30,
+			}),
+		);
+		expect(narrow).toContain("current");
+		expect(narrow).not.toContain("claude-sonnet-4-5");
 	});
 
 	it("gives up the effort label before the cluster itself", () => {
@@ -38,7 +74,7 @@ describe("model row", () => {
 	});
 
 	it("has no cluster at all when nothing on the page has effort to dial", () => {
-		const rows: EffortLayoutRow[] = [{ name: "GPT-5", levels: [], trailingSegments: ["gpt-5"] }];
+		const rows: EffortLayoutRow[] = [{ name: "GPT-5", levels: [], trailingSegments: [ID("gpt-5")] }];
 
 		expect(getEffortLayout(rows, 120)).toEqual(NO_EFFORT_CLUSTER);
 	});
@@ -49,7 +85,7 @@ describe("model row", () => {
 				name: "Claude Opus 5",
 				levels: [],
 				effort: undefined,
-				trailingSegments: ["anthropic", "claude-opus-5"],
+				trailingSegments: [PROVIDER("anthropic"), ID("claude-opus-5")],
 				selected: true,
 				layout: NO_EFFORT_CLUSTER,
 				width: 60,
@@ -68,7 +104,7 @@ describe("model row", () => {
 					name: "Claude Opus 5",
 					levels: LEVELS,
 					effort,
-					trailingSegments: ["claude-opus-5"],
+					trailingSegments: [ID("claude-opus-5")],
 					selected: true,
 					layout: getEffortLayout(rows, 120),
 					width: 120,

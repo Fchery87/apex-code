@@ -70,21 +70,39 @@ export interface EffortLayoutRow {
 	name: string;
 	/** Selectable thinking levels, empty when the model has no reasoning to dial. */
 	levels: ReadonlyArray<ModelThinkingLevel>;
-	trailingSegments: ReadonlyArray<string>;
+	trailingSegments: ReadonlyArray<TrailingSegment>;
 }
 
 /**
- * Drop trailing segments from the front until the cluster fits its budget.
+ * One piece of a row's trailing context, with what it costs to lose.
  *
- * The last segment is the one that identifies the row, so it is the one that
- * survives; the provider badge and status words in front of it are context.
+ * Reading order and dropping order are not the same thing. `id · current` reads
+ * correctly in that order, but under a squeeze `current` is the segment worth
+ * keeping, because the row already carries the model's name and the id is
+ * recoverable from it, while which model is active is not shown anywhere else.
+ * Dropping purely from the front would have kept the wrong one.
  */
-function reduceTrailingSegments(segments: ReadonlyArray<string>, budget: number): string[] {
-	let current = segments.filter((segment) => visibleWidth(segment) > 0);
-	while (current.length > 1 && visibleWidth(current.join(" · ")) > budget) {
-		current = current.slice(1);
+export interface TrailingSegment {
+	text: string;
+	/** Lower drops first. */
+	priority: number;
+}
+
+/** Drop the least valuable segments until the cluster fits, preserving reading order. */
+function reduceTrailingSegments(segments: ReadonlyArray<TrailingSegment>, budget: number): TrailingSegment[] {
+	let current = segments.filter((segment) => visibleWidth(segment.text) > 0);
+	while (current.length > 1 && visibleWidth(joinSegments(current)) > budget) {
+		let weakest = 0;
+		for (let i = 1; i < current.length; i++) {
+			if ((current[i]?.priority ?? 0) < (current[weakest]?.priority ?? 0)) weakest = i;
+		}
+		current = current.filter((_, i) => i !== weakest);
 	}
 	return current;
+}
+
+function joinSegments(segments: ReadonlyArray<TrailingSegment>): string {
+	return segments.map((segment) => segment.text).join(theme.fg("borderMuted", " · "));
 }
 
 function trailingBudget(width: number): number {
@@ -92,18 +110,18 @@ function trailingBudget(width: number): number {
 }
 
 /** Rendered width of a trailing cluster, degraded and truncated exactly as {@link renderTrailing} will. */
-export function getTrailingWidth(segments: ReadonlyArray<string>, width: number): number {
+export function getTrailingWidth(segments: ReadonlyArray<TrailingSegment>, width: number): number {
 	const budget = trailingBudget(width);
 	const reduced = reduceTrailingSegments(segments, budget);
 	if (reduced.length === 0) return 0;
-	return Math.min(visibleWidth(reduced.join(" · ")), budget);
+	return Math.min(visibleWidth(joinSegments(reduced)), budget);
 }
 
-function renderTrailing(segments: ReadonlyArray<string>, width: number): string {
+function renderTrailing(segments: ReadonlyArray<TrailingSegment>, width: number): string {
 	const budget = trailingBudget(width);
 	const reduced = reduceTrailingSegments(segments, budget);
 	if (reduced.length === 0) return "";
-	return truncateToWidth(reduced.join(theme.fg("borderMuted", " · ")), budget, "…");
+	return truncateToWidth(joinSegments(reduced), budget, "…");
 }
 
 /**
@@ -172,7 +190,7 @@ export interface ModelRowOptions {
 	name: string;
 	levels: ReadonlyArray<ModelThinkingLevel>;
 	effort: ModelThinkingLevel | undefined;
-	trailingSegments: ReadonlyArray<string>;
+	trailingSegments: ReadonlyArray<TrailingSegment>;
 	selected: boolean;
 	layout: EffortLayout;
 	width: number;
