@@ -15,6 +15,20 @@ function createFakeTui(): TUI {
 	return { requestRender: () => {} } as unknown as TUI;
 }
 
+/**
+ * Wide enough that the rendered file path never wraps.
+ *
+ * The header carries an absolute path, and a temp directory is far longer on
+ * macOS than on Linux. At a narrow width the wrap point is length-dependent and
+ * lands mid-filename there, which split `greet.ts` across two lines and failed
+ * only on that platform. Nothing here is about narrow layout, so give it room.
+ */
+const RENDER_WIDTH = 200;
+
+function render(component: ToolExecutionComponent): string {
+	return stripAnsi(component.render(RENDER_WIDTH).join("\n"));
+}
+
 describe("conversation detail cycle", () => {
 	it("cycles overview, details, all, and wraps", () => {
 		expect(nextChatDetail("overview")).toBe("details");
@@ -81,9 +95,9 @@ describe("edit diffs under the detail cycle", () => {
 		component.markExecutionStarted();
 		component.updateResult(await definition.execute("t1", args), false);
 		// The call renderer computes its diff preview asynchronously.
-		await vi.waitFor(() => expect(stripAnsi(component.render(90).join("\n"))).toContain("greet.ts"));
+		await vi.waitFor(() => expect(render(component)).toContain("greet.ts"));
 		component.setEditDiffsExpanded(editDiffsExpanded);
-		return stripAnsi(component.render(90).join("\n"));
+		return render(component);
 	}
 
 	it("reduces a diff to its line counts when diffs are collapsed", async () => {
