@@ -122,10 +122,19 @@ function findLeaseRecords(root: string): LeaseRecord[] {
 	return records;
 }
 
-/** How long a spawned CLI gets to write its lease. */
-const LEASE_WAIT_MS = 20_000;
-/** How long a spawned CLI gets to exit on its own. */
-const CLI_EXIT_WAIT_MS = 25_000;
+/**
+ * How long a spawned CLI gets to write its lease.
+ *
+ * A deadline, not a budget. The wait polls every 25ms and returns the moment
+ * the lease appears, so a generous value costs nothing when the machine is
+ * healthy; it only bounds how long a genuinely broken case takes to fail.
+ * Sized as though it were a budget, it became the binding constraint whenever
+ * the suite saturated the machine, because these tests spawn real Node CLIs
+ * and are the first thing starved when every core is already busy.
+ */
+const LEASE_WAIT_MS = 60_000;
+/** How long a spawned CLI gets to exit on its own. Same reasoning. */
+const CLI_EXIT_WAIT_MS = 45_000;
 /**
  * Each test's budget, derived from the waits it performs rather than set by hand.
  *
