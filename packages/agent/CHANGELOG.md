@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Repeated identical failed tool calls could consume the turn budget without making progress.** The agent now bounds repeated identical failures, resets the guard after successful work or steering, and returns a structured local error when the bound is reached.
+
 ## [0.3.0] - 2026-09-18
 
 ## [0.2.1] - 2026-09-16

@@ -57,7 +57,9 @@ const bashSchemaProperties = {
 		description:
 			"Handle from a background launch. Supply it alone to retrieve output and status; add kill: true to terminate.",
 	}),
-	kill: Type.Literal(true, { description: "Set to true with a background handle to terminate its command." }),
+	kill: Type.Boolean({
+		description: "Set to true only with a background handle to terminate its command; otherwise omit or use false.",
+	}),
 };
 
 const bashSchema = toolUnion(
@@ -66,8 +68,9 @@ const bashSchema = toolUnion(
 			command: Type.String(),
 			timeout: Type.Optional(Type.Number()),
 			background: Type.Optional(Type.Boolean()),
+			kill: Type.Optional(Type.Literal(false)),
 		}),
-		Type.Object({ handle: Type.String() }),
+		Type.Object({ handle: Type.String(), kill: Type.Optional(Type.Literal(false)) }),
 		Type.Object({ handle: Type.String(), kill: Type.Literal(true) }),
 	],
 	bashSchemaProperties,

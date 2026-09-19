@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Custom `openai-responses` models now default to strict tool schemas.** `supportsStrictMode` defaults to `true` for that API when omitted, with an explicit `false` opting out; other APIs are unchanged.
+- **The bash schema's `kill: false` branch is harmless.** Responses-compatible calls carrying the flag no longer fail schema validation or alter command behavior.
+- **Empty MCP calls now explain how to load their schema.** The local error points to the schema-loading guidance instead of failing without actionable context.
+
 ## [0.3.0] - 2026-09-18
 
 ### Changed

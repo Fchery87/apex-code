@@ -85,10 +85,10 @@ export function createMcpToolDefinition(
 			if (params.search !== undefined) return searchTools(params.search, params.server);
 			if (params.server) return listServer(params.server);
 
-			return {
-				content: text('Provide one of "search", "server", "describe", or "tool".'),
-				details: { action: "search", server: undefined, tool: undefined },
-			};
+			throw new Error(
+				'Provide one of "search", "server", "describe", or "tool". ' +
+					'If the parameters are unavailable, call tool_schema with {"name":"mcp"} first, then retry with an operation such as {"search":"keyword"}.',
+			);
 		},
 	};
 
