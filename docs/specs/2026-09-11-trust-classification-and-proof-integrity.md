@@ -90,7 +90,7 @@ Two smaller defects reach users directly. A crash during an edit truncates the u
 - [x] A project-scoped resource outside `.apex-code` reaches the classifier. `.mcp.json` at the repository root is the case that proves it.
 - [x] The ancestor `.agents/skills` walk survives the rewrite. A skills directory in a parent of the working directory still raises a prompt, and the user-level `~/.agents/skills` still does not.
 - [x] A resource that confers no authority does not raise a prompt. A `permissions.json` parsing to an empty scope is the case that proves it, and a resource that fails to parse does raise one.
-- [ ] `projectTrusted` is a required argument on the permission store, the settings manager, and the MCP runtime. No call site can omit it and receive trusted.
+- [x] `projectTrusted` is a required argument on the permission store, the settings manager, and the MCP runtime. No call site can omit it and receive trusted. [ADR 0034](../adr/0034-project-trust-is-a-required-argument.md). `SettingsManager.inMemory` is the one deliberate exclusion, recorded there: its storage holds only what the caller wrote, so there is no untrusted source to gate.
 - [x] ~~`read`, `grep`, `ls`, and `find` refuse the agent directory's `auth.json`.~~ Moved to the 2026-09-13 permission-gate recalibration spec and implemented there.
 - [ ] Every row of the 2026-09-05 confirmed-findings table has one committed probe that fails while the finding is open and passes once it is closed. Each probe names its row.
 - [ ] `docs/specs/2026-09-05-security-boundary-remediation.md` line 50 states what was actually verified, and the classifier half is tracked as open work rather than as a checked box.

@@ -66,7 +66,7 @@ const projectFormatter = [
 describe("policy settings ownership, precedence, and trust", () => {
 	it("is inert when no policies key exists anywhere", () => {
 		const { agentDir, projectDir } = scratchPair();
-		const manager = SettingsManager.create(projectDir, agentDir);
+		const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 		expect(manager.getGlobalSettings().policies).toBeUndefined();
 		expect(manager.getProjectSettings().policies).toBeUndefined();
@@ -77,7 +77,7 @@ describe("policy settings ownership, precedence, and trust", () => {
 	it("exposes user-level policies untouched", () => {
 		const { agentDir, projectDir } = scratchPair();
 		writeGlobal(agentDir, { policies: { schemaVersion: 1, verification: userVerification } });
-		const manager = SettingsManager.create(projectDir, agentDir);
+		const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 		const policies: PoliciesSettings | undefined = manager.getGlobalSettings().policies;
 		expect(policies?.schemaVersion).toBe(1);
@@ -90,7 +90,7 @@ describe("policy settings ownership, precedence, and trust", () => {
 		const { agentDir, projectDir } = scratchPair();
 		writeGlobal(agentDir, { policies: { schemaVersion: 1, verification: userVerification } });
 		writeProject(projectDir, { policies: { schemaVersion: 1, formatter: projectFormatter } });
-		const manager = SettingsManager.create(projectDir, agentDir);
+		const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 		expect(manager.isProjectTrusted()).toBe(true);
 		expect(manager.getProjectSettings().policies?.formatter?.[0]?.declaredPaths).toEqual(["src/**/*.ts"]);
@@ -119,7 +119,7 @@ describe("policy settings ownership, precedence, and trust", () => {
 	it("surfacing a malformed settings file keeps policies inert and drains a scoped error", () => {
 		const { agentDir, projectDir } = scratchPair();
 		writeFileSync(join(agentDir, "settings.json"), "{ not json", "utf-8");
-		const manager = SettingsManager.create(projectDir, agentDir);
+		const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 		expect(manager.getGlobalSettings().policies).toBeUndefined();
 		const errors = manager.drainErrors();
@@ -136,7 +136,7 @@ describe("policy settings ownership, precedence, and trust", () => {
 				formatter: projectFormatter,
 			},
 		});
-		SettingsManager.create(projectDir, agentDir);
+		SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 		const onDisk = JSON.parse(readFileSync(join(agentDir, "settings.json"), "utf-8")) as {
 			policies?: PoliciesSettings;

@@ -19,7 +19,7 @@ function settingsManager(global: Record<string, unknown>): SettingsManager {
 	mkdirSync(agentDir, { recursive: true });
 	mkdirSync(join(projectDir, ".apex-code"), { recursive: true });
 	writeFileSync(join(agentDir, "settings.json"), JSON.stringify(global));
-	return SettingsManager.create(projectDir, agentDir);
+	return SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 }
 
 describe("checkpoint settings", () => {

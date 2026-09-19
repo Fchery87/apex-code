@@ -28,6 +28,7 @@ function getContract(toolName: string) {
 
 function newParentStore(): FilePermissionRuleStore {
 	return new FilePermissionRuleStore({
+		projectTrusted: true,
 		cwd: join(scratch, "project"),
 		agentDir: join(scratch, "agent"),
 		policyPath: join(scratch, "missing-policy.json"),
@@ -116,6 +117,7 @@ describe("DerivedPermissionRuleStore", () => {
 
 	it("merges the parent's runtime-only sources (flag/cliArg) too, since they never touch disk either", async () => {
 		const parent = new FilePermissionRuleStore({
+			projectTrusted: true,
 			cwd: join(scratch, "project2"),
 			agentDir: join(scratch, "agent2"),
 			policyPath: join(scratch, "missing-policy2.json"),

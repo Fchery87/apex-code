@@ -34,13 +34,13 @@ afterEach(() => {
 function managerWith(settings: Record<string, unknown>): SettingsManager {
 	const { agentDir, projectDir } = scratchPair();
 	writeFileSync(join(agentDir, "settings.json"), JSON.stringify(settings), "utf-8");
-	return SettingsManager.create(projectDir, agentDir);
+	return SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 }
 
 describe("workspace state settings", () => {
 	it("defaults to metadata-only capture with bounded retention", () => {
 		const { agentDir, projectDir } = scratchPair();
-		const manager = SettingsManager.create(projectDir, agentDir);
+		const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 		expect(manager.getWorkspaceState()).toEqual({
 			patchCapture: "off",

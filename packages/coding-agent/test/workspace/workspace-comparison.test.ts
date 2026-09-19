@@ -170,7 +170,7 @@ describe("workspace comparison boundaries", () => {
 		writeFileSync(join(tempDir, "tracked.txt"), "one changed\n");
 
 		sessionManager = SessionManager.create(tempDir, sessionsDir);
-		settingsManager = SettingsManager.create(tempDir, tempDir);
+		settingsManager = SettingsManager.create(tempDir, tempDir, { projectTrusted: true });
 		settingsManager.applyOverrides({ compaction: { keepRecentTokens: 1 } });
 	});
 

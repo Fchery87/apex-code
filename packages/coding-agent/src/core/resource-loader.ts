@@ -254,7 +254,9 @@ export class DefaultResourceLoader implements ResourceLoader {
 	constructor(options: DefaultResourceLoaderOptions) {
 		this.cwd = resolvePath(options.cwd);
 		this.agentDir = resolvePath(options.agentDir);
-		this.settingsManager = options.settingsManager ?? SettingsManager.create(this.cwd, this.agentDir);
+		// The bootstrap pass is untrusted by design; `resolveProjectTrust` flips it below.
+		this.settingsManager =
+			options.settingsManager ?? SettingsManager.create(this.cwd, this.agentDir, { projectTrusted: false });
 		this.eventBus = options.eventBus ?? createEventBus();
 		this.packageManager = new DefaultPackageManager({
 			cwd: this.cwd,

@@ -2,7 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Project trust is now a required argument on the three loaders that read a checkout's own configuration.** `FilePermissionRuleStore`, `SettingsManager.create`, `SettingsManager.fromStorage`, and `createMcpRuntime` treated a missing `projectTrusted` as trusted, so a forgotten argument and a deliberate grant were the same value at the call site and in review. Omitting it is now a compile error for a TypeScript caller and a thrown `TypeError` for a JavaScript one, which is the break: an SDK caller constructing any of them directly must pass the decision. `SettingsManager.inMemory` is unchanged, because its storage holds only what the caller wrote into it and there is no untrusted source to gate. Making the argument required is what found the rest of this entry. See ADR 0034.
+
 ### Fixed
+
+- **A project could choose where its own session transcripts were written, before you trusted it.** Startup builds a settings manager before the trust store exists, and that manager read the merged global-and-project settings, so a cloned repository shipping `.apex-code/settings.json` with `sessionDir` set had that path honored with no trust decision anywhere in the sequence. It now reads global scope only. The cost is that a project-level `sessionDir` no longer applies at all, in a trusted project as well as an untrusted one, because the session manager is built before trust resolves and is not rebuilt afterward.
 
 - **Custom `openai-responses` models now default to strict tool schemas.** `supportsStrictMode` defaults to `true` for that API when omitted, with an explicit `false` opting out; other APIs are unchanged.
 - **The bash schema's `kill: false` branch is harmless.** Responses-compatible calls carrying the flag no longer fail schema validation or alter command behavior.

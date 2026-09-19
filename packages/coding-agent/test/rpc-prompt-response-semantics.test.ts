@@ -274,7 +274,7 @@ async function createRuntimeHost(options: {
 	});
 
 	const sessionManager = SessionManager.inMemory();
-	const settingsManager = SettingsManager.create(tempDir, tempDir);
+	const settingsManager = SettingsManager.create(tempDir, tempDir, { projectTrusted: true });
 	const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 	const modelRegistry = await createInMemoryModelRegistry(authStorage);
 	if (options.withAuth) {

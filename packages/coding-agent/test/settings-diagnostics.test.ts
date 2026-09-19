@@ -14,7 +14,9 @@ describe("settings diagnostics", () => {
 		writeFileSync(settingsPath, "{");
 
 		try {
-			const diagnostics = collectSettingsDiagnostics(SettingsManager.create(tempDir, agentDir));
+			const diagnostics = collectSettingsDiagnostics(
+				SettingsManager.create(tempDir, agentDir, { projectTrusted: true }),
+			);
 
 			expect(diagnostics).toHaveLength(1);
 			expect(diagnostics[0]?.type).toBe("warning");
@@ -31,7 +33,7 @@ describe("settings diagnostics", () => {
 				fn(undefined);
 			},
 		};
-		const diagnostics = collectSettingsDiagnostics(SettingsManager.fromStorage(storage));
+		const diagnostics = collectSettingsDiagnostics(SettingsManager.fromStorage(storage, { projectTrusted: true }));
 
 		expect(diagnostics).toEqual([{ type: "warning", message: "Invalid global settings: backend failed" }]);
 	});
@@ -63,7 +65,7 @@ describe("removed sandbox settings", () => {
 		mkdirSync(join(path, ".."), { recursive: true });
 		writeFileSync(path, JSON.stringify(settings));
 		try {
-			return collectSettingsDiagnostics(SettingsManager.create(tempDir, agentDir)).map(
+			return collectSettingsDiagnostics(SettingsManager.create(tempDir, agentDir, { projectTrusted: true })).map(
 				(diagnostic) => diagnostic.message,
 			);
 		} finally {
