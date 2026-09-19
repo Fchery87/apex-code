@@ -59,6 +59,7 @@ applies to every code unit. The plan is deleted on completion.
 | 8 | Permission preview + persist-a-refusal, add persist-denial test if missing, flip Draft to Landed | pending | test run, spec diffs, SHA |
 | 9 | Ember, Windows paths, shell-operation boundary, bash provider schema, verification runs then flip rows | pending | bench/suite logs, spec diffs, SHA |
 | 10 | Full gates, `npm test`, `npm run check`, `npm run check:docs`, roadmap consistency | pending | command outputs |
+| 11 | Release governance checklist, the trust spec's sixth open goal, absent from this plan's first draft | done | twelve items verified live via `gh api` and the npm registry on 2026-09-19 and ticked with evidence; two annotated as needing npm account access; `refresh-model-data.yml` found holding `contents: write` and recorded as a deviation |
 
 ## Verification discipline
 
