@@ -115,6 +115,21 @@ function unlinkUnder(parent: OpenDirectory, name: string): void {
 }
 
 /**
+ * The name of the sibling a publish stages into.
+ *
+ * It carries enough of the destination to be recognizable if a crash ever strands one, and
+ * a pid and a random suffix so two publishes in one directory cannot collide. The base is
+ * truncated to fit: a destination already at the filesystem's per-component limit would
+ * otherwise produce a staging name past it, and fail a write that truncate-in-place handled.
+ * 255 is the limit on every filesystem this runs on that has one at all.
+ */
+function stagingName(name: string): string {
+	const suffix = `.apex-${process.pid}-${randomUUID().slice(0, 8)}`;
+	const budget = 255 - suffix.length - 1;
+	return `.${name.slice(0, Math.max(1, budget))}${suffix}`;
+}
+
+/**
  * Write `content` to a sibling of `name` and rename it over `name`.
  *
  * The rename is the publish. Until it runs, `name` still refers to the old inode with all
@@ -127,9 +142,25 @@ function unlinkUnder(parent: OpenDirectory, name: string): void {
  * carried: a rename installs a file this process created, so a target owned by someone else
  * and merely writable by us changes owner. That is inherent to publishing by rename and is
  * the same trade the session store already makes.
+ *
+ * One guarantee narrows, and it is worth stating plainly rather than leaving for a reader to
+ * derive. ADR 0029's identity check still runs and still aborts on a mismatch, but it now
+ * proves the name referred to the authorized file at the moment of the check rather than at
+ * the moment of the write. Writing through the checked descriptor could not be redirected by
+ * a later swap; a rename can be, because it resolves the name again. The window is between
+ * the identity check and the rename, both anchored to the same validated parent descriptor,
+ * and exploiting it needs a local attacker placing a file at that exact name in a directory
+ * the call was already authorized to write. That is traded for crash safety, which is not a
+ * race: it is what every interrupted write did.
+ *
+ * Windows renames over a destination another process holds open without FILE_SHARE_DELETE
+ * will fail where an in-place write would have succeeded. The exchange is deliberate: an
+ * editor holding the file gets a clear failure instead of a silent partial overwrite, and
+ * the alternative is keeping the truncate window this exists to close. The session store
+ * has published this way on every platform for longer than this has.
  */
 function publishByRename(parent: OpenDirectory, name: string, content: string | Buffer, mode: number): void {
-	const temporary = `.${name}.apex-${process.pid}-${randomUUID().slice(0, 8)}`;
+	const temporary = stagingName(name);
 	let fd: number;
 	try {
 		fd = openUnder(
@@ -307,15 +338,18 @@ export function writePreparedPath(operation: PreparedPathOperation, content: str
  * hold the write to, and the no-follow walk would have nothing to check against.
  */
 export function writePathAtomically(filePath: string, content: string | Buffer): void {
-	const temporary = join(dirname(filePath), `.${basename(filePath)}.apex-${process.pid}-${randomUUID().slice(0, 8)}`);
-	let mode = 0o666;
+	const temporary = join(dirname(filePath), stagingName(basename(filePath)));
+	// Only an existing destination has a mode worth carrying. For a new file there is
+	// nothing to capture, and chmod'ing to the 0o666 open default would force past the
+	// caller's umask and publish a world-writable file, which `writeFile` never did.
+	let destinationMode: number | undefined;
 	try {
-		mode = statSync(filePath).mode & 0o7777;
+		destinationMode = statSync(filePath).mode & 0o7777;
 	} catch {}
-	const fd = openSync(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, mode);
+	const fd = openSync(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, destinationMode ?? 0o666);
 	try {
 		writeAll(fd, content);
-		fchmodSync(fd, mode);
+		if (destinationMode !== undefined) fchmodSync(fd, destinationMode);
 		closeSync(fd);
 	} catch (error) {
 		try {

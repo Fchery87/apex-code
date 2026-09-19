@@ -1,6 +1,6 @@
 # Spec: Trust classification and proof integrity
 
-**Status:** Active
+**Status:** Landed
 
 > **Reconciled with [ADR 0032](../adr/0032-no-built-in-sandbox.md) on 2026-09-13.** This spec
 > was written on 2026-09-11, while an OS boundary still existed. The boundary was deleted the
@@ -182,6 +182,36 @@ Branch protection is the item that is genuinely absent, and it is the one the ro
 
 `edit` and `write` publish through the same temp-file-and-rename path the session storage uses, preserving the destination mode so a rename does not silently reset permissions. The change belongs in `writePreparedPath`, not only in the two fallback branches, because the prepared path is the default and is the one that truncates. Its existing device and inode identity check has to survive, since that check is what makes the authorized target the written target. `bash` gains a generous default timeout, long enough that ordinary builds and test runs are unaffected, with the firing message naming both the explicit `timeout` argument and the background shell.
 
+### What publishing by rename costs
+
+ADR 0029 says authorization and execution share one prepared operation, and that execution
+pins the target by descriptor identity. Publishing by rename keeps the check and narrows what
+it proves.
+
+Writing through the checked descriptor could not be redirected: a swap after the check sent
+the bytes to the original inode, wherever its name had gone. A rename resolves the name again,
+so it proves the name referred to the authorized file at the moment of the check rather than at
+the moment of the write. The window is between the two, both anchored to the same validated
+parent descriptor.
+
+Exploiting it needs a local attacker placing a file at that exact name, in a directory the call
+was already authorized to write, inside that window. Crash safety is not a race: an interrupted
+write destroyed the file every time. The trade is deliberate and is recorded here rather than
+left for a reader to derive from the diff.
+
+### What the registry still could not see
+
+The path guard this spec landed matched a gated resource by its filename as a string. Two
+sites reached the same resource through `PROJECT_CONFIG_FILENAME` instead, so
+`core/mcp/runtime.ts` and `core/mcp/oauth/authorize.ts` composed `.mcp.json` paths in plain
+sight of the guard built to stop exactly that. Both now resolve through the registry, and the
+guard checks the identifiers that name a gated resource alongside the strings. It was proved
+by reintroducing the old line and watching it name the file and the line number.
+
+The authorize path is deliberately not trust-gated. `mcp auth <server>` is the user naming one
+server to authorize, which is the decision, and a one-shot command has no session trust state
+to consult instead. What was wrong was the path resolution, not the absence of a prompt.
+
 ## Deletion inventory
 
 | Item | Type | Disposition |
@@ -240,6 +270,21 @@ Required focused checks.
 - One required three-OS CI run on the finished branch, recorded by run id, after branch protection is enabled so the run is the gate rather than a report.
 
 Branch protection itself is verified by observing a pull request that cannot merge while a required job is red, and by one real tagged release that still publishes.
+
+## What was actually verified
+
+Recorded on completion, against the Verification list above. Where the plan and the result
+differ, the result is what is written.
+
+| Asked for | What happened |
+| --- | --- |
+| Compile-level proof `projectTrusted` cannot be omitted | `npx tsgo --noEmit` named 153 call sites the moment the argument became required. That enumeration is the proof, and it is also what found that none of the four production sites had a trust answer at its call point. |
+| One probe per 2026-09-05 row, each observed failing | Ten of the surviving rows already had public-boundary probes that already run, so ten more would have duplicated them. `test/security-boundary/findings-2026-09-05.test.ts` binds each row to the test that answers it and reads the table out of the research document, so a row added with no disposition fails. Nine rows are retired against ADR 0032, which deleted their subject. |
+| Atomic publish tests including a simulated crash between write and rename | Staging a crash is not deterministic. A reader holding a descriptor across the publish is: truncate-in-place mutates the inode it holds, a rename does not. That case plus mode preservation, inode replacement, a name at the filesystem's length limit, the umask case for a new ungated file, the surviving identity check, and no stranded temporary. The symlinked destination is covered by `test/permissions/canonical-authorization.test.ts`. |
+| `bash` timeout tests | Default firing, explicit larger, the message naming both escape hatches, the schema no longer claiming there is no default, and a background launch staying unbounded. Writing them found that the default lived in one backend rather than at the tool. |
+| `npx tsgo --noEmit`, narrow suites, `npm test`, `npm run check` | Typecheck clean throughout. `npm run check` passed in the pre-commit hook on every commit. Full-suite result recorded in the closing commit. |
+| One required three-OS CI run on the finished branch | **Not done, and not doable from here.** The work is unpushed, so no run id exists. This is the operator gate for the row. The rename-based publish is the part that most needs it: Windows fails a rename over a destination another process holds open without `FILE_SHARE_DELETE`, and no local run on Linux can observe that. |
+
 
 ## Rollout
 

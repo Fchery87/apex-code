@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
 	PreparedTargetChangedError,
 	preparePathOperation,
+	writePathAtomically,
 	writePreparedPath,
 } from "../../src/core/tools/path-utils.ts";
 
@@ -101,6 +102,34 @@ describe("edit and write publish atomically", () => {
 		const racedOperation = preparePathOperation(raced, dir);
 		writeFileSync(raced, "someone got here first");
 		expect(() => writePreparedPath(racedOperation, "created\n")).toThrow(PreparedTargetChangedError);
+	});
+
+	it("stages a replacement for a name that already fills the filesystem's limit", () => {
+		// The staged sibling carries a prefix and a suffix, so a base name near NAME_MAX
+		// produced a temporary name past it. Truncate-in-place had no such limit, which makes
+		// this a regression the rename introduced rather than one it inherited.
+		const target = join(dir, `${"n".repeat(250)}.txt`);
+		writeFileSync(target, original);
+		writePreparedPath(preparePathOperation(target, dir), "replacement\n");
+		expect(readFileSync(target, "utf-8")).toBe("replacement\n");
+	});
+
+	it("lets umask decide a new ungated file's mode, rather than forcing it world-writable", () => {
+		// `fsWriteFile` created with 0o666 masked by umask. Staging then chmod'ing to a
+		// captured mode is right for an existing destination and wrong for a new one: there
+		// is no destination to capture from, and forcing the fallback value defeats the mask.
+		const fresh = join(dir, "fresh.txt");
+		writePathAtomically(fresh, "created\n");
+		expect(readFileSync(fresh, "utf-8")).toBe("created\n");
+		expect(statSync(fresh).mode & 0o002, "a new file must not be world-writable").toBe(0);
+	});
+
+	it("carries an existing destination's mode through an ungated write too", () => {
+		const target = join(dir, "kept-mode.txt");
+		writeFileSync(target, original);
+		chmodSync(target, 0o600);
+		writePathAtomically(target, "replacement\n");
+		expect(statSync(target).mode & 0o777).toBe(0o600);
 	});
 
 	it("leaves no temporary file behind", () => {

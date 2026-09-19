@@ -97,8 +97,9 @@ window: a silent default is exactly what makes the omission invisible, so leavin
 for a release would preserve the defect for that release. The break is a compile error with the
 argument named, which is the cheapest possible form of it.
 
-`docs/user-guide.md` and the SDK examples pass the flag explicitly, so copied code carries the
-decision rather than inheriting it.
+The SDK examples pass the flag explicitly, so copied code carries the decision rather than
+inheriting it, and `examples/sdk/README.md` documents the new default and what it costs. The
+user guide is untouched: it does not reach these constructors.
 
 Trust is resolved once, at startup, by `core/trust-manager.ts`. This ADR does not change when
 that happens or what it decides. It changes only whether a constructor can proceed without the
