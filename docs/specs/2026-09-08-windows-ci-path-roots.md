@@ -1,6 +1,6 @@
 # Windows prepared paths and CI coverage
 
-**Status:** Active
+**Status:** Landed
 
 > **Reconciled with [ADR 0032](../adr/0032-no-built-in-sandbox.md) on 2026-09-13.** The
 > paragraph naming supervisor behavior and fail-closed selection already carries a

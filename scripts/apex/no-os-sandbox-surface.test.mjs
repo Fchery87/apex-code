@@ -63,6 +63,16 @@ const NAMING_EXEMPTIONS = new Map([
 		"packages/coding-agent/test/settings-diagnostics.test.ts",
 		["allowedHosts", "allowDefaultHosts", "sandboxProfiles"],
 	],
+	// The one file whose subject is the removal itself. It disposes of the 2026-09-05
+	// findings table, and nine of those rows named a supervisor, a Seatbelt profile, or
+	// another piece of the deleted boundary. Naming what a row described is how a reader
+	// can tell a retirement from an oversight, and the file's own case asserts
+	// `core/sandbox` is absent, so it fails the moment the boundary comes back. That is
+	// the opposite of the claim this guard exists to catch.
+	[
+		"packages/coding-agent/test/security-boundary/findings-2026-09-05.test.ts",
+		["supervisor", "Seatbelt"],
+	],
 ]);
 
 /**
@@ -182,6 +192,7 @@ async function offendersIn(directory) {
 		}
 		const lowered = text.toLowerCase();
 		for (const phrase of REMOVED_PHRASES) {
+			if (permitted.includes(phrase)) continue;
 			if (lowered.includes(phrase.toLowerCase())) offenders.push(`${relative(root, file)}: "${phrase}"`);
 		}
 	}

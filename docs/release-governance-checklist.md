@@ -28,6 +28,8 @@ than registry or repository API access. They are annotated rather than ticked.
       `enforce_admins` is deliberately `false`; see "Recorded deviations".
 - [x] **The `npm` deployment environment** (referenced by `.github/workflows/release.yml`'s
       `publish` job) exists and has:
+      *Verified 2026-09-19:* the environment exists, with one protection rule of type
+      `branch_policy`. The three sub-items below carry the rest.
   - [x] A deployment branch/tag policy restricted to `v*` tags — not "no restriction" and not
         `main` (a plain branch push must never be able to trigger `npm publish`).
         *Verified 2026-09-19:* the environment's only policy is `{"name": "v*", "type": "tag"}`,

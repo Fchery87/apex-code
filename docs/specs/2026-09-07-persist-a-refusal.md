@@ -1,6 +1,6 @@
 # Spec: A refusal that says "always" persists
 
-**Status:** Draft
+**Status:** Landed
 
 ## Metadata
 
@@ -56,11 +56,11 @@ pull request #90, one branch further down: the code silently ignores what the la
 
 ## Goals
 
-- [ ] A denial carrying `persist` writes a session-source deny rule built from
+- [x] A denial carrying `persist` writes a session-source deny rule built from
       `ruleForCall()`.
-- [ ] The next identical call resolves to deny from that rule, without asking.
-- [ ] A denial without `persist`, and a denial whose tool yields no rule, write nothing.
-- [ ] ACP offers `reject_always` only when a rule would actually be written, matching what
+- [x] The next identical call resolves to deny from that rule, without asking.
+- [x] A denial without `persist`, and a denial whose tool yields no rule, write nothing.
+- [x] ACP offers `reject_always` only when a rule would actually be written, matching what
       pull request #90 already did for `allow_always`.
 
 ## Non-goals

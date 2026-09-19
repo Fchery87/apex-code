@@ -1,6 +1,6 @@
 # Spec: Recalibrate the permission gate for a harness with no boundary
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 
@@ -49,20 +49,44 @@ Neither is a containment failure, because there is no containment to fail. Both 
 
 ## Goals
 
-- [ ] `acceptEdits` auto-allows a write only when the target resolves inside the workspace. A target outside it falls through to the behavior the rules and the mode would otherwise give, which is `ask`.
-- [ ] The workspace test resists a symlink. A path inside the workspace that resolves outside it is outside it.
-- [ ] `acceptEdits` is described in terms that match what it does, in the settings selector and in `README.md`.
-- [ ] `read`, `grep`, `ls`, and `find` refuse the agent directory's `auth.json` without an explicit decision, and that refusal is not expressible as a project or local rule. A directory that contains the file is refused on the same terms, because the recursive tools reach it by naming a parent.
-- [ ] The refusal names the file and states the alternative, so a user who legitimately wants that content knows how to supply it.
-- [ ] Every change above is pinned by a probe that drives a real session, not a unit call, and each probe is observed failing before its fix lands.
+- [x] `acceptEdits` auto-allows a write only when the target resolves inside the workspace. A target outside it falls through to the behavior the rules and the mode would otherwise give, which is `ask`.
+- [x] The workspace test resists a symlink. A path inside the workspace that resolves outside it is outside it.
+- [x] `acceptEdits` is described in terms that match what it does, in the settings selector and in `README.md`.
+- [x] `read`, `grep`, `ls`, and `find` refuse the agent directory's `auth.json` without an explicit decision, and that refusal is not expressible as a project or local rule. A directory that contains the file is refused on the same terms, because the recursive tools reach it by naming a parent.
+- [x] The refusal names the file and states the alternative, so a user who legitimately wants that content knows how to supply it.
+- [x] Every change above is pinned by a probe that drives a real session, not a unit call, and each probe is observed failing before its fix lands.
 
 ## Non-goals
 
 - [ ] This does not revisit the read-shaped tools' `allow` default in general. Reading source is the ordinary case and prompting for it would make the harness unusable. Only the credential file is refused.
 - [ ] This does not add containment. ADR 0032 settled that, and nothing here confines a subprocess, an extension, or a path reached outside the tool gate.
-- [ ] This does not gate `AGENTS.md` or `CLAUDE.md` through project trust. That remains open and belongs with the trust classifier, not with the gate.
+- [ ] This does not gate `AGENTS.md` or `CLAUDE.md` through project trust. That belongs with the trust classifier, not with the gate, and was closed there on 2026-09-19 by [the trust classification spec](2026-09-11-trust-classification-and-proof-integrity.md).
 - [ ] This does not change `bash`. Its grammar-sensitive matcher already fails closed and is the part of the gate that was built to be load-bearing.
 - [ ] This does not encrypt `auth.json`. Refusing a read path is not key management, and pretending otherwise would be the failure class `2026-08-29-documented-surfaces-that-do-not-exist.md` exists to prevent.
+
+## Landed
+
+Two slices, both on `main`.
+
+`18697ca93` carries the workspace predicate, the `PermissionSpec.withinWorkspace` hook, the gate
+and mode wiring, the settings-selector and `README.md` description fixes, and the kept probe at
+`test/security-boundary/accept-edits-workspace-scope.test.ts`. Its probe was observed failing at
+`b03588f76`: two of four cases failed and both controls passed in either state. `6a0070e6f`
+repairs the dangling-symlink hole found in review.
+
+`631b2da55` carries `core/permissions/protected-paths.ts`, the `PermissionSpec.protectedTarget`
+hook, the gate and mode wiring, the refusal message, and the kept probe at
+`test/security-boundary/credential-read-refusal.test.ts`. Its probe was observed failing at
+`3a4ad051a`, seven of eight cases.
+
+The plan recorded the dangling-symlink repair as `27859f482`, which is not an ancestor of `main`.
+That hash predates a rebase and the landed commit is `6a0070e6f`. AGENTS.md requires verifying a
+SHA before writing it down; this one was not re-verified after the rebase, and correcting it is
+part of closing the row rather than a footnote to it.
+
+Not covered by three-OS CI as a closure run: the work landed through pull requests #103 and #104,
+each of which passed the four required checks, and no separate closure run was taken at the
+merged head.
 
 ## Design
 
