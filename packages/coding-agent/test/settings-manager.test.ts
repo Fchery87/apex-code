@@ -636,11 +636,14 @@ describe("SettingsManager", () => {
 			expect(manager.getSessionDir()).toBe("/tmp/sessions");
 		});
 
-		it("should return project sessionDir, overriding global", () => {
+		// Flipped on 2026-09-19. This asserted a project could redirect where its own session
+		// transcripts land, which is an exfiltration primitive rather than a preference, and
+		// startup reads the value before trust is resolved anyway. `sessionDir` is the user's.
+		it("should ignore a project sessionDir and keep the user's", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ sessionDir: "/global/sessions" }));
 			writeFileSync(join(projectDir, ".apex-code", "settings.json"), JSON.stringify({ sessionDir: "./sessions" }));
 			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
-			expect(manager.getSessionDir()).toBe("./sessions");
+			expect(manager.getSessionDir()).toBe("/global/sessions");
 		});
 
 		it("should expand ~ in sessionDir", () => {

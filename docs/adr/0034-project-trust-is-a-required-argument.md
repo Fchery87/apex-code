@@ -68,10 +68,15 @@ invisible omissions into four stated answers.
 `.apex-code/settings.json` before any trust decision existed. A cloned repository could choose
 where that session's transcripts were written. It now reads global scope only.
 
-The cost is that a project-level `sessionDir` no longer applies, for a trusted project as well as
-an untrusted one, because the session manager is built before trust resolves and is not rebuilt
-after. Re-reading it post-decision is the fix if anyone wants the setting back; it is a startup
-ordering change rather than a line, so it is not made here.
+Re-reading it after the decision was considered and rejected. A transcript carries everything the
+session saw, so a project choosing where one lands is an exfiltration primitive that needs no
+cooperation from the model. There is no point in startup where honoring a project's value would be
+both safe and possible: before the decision there is nothing to consult, and after it the setting
+still lets a repository name the directory its own transcripts are written to.
+
+`sessionDir` is therefore a global setting, like `defaultProjectTrust`, and a project's value is
+ignored whether or not the project is trusted. A test asserted the old precedence, which is how it
+survived; it is flipped with the reason recorded beside it.
 
 ## Scope, and one deliberate exclusion
 

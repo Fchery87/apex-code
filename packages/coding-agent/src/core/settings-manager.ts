@@ -249,7 +249,7 @@ export interface Settings {
 	showHardwareCursor?: boolean; // Show terminal cursor while still positioning it for IME
 	markdown?: MarkdownSettings;
 	warnings?: WarningSettings;
-	sessionDir?: string; // Custom session storage directory (same format as --session-dir CLI flag)
+	sessionDir?: string; // Custom session storage directory (same format as --session-dir CLI flag); global setting only
 	httpProxy?: string; // Proxy URL applied as HTTP_PROXY and HTTPS_PROXY for Pi-managed HTTP clients
 	httpIdleTimeoutMs?: number; // HTTP header/body idle timeout in milliseconds; 0 disables it
 	websocketConnectTimeoutMs?: number; // WebSocket connect/open handshake timeout in milliseconds; 0 disables it
@@ -973,7 +973,12 @@ export class SettingsManager {
 	}
 
 	getSessionDir(): string | undefined {
-		const sessionDir = this.settings.sessionDir;
+		// Global scope only. A transcript carries everything the session saw, so a project
+		// that could choose where one is written could have it written somewhere the project
+		// reads or commits. Startup also reads this before trust is resolved, because the
+		// session manager is built before the trust store exists, so there is no point in the
+		// sequence where honoring a project's value would be both safe and possible.
+		const sessionDir = this.globalSettings.sessionDir;
 		return sessionDir ? normalizePath(sessionDir) : sessionDir;
 	}
 
