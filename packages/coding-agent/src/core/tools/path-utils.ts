@@ -1,15 +1,18 @@
+import { randomUUID } from "node:crypto";
 import {
 	accessSync,
 	closeSync,
 	constants,
 	existsSync,
+	fchmodSync,
 	fstatSync,
-	ftruncateSync,
 	mkdirSync,
 	openSync,
 	readSync,
 	realpathSync,
+	renameSync,
 	statSync,
+	unlinkSync,
 	writeSync,
 } from "node:fs";
 import { access } from "node:fs/promises";
@@ -97,6 +100,65 @@ interface OpenDirectory {
 function openUnder(parent: OpenDirectory, name: string, flags: number, mode?: number): number {
 	if (useProcFd()) return openSync(`${PROC_FD}/${parent.fd}/${name}`, flags, mode);
 	return openSync(join(parent.path, name), flags, mode);
+}
+
+function renameUnder(parent: OpenDirectory, from: string, to: string): void {
+	if (useProcFd()) renameSync(`${PROC_FD}/${parent.fd}/${from}`, `${PROC_FD}/${parent.fd}/${to}`);
+	else renameSync(join(parent.path, from), join(parent.path, to));
+}
+
+function unlinkUnder(parent: OpenDirectory, name: string): void {
+	try {
+		if (useProcFd()) unlinkSync(`${PROC_FD}/${parent.fd}/${name}`);
+		else unlinkSync(join(parent.path, name));
+	} catch {}
+}
+
+/**
+ * Write `content` to a sibling of `name` and rename it over `name`.
+ *
+ * The rename is the publish. Until it runs, `name` still refers to the old inode with all
+ * of its old bytes, so a crash, a full disk, or a kill mid-write destroys nothing. The
+ * caller has already proved that `name` refers to the authorized target; this only decides
+ * how the bytes arrive.
+ *
+ * `mode` is the destination's, captured from the descriptor the identity check used, so a
+ * publish does not quietly reset a file's permissions to the temp file's. Ownership is not
+ * carried: a rename installs a file this process created, so a target owned by someone else
+ * and merely writable by us changes owner. That is inherent to publishing by rename and is
+ * the same trade the session store already makes.
+ */
+function publishByRename(parent: OpenDirectory, name: string, content: string | Buffer, mode: number): void {
+	const temporary = `.${name}.apex-${process.pid}-${randomUUID().slice(0, 8)}`;
+	let fd: number;
+	try {
+		fd = openUnder(
+			parent,
+			temporary,
+			constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+			mode,
+		);
+	} catch (error) {
+		throw new PreparedTargetChangedError("Authorized write could not stage its replacement", { cause: error });
+	}
+	try {
+		writeAll(fd, content);
+		// The create mode passes through umask; the destination's mode does not.
+		fchmodSync(fd, mode);
+		closeSync(fd);
+	} catch (error) {
+		try {
+			closeSync(fd);
+		} catch {}
+		unlinkUnder(parent, temporary);
+		throw error;
+	}
+	try {
+		renameUnder(parent, temporary, name);
+	} catch (error) {
+		unlinkUnder(parent, temporary);
+		throw new PreparedTargetChangedError("Authorized write target changed before execution", { cause: error });
+	}
 }
 
 function mkdirUnder(parent: OpenDirectory, name: string): void {
@@ -199,18 +261,22 @@ export function writePreparedPath(operation: PreparedPathOperation, content: str
 			} catch (error) {
 				throw new PreparedTargetChangedError("Authorized write target changed before execution", { cause: error });
 			}
+			let mode: number;
 			try {
 				const stats = fstatSync(fd);
 				if (stats.dev !== operation.identity.device || stats.ino !== operation.identity.inode) {
 					throw new PreparedTargetChangedError("Authorized write target changed before execution");
 				}
-				ftruncateSync(fd, 0);
-				writeAll(fd, content);
+				mode = stats.mode & 0o7777;
 			} finally {
 				closeSync(fd);
 			}
+			publishByRename(parent, name, content, mode);
 			return;
 		}
+		// The exclusive create is what proves the name was still absent, which is the whole
+		// authorization for a new-file write. It reserves the name; the rename below then
+		// replaces that empty placeholder, so the name never holds a half-written file.
 		let fd: number;
 		try {
 			fd = openUnder(
@@ -222,12 +288,52 @@ export function writePreparedPath(operation: PreparedPathOperation, content: str
 		} catch (error) {
 			throw new PreparedTargetChangedError("Authorized new-file target changed before execution", { cause: error });
 		}
+		closeSync(fd);
 		try {
-			writeAll(fd, content);
-		} finally {
-			closeSync(fd);
+			publishByRename(parent, name, content, 0o600);
+		} catch (error) {
+			unlinkUnder(parent, name);
+			throw error;
 		}
 	});
+}
+
+/**
+ * Atomic publish for an ungated write, where no prepared operation exists to pin the target.
+ *
+ * `writePreparedPath` is the gated path and the one that matters; this is its counterpart for
+ * a tool invoked outside the permission gate, so that neither route can leave a half-written
+ * file. It makes no containment claim: with no authorization there is no authorized target to
+ * hold the write to, and the no-follow walk would have nothing to check against.
+ */
+export function writePathAtomically(filePath: string, content: string | Buffer): void {
+	const temporary = join(dirname(filePath), `.${basename(filePath)}.apex-${process.pid}-${randomUUID().slice(0, 8)}`);
+	let mode = 0o666;
+	try {
+		mode = statSync(filePath).mode & 0o7777;
+	} catch {}
+	const fd = openSync(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, mode);
+	try {
+		writeAll(fd, content);
+		fchmodSync(fd, mode);
+		closeSync(fd);
+	} catch (error) {
+		try {
+			closeSync(fd);
+		} catch {}
+		try {
+			unlinkSync(temporary);
+		} catch {}
+		throw error;
+	}
+	try {
+		renameSync(temporary, filePath);
+	} catch (error) {
+		try {
+			unlinkSync(temporary);
+		} catch {}
+		throw error;
+	}
 }
 
 function tryMacOSScreenshotPath(filePath: string): string {

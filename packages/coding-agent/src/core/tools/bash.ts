@@ -31,8 +31,16 @@ import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, type TruncationResult
 const MAX_TIMEOUT_MS = 2_147_483_647;
 const MAX_TIMEOUT_SECONDS = MAX_TIMEOUT_MS / 1000;
 
-function resolveTimeoutMs(timeout: number | undefined): number | undefined {
-	if (timeout === undefined) return undefined;
+/**
+ * Applied when a call names no `timeout`. One hour, which is 2.16x the slowest full suite run
+ * recorded for this repository on the host ADR 0035 names. A default that merely cleared the
+ * measurement would kill a real build on a slower machine, and a killed build presents as a
+ * failing build rather than as a timeout, which is the expensive mistake.
+ */
+export const DEFAULT_BASH_TIMEOUT_SECONDS = 3600;
+
+function resolveTimeoutMs(timeout: number | undefined): number {
+	if (timeout === undefined) return DEFAULT_BASH_TIMEOUT_SECONDS * 1000;
 	if (!Number.isFinite(timeout) || timeout <= 0) {
 		throw new Error("Invalid timeout: must be a finite number of seconds");
 	}
@@ -46,7 +54,11 @@ function resolveTimeoutMs(timeout: number | undefined): number | undefined {
 
 const bashSchemaProperties = {
 	command: Type.String({ description: "Shell command to execute" }),
-	timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (optional, no default timeout)" })),
+	timeout: Type.Optional(
+		Type.Number({
+			description: `Timeout in seconds. Defaults to ${DEFAULT_BASH_TIMEOUT_SECONDS}; raise it or use background for longer work.`,
+		}),
+	),
 	background: Type.Optional(
 		Type.Boolean({
 			description:
@@ -295,13 +307,10 @@ export function createLocalShellOperations(shellName: string, resolveShellConfig
 			};
 
 			try {
-				// Set timeout if provided.
-				if (timeoutMs !== undefined) {
-					timeoutHandle = setTimeout(() => {
-						timedOut = true;
-						if (child.pid) killProcessTree(child.pid);
-					}, timeoutMs);
-				}
+				timeoutHandle = setTimeout(() => {
+					timedOut = true;
+					if (child.pid) killProcessTree(child.pid);
+				}, timeoutMs);
 				// Stream stdout and stderr.
 				child.stdout?.on("data", onData);
 				child.stderr?.on("data", onData);
@@ -317,7 +326,7 @@ export function createLocalShellOperations(shellName: string, resolveShellConfig
 					throw new Error("aborted");
 				}
 				if (timedOut) {
-					throw new Error(`timeout:${timeout}`);
+					throw new Error(`timeout:${timeoutMs / 1000}`);
 				}
 				return {
 					exitCode,
@@ -631,7 +640,7 @@ export function createShellToolDefinition(
 	return {
 		name: config.name,
 		label: config.label,
-		description: `Execute a ${config.shellName} command in the current working directory. Returns stdout and stderr. Output is truncated to last ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.`,
+		description: `Execute a ${config.shellName} command in the current working directory. Returns stdout and stderr. Output is truncated to last ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). If truncated, full output is saved to a temp file. A call with no timeout is bounded at ${DEFAULT_BASH_TIMEOUT_SECONDS} seconds; pass a larger one, or use background for longer work.`,
 		promptSnippet: config.promptSnippet,
 		promptGuidelines: exposeSessionEnvironment && config.promptGuidelines ? [...config.promptGuidelines] : undefined,
 		parameters: bashSchema,
@@ -787,7 +796,10 @@ export function createShellToolDefinition(
 					const result = await ops.exec(spawnContext.command, spawnContext.cwd, {
 						onData: handleData,
 						signal,
-						timeout,
+						// The default belongs to the tool, not to one backend. Resolved here, every
+						// backend gets the effective value; resolved inside the local one, a custom
+						// backend silently had no default at all.
+						timeout: timeout ?? DEFAULT_BASH_TIMEOUT_SECONDS,
 						env: spawnContext.env,
 					});
 					exitCode = result.exitCode;
@@ -808,7 +820,8 @@ export function createShellToolDefinition(
 					}
 					if (err instanceof Error && err.message.startsWith("timeout:")) {
 						const timeoutSecs = err.message.split(":")[1];
-						throw new ToolExecutionError(appendStatus(text, `Command timed out after ${timeoutSecs} seconds`), {
+						const status = `Command timed out after ${timeoutSecs} seconds. Pass a larger timeout, or run it with background: true and retrieve the output by handle.`;
+						throw new ToolExecutionError(appendStatus(text, status), {
 							execution: interruptedExecution,
 						});
 					}

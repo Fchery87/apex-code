@@ -93,12 +93,12 @@ Two smaller defects reach users directly. A crash during an edit truncates the u
 - [x] `projectTrusted` is a required argument on the permission store, the settings manager, and the MCP runtime. No call site can omit it and receive trusted. [ADR 0034](../adr/0034-project-trust-is-a-required-argument.md). `SettingsManager.inMemory` is the one deliberate exclusion, recorded there: its storage holds only what the caller wrote, so there is no untrusted source to gate.
 - [x] ~~`read`, `grep`, `ls`, and `find` refuse the agent directory's `auth.json`.~~ Moved to the 2026-09-13 permission-gate recalibration spec and implemented there.
 - [x] `AGENTS.md` and `CLAUDE.md` reach the system prompt through the trust decision rather than through no gate. The checkout's and its ancestors' copies are withheld from an untrusted project; the agent directory's own is not, on the same grounds that exempt `~/.agents/skills`. Their filenames are registered, so presence raises the decision.
-- [ ] Every row of the 2026-09-05 confirmed-findings table has one committed probe that fails while the finding is open and passes once it is closed. Each probe names its row.
-- [ ] `docs/specs/2026-09-05-security-boundary-remediation.md` line 50 states what was actually verified, and the classifier half is tracked as open work rather than as a checked box.
+- [x] Every row of the 2026-09-05 confirmed-findings table has a disposition, and `test/security-boundary/findings-2026-09-05.test.ts` reads the table out of the research document to prove none is missing. Ten rows name the committed probe that answers them; nine name [ADR 0032](../adr/0032-no-built-in-sandbox.md), which deleted the subsystem each described. The index asserts every named test still exists and still carries its name, and that the boundary is still gone.
+- [x] `docs/specs/2026-09-05-security-boundary-remediation.md` states what was actually verified, and the classifier half is a pointer to this spec rather than a checked box.
 - [x] `main` requires the Ubuntu, macOS, and Windows `ci.yml` jobs before merge, and force-push and deletion are disallowed.
 - [ ] Every item in `docs/release-governance-checklist.md` is either ticked with the evidence that settles it or annotated with why it cannot be settled yet.
-- [ ] `edit` and `write` publish through the same atomic path the session storage uses, preserving the destination file's mode.
-- [ ] `bash` applies a default wall-clock timeout, and the timeout that fires names itself and the escape hatch.
+- [x] `edit` and `write` publish through the same atomic path the session storage uses, preserving the destination file's mode.
+- [x] `bash` applies a default wall-clock timeout, and the timeout that fires names itself and both escape hatches. [ADR 0035](../adr/0035-default-bash-timeout.md) records the measurement it came from.
 - [x] ~~A Windows session that cannot be sandboxed prints the reason and the supported next step.~~ Dropped on 2026-09-12. The startup path that printed it, the mode it named, and the exclusion behind it were deleted with the boundary. `README.md` and `docs/user-guide.md` now state the operator's container or VM on every platform.
 
 ## Non-goals

@@ -1357,6 +1357,7 @@ takes the next free number instead of a reserved one.
 | 0032 | Apex Code ships no OS boundary; isolation is the operator's container or VM | follow-up | ✅ |
 | 0033 | 0.1.x is a stable release line; the pre-alpha label is retired | follow-up | ✅ |
 | 0034 | Project trust is a required constructor argument; no loader defaults to trusted | follow-up | ✅ |
+| 0035 | `bash` applies a one-hour default wall-clock timeout, derived from recorded suite runs | follow-up | ✅ |
 
 ## Cross-phase contracts
 
