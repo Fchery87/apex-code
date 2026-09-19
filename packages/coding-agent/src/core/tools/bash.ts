@@ -56,7 +56,7 @@ const bashSchemaProperties = {
 	command: Type.String({ description: "Shell command to execute" }),
 	timeout: Type.Optional(
 		Type.Number({
-			description: `Timeout in seconds. Defaults to ${DEFAULT_BASH_TIMEOUT_SECONDS}; raise it or use background for longer work.`,
+			description: `Timeout in seconds (default ${DEFAULT_BASH_TIMEOUT_SECONDS}; use background for longer work)`,
 		}),
 	),
 	background: Type.Optional(
@@ -640,7 +640,7 @@ export function createShellToolDefinition(
 	return {
 		name: config.name,
 		label: config.label,
-		description: `Execute a ${config.shellName} command in the current working directory. Returns stdout and stderr. Output is truncated to last ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). If truncated, full output is saved to a temp file. A call with no timeout is bounded at ${DEFAULT_BASH_TIMEOUT_SECONDS} seconds; pass a larger one, or use background for longer work.`,
+		description: `Execute a ${config.shellName} command in the current working directory. Returns stdout and stderr. Output is truncated to last ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds; the default is ${DEFAULT_BASH_TIMEOUT_SECONDS}.`,
 		promptSnippet: config.promptSnippet,
 		promptGuidelines: exposeSessionEnvironment && config.promptGuidelines ? [...config.promptGuidelines] : undefined,
 		parameters: bashSchema,
