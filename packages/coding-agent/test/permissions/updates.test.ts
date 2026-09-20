@@ -25,6 +25,7 @@ function createStore(name: string, policyPath?: string) {
 	mkdirSync(cwd, { recursive: true });
 	mkdirSync(agentDir, { recursive: true });
 	return new FilePermissionRuleStore({
+		projectTrusted: true,
 		cwd,
 		agentDir,
 		policyPath: policyPath ?? join(sharedTempDir, name, "missing-policy.json"),
@@ -35,6 +36,7 @@ describe("FilePermissionRuleStore", () => {
 	it("includes immutable command-line rule layers in its snapshots", async () => {
 		const cliArgRules: PermissionRule[] = [{ source: "cliArg", toolName: "read", behavior: "allow" }];
 		const store = new FilePermissionRuleStore({
+			projectTrusted: true,
 			cwd: join(sharedTempDir, "cli-args", "project"),
 			agentDir: join(sharedTempDir, "cli-args", "agent"),
 			policyPath: join(sharedTempDir, "cli-args", "missing-policy.json"),
@@ -50,10 +52,10 @@ describe("FilePermissionRuleStore", () => {
 		mkdirSync(agentDir, { recursive: true });
 		const policyPath = join(sharedTempDir, "roundtrip-add", "missing-policy.json");
 
-		const first = new FilePermissionRuleStore({ cwd, agentDir, policyPath });
+		const first = new FilePermissionRuleStore({ cwd, agentDir, policyPath, projectTrusted: true });
 		await first.apply({ type: "addRules", destination: "project", rules: [rule()] });
 
-		const second = new FilePermissionRuleStore({ cwd, agentDir, policyPath });
+		const second = new FilePermissionRuleStore({ cwd, agentDir, policyPath, projectTrusted: true });
 		const { rules } = await second.snapshot();
 		expect(rules).toEqual([{ ...rule(), source: "project" }]);
 	});
@@ -99,6 +101,7 @@ describe("FilePermissionRuleStore", () => {
 		mkdirSync(cwd, { recursive: true });
 		mkdirSync(agentDir, { recursive: true });
 		const store = new FilePermissionRuleStore({
+			projectTrusted: true,
 			cwd,
 			agentDir,
 			policyPath: join(sharedTempDir, "session-runtime-only", "missing-policy.json"),
@@ -117,6 +120,7 @@ describe("FilePermissionRuleStore", () => {
 
 		// And it does not survive a fresh store instance over the same paths — runtime-only.
 		const reopened = new FilePermissionRuleStore({
+			projectTrusted: true,
 			cwd,
 			agentDir,
 			policyPath: join(sharedTempDir, "session-runtime-only", "missing-policy.json"),
@@ -152,6 +156,7 @@ describe("FilePermissionRuleStore", () => {
 		mkdirSync(agentDir, { recursive: true });
 		writeFileSync(join(cwd, ".apex-code", "permissions.local.json"), "not valid json{{{", "utf-8");
 		const store = new FilePermissionRuleStore({
+			projectTrusted: true,
 			cwd,
 			agentDir,
 			policyPath: join(sharedTempDir, "malformed", "missing-policy.json"),
@@ -175,6 +180,7 @@ describe("FilePermissionRuleStore", () => {
 			JSON.stringify({ version: 1, rules: [], mode: "invalid" }),
 		);
 		const snapshot = await new FilePermissionRuleStore({
+			projectTrusted: true,
 			cwd,
 			agentDir,
 			policyPath: join(sharedTempDir, "invalid-mode", "missing-policy.json"),

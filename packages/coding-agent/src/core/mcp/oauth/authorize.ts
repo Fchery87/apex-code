@@ -5,9 +5,9 @@
  * line printer and the browser opener.
  */
 
-import { join } from "node:path";
 import type { CredentialStore } from "@earendil-works/pi-ai";
 import { AuthStorage } from "../../auth-storage.ts";
+import { projectResourcePathByName } from "../../project-resources.ts";
 import { globalMcpConfigPath, loadMcpConfig, PROJECT_CONFIG_FILENAME } from "../config.ts";
 import { runMcpOAuthFlow } from "./flow.ts";
 
@@ -27,7 +27,12 @@ export interface AuthorizeServerOptions {
 
 export async function authorizeConfiguredServer(options: AuthorizeServerOptions): Promise<void> {
 	const { servers } = loadMcpConfig({
-		projectPath: join(options.cwd ?? process.cwd(), PROJECT_CONFIG_FILENAME),
+		// Resolved through the registry, like every other reader of a gated resource, so a
+		// `piConfig.configDir` override cannot point this at a file the classifier does not
+		// check. Not trust-gated: `mcp auth <server>` is the user naming one server to
+		// authorize, which is the decision, and there is no session trust state in a
+		// one-shot command to consult instead.
+		projectPath: projectResourcePathByName(options.cwd ?? process.cwd(), PROJECT_CONFIG_FILENAME),
 		globalPath: globalMcpConfigPath(options.agentDir),
 	});
 	const server = servers.get(options.serverName);

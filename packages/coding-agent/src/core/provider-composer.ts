@@ -13,6 +13,7 @@ import {
 	type OAuthAuth,
 	type OAuthCredentials,
 	type OAuthLoginCallbacks,
+	type OpenAIResponsesCompat,
 	type Provider,
 	type ProviderHeaders,
 	type RefreshModelsContext,
@@ -124,6 +125,15 @@ function applyModelOverride(model: Model<Api>, override: ModelsJsonModelOverride
 			? { ...model.samplingParams, ...override.samplingParams }
 			: model.samplingParams,
 		compat: mergeCompat(model.compat, override.compat),
+	};
+}
+
+function applyCompatibilityDefaults(model: Model<Api>): Model<Api> {
+	const compat = model.api === "openai-responses" ? (model.compat as OpenAIResponsesCompat | undefined) : undefined;
+	if (model.api !== "openai-responses" || compat?.supportsStrictMode !== undefined) return model;
+	return {
+		...model,
+		compat: { ...compat, supportsStrictMode: true },
 	};
 }
 
@@ -441,7 +451,7 @@ export function composeModelProvider(
 		}
 		return models.map((model) => {
 			const override = config?.modelOverrides?.[model.id];
-			return override ? applyModelOverride(model, override) : model;
+			return applyCompatibilityDefaults(override ? applyModelOverride(model, override) : model);
 		});
 	};
 	// Validate eagerly so registration/reload reports structural errors immediately.

@@ -76,7 +76,7 @@ async function createVerifiedSession(settings: unknown): Promise<SessionUnderTes
 	execFileSync("git", ["-C", tempDir, "commit", "-m", "initial"]);
 	writeFileSync(join(tempDir, "settings.json"), JSON.stringify(settings), "utf-8");
 
-	const settingsManager = SettingsManager.create(tempDir, tempDir);
+	const settingsManager = SettingsManager.create(tempDir, tempDir, { projectTrusted: true });
 	const sessionManager = SessionManager.create(tempDir, join(tempDir, "sessions"));
 
 	const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionManager: manager }) => {

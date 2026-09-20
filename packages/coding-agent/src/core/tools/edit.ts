@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { Box, Container, Spacer, Text } from "@earendil-works/pi-tui";
 import type { AgentTool } from "apex-code-agent-core";
 import { constants } from "fs";
-import { access as fsAccess, readFile as fsReadFile, writeFile as fsWriteFile } from "fs/promises";
+import { access as fsAccess, readFile as fsReadFile } from "fs/promises";
 import { type Static, Type } from "typebox";
 import { renderDiff } from "../../modes/interactive/components/diff.ts";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
@@ -28,7 +28,7 @@ import {
 } from "./edit-diff.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
-import { readPreparedPath, resolveToCwd, writePreparedPath } from "./path-utils.ts";
+import { readPreparedPath, resolveToCwd, writePathAtomically, writePreparedPath } from "./path-utils.ts";
 import { renderToolPath, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
@@ -124,7 +124,7 @@ export interface EditOperations {
 
 const defaultEditOperations: EditOperations = {
 	readFile: (path) => fsReadFile(path),
-	writeFile: (path, content) => fsWriteFile(path, content, "utf-8"),
+	writeFile: async (path, content) => writePathAtomically(path, content),
 	access: (path) => fsAccess(path, constants.R_OK | constants.W_OK),
 	readPreparedFile: (operation) => readPreparedPath(operation),
 	writePreparedFile: (operation, content) => writePreparedPath(operation, content),

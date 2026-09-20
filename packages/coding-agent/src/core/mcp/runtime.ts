@@ -7,7 +7,7 @@
  * build from before this subsystem existed.
  */
 
-import { join } from "node:path";
+import { projectResourcePathByName } from "../project-resources.ts";
 import { globalMcpConfigPath, loadMcpConfig, PROJECT_CONFIG_FILENAME } from "./config.ts";
 import { connectMcpServer } from "./connector.ts";
 import type { McpToolOptions } from "./mcp-tool.ts";
@@ -25,10 +25,15 @@ export interface McpRuntime extends McpToolOptions {
 export function createMcpRuntime(
 	cwd: string,
 	connector: McpConnector = connectMcpServer,
-	options: { projectTrusted?: boolean; agentDir?: string } = {},
+	options: { projectTrusted: boolean; agentDir?: string },
 ): McpRuntime | undefined {
+	// ADR 0034. Inferring trust from `!== false` meant a forgotten argument and a deliberate
+	// grant were the same value, and the forgotten one started the project's eager servers.
+	if (typeof options?.projectTrusted !== "boolean") {
+		throw new TypeError("createMcpRuntime requires an explicit projectTrusted decision (ADR 0034)");
+	}
 	const { servers, diagnostics } = loadMcpConfig({
-		projectPath: options.projectTrusted === false ? undefined : join(cwd, PROJECT_CONFIG_FILENAME),
+		projectPath: options.projectTrusted ? projectResourcePathByName(cwd, PROJECT_CONFIG_FILENAME) : undefined,
 		globalPath: globalMcpConfigPath(options.agentDir),
 	});
 	if (servers.size === 0) return undefined;

@@ -192,7 +192,8 @@ export async function createAgentSessionServices(
 		}
 	}
 
-	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
+	// No caller-supplied manager means nobody resolved trust, so this one cannot claim it.
+	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir, { projectTrusted: false });
 	const otlpEndpoint = settingsManager.getObservabilitySettings().otlpEndpoint;
 	const otlpExportConfig = otlpEndpoint
 		? { endpoint: otlpEndpoint, headers: settingsManager.getObservabilitySettings().otlpHeaders }

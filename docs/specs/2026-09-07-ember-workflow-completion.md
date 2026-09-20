@@ -1,6 +1,6 @@
 # Spec: Ember carried through the working session
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 
@@ -130,28 +130,30 @@ tokens.
 
 ## Goals
 
-- [ ] `/model` and the extension picker light their selected row with the same
+- [x] `/model` and the extension picker light their selected row with the same
       `paintBackground` treatment `getSelectListTheme` uses, proved by a rendered-output
       test rather than a token assertion.
-- [ ] Overlay borders read as the quiet dotted rule everywhere, including the session
+- [x] Overlay borders read as the quiet dotted rule everywhere, including the session
       selector, without dropping the explicit color function jiti requires.
-- [ ] The composer's input origin stays at the same column across idle, typing, bash,
+- [x] The composer's input origin stays at the same column across idle, typing, bash,
       working, and context pressure, proved by a cursor-column test.
-- [ ] Bash mode is legible from the caret's hue and the tray, not from a label that
+- [x] Bash mode is legible from the caret's hue and the tray, not from a label that
       moves the input.
-- [ ] A completed tool call with nothing hidden renders no disclosure hint.
-- [ ] Expanding one tool call leaves every other call unchanged, and the global expand
+- [x] A completed tool call with nothing hidden renders no disclosure hint.
+- [x] Expanding one tool call leaves every other call unchanged, and the global expand
       action still expands everything.
-- [ ] The permission prompt names the scope it actually grants, and lets a rejection
+- [x] The permission prompt names the scope it actually grants, and lets a rejection
       carry guidance into the blocked tool result.
-- [ ] The prompt shows the proposed change before the user chooses. **Deferred.**
+- [ ] The prompt shows the proposed change before the user chooses. **Deferred, then delivered elsewhere.**
       `ExtensionSelectorComponent` draws its title as one accent-bold `Text` and
       `select` offers no other channel, so this needs either a new review component or
       a new extension UI primitive. The roadmap rules out a second TUI stack, so which
-      of those is acceptable is a design decision and gets its own spec.
-- [ ] The context tray keeps its textual pressure markers and gains an actionable
+      of those is acceptable is a design decision and gets its own spec. It did:
+      [Permission preview](2026-09-07-permission-preview.md), landed through pull request
+      #93. Left unchecked here because this spec did not deliver it.
+- [x] The context tray keeps its textual pressure markers and gains an actionable
       compaction hint.
-- [ ] `pi-tui` and `pi-ai` are unchanged, per-frame cost stays inside the 16 ms budget,
+- [x] `pi-tui` and `pi-ai` are unchanged, per-frame cost stays inside the 16 ms budget,
       and the forked-file hunk count is recorded in `docs/upstream-log.md`.
 
 ## Non-goals

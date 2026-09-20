@@ -842,7 +842,7 @@ describe("default model selection", () => {
 			mkdirSync(tempDir, { recursive: true });
 			tempDirs.push(tempDir);
 
-			const settingsManager = SettingsManager.create(tempDir, tempDir);
+			const settingsManager = SettingsManager.create(tempDir, tempDir, { projectTrusted: true });
 			if (options.persistedScope) {
 				settingsManager.setEnabledModels(options.persistedScope);
 			}

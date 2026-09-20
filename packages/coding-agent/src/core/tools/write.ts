@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { Container, Text } from "@earendil-works/pi-tui";
 import type { AgentTool } from "apex-code-agent-core";
-import { mkdir as fsMkdir, writeFile as fsWriteFile } from "fs/promises";
+import { mkdir as fsMkdir } from "fs/promises";
 import { dirname } from "path";
 import { type Static, Type } from "typebox";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
@@ -15,7 +15,7 @@ import type { DiagnosticsOperations, DiagnosticsOutcome } from "./diagnostics.ts
 import { diagnosticEvidenceForPath, formatDiagnosticsOutcome } from "./diagnostics.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
-import { readPreparedPath, resolveToCwd, writePreparedPath } from "./path-utils.ts";
+import { readPreparedPath, resolveToCwd, writePathAtomically, writePreparedPath } from "./path-utils.ts";
 import { normalizeDisplayText, renderToolPath, replaceTabs, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
@@ -60,7 +60,7 @@ export interface WriteOperations {
 }
 
 const defaultWriteOperations: WriteOperations = {
-	writeFile: (path, content) => fsWriteFile(path, content, "utf-8"),
+	writeFile: async (path, content) => writePathAtomically(path, content),
 	mkdir: (dir) => fsMkdir(dir, { recursive: true }).then(() => {}),
 	writePrepared: (operation, content) => writePreparedPath(operation, content),
 };

@@ -44,6 +44,7 @@ describe("the permission prompt, end to end", () => {
 			{
 				getContract: () => definition.contract,
 				store: new FilePermissionRuleStore({
+					projectTrusted: true,
 					cwd,
 					agentDir: join(cwd, "agent"),
 					policyPath: join(cwd, "missing.json"),
@@ -79,6 +80,7 @@ describe("the permission prompt, end to end", () => {
 			{
 				getContract: () => definition.contract,
 				store: new FilePermissionRuleStore({
+					projectTrusted: true,
 					cwd,
 					agentDir: join(cwd, "agent"),
 					policyPath: join(cwd, "missing.json"),
@@ -97,6 +99,7 @@ describe("the permission prompt, end to end", () => {
 		await writeFile(join(cwd, "auth.ts"), "const a = 1;\n");
 		const definition = createEditToolDefinition(cwd);
 		const store = new FilePermissionRuleStore({
+			projectTrusted: true,
 			cwd,
 			agentDir: join(cwd, "agent"),
 			policyPath: join(cwd, "missing.json"),

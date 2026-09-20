@@ -26,7 +26,7 @@ describe("regression #2835: tool allowlists filter extension tools", () => {
 	});
 
 	async function createSession(allowedToolNames?: string[]) {
-		const settingsManager = SettingsManager.create(tempDir, agentDir);
+		const settingsManager = SettingsManager.create(tempDir, agentDir, { projectTrusted: true });
 		const sessionManager = SessionManager.inMemory(tempDir);
 		const resourceLoader = new DefaultResourceLoader({
 			cwd: tempDir,

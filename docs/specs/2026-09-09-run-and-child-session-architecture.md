@@ -1,6 +1,6 @@
 # Spec: Unified runs and child sessions
 
-**Status:** Active
+**Status:** Landed
 
 > **Reconciled with [ADR 0032](../adr/0032-no-built-in-sandbox.md) on 2026-09-13.** This
 > spec predates the removal of the OS boundary and integrates with it in four places: the
@@ -89,24 +89,24 @@ retries, context limits, path ownership, and real verification evidence.
 
 ## Goals
 
-- [ ] Define one internal `Run` boundary for a root session or a child session.
-- [ ] Make a child a linked, addressable session with a lifecycle rather than a promise.
-- [ ] Preserve the existing `delegate` tool as a thin launch-or-retrieve adapter.
-- [ ] Preserve the canonical tool contract as the only source for capabilities,
+- [x] Define one internal `Run` boundary for a root session or a child session.
+- [x] Make a child a linked, addressable session with a lifecycle rather than a promise.
+- [x] Preserve the existing `delegate` tool as a thin launch-or-retrieve adapter.
+- [x] Preserve the canonical tool contract as the only source for capabilities,
       permission grammar, context behavior, and evidence declarations.
-- [ ] Derive every child policy from the parent's live effective policy.
-- [ ] Keep the parent capability ceiling non-widenable by child approval decisions.
-- [ ] Reuse the existing agent loop budget for root and child execution.
-- [ ] Reuse the existing `VerificationTracker` and policy executor for child checks.
-- [ ] Reuse the existing artifact store and session manager rather than creating new
+- [x] Derive every child policy from the parent's live effective policy.
+- [x] Keep the parent capability ceiling non-widenable by child approval decisions.
+- [x] Reuse the existing agent loop budget for root and child execution.
+- [x] Reuse the existing `VerificationTracker` and policy executor for child checks.
+- [x] Reuse the existing artifact store and session manager rather than creating new
       output or persistence systems.
-- [ ] Add child lifecycle operations to the CLI, RPC, and ACP adapters through one
+- [x] Add child lifecycle operations to the CLI, RPC, and ACP adapters through one
       internal service.
-- [ ] Support explicit concurrency, depth, runtime, model, and verification policies.
-- [ ] Prevent overlapping write ownership before parallel child work starts.
-- [ ] Return compact summaries while retaining bounded evidence and full artifacts under
+- [x] Support explicit concurrency, depth, runtime, model, and verification policies.
+- [x] Prevent overlapping write ownership before parallel child work starts.
+- [x] Return compact summaries while retaining bounded evidence and full artifacts under
       the existing artifact policy.
-- [ ] Make interrupted runs resumable without reconstructing authority from disk.
+- [x] Make interrupted runs resumable without reconstructing authority from disk.
 
 ## Non-goals
 
@@ -717,6 +717,14 @@ Validation must exercise the real public boundaries.
   enabled. With an aggregate configured, the parent's own runs consume it (the earlier
   boundary that kept them outside the ceiling is superseded); whether a default should
   turn on for every session awaits replay measurements.
+
+  **Settled 2026-09-19.** Both halves of this were carried on the roadmap as open settings
+  policy for ten days after the paragraph above decided them, which is a row disagreeing
+  with the spec it links to rather than a decision anyone still had to take. Opt-in stays,
+  and parent consumption stays. Turning an aggregate default on for every session is the
+  only part still open, it needs replay measurements that do not exist, and it is a new
+  question rather than unfinished work from this phase. It gets its own spec if it is ever
+  taken up.
 - Worktrees add setup and cleanup cost. Read-only parallel work must not pay that cost.
 - A child resume after its workspace changed must report stale verification and rerun
   required checks.
@@ -753,4 +761,3 @@ Validation must exercise the real public boundaries.
 - OpenAI, [Codex subagents](https://developers.openai.com/codex/subagents)
 - OpenAI, [Codex agent approvals and security](https://developers.openai.com/codex/agent-approvals-security)
 - OpenAI, [Codex app-server](https://developers.openai.com/codex/app-server)
-- `/home/nochaserz/.agents/skills/poteto-mode/SKILL.md`

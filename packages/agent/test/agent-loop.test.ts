@@ -1731,6 +1731,7 @@ describe("run budget", () => {
 				runBudget: createRunBudgetController({ maxProviderRequests: 3 }),
 			},
 			streamFn,
+			[countingTool([])],
 		);
 
 		expect(sent.count).toBe(3);

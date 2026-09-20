@@ -48,7 +48,7 @@ describe("workspace compaction integration", () => {
 		writeFileSync(join(tempDir, "notes.txt"), "untracked\n");
 
 		sessionManager = SessionManager.create(tempDir, sessionsDir);
-		settingsManager = SettingsManager.create(tempDir, tempDir);
+		settingsManager = SettingsManager.create(tempDir, tempDir, { projectTrusted: true });
 		settingsManager.applyOverrides({ compaction: { keepRecentTokens: 1 } });
 	});
 

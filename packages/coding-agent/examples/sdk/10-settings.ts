@@ -9,11 +9,11 @@ import { createAgentSession, SessionManager, SettingsManager } from "apex-code";
 const cwd = process.cwd();
 
 // Load current settings (merged global + project)
-const settingsManagerFromDisk = SettingsManager.create(cwd);
+const settingsManagerFromDisk = SettingsManager.create(cwd, undefined, { projectTrusted: true });
 console.log("Current settings:", JSON.stringify(settingsManagerFromDisk.getGlobalSettings(), null, 2));
 
 // Override specific settings
-const settingsManager = SettingsManager.create(cwd);
+const settingsManager = SettingsManager.create(cwd, undefined, { projectTrusted: true });
 settingsManager.applyOverrides({
 	compaction: { enabled: false },
 	retry: { enabled: true, maxRetries: 5, baseDelayMs: 1000 },

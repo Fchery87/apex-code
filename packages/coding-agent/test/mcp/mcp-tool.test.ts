@@ -80,6 +80,12 @@ describe("mcp proxy tool", () => {
 		expect(setup().definition.name).toBe("mcp");
 	});
 
+	it("rejects an empty call with schema loading instructions", async () => {
+		const { definition } = setup();
+		await expect(run(definition, {})).rejects.toThrow("tool_schema");
+		await expect(run(definition, {})).rejects.toThrow('"search"');
+	});
+
 	it("searches cached tools across every server", async () => {
 		const { definition } = setup();
 
@@ -215,12 +221,6 @@ describe("mcp proxy tool", () => {
 		expect(textOf(result)).toContain('MCP server "github" requires OAuth');
 		expect(textOf(result)).toContain("apex-code mcp auth github");
 		expect(textOf(result)).not.toContain("is unavailable");
-	});
-
-	it("rejects a call naming no action", async () => {
-		const { definition } = setup();
-
-		expect(textOf(await run(definition, {}))).toMatch(/search|describe|tool/i);
 	});
 
 	it("keeps its description inside the prompt budget it promises", () => {

@@ -536,6 +536,7 @@ describe("AgentSession model and extension characterization", () => {
 	it("runs a configured permission gate after non-blocking extension handlers", async () => {
 		let executed = false;
 		const store = new FilePermissionRuleStore({
+			projectTrusted: true,
 			cwd: "/nonexistent",
 			agentDir: "/nonexistent/agent",
 			policyPath: "/nonexistent/policy.json",

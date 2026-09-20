@@ -96,9 +96,10 @@ async function buildParentSession(
 		mkdirSync(join(scratch, "agent"), { recursive: true });
 		writeFileSync(join(scratch, "agent", "settings.json"), JSON.stringify(options.settings), "utf-8");
 	}
-	const settingsManager = SettingsManager.create(scratch, join(scratch, "agent"));
+	const settingsManager = SettingsManager.create(scratch, join(scratch, "agent"), { projectTrusted: true });
 	options.createdSettingsManager?.(settingsManager);
 	const store = new FilePermissionRuleStore({
+		projectTrusted: true,
 		cwd: scratch,
 		agentDir: join(scratch, "agent"),
 		policyPath: join(scratch, "missing-policy.json"),
@@ -167,8 +168,9 @@ describe("delegation end-to-end through createAgentSession (task 5.2)", () => {
 	it("stores a real child's session only under its per-child artifact directory while a permitted workspace write succeeds", async () => {
 		const { faux, runtime } = await buildModelRuntime("delegation-artifacts-e2e");
 		const agentDir = join(scratch, "agent");
-		const settingsManager = SettingsManager.create(scratch, agentDir);
+		const settingsManager = SettingsManager.create(scratch, agentDir, { projectTrusted: true });
 		const store = new FilePermissionRuleStore({
+			projectTrusted: true,
 			cwd: scratch,
 			agentDir,
 			policyPath: join(scratch, "missing-policy.json"),
@@ -287,8 +289,9 @@ describe("delegation recursion depth guard through createAgentSession (task 5.3)
 			},
 		};
 		const { faux, runtime } = await buildModelRuntime("delegation-depth-e2e");
-		const settingsManager = SettingsManager.create(scratch, join(scratch, "agent"));
+		const settingsManager = SettingsManager.create(scratch, join(scratch, "agent"), { projectTrusted: true });
 		const store = new FilePermissionRuleStore({
+			projectTrusted: true,
 			cwd: scratch,
 			agentDir: join(scratch, "agent"),
 			policyPath: join(scratch, "missing-policy.json"),

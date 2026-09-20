@@ -19,6 +19,7 @@ import {
 import type { Extension, ExtensionRuntime, InlineExtension, LoadExtensionsResult } from "./extensions/types.ts";
 import { findGitPaths } from "./footer-data-provider.ts";
 import { DefaultPackageManager, type PathMetadata, type ResolvedResource } from "./package-manager.ts";
+import { PROJECT_INSTRUCTION_FILES } from "./project-resources.ts";
 import type { PromptTemplate } from "./prompt-templates.ts";
 import { loadPromptTemplates } from "./prompt-templates.ts";
 import { SettingsManager } from "./settings-manager.ts";
@@ -69,8 +70,7 @@ function resolvePromptInput(input: string | undefined, description: string): str
 }
 
 function loadContextFileFromDir(dir: string): { path: string; content: string } | null {
-	const candidates = ["AGENTS.override.md", "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD"];
-	for (const filename of candidates) {
+	for (const filename of PROJECT_INSTRUCTION_FILES) {
 		const filePath = join(dir, filename);
 		if (existsSync(filePath)) {
 			try {
@@ -119,6 +119,12 @@ function findShadowedContextFile(cwd: string): string | undefined {
 export function loadProjectContextFiles(options: {
 	cwd: string;
 	agentDir: string;
+	/**
+	 * Required. False keeps the checkout's and its ancestors' instruction files out, and
+	 * leaves the agent directory's own, which is the user's and not the project's. The
+	 * same exemption the `~/.agents/skills` walk gets, for the same reason.
+	 */
+	projectTrusted: boolean;
 }): Array<{ path: string; content: string }> {
 	const resolvedCwd = resolvePath(options.cwd);
 	const resolvedAgentDir = resolvePath(options.agentDir);
@@ -130,6 +136,10 @@ export function loadProjectContextFiles(options: {
 	if (globalContext) {
 		contextFiles.push(globalContext);
 		seenPaths.add(globalContext.path);
+	}
+
+	if (!options.projectTrusted) {
+		return contextFiles;
 	}
 
 	const ancestorContextFiles: Array<{ path: string; content: string }> = [];
@@ -254,7 +264,9 @@ export class DefaultResourceLoader implements ResourceLoader {
 	constructor(options: DefaultResourceLoaderOptions) {
 		this.cwd = resolvePath(options.cwd);
 		this.agentDir = resolvePath(options.agentDir);
-		this.settingsManager = options.settingsManager ?? SettingsManager.create(this.cwd, this.agentDir);
+		// The bootstrap pass is untrusted by design; `resolveProjectTrust` flips it below.
+		this.settingsManager =
+			options.settingsManager ?? SettingsManager.create(this.cwd, this.agentDir, { projectTrusted: false });
 		this.eventBus = options.eventBus ?? createEventBus();
 		this.packageManager = new DefaultPackageManager({
 			cwd: this.cwd,
@@ -518,6 +530,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 				: loadProjectContextFiles({
 						cwd: this.cwd,
 						agentDir: this.agentDir,
+						projectTrusted: this.settingsManager.isProjectTrusted(),
 					}),
 		};
 		const resolvedAgentsFiles = this.agentsFilesOverride ? this.agentsFilesOverride(agentsFiles) : agentsFiles;

@@ -24,6 +24,11 @@ vi.mock("node:fs", async (importOriginal) => {
 		existsSync: (value: string) => (value === "/proc/self/fd/self" ? false : actual.existsSync(hostPath(value))),
 		openSync: (value: string, flags: number, mode?: number) => actual.openSync(hostPath(value), flags, mode),
 		mkdirSync: (value: string) => actual.mkdirSync(hostPath(value)),
+		// Publishing by rename stages a sibling and renames it over the target, so both of
+		// those cross this boundary as Windows paths and need the same translation the
+		// opens get. Without them the rename reaches the host as a literal `C:\...`.
+		renameSync: (from: string, to: string) => actual.renameSync(hostPath(from), hostPath(to)),
+		unlinkSync: (value: string) => actual.unlinkSync(hostPath(value)),
 	};
 });
 

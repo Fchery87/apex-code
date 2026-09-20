@@ -83,7 +83,7 @@ describe("createAgentSession provider attribution headers", () => {
 			sessionId?: string;
 		} = {},
 	): Promise<ProviderHeaders | undefined> {
-		const settingsManager = SettingsManager.create(cwd, agentDir);
+		const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: true });
 		if (options.attributionEnabled === false) {
 			settingsManager.setSendProviderAttribution(false);
 		}

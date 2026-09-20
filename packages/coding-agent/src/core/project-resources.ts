@@ -55,6 +55,25 @@ export const PROJECT_LOCAL_PERMISSIONS_FILE = "permissions.local.json";
 export const PROJECT_AGENTS_DIR = "agents";
 export const PROJECT_MCP_CONFIG_FILE = ".mcp.json";
 
+/**
+ * The repository instruction files, in the order the loader prefers them.
+ *
+ * These are wrapped as `<project_instructions>` and handed to the model as instructions,
+ * so a checkout supplying one is steering the agent. That is what the trust prompt asks
+ * about, and until this list was registered they reached the system prompt through no gate.
+ *
+ * The loader reads this array rather than its own copy. A sixth spelling added to one and
+ * not the other is the exact divergence this registry exists to prevent, and the earlier
+ * form of that bug is why the registry exists at all.
+ */
+export const PROJECT_INSTRUCTION_FILES = [
+	"AGENTS.override.md",
+	"AGENTS.md",
+	"AGENTS.MD",
+	"CLAUDE.md",
+	"CLAUDE.MD",
+] as const;
+
 export const PROJECT_RESOURCES: readonly ProjectResource[] = [
 	{ name: "settings.json", scope: "config-dir", authority: "presence" },
 	{ name: "extensions", scope: "config-dir", authority: "presence" },
@@ -67,6 +86,9 @@ export const PROJECT_RESOURCES: readonly ProjectResource[] = [
 	{ name: PROJECT_LOCAL_PERMISSIONS_FILE, scope: "config-dir", authority: "permission-scope" },
 	{ name: PROJECT_AGENTS_DIR, scope: "config-dir", authority: "presence" },
 	{ name: PROJECT_MCP_CONFIG_FILE, scope: "root", authority: "presence" },
+	...PROJECT_INSTRUCTION_FILES.map(
+		(name) => ({ name, scope: "root", authority: "presence" }) as const satisfies ProjectResource,
+	),
 ] as const;
 
 /** The project config directory for `cwd`. Honors a `piConfig.configDir` override. */

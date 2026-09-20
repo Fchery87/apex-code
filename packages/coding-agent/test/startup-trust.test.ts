@@ -92,7 +92,12 @@ describe("startup trust public loaders", () => {
 		mkdirSync(agentDir, { recursive: true });
 		const permissionPath = join(agentDir, "permissions.json");
 		writeFileSync(permissionPath, scope("acceptEdits"));
-		const store = new FilePermissionRuleStore({ cwd, agentDir, policyPath: join(cwd, "policy") });
+		const store = new FilePermissionRuleStore({
+			cwd,
+			agentDir,
+			policyPath: join(cwd, "policy"),
+			projectTrusted: true,
+		});
 		const before = await store.snapshot();
 
 		writeFileSync(permissionPath, scope("bypassPermissions"));
@@ -106,7 +111,12 @@ describe("startup trust public loaders", () => {
 		mkdirSync(agentDir, { recursive: true });
 		const permissionPath = join(agentDir, "permissions.json");
 		writeFileSync(permissionPath, scope("acceptEdits"));
-		const store = new FilePermissionRuleStore({ cwd, agentDir, policyPath: join(cwd, "policy") });
+		const store = new FilePermissionRuleStore({
+			cwd,
+			agentDir,
+			policyPath: join(cwd, "policy"),
+			projectTrusted: true,
+		});
 		const before = await store.snapshot();
 		rmSync(permissionPath);
 		const attacker = join(cwd, "attacker.json");
@@ -124,7 +134,12 @@ describe("startup trust public loaders", () => {
 		const projectPath = join(cwd, ".apex-code", "permissions.json");
 		writeFileSync(projectPath, scope("acceptEdits"));
 		writeFileSync(join(agentDir, "permissions.json"), scope("acceptEdits"));
-		const store = new FilePermissionRuleStore({ cwd, agentDir, policyPath: join(cwd, "policy") });
+		const store = new FilePermissionRuleStore({
+			cwd,
+			agentDir,
+			policyPath: join(cwd, "policy"),
+			projectTrusted: true,
+		});
 		await store.snapshot();
 		writeFileSync(projectPath, scope("bypassPermissions"));
 
@@ -139,7 +154,7 @@ describe("startup trust public loaders", () => {
 		const cwd = workspace();
 		const agentDir = join(cwd, "agent");
 		const policyPath = join(cwd, "policy.json");
-		const store = new FilePermissionRuleStore({ cwd, agentDir, policyPath });
+		const store = new FilePermissionRuleStore({ cwd, agentDir, policyPath, projectTrusted: true });
 		expect((await store.snapshot()).rules.filter((rule) => rule.source === "policy")).toEqual([]);
 
 		writeFileSync(policyPath, scope("default"));

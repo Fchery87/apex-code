@@ -13,6 +13,17 @@ import { createSyntheticSourceInfo } from "../src/core/source-info.ts";
 
 import { createModelRegistry } from "./model-runtime-test-utils.ts";
 
+/**
+ * A loader for a project the user has trusted. ADR 0034 made that an argument rather than a
+ * default, so a case that expects project resources to load has to say so.
+ */
+function trustedLoader(options: { cwd: string; agentDir: string }): DefaultResourceLoader {
+	return new DefaultResourceLoader({
+		...options,
+		settingsManager: SettingsManager.create(options.cwd, options.agentDir, { projectTrusted: true }),
+	});
+}
+
 describe("DefaultResourceLoader", () => {
 	let tempDir: string;
 	let agentDir: string;
@@ -32,7 +43,7 @@ describe("DefaultResourceLoader", () => {
 
 	describe("reload", () => {
 		it("should initialize with empty results before reload", () => {
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = trustedLoader({ cwd, agentDir });
 
 			expect(loader.getExtensions().extensions).toEqual([]);
 			expect(loader.getSkills().skills).toEqual([]);
@@ -52,7 +63,7 @@ description: A test skill
 Skill content here.`,
 			);
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = trustedLoader({ cwd, agentDir });
 			await loader.reload();
 
 			const { skills } = loader.getSkills();
@@ -72,7 +83,7 @@ Skill content here.`,
 			);
 			writeFileSync(join(skillDir, "EFFICIENCY.md"), "No frontmatter here");
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = trustedLoader({ cwd, agentDir });
 			await loader.reload();
 
 			const { skills, diagnostics } = loader.getSkills();
@@ -91,7 +102,7 @@ description: A test prompt
 Prompt content.`,
 			);
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = trustedLoader({ cwd, agentDir });
 			await loader.reload();
 
 			const { prompts } = loader.getPrompts();
@@ -145,7 +156,7 @@ Project skill`,
 			}
 			writeFileSync(projectThemePath, JSON.stringify(baseTheme, null, 2));
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = trustedLoader({ cwd, agentDir });
 			await loader.reload();
 
 			const prompt = loader.getPrompts().prompts.find((p) => p.name === "commit");
@@ -176,7 +187,7 @@ Project skill`,
 			symlinkSync(sharedExtDir, join(agentDir, "extensions"), "dir");
 			symlinkSync(sharedExtDir, join(cwd, ".apex-code", "extensions"), "dir");
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = trustedLoader({ cwd, agentDir });
 			await loader.reload();
 
 			const extensionsResult = loader.getExtensions();
@@ -217,7 +228,7 @@ export default function(pi) {
 }`,
 			);
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = trustedLoader({ cwd, agentDir });
 			await loader.reload({
 				resolveProjectTrust: async ({ extensionsResult }) => {
 					expect(extensionsResult.extensions.map((extension) => extension.path)).toEqual([
@@ -269,7 +280,7 @@ export default function(pi) {
 }`,
 			);
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = trustedLoader({ cwd, agentDir });
 			await loader.reload();
 
 			const extensionsResult = loader.getExtensions();
@@ -348,7 +359,7 @@ Content`,
 		it("should discover AGENTS.md context files", async () => {
 			writeFileSync(join(cwd, "AGENTS.md"), "# Project Guidelines\n\nBe helpful.");
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = trustedLoader({ cwd, agentDir });
 			await loader.reload();
 
 			const { agentsFiles } = loader.getAgentsFiles();
@@ -364,7 +375,7 @@ Content`,
 			writeFileSync(join(nestedCwd, "AGENTS.md"), "service instructions");
 			writeFileSync(join(nestedCwd, "AGENTS.override.md"), "service override");
 
-			const loader = new DefaultResourceLoader({ cwd: nestedCwd, agentDir });
+			const loader = trustedLoader({ cwd: nestedCwd, agentDir });
 			await loader.reload();
 
 			expect(loader.getAgentsFiles().agentsFiles).toEqual([
@@ -380,7 +391,7 @@ Content`,
 			writeFileSync(join(cwd, "CLAUDE.md"), "Fallback instructions");
 			const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = trustedLoader({ cwd, agentDir });
 			await loader.reload();
 
 			expect(loader.getAgentsFiles().agentsFiles).toContainEqual({
@@ -409,7 +420,7 @@ Content`,
 			mkdirSync(piDir, { recursive: true });
 			writeFileSync(join(piDir, "SYSTEM.md"), "You are a helpful assistant.");
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = trustedLoader({ cwd, agentDir });
 			await loader.reload();
 
 			expect(loader.getSystemPrompt()).toBe("You are a helpful assistant.");
@@ -453,7 +464,10 @@ Project skill content`,
 			expect(loader.getAgentsFiles().agentsFiles.some((file) => file.path === join(agentDir, "AGENTS.md"))).toBe(
 				true,
 			);
-			expect(loader.getAgentsFiles().agentsFiles.some((file) => file.path === join(cwd, "AGENTS.md"))).toBe(true);
+			// Flipped on 2026-09-19. This asserted that an untrusted checkout's instructions still
+			// reached the system prompt, which is the hole rather than the behavior. The global
+			// file above is the control: it is the user's own and still loads.
+			expect(loader.getAgentsFiles().agentsFiles.some((file) => file.path === join(cwd, "AGENTS.md"))).toBe(false);
 			expect(loader.getExtensions().extensions).toHaveLength(0);
 			expect(loader.getExtensions().errors).toEqual([]);
 			expect(loader.getSkills().skills.some((skill) => skill.name === "project-skill")).toBe(false);
@@ -466,7 +480,7 @@ Project skill content`,
 			mkdirSync(piDir, { recursive: true });
 			writeFileSync(join(piDir, "APPEND_SYSTEM.md"), "Additional instructions.");
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = trustedLoader({ cwd, agentDir });
 			await loader.reload();
 
 			expect(loader.getAppendSystemPrompt()).toContain("Additional instructions.");
@@ -480,7 +494,7 @@ Project skill content`,
 			mkdirSync(piDir, { recursive: true });
 			writeFileSync(systemPromptPath, "Project system prompt.");
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = trustedLoader({ cwd, agentDir });
 			await loader.reload();
 
 			expect(loader.getSystemPrompt()).toBe("Project system prompt.");
@@ -491,7 +505,7 @@ Project skill content`,
 			const systemPromptPath = join(agentDir, "SYSTEM.md");
 			writeFileSync(systemPromptPath, "Global system prompt.");
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = trustedLoader({ cwd, agentDir });
 			await loader.reload();
 
 			expect(loader.getSystemPrompt()).toBe("Global system prompt.");
@@ -523,7 +537,7 @@ Project skill content`,
 			mkdirSync(piDir, { recursive: true });
 			writeFileSync(appendSystemPromptPath, "Project append prompt.");
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = trustedLoader({ cwd, agentDir });
 			await loader.reload();
 
 			expect(loader.getAppendSystemPrompt()).toEqual(["Project append prompt."]);
@@ -579,7 +593,7 @@ description: Extra prompt
 Extra prompt content`,
 			);
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = trustedLoader({ cwd, agentDir });
 			await loader.reload();
 
 			loader.extendResources({
@@ -880,7 +894,7 @@ export default function(pi: ExtensionAPI) {
 }`,
 			);
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = trustedLoader({ cwd, agentDir });
 			await loader.reload();
 
 			const { errors } = loader.getExtensions();
@@ -990,7 +1004,7 @@ export default function(pi: ExtensionAPI) {
 			writeFileSync(join(main, "AGENTS.md"), "main repo instructions");
 			writeFileSync(join(worktree, "AGENTS.md"), "worktree instructions");
 
-			const files = loadProjectContextFiles({ cwd: worktreeSrc, agentDir });
+			const files = loadProjectContextFiles({ cwd: worktreeSrc, agentDir, projectTrusted: true });
 
 			expect(files.map((f) => f.content)).toEqual(["worktree instructions"]);
 		});
@@ -999,7 +1013,7 @@ export default function(pi: ExtensionAPI) {
 			const { main, worktreeSrc } = setupNestedWorktree();
 			writeFileSync(join(main, "AGENTS.md"), "main repo instructions");
 
-			const files = loadProjectContextFiles({ cwd: worktreeSrc, agentDir });
+			const files = loadProjectContextFiles({ cwd: worktreeSrc, agentDir, projectTrusted: true });
 
 			expect(files.map((f) => f.content)).toEqual(["main repo instructions"]);
 		});
@@ -1012,7 +1026,7 @@ export default function(pi: ExtensionAPI) {
 			writeFileSync(join(main, "CLAUDE.md"), "main repo instructions");
 			writeFileSync(join(worktree, "AGENTS.md"), "worktree instructions");
 
-			const files = loadProjectContextFiles({ cwd: worktreeSrc, agentDir });
+			const files = loadProjectContextFiles({ cwd: worktreeSrc, agentDir, projectTrusted: true });
 
 			expect(files.map((f) => f.content)).toEqual(["main repo instructions", "worktree instructions"]);
 		});
@@ -1035,7 +1049,7 @@ export default function(pi: ExtensionAPI) {
 			writeFileSync(join(proj, "AGENTS.md"), "container instructions");
 			writeFileSync(join(worktree, "AGENTS.md"), "worktree instructions");
 
-			const files = loadProjectContextFiles({ cwd: worktree, agentDir });
+			const files = loadProjectContextFiles({ cwd: worktree, agentDir, projectTrusted: true });
 
 			expect(files.map((f) => f.content)).toEqual(["container instructions", "worktree instructions"]);
 		});
@@ -1046,7 +1060,7 @@ export default function(pi: ExtensionAPI) {
 			writeFileSync(join(main, "AGENTS.md"), "main repo instructions");
 			writeFileSync(join(worktree, "AGENTS.md"), "worktree instructions");
 
-			const files = loadProjectContextFiles({ cwd: worktreeSrc, agentDir });
+			const files = loadProjectContextFiles({ cwd: worktreeSrc, agentDir, projectTrusted: true });
 
 			// Only the main repo root's duplicate is dropped; the unrelated dir above it stays.
 			expect(files.map((f) => f.content)).toEqual(["outer instructions", "worktree instructions"]);
@@ -1065,7 +1079,7 @@ export default function(pi: ExtensionAPI) {
 			writeFileSync(join(sib, "AGENTS.md"), "sibling worktree instructions");
 			linkWorktree(main, sib, "sib");
 
-			const files = loadProjectContextFiles({ cwd: sibSrc, agentDir });
+			const files = loadProjectContextFiles({ cwd: sibSrc, agentDir, projectTrusted: true });
 
 			expect(files.map((f) => f.content)).toEqual(["outer instructions", "sibling worktree instructions"]);
 		});
@@ -1084,7 +1098,7 @@ export default function(pi: ExtensionAPI) {
 			writeFileSync(join(subGitDir, "HEAD"), "ref: refs/heads/main\n");
 			writeFileSync(join(sub, ".git"), `gitdir: ${subGitDir}\n`);
 
-			const files = loadProjectContextFiles({ cwd: subSrc, agentDir });
+			const files = loadProjectContextFiles({ cwd: subSrc, agentDir, projectTrusted: true });
 
 			expect(files.map((f) => f.content)).toEqual(["superproject instructions", "submodule instructions"]);
 		});
@@ -1100,7 +1114,7 @@ export default function(pi: ExtensionAPI) {
 			writeFileSync(join(repo, "AGENTS.md"), "repo instructions");
 			writeFileSync(join(leaf, "AGENTS.md"), "leaf instructions");
 
-			const files = loadProjectContextFiles({ cwd: leaf, agentDir });
+			const files = loadProjectContextFiles({ cwd: leaf, agentDir, projectTrusted: true });
 
 			expect(files.map((f) => f.content)).toEqual(["outer instructions", "repo instructions", "leaf instructions"]);
 		});
@@ -1113,7 +1127,7 @@ export default function(pi: ExtensionAPI) {
 			writeFileSync(join(repo, "AGENTS.md"), "repo instructions");
 			writeFileSync(join(src, "AGENTS.md"), "src instructions");
 
-			const files = loadProjectContextFiles({ cwd: src, agentDir });
+			const files = loadProjectContextFiles({ cwd: src, agentDir, projectTrusted: true });
 
 			expect(files.map((f) => f.content)).toEqual(["repo instructions", "src instructions"]);
 		});

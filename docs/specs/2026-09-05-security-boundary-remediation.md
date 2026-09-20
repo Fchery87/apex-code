@@ -51,7 +51,8 @@ Passing focused unit tests does not prove complete mediation. The missing tests 
 ## Goals
 
 - [x] The public CLI parses arguments once and uses the typed result for metadata behavior, sandbox selection, and session construction.
-- [x] Untrusted projects cannot load project or local authorization grants, modes, eager MCP, hooks, or other project-controlled startup authority.
+- [x] A permission store, settings manager, or MCP runtime constructed for a project already classified untrusted excludes project and local grants, modes, eager MCP, and hooks. This is what the 2026-09-05 verification actually checked, and it is kept true by `test/security-boundary/project-permission-trust.test.ts`.
+- [ ] Whether a project reaches that construction classified correctly is a separate question this spec did not check, and the answer was no. Four project resources were read without ever reaching the classifier, three loaders treated a missing trust argument as trusted, and repository instruction files reached the system prompt through no gate. Tracked and closed in [the 2026-09-11 trust classification spec](2026-09-11-trust-classification-and-proof-integrity.md), not here. Left unchecked deliberately: this row is a pointer, not outstanding work in a superseded document.
 - [x] The child cannot modify the authorization state used by its current or next permission snapshot.
 - [x] A canonical operation model supplies authorization and execution for path operations. Bash retains its grammar-sensitive matcher, while unused command, credential, and evidence variants were not added.
 - [x] `@` aliases, symlink aliases, literal glob characters, unsupported shell grammar, mixed shell commands, and grammar-sensitive whitespace cannot bypass authorization within the covered paths and Bash matcher.

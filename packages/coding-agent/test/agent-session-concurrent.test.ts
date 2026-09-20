@@ -121,7 +121,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		});
 
 		const sessionManager = SessionManager.inMemory();
-		const settingsManager = SettingsManager.create(tempDir, tempDir);
+		const settingsManager = SettingsManager.create(tempDir, tempDir, { projectTrusted: true });
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = await createModelRegistry(authStorage, tempDir);
 		// Set a runtime API key so validation passes
@@ -267,7 +267,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		});
 
 		const sessionManager = SessionManager.inMemory();
-		const settingsManager = SettingsManager.create(tempDir, tempDir);
+		const settingsManager = SettingsManager.create(tempDir, tempDir, { projectTrusted: true });
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = await createModelRegistry(authStorage, tempDir);
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));
@@ -345,7 +345,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		});
 
 		const sessionManager = SessionManager.inMemory();
-		const settingsManager = SettingsManager.create(tempDir, tempDir);
+		const settingsManager = SettingsManager.create(tempDir, tempDir, { projectTrusted: true });
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = await createModelRegistry(authStorage, tempDir);
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));
@@ -451,7 +451,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		});
 
 		const sessionManager = SessionManager.inMemory();
-		const settingsManager = SettingsManager.create(tempDir, tempDir);
+		const settingsManager = SettingsManager.create(tempDir, tempDir, { projectTrusted: true });
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = await createModelRegistry(authStorage, tempDir);
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));
@@ -598,7 +598,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		});
 
 		const sessionManager = SessionManager.inMemory();
-		const settingsManager = SettingsManager.create(tempDir, tempDir);
+		const settingsManager = SettingsManager.create(tempDir, tempDir, { projectTrusted: true });
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = await createModelRegistry(authStorage, tempDir);
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));

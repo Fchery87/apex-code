@@ -109,6 +109,7 @@ async function driveOneToolCallTurn(
 describe("permission gate — universal (invariant 2: every registered tool passes the gate)", () => {
 	it.each([...allToolNames])("blocks %s when a blanket deny rule applies, and never executes it", async (toolName) => {
 		const store = new FilePermissionRuleStore({
+			projectTrusted: true,
 			cwd: scratch,
 			agentDir: join(scratch, "agent"),
 			policyPath: join(scratch, "missing-policy.json"),
@@ -131,6 +132,7 @@ describe("permission gate — universal (invariant 2: every registered tool pass
 
 	it.each([...allToolNames])("allows %s to execute when an explicit allow rule applies", async (toolName) => {
 		const store = new FilePermissionRuleStore({
+			projectTrusted: true,
 			cwd: scratch,
 			agentDir: join(scratch, "agent"),
 			policyPath: join(scratch, "missing-policy.json"),
@@ -157,6 +159,7 @@ describe("permission gate — universal (invariant 2: every registered tool pass
 describe("permission gate — lsp (invariant 2, conditionally registered tool)", () => {
 	it("blocks lsp when a blanket deny rule applies, and never executes it", async () => {
 		const store = new FilePermissionRuleStore({
+			projectTrusted: true,
 			cwd: scratch,
 			agentDir: join(scratch, "agent"),
 			policyPath: join(scratch, "missing-policy.json"),
@@ -179,6 +182,7 @@ describe("permission gate — lsp (invariant 2, conditionally registered tool)",
 
 	it("allows lsp to execute when an explicit allow rule applies", async () => {
 		const store = new FilePermissionRuleStore({
+			projectTrusted: true,
 			cwd: scratch,
 			agentDir: join(scratch, "agent"),
 			policyPath: join(scratch, "missing-policy.json"),
@@ -201,6 +205,7 @@ describe("permission gate — lsp (invariant 2, conditionally registered tool)",
 describe("permission gate — plan mode (task 4.3: state stays callable, mutation stays denied)", () => {
 	it("executes todo_write under plan mode even with no explicit rule, through the real registry contract", async () => {
 		const store = new FilePermissionRuleStore({
+			projectTrusted: true,
 			cwd: scratch,
 			agentDir: join(scratch, "agent"),
 			policyPath: join(scratch, "missing-policy.json"),
@@ -221,6 +226,7 @@ describe("permission gate — plan mode (task 4.3: state stays callable, mutatio
 		"still denies %s under plan mode's hard floor, through the real registry contract",
 		async (toolName) => {
 			const store = new FilePermissionRuleStore({
+				projectTrusted: true,
 				cwd: scratch,
 				agentDir: join(scratch, "agent"),
 				policyPath: join(scratch, "missing-policy.json"),
@@ -242,6 +248,7 @@ describe("permission gate — plan mode (task 4.3: state stays callable, mutatio
 		"task 4.4: %s (net capability) is not denied by plan mode's hard floor -- an explicit allow rule still executes",
 		async (toolName) => {
 			const store = new FilePermissionRuleStore({
+				projectTrusted: true,
 				cwd: scratch,
 				agentDir: join(scratch, "agent"),
 				policyPath: join(scratch, "missing-policy.json"),
@@ -265,6 +272,7 @@ describe("permission gate — plan mode (task 4.3: state stays callable, mutatio
 		"task 4.5: %s (ui capability) is not denied by plan mode's hard floor, even with no explicit rule (allow default)",
 		async (toolName) => {
 			const store = new FilePermissionRuleStore({
+				projectTrusted: true,
 				cwd: scratch,
 				agentDir: join(scratch, "agent"),
 				policyPath: join(scratch, "missing-policy.json"),
@@ -286,6 +294,7 @@ describe("permission gate — plan mode (task 4.3: state stays callable, mutatio
 describe("permission gate — decision plumbing (evaluateToolCall)", () => {
 	function inMemoryStore(): FilePermissionRuleStore {
 		return new FilePermissionRuleStore({
+			projectTrusted: true,
 			cwd: "/nonexistent",
 			agentDir: "/nonexistent/agent",
 			policyPath: "/nonexistent/policy.json",
@@ -410,6 +419,7 @@ describe("permission gate — decision plumbing (evaluateToolCall)", () => {
 describe("a denial carries the user's instruction back to the model", () => {
 	it("puts the guidance in the blocked tool result and never runs the tool", async () => {
 		const store = new FilePermissionRuleStore({
+			projectTrusted: true,
 			cwd: scratch,
 			agentDir: join(scratch, "agent"),
 			policyPath: join(scratch, "missing-policy.json"),
@@ -437,6 +447,7 @@ describe("a denial carries the user's instruction back to the model", () => {
 
 	it("offers no session grant for a tool whose contract yields no rule", async () => {
 		const store = new FilePermissionRuleStore({
+			projectTrusted: true,
 			cwd: scratch,
 			agentDir: join(scratch, "agent"),
 			policyPath: join(scratch, "missing-policy.json"),

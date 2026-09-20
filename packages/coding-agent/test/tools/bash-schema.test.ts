@@ -62,7 +62,7 @@ describe("bash provider schema", () => {
 							timeout: { type: "number" },
 							background: { type: "boolean" },
 							handle: { type: "string", description: expect.any(String) },
-							kill: { const: true, description: expect.any(String) },
+							kill: { type: "boolean", description: expect.any(String) },
 						},
 					},
 				},
@@ -72,9 +72,11 @@ describe("bash provider schema", () => {
 
 	it.each([
 		{ command: "pwd" },
+		{ command: "pwd", kill: false },
 		{ command: "pwd", timeout: 5 },
 		{ command: "pwd", background: true },
 		{ handle: "background-handle" },
+		{ handle: "background-handle", kill: false },
 		{ handle: "background-handle", kill: true },
 	])("validates the existing call form %j", (args) => {
 		const tool = createBashTool(cwd);
