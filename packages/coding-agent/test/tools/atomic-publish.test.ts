@@ -37,20 +37,41 @@ describe("edit and write publish atomically", () => {
 		dir = mkdtempSync(join(tmpdir(), "apex-atomic-"));
 	});
 
-	it("leaves a reader's already-open descriptor showing the original bytes", () => {
-		const target = join(dir, "notes.txt");
+	// POSIX only. Windows refuses a rename onto a destination another handle holds open, so
+	// this exact situation is the one that falls back to an in-place write and cannot keep the
+	// old bytes. `still publishes when a reader holds the file open` below is the Windows half.
+	it.skipIf(process.platform === "win32")(
+		"leaves a reader's already-open descriptor showing the original bytes",
+		() => {
+			const target = join(dir, "notes.txt");
+			writeFileSync(target, original);
+			const operation = preparePathOperation(target, dir);
+
+			const reader = openSync(target, "r");
+			try {
+				writePreparedPath(operation, "replacement\n");
+				const buffer = Buffer.alloc(original.length);
+				const read = readSync(reader, buffer, 0, buffer.length, 0);
+				expect(buffer.subarray(0, read).toString("utf-8")).toBe(original);
+			} finally {
+				closeSync(reader);
+			}
+		},
+	);
+
+	it("still publishes when a reader holds the file open, on every platform", () => {
+		const target = join(dir, "held.txt");
 		writeFileSync(target, original);
 		const operation = preparePathOperation(target, dir);
-
 		const reader = openSync(target, "r");
 		try {
 			writePreparedPath(operation, "replacement\n");
-			const buffer = Buffer.alloc(original.length);
-			const read = readSync(reader, buffer, 0, buffer.length, 0);
-			expect(buffer.subarray(0, read).toString("utf-8")).toBe(original);
 		} finally {
 			closeSync(reader);
 		}
+		// Windows cannot rename onto an open destination, and refusing to write a file an editor
+		// happens to have open is not a trade a user opted into. It falls back; the write lands.
+		expect(readFileSync(target, "utf-8")).toBe("replacement\n");
 	});
 
 	it("publishes the new content under the name", () => {
@@ -68,13 +89,16 @@ describe("edit and write publish atomically", () => {
 		expect(statSync(target).ino).not.toBe(before);
 	});
 
-	it("preserves the destination's mode, so publishing does not reset permissions", () => {
-		const target = join(dir, "secret.txt");
-		writeFileSync(target, original);
-		chmodSync(target, 0o640);
-		writePreparedPath(preparePathOperation(target, dir), "replacement\n");
-		expect(statSync(target).mode & 0o777).toBe(0o640);
-	});
+	it.skipIf(process.platform === "win32")(
+		"preserves the destination's mode, so publishing does not reset permissions",
+		() => {
+			const target = join(dir, "secret.txt");
+			writeFileSync(target, original);
+			chmodSync(target, 0o640);
+			writePreparedPath(preparePathOperation(target, dir), "replacement\n");
+			expect(statSync(target).mode & 0o777).toBe(0o640);
+		},
+	);
 
 	it("still refuses a target whose identity changed after authorization", () => {
 		const target = join(dir, "notes.txt");
@@ -114,23 +138,29 @@ describe("edit and write publish atomically", () => {
 		expect(readFileSync(target, "utf-8")).toBe("replacement\n");
 	});
 
-	it("lets umask decide a new ungated file's mode, rather than forcing it world-writable", () => {
-		// `fsWriteFile` created with 0o666 masked by umask. Staging then chmod'ing to a
-		// captured mode is right for an existing destination and wrong for a new one: there
-		// is no destination to capture from, and forcing the fallback value defeats the mask.
-		const fresh = join(dir, "fresh.txt");
-		writePathAtomically(fresh, "created\n");
-		expect(readFileSync(fresh, "utf-8")).toBe("created\n");
-		expect(statSync(fresh).mode & 0o002, "a new file must not be world-writable").toBe(0);
-	});
+	it.skipIf(process.platform === "win32")(
+		"lets umask decide a new ungated file's mode, rather than forcing it world-writable",
+		() => {
+			// `fsWriteFile` created with 0o666 masked by umask. Staging then chmod'ing to a
+			// captured mode is right for an existing destination and wrong for a new one: there
+			// is no destination to capture from, and forcing the fallback value defeats the mask.
+			const fresh = join(dir, "fresh.txt");
+			writePathAtomically(fresh, "created\n");
+			expect(readFileSync(fresh, "utf-8")).toBe("created\n");
+			expect(statSync(fresh).mode & 0o002, "a new file must not be world-writable").toBe(0);
+		},
+	);
 
-	it("carries an existing destination's mode through an ungated write too", () => {
-		const target = join(dir, "kept-mode.txt");
-		writeFileSync(target, original);
-		chmodSync(target, 0o600);
-		writePathAtomically(target, "replacement\n");
-		expect(statSync(target).mode & 0o777).toBe(0o600);
-	});
+	it.skipIf(process.platform === "win32")(
+		"carries an existing destination's mode through an ungated write too",
+		() => {
+			const target = join(dir, "kept-mode.txt");
+			writeFileSync(target, original);
+			chmodSync(target, 0o600);
+			writePathAtomically(target, "replacement\n");
+			expect(statSync(target).mode & 0o777).toBe(0o600);
+		},
+	);
 
 	it("leaves no temporary file behind", () => {
 		const target = join(dir, "notes.txt");

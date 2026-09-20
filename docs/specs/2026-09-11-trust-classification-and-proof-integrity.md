@@ -199,6 +199,30 @@ was already authorized to write, inside that window. Crash safety is not a race:
 write destroyed the file every time. The trade is deliberate and is recorded here rather than
 left for a reader to derive from the diff.
 
+### What three-OS CI caught that nothing local could
+
+The Windows job failed on the first run of this work, and one of its four failures was a real
+defect rather than a test-portability problem.
+
+Windows refuses a rename onto a destination another handle holds open, and an ordinary read
+handle is enough. The probe holds one across the publish, which is how it surfaced. In a real
+session the handle belongs to an editor, a watcher, or a language server, so `edit` and `write`
+would have failed on any file the user happened to have open. The spec and the changelog had
+already recorded this as an acceptable trade, reasoning from `FILE_SHARE_DELETE` alone. That was
+wrong on the facts and wrong on the severity.
+
+The rename now falls back to an in-place write when Windows refuses it, re-verifying the target's
+identity against a fresh descriptor so the weaker durability does not come with a weaker target
+guarantee. Windows gets atomic publish whenever it can have it and a working write when it
+cannot.
+
+The other three failures were POSIX mode semantics. Windows reports `0o666` for any writable file
+and has no umask, so those assertions measured the platform rather than the change, and they are
+skipped there using the idiom `test/models-store.test.ts` already uses for the same reason.
+
+This is the case for the required Windows job existing. The Linux and macOS jobs passed, and so
+did every local run, because POSIX renames over an open file without complaint.
+
 ### What the registry still could not see
 
 The path guard this spec landed matched a gated resource by its filename as a string. Two
