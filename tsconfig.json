@@ -6,6 +6,14 @@
 		"moduleResolution": "NodeNext",
 		"paths": {
 			"*": ["./*"],
+			// highlight.js 11 ships types that open with `/// <reference lib="dom" />`, which a
+			// declaration file gets to do regardless of `skipLibCheck`. That pulls lib.dom into
+			// the program, DOM's `Headers` shadows the one @types/node supplies, and frozen
+			// `packages/ai` stops compiling on code ADR 0001 forbids us to repair. These point at
+			// local declarations so the dependency stays current without DOM entering the program.
+			"highlight.js": ["./packages/coding-agent/src/utils/highlight-js-api.d.ts"],
+			"highlight.js/lib/core": ["./packages/coding-agent/src/utils/highlight-js-api.d.ts"],
+			"highlight.js/lib/languages/*": ["./packages/coding-agent/src/utils/highlight-js-language.d.ts"],
 			"@earendil-works/pi-telemetry": ["./packages/telemetry/src/index.ts"],
 			"@earendil-works/pi-telemetry/testing": ["./packages/telemetry/src/testing/index.ts"],
 			"@earendil-works/pi-ai": ["./packages/ai/src/index.ts"],
