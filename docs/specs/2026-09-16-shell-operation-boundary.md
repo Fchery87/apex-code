@@ -1,6 +1,6 @@
 # Spec: One parsed shell operation, shared by every consumer
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 

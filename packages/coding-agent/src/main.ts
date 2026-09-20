@@ -704,7 +704,9 @@ export async function main(args: string[], options?: MainOptions) {
 	const { migratedAuthProviders: migratedProviders, deprecationWarnings } = runMigrations(cwd);
 	time("runMigrations");
 
-	const startupSettingsManager = SettingsManager.create(cwd, agentDir);
+	// Untrusted: `ProjectTrustStore` is not built until below, so there is no decision to
+	// read yet and the project cannot supply startup settings ahead of one. ADR 0034.
+	const startupSettingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: false });
 	const startupSettingsDiagnostics = collectSettingsDiagnostics(startupSettingsManager);
 
 	// Experimental first-time setup: theme choice and analytics opt-in.

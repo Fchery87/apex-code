@@ -249,7 +249,7 @@ export interface Settings {
 	showHardwareCursor?: boolean; // Show terminal cursor while still positioning it for IME
 	markdown?: MarkdownSettings;
 	warnings?: WarningSettings;
-	sessionDir?: string; // Custom session storage directory (same format as --session-dir CLI flag)
+	sessionDir?: string; // Custom session storage directory (same format as --session-dir CLI flag); global setting only
 	httpProxy?: string; // Proxy URL applied as HTTP_PROXY and HTTPS_PROXY for Pi-managed HTTP clients
 	httpIdleTimeoutMs?: number; // HTTP header/body idle timeout in milliseconds; 0 disables it
 	websocketConnectTimeoutMs?: number; // WebSocket connect/open handshake timeout in milliseconds; 0 disables it
@@ -394,6 +394,18 @@ function parseTimeoutSetting(value: unknown, settingName: string): number | unde
 export type SettingsScope = "global" | "project";
 
 export interface SettingsManagerCreateOptions {
+	/**
+	 * Required, per ADR 0034. `create` and `fromStorage` read project-controlled bytes, and
+	 * a caller that has not resolved trust cannot be given either answer about them.
+	 */
+	projectTrusted: boolean;
+}
+
+/**
+ * `inMemory`'s storage holds whatever the caller wrote into it, so its project scope has no
+ * untrusted source and there is no decision for the caller to record. ADR 0034 § Scope.
+ */
+export interface SettingsManagerInMemoryOptions {
 	projectTrusted?: boolean;
 }
 
@@ -503,6 +515,16 @@ export class InMemorySettingsStorage implements SettingsStorage {
 	}
 }
 
+/**
+ * ADR 0034. The required type stops a TypeScript caller; this stops the JavaScript one, who
+ * reaches these constructors through the published package with no compiler in between.
+ */
+function assertTrustDecision(options: SettingsManagerCreateOptions | undefined, caller: string): void {
+	if (typeof options?.projectTrusted !== "boolean") {
+		throw new TypeError(`${caller} requires an explicit projectTrusted decision (ADR 0034)`);
+	}
+}
+
 export class SettingsManager {
 	private storage: SettingsStorage;
 	private globalSettings: Settings;
@@ -526,7 +548,7 @@ export class SettingsManager {
 		globalLoadError: Error | null = null,
 		projectLoadError: Error | null = null,
 		initialErrors: SettingsError[] = [],
-		projectTrusted = true,
+		projectTrusted: boolean,
 		settingsPaths: SettingsPaths = {},
 	) {
 		this.storage = storage;
@@ -544,8 +566,9 @@ export class SettingsManager {
 	static create(
 		cwd: string,
 		agentDir: string = getAgentDir(),
-		options: SettingsManagerCreateOptions = {},
+		options: SettingsManagerCreateOptions,
 	): SettingsManager {
+		assertTrustDecision(options, "SettingsManager.create");
 		const resolvedCwd = resolvePath(cwd);
 		const resolvedAgentDir = resolvePath(agentDir);
 		const storage = new FileSettingsStorage(resolvedCwd, resolvedAgentDir);
@@ -556,7 +579,8 @@ export class SettingsManager {
 	}
 
 	/** Create a SettingsManager from an arbitrary storage backend */
-	static fromStorage(storage: SettingsStorage, options: SettingsManagerCreateOptions = {}): SettingsManager {
+	static fromStorage(storage: SettingsStorage, options: SettingsManagerCreateOptions): SettingsManager {
+		assertTrustDecision(options, "SettingsManager.fromStorage");
 		return SettingsManager.fromStorageWithPaths(storage, options);
 	}
 
@@ -566,9 +590,11 @@ export class SettingsManager {
 		options: SettingsManagerCreateOptions,
 		settingsPaths: SettingsPaths = {},
 	): SettingsManager {
-		const projectTrusted = options.projectTrusted ?? true;
+		const { projectTrusted } = options;
 		const globalLoad = SettingsManager.tryLoadFromStorage(storage, "global");
-		const projectLoad = SettingsManager.tryLoadFromStorage(storage, "project", projectTrusted);
+		const projectLoad = projectTrusted
+			? SettingsManager.tryLoadFromStorage(storage, "project")
+			: SettingsManager.untrustedProjectLoad();
 		const initialErrors: SettingsError[] = [];
 		if (globalLoad.error) {
 			initialErrors.push(toSettingsError("global", globalLoad.error, settingsPaths.global));
@@ -590,18 +616,19 @@ export class SettingsManager {
 	}
 
 	/** Create an in-memory SettingsManager (no file I/O) */
-	static inMemory(settings: Partial<Settings> = {}, options: SettingsManagerCreateOptions = {}): SettingsManager {
+	static inMemory(settings: Partial<Settings> = {}, options: SettingsManagerInMemoryOptions = {}): SettingsManager {
 		const storage = new InMemorySettingsStorage();
 		const initialSettings = SettingsManager.migrateSettings(structuredClone(settings) as Record<string, unknown>);
 		storage.withLock("global", () => JSON.stringify(initialSettings, null, 2));
-		return SettingsManager.fromStorage(storage, options);
+		return SettingsManager.fromStorageWithPaths(storage, { projectTrusted: options.projectTrusted ?? true });
 	}
 
-	private static loadFromStorage(storage: SettingsStorage, scope: SettingsScope, projectTrusted = true): Settings {
-		if (scope === "project" && !projectTrusted) {
-			return {};
-		}
+	/** An untrusted project contributes no settings and reports no error. */
+	private static untrustedProjectLoad(): { settings: Settings; error: Error | null } {
+		return { settings: {}, error: null };
+	}
 
+	private static loadFromStorage(storage: SettingsStorage, scope: SettingsScope): Settings {
 		let content: string | undefined;
 		storage.withLock(scope, (current) => {
 			content = current;
@@ -618,10 +645,9 @@ export class SettingsManager {
 	private static tryLoadFromStorage(
 		storage: SettingsStorage,
 		scope: SettingsScope,
-		projectTrusted = true,
 	): { settings: Settings; error: Error | null } {
 		try {
-			return { settings: SettingsManager.loadFromStorage(storage, scope, projectTrusted), error: null };
+			return { settings: SettingsManager.loadFromStorage(storage, scope), error: null };
 		} catch (error) {
 			return { settings: {}, error: error as Error };
 		}
@@ -733,7 +759,9 @@ export class SettingsManager {
 			return;
 		}
 
-		const projectLoad = SettingsManager.tryLoadFromStorage(this.storage, "project", trusted);
+		const projectLoad = trusted
+			? SettingsManager.tryLoadFromStorage(this.storage, "project")
+			: SettingsManager.untrustedProjectLoad();
 		this.projectSettings = projectLoad.settings;
 		this.projectSettingsLoadError = projectLoad.error;
 		if (projectLoad.error) {
@@ -758,7 +786,9 @@ export class SettingsManager {
 		this.modifiedProjectFields.clear();
 		this.modifiedProjectNestedFields.clear();
 
-		const projectLoad = SettingsManager.tryLoadFromStorage(this.storage, "project", this.projectTrusted);
+		const projectLoad = this.projectTrusted
+			? SettingsManager.tryLoadFromStorage(this.storage, "project")
+			: SettingsManager.untrustedProjectLoad();
 		if (!projectLoad.error) {
 			this.projectSettings = projectLoad.settings;
 			this.projectSettingsLoadError = null;
@@ -943,7 +973,12 @@ export class SettingsManager {
 	}
 
 	getSessionDir(): string | undefined {
-		const sessionDir = this.settings.sessionDir;
+		// Global scope only. A transcript carries everything the session saw, so a project
+		// that could choose where one is written could have it written somewhere the project
+		// reads or commits. Startup also reads this before trust is resolved, because the
+		// session manager is built before the trust store exists, so there is no point in the
+		// sequence where honoring a project's value would be both safe and possible.
+		const sessionDir = this.globalSettings.sessionDir;
 		return sessionDir ? normalizePath(sessionDir) : sessionDir;
 	}
 

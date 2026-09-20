@@ -236,7 +236,9 @@ normal turn follows this shape:
 
 1. **Build context.** Apex Code combines the system prompt, session history, project
    context files such as `AGENTS.md`, the current request, enabled tools, and relevant
-   extension state.
+   extension state. A project's own `AGENTS.md` or `CLAUDE.md` is instruction the
+   repository supplies, so it loads only once you have trusted that project; the one in
+   your agent directory is yours and always loads.
 2. **Select a model.** The configured provider/model and reasoning level determine which
    upstream `pi-ai` adapter receives the request.
 3. **Ask for the next action.** The model can answer directly or request a tool call.
@@ -619,6 +621,11 @@ complete export to GitHub after confirmation.
 Use a container, VM, or micro-VM, restrict mounts and network access, use short-lived
 credentials, and review outputs before moving them into a trusted environment. Apex Code
 ships no built-in sandbox, so container or VM isolation is the containment boundary.
+
+Declining the trust prompt, or answering it later, keeps that repository's settings,
+permission grants, agents, eager MCP servers, and `AGENTS.md` or `CLAUDE.md` out of the
+session. It is not containment and does not stop a tool call you approve. It stops the
+checkout from configuring the agent before you have looked at it.
 
 ## Developing Apex Code
 

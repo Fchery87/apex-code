@@ -167,8 +167,13 @@ export interface CreateFilePermissionRuleStoreOptions {
 	backends?: Partial<Record<FileBackedSource, AuthStorageBackend>>;
 	/** Immutable argv layers (`flag` / `cliArg`), validated by the CLI before construction. */
 	initialRules?: readonly PermissionRule[];
-	/** Resolved before construction. False excludes both project-controlled scopes. */
-	projectTrusted?: boolean;
+	/**
+	 * Resolved before construction. False excludes both project-controlled scopes.
+	 *
+	 * Required, per ADR 0034. There is no correct default: a caller that has not resolved
+	 * trust cannot be given either answer about an untrusted checkout.
+	 */
+	projectTrusted: boolean;
 }
 
 /** File-backed store for policy/local/project/user, in-memory for command/session. */
@@ -195,7 +200,12 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 		};
 		this.policyPath = options.policyPath ?? defaultPolicyPath();
 		this.initialRules = options.initialRules ?? [];
-		this.projectTrusted = options.projectTrusted ?? true;
+		// A JavaScript caller reaches this with no compiler in between, so the type is not
+		// the whole guard. ADR 0034.
+		if (typeof options.projectTrusted !== "boolean") {
+			throw new TypeError("FilePermissionRuleStore requires an explicit projectTrusted decision (ADR 0034)");
+		}
+		this.projectTrusted = options.projectTrusted;
 		if (!this.projectTrusted) {
 			this.fileScopes.local = Promise.resolve({ scope: emptyScope() });
 			this.fileScopes.project = Promise.resolve({ scope: emptyScope() });

@@ -50,7 +50,7 @@ describe("session tree navigation workspace policies", () => {
 		git(tempDir, "commit", "-m", "initial");
 
 		sessionManager = SessionManager.create(tempDir, sessionsDir);
-		settingsManager = SettingsManager.create(tempDir, tempDir);
+		settingsManager = SettingsManager.create(tempDir, tempDir, { projectTrusted: true });
 		settingsManager.applyOverrides({ compaction: { keepRecentTokens: 1 } });
 	});
 

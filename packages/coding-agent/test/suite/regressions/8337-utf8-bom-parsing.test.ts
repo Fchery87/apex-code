@@ -38,7 +38,7 @@ describe("issue #8337 UTF-8 BOM parsing", () => {
 			`\uFEFF${JSON.stringify({ defaultProvider: "project-provider" })}`,
 		);
 
-		const settings = SettingsManager.create(projectDir, agentDir);
+		const settings = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 		expect(settings.getDefaultModel()).toBe("global-model");
 		expect(settings.getDefaultProvider()).toBe("project-provider");
 

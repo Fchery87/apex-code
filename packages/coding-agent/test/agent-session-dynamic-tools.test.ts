@@ -27,7 +27,7 @@ describe("AgentSession dynamic tool registration", () => {
 	});
 
 	it("exposes session state before custom bash spawn hooks and supports opting out", async () => {
-		const settingsManager = SettingsManager.create(tempDir, agentDir);
+		const settingsManager = SettingsManager.create(tempDir, agentDir, { projectTrusted: true });
 		const sessionManager = SessionManager.create(tempDir, join(agentDir, "sessions"), { id: "bash-env-test" });
 		let sessionEnv: NodeJS.ProcessEnv | undefined;
 		let optedOutEnv: NodeJS.ProcessEnv | undefined;
@@ -97,7 +97,7 @@ describe("AgentSession dynamic tool registration", () => {
 	});
 
 	it("refreshes tool registry when tools are registered after initialization", async () => {
-		const settingsManager = SettingsManager.create(tempDir, agentDir);
+		const settingsManager = SettingsManager.create(tempDir, agentDir, { projectTrusted: true });
 		const sessionManager = SessionManager.inMemory();
 
 		const resourceLoader = new DefaultResourceLoader({
@@ -166,7 +166,7 @@ describe("AgentSession dynamic tool registration", () => {
 	});
 
 	it("returns source metadata for SDK custom tools", async () => {
-		const settingsManager = SettingsManager.create(tempDir, agentDir);
+		const settingsManager = SettingsManager.create(tempDir, agentDir, { projectTrusted: true });
 		const sessionManager = SessionManager.inMemory();
 		const resourceLoader = new DefaultResourceLoader({
 			cwd: tempDir,
@@ -210,7 +210,7 @@ describe("AgentSession dynamic tool registration", () => {
 	});
 
 	it("keeps custom tools active but omits them from available tools when promptSnippet is not provided", async () => {
-		const settingsManager = SettingsManager.create(tempDir, agentDir);
+		const settingsManager = SettingsManager.create(tempDir, agentDir, { projectTrusted: true });
 		const sessionManager = SessionManager.inMemory();
 
 		const resourceLoader = new DefaultResourceLoader({

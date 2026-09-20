@@ -26,11 +26,14 @@ describe("SettingsManager", () => {
 	});
 
 	it("persists the first-use hint ledger across sessions", async () => {
-		const manager = SettingsManager.create(projectDir, agentDir);
+		const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 		manager.setFirstUseHints(["queue", "bash", "queue"]);
 		await manager.flush();
 
-		expect(SettingsManager.create(projectDir, agentDir).getFirstUseHints()).toEqual(["queue", "bash"]);
+		expect(SettingsManager.create(projectDir, agentDir, { projectTrusted: true }).getFirstUseHints()).toEqual([
+			"queue",
+			"bash",
+		]);
 	});
 
 	describe("preserves externally added settings", () => {
@@ -46,7 +49,7 @@ describe("SettingsManager", () => {
 			);
 
 			// Create SettingsManager (simulates pi starting up)
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			// Simulate user editing settings.json externally to add enabledModels
 			const currentSettings = JSON.parse(readFileSync(settingsPath, "utf-8"));
@@ -74,7 +77,7 @@ describe("SettingsManager", () => {
 				}),
 			);
 
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			// User adds custom settings externally
 			const currentSettings = JSON.parse(readFileSync(settingsPath, "utf-8"));
@@ -102,7 +105,7 @@ describe("SettingsManager", () => {
 				}),
 			);
 
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			// User externally sets thinking level to "low"
 			const currentSettings = JSON.parse(readFileSync(settingsPath, "utf-8"));
@@ -129,7 +132,7 @@ describe("SettingsManager", () => {
 				}),
 			);
 
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			expect(manager.getPackages()).toEqual([]);
 			expect(manager.getExtensionPaths()).toEqual(["/local/ext.ts", "./relative/ext.ts"]);
@@ -151,7 +154,7 @@ describe("SettingsManager", () => {
 				}),
 			);
 
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			const packages = manager.getPackages();
 			expect(packages).toHaveLength(2);
@@ -175,7 +178,7 @@ describe("SettingsManager", () => {
 				}),
 			);
 
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			writeFileSync(
 				settingsPath,
@@ -197,7 +200,7 @@ describe("SettingsManager", () => {
 			const settingsPath = join(agentDir, "settings.json");
 			writeFileSync(settingsPath, JSON.stringify({ theme: "dark" }));
 
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			writeFileSync(settingsPath, "{ invalid json");
 			await manager.reload();
@@ -212,7 +215,7 @@ describe("SettingsManager", () => {
 			const settingsPath = join(agentDir, "settings.json");
 			writeFileSync(settingsPath, JSON.stringify({ theme: "light/dark" }));
 
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			expect(manager.getTheme()).toBeUndefined();
 			expect(manager.getThemeSetting()).toBe("light/dark");
@@ -232,7 +235,7 @@ describe("SettingsManager", () => {
 			writeFileSync(globalSettingsPath, "{ invalid global json");
 			writeFileSync(projectSettingsPath, "{ invalid project json");
 
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 			const errors = manager.drainErrors();
 
 			expect(errors).toHaveLength(2);
@@ -288,7 +291,7 @@ describe("SettingsManager", () => {
 				JSON.stringify({ defaultProjectTrust: "never" }),
 			);
 
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			expect(manager.getDefaultProjectTrust()).toBe("always");
 		});
@@ -296,7 +299,7 @@ describe("SettingsManager", () => {
 		it("should default invalid project trust settings to ask", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ defaultProjectTrust: "sometimes" }));
 
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			expect(manager.getDefaultProjectTrust()).toBe("ask");
 		});
@@ -312,7 +315,7 @@ describe("SettingsManager", () => {
 			rmSync(join(projectDir, ".apex-code"), { recursive: true });
 
 			// Create SettingsManager (reads both global and project settings)
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			// .pi folder should NOT have been created just from reading
 			expect(existsSync(join(projectDir, ".apex-code"))).toBe(false);
@@ -329,7 +332,7 @@ describe("SettingsManager", () => {
 			// Delete the .pi folder that beforeEach created
 			rmSync(join(projectDir, ".apex-code"), { recursive: true });
 
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			// .pi folder should NOT exist yet
 			expect(existsSync(join(projectDir, ".apex-code"))).toBe(false);
@@ -367,7 +370,7 @@ describe("SettingsManager", () => {
 
 	describe("httpIdleTimeoutMs", () => {
 		it("should default to 5 minutes", () => {
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 			expect(manager.getHttpIdleTimeoutMs()).toBe(DEFAULT_HTTP_IDLE_TIMEOUT_MS);
 		});
 
@@ -375,14 +378,14 @@ describe("SettingsManager", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ httpIdleTimeoutMs: 300000 }));
 			writeFileSync(join(projectDir, ".apex-code", "settings.json"), JSON.stringify({ httpIdleTimeoutMs: 0 }));
 
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			expect(manager.getHttpIdleTimeoutMs()).toBe(0);
 		});
 
 		it("should reject invalid timeout values", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ httpIdleTimeoutMs: -1 }));
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			expect(() => manager.getHttpIdleTimeoutMs()).toThrow("Invalid httpIdleTimeoutMs setting");
 		});
@@ -390,32 +393,32 @@ describe("SettingsManager", () => {
 
 	describe("delegationMaxDepth (roadmap Phase 5, task 5.3)", () => {
 		it("should default to 2", () => {
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 			expect(manager.getDelegationMaxDepth()).toBe(2);
 		});
 
 		it("should use a configured value below the hard cap", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ delegationMaxDepth: 1 }));
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 			expect(manager.getDelegationMaxDepth()).toBe(1);
 		});
 
 		it("should use merged global and project settings, like other numeric settings", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ delegationMaxDepth: 4 }));
 			writeFileSync(join(projectDir, ".apex-code", "settings.json"), JSON.stringify({ delegationMaxDepth: 3 }));
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 			expect(manager.getDelegationMaxDepth()).toBe(3);
 		});
 
 		it("should clamp a configured value above the hard cap rather than honoring it", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ delegationMaxDepth: 999 }));
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 			expect(manager.getDelegationMaxDepth()).toBeLessThanOrEqual(5);
 		});
 
 		it("should reject a non-positive configured value, falling back to the default", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ delegationMaxDepth: 0 }));
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 			expect(manager.getDelegationMaxDepth()).toBe(2);
 		});
 	});
@@ -465,7 +468,7 @@ describe("SettingsManager", () => {
 
 	describe("TUI mode", () => {
 		it("defaults to regular and persists fullscreen mode", async () => {
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			expect(manager.getTuiMode()).toBe("regular");
 
@@ -480,7 +483,7 @@ describe("SettingsManager", () => {
 		it("falls back to regular for unsupported values", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ tuiMode: "other" }));
 
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			expect(manager.getTuiMode()).toBe("regular");
 		});
@@ -488,14 +491,14 @@ describe("SettingsManager", () => {
 		it("does not recognize the old uiMode setting", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ uiMode: "fullscreen" }));
 
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			expect(manager.getTuiMode()).toBe("regular");
 		});
 	});
 
 	it("validates and persists fullscreen settings", async () => {
-		const manager = SettingsManager.create(projectDir, agentDir);
+		const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 		expect(manager.getFullscreenExitOutput()).toBe("transcript");
 		expect(manager.getFullscreenScrollbar()).toBe("auto");
 		expect(manager.getFullscreenCopyOnSelect()).toBe(true);
@@ -513,7 +516,7 @@ describe("SettingsManager", () => {
 			join(agentDir, "settings.json"),
 			JSON.stringify({ fullscreenExitOutput: "nothing", fullscreenScrollbar: "sometimes" }),
 		);
-		const reloadedManager = SettingsManager.create(projectDir, agentDir);
+		const reloadedManager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 		expect(reloadedManager.getFullscreenExitOutput()).toBe("transcript");
 		expect(reloadedManager.getFullscreenScrollbar()).toBe("auto");
 		expect(reloadedManager.getFullscreenCopyOnSelect()).toBe(true);
@@ -521,7 +524,7 @@ describe("SettingsManager", () => {
 
 	describe("outputPad", () => {
 		it("should default to 1 and persist binary values", async () => {
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			expect(manager.getOutputPad()).toBe(1);
 
@@ -536,7 +539,7 @@ describe("SettingsManager", () => {
 		it("should treat unsupported outputPad values as default padding", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ outputPad: 2 }));
 
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			expect(manager.getOutputPad()).toBe(1);
 		});
@@ -544,7 +547,7 @@ describe("SettingsManager", () => {
 
 	describe("markdown.mermaid", () => {
 		it("defaults to streaming and persists rendering modes", async () => {
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			expect(manager.getMermaidRenderingMode()).toBe("streaming");
 
@@ -559,7 +562,9 @@ describe("SettingsManager", () => {
 		it("falls back to streaming for unsupported values", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ markdown: { mermaid: "sometimes" } }));
 
-			expect(SettingsManager.create(projectDir, agentDir).getMermaidRenderingMode()).toBe("streaming");
+			expect(SettingsManager.create(projectDir, agentDir, { projectTrusted: true }).getMermaidRenderingMode()).toBe(
+				"streaming",
+			);
 		});
 	});
 
@@ -568,7 +573,7 @@ describe("SettingsManager", () => {
 			const settingsPath = join(agentDir, "settings.json");
 			writeFileSync(settingsPath, JSON.stringify({ shellCommandPrefix: "shopt -s expand_aliases" }));
 
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			expect(manager.getShellCommandPrefix()).toBe("shopt -s expand_aliases");
 		});
@@ -577,7 +582,7 @@ describe("SettingsManager", () => {
 			const settingsPath = join(agentDir, "settings.json");
 			writeFileSync(settingsPath, JSON.stringify({ theme: "dark" }));
 
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 			expect(manager.getShellCommandPrefix()).toBeUndefined();
 		});
@@ -586,7 +591,7 @@ describe("SettingsManager", () => {
 			const settingsPath = join(agentDir, "settings.json");
 			writeFileSync(settingsPath, JSON.stringify({ shellCommandPrefix: "shopt -s expand_aliases" }));
 
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 			manager.setTheme("light");
 			await manager.flush();
 
@@ -600,11 +605,16 @@ describe("SettingsManager", () => {
 		it("loads global defaults and lets project settings replace them", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ defaultTools: ["read", "bash"] }));
 
-			expect(SettingsManager.create(projectDir, agentDir).getDefaultTools()).toEqual(["read", "bash"]);
+			expect(SettingsManager.create(projectDir, agentDir, { projectTrusted: true }).getDefaultTools()).toEqual([
+				"read",
+				"bash",
+			]);
 
 			writeFileSync(join(projectDir, ".apex-code", "settings.json"), JSON.stringify({ defaultTools: ["grep"] }));
 
-			expect(SettingsManager.create(projectDir, agentDir).getDefaultTools()).toEqual(["grep"]);
+			expect(SettingsManager.create(projectDir, agentDir, { projectTrusted: true }).getDefaultTools()).toEqual([
+				"grep",
+			]);
 		});
 
 		it("preserves an empty tool list", () => {
@@ -616,26 +626,29 @@ describe("SettingsManager", () => {
 	describe("getSessionDir", () => {
 		it("should return undefined when not set", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ theme: "dark" }));
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 			expect(manager.getSessionDir()).toBeUndefined();
 		});
 
 		it("should return global sessionDir", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ sessionDir: "/tmp/sessions" }));
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 			expect(manager.getSessionDir()).toBe("/tmp/sessions");
 		});
 
-		it("should return project sessionDir, overriding global", () => {
+		// Flipped on 2026-09-19. This asserted a project could redirect where its own session
+		// transcripts land, which is an exfiltration primitive rather than a preference, and
+		// startup reads the value before trust is resolved anyway. `sessionDir` is the user's.
+		it("should ignore a project sessionDir and keep the user's", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ sessionDir: "/global/sessions" }));
 			writeFileSync(join(projectDir, ".apex-code", "settings.json"), JSON.stringify({ sessionDir: "./sessions" }));
-			const manager = SettingsManager.create(projectDir, agentDir);
-			expect(manager.getSessionDir()).toBe("./sessions");
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
+			expect(manager.getSessionDir()).toBe("/global/sessions");
 		});
 
 		it("should expand ~ in sessionDir", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ sessionDir: "~/sessions" }));
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 			expect(manager.getSessionDir()).toBe(join(homedir(), "sessions"));
 		});
 	});
@@ -643,13 +656,13 @@ describe("SettingsManager", () => {
 	describe("getShellPath", () => {
 		it("should return undefined when not set", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ theme: "dark" }));
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 			expect(manager.getShellPath()).toBeUndefined();
 		});
 
 		it("should return an absolute shellPath unchanged", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ shellPath: "/bin/zsh" }));
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 			expect(manager.getShellPath()).toBe("/bin/zsh");
 		});
 
@@ -658,13 +671,13 @@ describe("SettingsManager", () => {
 				join(agentDir, "settings.json"),
 				JSON.stringify({ shellPath: "~/.local/bin/agent-shell-sandbox" }),
 			);
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 			expect(manager.getShellPath()).toBe(join(homedir(), ".local/bin/agent-shell-sandbox"));
 		});
 
 		it("should expand a bare ~ in shellPath", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ shellPath: "~" }));
-			const manager = SettingsManager.create(projectDir, agentDir);
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 			expect(manager.getShellPath()).toBe(homedir());
 		});
 	});

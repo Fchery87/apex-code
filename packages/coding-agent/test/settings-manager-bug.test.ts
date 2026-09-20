@@ -47,7 +47,7 @@ describe("SettingsManager - External Edit Preservation", () => {
 		);
 
 		// Pi starts up, loads settings into memory
-		const manager = SettingsManager.create(projectDir, agentDir);
+		const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 		// At this point, globalSettings.packages = ["npm:pi-mcp-adapter"]
 		expect(manager.getPackages()).toEqual(["npm:pi-mcp-adapter"]);
@@ -82,7 +82,7 @@ describe("SettingsManager - External Edit Preservation", () => {
 			}),
 		);
 
-		const manager = SettingsManager.create(projectDir, agentDir);
+		const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 		// User externally updates extensions
 		const currentSettings = JSON.parse(readFileSync(settingsPath, "utf-8"));
@@ -109,7 +109,7 @@ describe("SettingsManager - External Edit Preservation", () => {
 			}),
 		);
 
-		const manager = SettingsManager.create(projectDir, agentDir);
+		const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 		const currentProjectSettings = JSON.parse(readFileSync(projectSettingsPath, "utf-8"));
 		currentProjectSettings.prompts = ["./new-prompt.md"];
@@ -132,7 +132,7 @@ describe("SettingsManager - External Edit Preservation", () => {
 			}),
 		);
 
-		const manager = SettingsManager.create(projectDir, agentDir);
+		const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 		const currentProjectSettings = JSON.parse(readFileSync(projectSettingsPath, "utf-8"));
 		currentProjectSettings.extensions = ["./external-extension.ts"];

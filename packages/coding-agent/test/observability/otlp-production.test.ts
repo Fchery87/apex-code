@@ -59,7 +59,7 @@ describe("OTLP export through production wiring (task 8.5)", () => {
 
 		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
 
-		const settingsManager = SettingsManager.create(agentDir, agentDir);
+		const settingsManager = SettingsManager.create(agentDir, agentDir, { projectTrusted: true });
 		settingsManager.applyOverrides({ observability: { otlpEndpoint: "http://localhost:4318" } });
 
 		const services = await createAgentSessionServices({

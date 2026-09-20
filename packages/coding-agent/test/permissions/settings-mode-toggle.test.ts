@@ -44,7 +44,7 @@ function scope(name: string) {
 	const agentDir = join(sharedTempDir, name, "agent");
 	mkdirSync(cwd, { recursive: true });
 	mkdirSync(agentDir, { recursive: true });
-	return { cwd, agentDir, policyPath: join(sharedTempDir, name, "missing-policy.json") };
+	return { cwd, agentDir, policyPath: join(sharedTempDir, name, "missing-policy.json"), projectTrusted: true };
 }
 
 /** Mirrors AgentSession.setPermissionMode: write user scope, report what is in force. */

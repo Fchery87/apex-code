@@ -53,7 +53,12 @@ describe("offline session replay", () => {
 		// Was 1113 while that union reached the provider with no properties at all, so
 		// bash, delegate and lsp described themselves to the model as empty objects.
 		// Advertising their fields adds a flat 66 tokens to every measurement here.
-		expect(result.metrics.contextTokensByTurn[0]).toBe(1179);
+		// The harmless kill:false branch in the bash schema adds a further 25 tokens.
+		// ADR 0035 gave bash a default timeout, and naming the number is what lets the model
+		// decide whether to raise it, so both the tool description and the timeout field now
+		// carry it. That is 9 tokens on every request. It was 24 before the same sentence was
+		// cut from appearing in both places.
+		expect(result.metrics.contextTokensByTurn[0]).toBe(1213);
 		const [turnContext] = result.contextsByTurn;
 		expect(
 			turnContext?.some(
@@ -85,7 +90,9 @@ describe("offline session replay", () => {
 		expect(result.requests).toBe(22);
 		expect(result.metrics.contextTokensByTurn).toHaveLength(22);
 		expect(result.metrics.contextTokensByTurn[18]).toBeLessThan(result.metrics.contextTokensByTurn[17]);
-		expect(result.metrics.contextTokensByTurn.slice(18)).toEqual([1165, 1183, 1201, 1219]);
+		// The harmless kill:false branch in the bash schema adds 25 tokens to each
+		// measured turn while preserving the earlier calibration history above.
+		expect(result.metrics.contextTokensByTurn.slice(18)).toEqual([1199, 1217, 1235, 1253]);
 	});
 
 	it("evicts stale recoverable tool results from the outbound context by turn 20 (long-tool-heavy)", async () => {
@@ -241,8 +248,9 @@ describe("offline session replay", () => {
 
 		expect(JSON.stringify(second)).toBe(JSON.stringify(first));
 		expect(first.metrics).toEqual({
-			contextTokensByTurn: [1190],
-			systemPromptTokens: 1138,
+			// The harmless kill:false branch in the bash schema adds 25 tokens.
+			contextTokensByTurn: [1224],
+			systemPromptTokens: 1172,
 			cacheHitRate: 0,
 			toolCallsByName: { read: 2 },
 			wallTimeMs: 0,

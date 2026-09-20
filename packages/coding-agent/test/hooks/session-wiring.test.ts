@@ -33,7 +33,7 @@ async function session(hooks: Record<string, unknown>) {
 	mkdirSync(agentDir, { recursive: true });
 	const settings = Object.keys(hooks).length > 0 ? { hooks } : {};
 	writeFileSync(join(agentDir, "settings.json"), JSON.stringify(settings));
-	const settingsManager = SettingsManager.create(cwd, agentDir);
+	const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: true });
 	const sessionManager = SessionManager.create(cwd, join(agentDir, "sessions"));
 	const resourceLoader = new DefaultResourceLoader({ cwd, agentDir, settingsManager });
 	const created = await createAgentSession({

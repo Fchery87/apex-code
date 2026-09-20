@@ -27,15 +27,40 @@ test("docs/support.md publishes the maintainer, targets, supported-version line,
 	assert.match(support, /release-integrity-runbook\.md/);
 });
 
-test("the release governance checklist records external settings without claiming they are enabled (task 12.13)", async () => {
+test("the release governance checklist ticks nothing without dated evidence (task 12.13)", async () => {
 	const checklist = await read("docs/release-governance-checklist.md");
-	assert.match(checklist, /not a claim that they already are/);
-	assert.match(checklist, /evidence that\s+any item below is enabled/);
+
+	// This assertion used to require the page to claim nothing at all, which kept it honest
+	// by keeping it empty. The items are now verifiable, so the invariant moved: a tick is a
+	// dated observation of a live setting, never a guarantee that anything enforces it.
+	assert.match(checklist, /A ticked box here means someone checked the live setting on the date/);
+	assert.match(checklist, /Nothing below is self-maintaining/);
+
 	assert.match(checklist, /Branch protection on `main`/);
 	assert.match(checklist, /Trusted Publishing/);
 	assert.match(checklist, /NPM_TOKEN/);
 	assert.match(checklist, /Private vulnerability reporting/);
 	assert.match(checklist, /Dependabot alerts/);
+
+	// Every ticked box carries its own evidence line. A tick with nothing under it is the
+	// failure this test exists to catch, and it is what the old "claim nothing" rule prevented
+	// by forbidding ticks outright.
+	const unevidenced = [];
+	const lines = checklist.split("\n");
+	for (const [index, line] of lines.entries()) {
+		if (!/^\s*- \[x\] /.test(line)) continue;
+		const block = [];
+		for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
+			if (/^\s*- \[[ x]\] /.test(lines[cursor]) || lines[cursor].startsWith("#")) break;
+			block.push(lines[cursor]);
+		}
+		const body = [line, ...block].join(" ");
+		if (!/\*Verified \d{4}-\d{2}-\d{2}|\*Settled/.test(body)) unevidenced.push(line.trim());
+	}
+	assert.deepEqual(unevidenced, [], `these boxes are ticked with no evidence line:\n${unevidenced.join("\n")}`);
+
+	// The two that cannot be settled from a checkout must say so rather than sit unexplained.
+	assert.match(checklist, /Not settleable from a checkout/);
 });
 
 test("the packed npm README links to the published support policy and security policy", async () => {

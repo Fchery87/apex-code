@@ -41,7 +41,7 @@ function workspace(settings: Record<string, unknown>): { cwd: string; agentDir: 
 
 async function session(settings: Record<string, unknown>, sessionId: string) {
 	const { cwd, agentDir } = workspace(settings);
-	const settingsManager = SettingsManager.create(cwd, agentDir);
+	const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: true });
 	const sessionManager = SessionManager.create(cwd, join(agentDir, "sessions"), { id: sessionId });
 	const resourceLoader = new DefaultResourceLoader({ cwd, agentDir, settingsManager });
 	const created = await createAgentSession({

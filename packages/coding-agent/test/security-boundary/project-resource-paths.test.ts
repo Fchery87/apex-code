@@ -44,6 +44,11 @@ describe("project resource paths resolve in one place", () => {
 		// `~/.apex-code/themes` share filenames with gated resources but are the user's own
 		// trusted resources, which project trust does not gate.
 		const quoteStyles = (name: string) => [`"${name}"`, `'${name}'`, `\`${name}\``];
+		// A constant defeats a literal scan. `PROJECT_CONFIG_FILENAME` is `.mcp.json`, and two
+		// call sites composed `join(cwd, PROJECT_CONFIG_FILENAME)` in plain sight of the guard
+		// that was supposed to stop exactly that. Indirection is the normal way this bug comes
+		// back, so the identifiers that name a gated resource are checked alongside the strings.
+		const gatedConstants = ["PROJECT_CONFIG_FILENAME", "PROJECT_PERMISSIONS_FILE", "PROJECT_LOCAL_PERMISSIONS_FILE"];
 		const gated = PROJECT_RESOURCES.map((resource) => resource.name);
 		const rootGated = PROJECT_RESOURCES.filter((resource) => resource.scope === "root").map((r) => r.name);
 		const projectRooted = /join\(\s*[^,)]*\b(cwd|workspace|projectRoot|projectDir|projectPath)\b/i;
@@ -59,7 +64,9 @@ describe("project resource paths resolve in one place", () => {
 				const hardcodedConfigDir = /["'`]\.apex-code["'`]/.test(line);
 				const namesGatedHere = hardcodedConfigDir ? gated : rootGated;
 				if (!hardcodedConfigDir && !projectRooted.test(line)) continue;
-				const hit = namesGatedHere.some((name) => quoteStyles(name).some((lit) => line.includes(lit)));
+				const hit =
+					namesGatedHere.some((name) => quoteStyles(name).some((lit) => line.includes(lit))) ||
+					(projectRooted.test(line) && gatedConstants.some((constant) => line.includes(constant)));
 				if (hit) offenders.push(`${relative(SRC, file)}:${index + 1}`);
 			}
 		}
