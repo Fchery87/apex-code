@@ -58,7 +58,7 @@ describe.skipIf(!API_KEY)("AgentSession compaction e2e", () => {
 		});
 
 		sessionManager = inMemory ? SessionManager.inMemory() : SessionManager.create(tempDir, join(tempDir, "sessions"));
-		const settingsManager = SettingsManager.create(tempDir, tempDir);
+		const settingsManager = SettingsManager.create(tempDir, tempDir, { projectTrusted: true });
 		// Use minimal keepRecentTokens so small test conversations have something to summarize
 		settingsManager.applyOverrides({ compaction: { keepRecentTokens: 1 } });
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));

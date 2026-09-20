@@ -392,7 +392,7 @@ async function createHarnessWithResourceLoader(
 	});
 
 	const sessionManager = SessionManager.inMemory();
-	const settingsManager = SettingsManager.create(tempDir, tempDir);
+	const settingsManager = SettingsManager.create(tempDir, tempDir, { projectTrusted: true });
 
 	if (options.settings) {
 		settingsManager.applyOverrides(options.settings);

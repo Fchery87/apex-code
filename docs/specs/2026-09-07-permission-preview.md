@@ -1,6 +1,6 @@
 # Spec: The permission prompt shows what it is authorizing
 
-**Status:** Draft
+**Status:** Landed
 
 ## Metadata
 
@@ -84,15 +84,15 @@ is most costly.
 
 ## Goals
 
-- [ ] The prompt shows the change it is authorizing, not only the rule that would persist.
-- [ ] Any diff shown at approval time is read through the `PreparedPathOperation` the gate
+- [x] The prompt shows the change it is authorizing, not only the rule that would persist.
+- [x] Any diff shown at approval time is read through the `PreparedPathOperation` the gate
       validated, so it cannot describe a different file from the one that will be written.
-- [ ] `write` shows the content it would replace, and `bash` shows the exact command.
-- [ ] A tool with no producer, and a file the producer cannot read, both degrade to a
+- [x] `write` shows the content it would replace, and `bash` shows the exact command.
+- [x] A tool with no producer, and a file the producer cannot read, both degrade to a
       truthful summary rather than to silence or to a fabricated diff.
-- [ ] The preview never executes the tool, never writes, and never grants authority the
+- [x] The preview never executes the tool, never writes, and never grants authority the
       gate did not already validate.
-- [ ] `pi-tui` and `pi-ai` are unchanged, and no second TUI stack appears.
+- [x] `pi-tui` and `pi-ai` are unchanged, and no second TUI stack appears.
 
 ## Non-goals
 

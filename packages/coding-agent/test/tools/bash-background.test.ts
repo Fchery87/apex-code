@@ -119,7 +119,7 @@ describe("background shell session wiring", () => {
 		const agentDir = join(cwd, "agent");
 		mkdirSync(agentDir, { recursive: true });
 		writeSettings(agentDir);
-		const settingsManager = SettingsManager.create(cwd, agentDir);
+		const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: true });
 		const sessionManager = SessionManager.create(cwd, join(agentDir, "sessions"));
 		const resourceLoader = new DefaultResourceLoader({ cwd, agentDir, settingsManager });
 		const registry = createBackgroundShellRegistry();

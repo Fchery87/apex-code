@@ -34,13 +34,13 @@ afterEach(() => {
 function managerWith(settings: Record<string, unknown>): SettingsManager {
 	const { agentDir, projectDir } = scratchPair();
 	writeFileSync(join(agentDir, "settings.json"), JSON.stringify(settings), "utf-8");
-	return SettingsManager.create(projectDir, agentDir);
+	return SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 }
 
 describe("run budget settings", () => {
 	it("resolves the measured default policy when nothing is configured", () => {
 		const { agentDir, projectDir } = scratchPair();
-		const manager = SettingsManager.create(projectDir, agentDir);
+		const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 
 		expect(manager.getRunBudget()).toEqual({
 			maxProviderRequests: DEFAULT_MAX_PROVIDER_REQUESTS,

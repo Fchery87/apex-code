@@ -30,7 +30,7 @@ describe("regression #3592: no-builtin-tools keeps extension tools enabled", () 
 	});
 
 	async function createSession(options?: { noTools?: "all" | "builtin"; tools?: string[] }) {
-		const settingsManager = SettingsManager.create(tempDir, agentDir);
+		const settingsManager = SettingsManager.create(tempDir, agentDir, { projectTrusted: true });
 		const sessionManager = SessionManager.inMemory(tempDir);
 		const resourceLoader = new DefaultResourceLoader({
 			cwd: tempDir,
@@ -114,7 +114,7 @@ describe("regression #3592: no-builtin-tools keeps extension tools enabled", () 
 	});
 
 	it("propagates noTools through service-based session creation", async () => {
-		const settingsManager = SettingsManager.create(tempDir, agentDir);
+		const settingsManager = SettingsManager.create(tempDir, agentDir, { projectTrusted: true });
 		const sessionManager = SessionManager.inMemory(tempDir);
 		const services = await createAgentSessionServices({
 			cwd: tempDir,

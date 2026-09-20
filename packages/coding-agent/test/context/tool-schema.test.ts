@@ -81,7 +81,7 @@ describe("deferred schema load path (task 4.1)", () => {
 		const session = new AgentSession({
 			agent,
 			sessionManager: SessionManager.inMemory(),
-			settingsManager: SettingsManager.create(tempDir, tempDir),
+			settingsManager: SettingsManager.create(tempDir, tempDir, { projectTrusted: true }),
 			cwd: tempDir,
 			modelRuntime: getModelRuntime(registry),
 			resourceLoader: createTestResourceLoader(),
@@ -159,7 +159,7 @@ describe("deferred schema load path (task 4.1)", () => {
 		const session = new AgentSession({
 			agent,
 			sessionManager: SessionManager.inMemory(),
-			settingsManager: SettingsManager.create(tempDir, tempDir),
+			settingsManager: SettingsManager.create(tempDir, tempDir, { projectTrusted: true }),
 			cwd: tempDir,
 			modelRuntime: getModelRuntime(registry),
 			resourceLoader: createTestResourceLoader(),

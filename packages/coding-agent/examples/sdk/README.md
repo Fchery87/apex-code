@@ -114,7 +114,7 @@ await session.prompt("Hello");
 | `customTools` | `[]` | Additional tool definitions |
 | `resourceLoader` | DefaultResourceLoader | Resource loader for extensions, skills, prompts, themes, and context files |
 | `sessionManager` | `SessionManager.create(cwd)` | Persistence |
-| `settingsManager` | `SettingsManager.create(cwd, agentDir)` | Settings overrides |
+| `settingsManager` | `SettingsManager.create(cwd, agentDir, { projectTrusted: false })` | Settings overrides. The default is untrusted: with no manager supplied, nothing has resolved whether this project is trusted, so its `.apex-code/settings.json` is not read. Pass one built with `projectTrusted: true` to load project settings (ADR 0034) |
 
 ## Events
 

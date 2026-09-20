@@ -1,6 +1,6 @@
 # Spec: Trust classification and proof integrity
 
-**Status:** Active
+**Status:** Landed
 
 > **Reconciled with [ADR 0032](../adr/0032-no-built-in-sandbox.md) on 2026-09-13.** This spec
 > was written on 2026-09-11, while an OS boundary still existed. The boundary was deleted the
@@ -90,14 +90,15 @@ Two smaller defects reach users directly. A crash during an edit truncates the u
 - [x] A project-scoped resource outside `.apex-code` reaches the classifier. `.mcp.json` at the repository root is the case that proves it.
 - [x] The ancestor `.agents/skills` walk survives the rewrite. A skills directory in a parent of the working directory still raises a prompt, and the user-level `~/.agents/skills` still does not.
 - [x] A resource that confers no authority does not raise a prompt. A `permissions.json` parsing to an empty scope is the case that proves it, and a resource that fails to parse does raise one.
-- [ ] `projectTrusted` is a required argument on the permission store, the settings manager, and the MCP runtime. No call site can omit it and receive trusted.
+- [x] `projectTrusted` is a required argument on the permission store, the settings manager, and the MCP runtime. No call site can omit it and receive trusted. [ADR 0034](../adr/0034-project-trust-is-a-required-argument.md). `SettingsManager.inMemory` is the one deliberate exclusion, recorded there: its storage holds only what the caller wrote, so there is no untrusted source to gate.
 - [x] ~~`read`, `grep`, `ls`, and `find` refuse the agent directory's `auth.json`.~~ Moved to the 2026-09-13 permission-gate recalibration spec and implemented there.
-- [ ] Every row of the 2026-09-05 confirmed-findings table has one committed probe that fails while the finding is open and passes once it is closed. Each probe names its row.
-- [ ] `docs/specs/2026-09-05-security-boundary-remediation.md` line 50 states what was actually verified, and the classifier half is tracked as open work rather than as a checked box.
+- [x] `AGENTS.md` and `CLAUDE.md` reach the system prompt through the trust decision rather than through no gate. The checkout's and its ancestors' copies are withheld from an untrusted project; the agent directory's own is not, on the same grounds that exempt `~/.agents/skills`. Their filenames are registered, so presence raises the decision.
+- [x] Every row of the 2026-09-05 confirmed-findings table has a disposition, and `test/security-boundary/findings-2026-09-05.test.ts` reads the table out of the research document to prove none is missing. Ten rows name the committed probe that answers them; nine name [ADR 0032](../adr/0032-no-built-in-sandbox.md), which deleted the subsystem each described. The index asserts every named test still exists and still carries its name, and that the boundary is still gone.
+- [x] `docs/specs/2026-09-05-security-boundary-remediation.md` states what was actually verified, and the classifier half is a pointer to this spec rather than a checked box.
 - [x] `main` requires the Ubuntu, macOS, and Windows `ci.yml` jobs before merge, and force-push and deletion are disallowed.
-- [ ] Every item in `docs/release-governance-checklist.md` is either ticked with the evidence that settles it or annotated with why it cannot be settled yet.
-- [ ] `edit` and `write` publish through the same atomic path the session storage uses, preserving the destination file's mode.
-- [ ] `bash` applies a default wall-clock timeout, and the timeout that fires names itself and the escape hatch.
+- [x] Every item in `docs/release-governance-checklist.md` is either ticked with the evidence that settles it or annotated with why it cannot be settled yet. Twelve are ticked with a dated verification against the live GitHub and npm settings. Two, the absence of a publish-capable npm token and the 2FA requirement, need npm account access rather than registry access and are annotated as not settleable from a checkout. Verifying the release-authority row turned up a second workflow holding `contents: write`, recorded as a deviation rather than ticked around.
+- [x] `edit` and `write` publish through the same atomic path the session storage uses, preserving the destination file's mode.
+- [x] `bash` applies a default wall-clock timeout, and the timeout that fires names itself and both escape hatches. [ADR 0035](../adr/0035-default-bash-timeout.md) records the measurement it came from.
 - [x] ~~A Windows session that cannot be sandboxed prints the reason and the supported next step.~~ Dropped on 2026-09-12. The startup path that printed it, the mode it named, and the exclusion behind it were deleted with the boundary. `README.md` and `docs/user-guide.md` now state the operator's container or VM on every platform.
 
 ## Non-goals
@@ -181,6 +182,60 @@ Branch protection is the item that is genuinely absent, and it is the one the ro
 
 `edit` and `write` publish through the same temp-file-and-rename path the session storage uses, preserving the destination mode so a rename does not silently reset permissions. The change belongs in `writePreparedPath`, not only in the two fallback branches, because the prepared path is the default and is the one that truncates. Its existing device and inode identity check has to survive, since that check is what makes the authorized target the written target. `bash` gains a generous default timeout, long enough that ordinary builds and test runs are unaffected, with the firing message naming both the explicit `timeout` argument and the background shell.
 
+### What publishing by rename costs
+
+ADR 0029 says authorization and execution share one prepared operation, and that execution
+pins the target by descriptor identity. Publishing by rename keeps the check and narrows what
+it proves.
+
+Writing through the checked descriptor could not be redirected: a swap after the check sent
+the bytes to the original inode, wherever its name had gone. A rename resolves the name again,
+so it proves the name referred to the authorized file at the moment of the check rather than at
+the moment of the write. The window is between the two, both anchored to the same validated
+parent descriptor.
+
+Exploiting it needs a local attacker placing a file at that exact name, in a directory the call
+was already authorized to write, inside that window. Crash safety is not a race: an interrupted
+write destroyed the file every time. The trade is deliberate and is recorded here rather than
+left for a reader to derive from the diff.
+
+### What three-OS CI caught that nothing local could
+
+The Windows job failed on the first run of this work, and one of its four failures was a real
+defect rather than a test-portability problem.
+
+Windows refuses a rename onto a destination another handle holds open, and an ordinary read
+handle is enough. The probe holds one across the publish, which is how it surfaced. In a real
+session the handle belongs to an editor, a watcher, or a language server, so `edit` and `write`
+would have failed on any file the user happened to have open. The spec and the changelog had
+already recorded this as an acceptable trade, reasoning from `FILE_SHARE_DELETE` alone. That was
+wrong on the facts and wrong on the severity.
+
+The rename now falls back to an in-place write when Windows refuses it, re-verifying the target's
+identity against a fresh descriptor so the weaker durability does not come with a weaker target
+guarantee. Windows gets atomic publish whenever it can have it and a working write when it
+cannot.
+
+The other three failures were POSIX mode semantics. Windows reports `0o666` for any writable file
+and has no umask, so those assertions measured the platform rather than the change, and they are
+skipped there using the idiom `test/models-store.test.ts` already uses for the same reason.
+
+This is the case for the required Windows job existing. The Linux and macOS jobs passed, and so
+did every local run, because POSIX renames over an open file without complaint.
+
+### What the registry still could not see
+
+The path guard this spec landed matched a gated resource by its filename as a string. Two
+sites reached the same resource through `PROJECT_CONFIG_FILENAME` instead, so
+`core/mcp/runtime.ts` and `core/mcp/oauth/authorize.ts` composed `.mcp.json` paths in plain
+sight of the guard built to stop exactly that. Both now resolve through the registry, and the
+guard checks the identifiers that name a gated resource alongside the strings. It was proved
+by reintroducing the old line and watching it name the file and the line number.
+
+The authorize path is deliberately not trust-gated. `mcp auth <server>` is the user naming one
+server to authorize, which is the decision, and a one-shot command has no session trust state
+to consult instead. What was wrong was the path resolution, not the absence of a prompt.
+
 ## Deletion inventory
 
 | Item | Type | Disposition |
@@ -239,6 +294,21 @@ Required focused checks.
 - One required three-OS CI run on the finished branch, recorded by run id, after branch protection is enabled so the run is the gate rather than a report.
 
 Branch protection itself is verified by observing a pull request that cannot merge while a required job is red, and by one real tagged release that still publishes.
+
+## What was actually verified
+
+Recorded on completion, against the Verification list above. Where the plan and the result
+differ, the result is what is written.
+
+| Asked for | What happened |
+| --- | --- |
+| Compile-level proof `projectTrusted` cannot be omitted | `npx tsgo --noEmit` named 153 call sites the moment the argument became required. That enumeration is the proof, and it is also what found that none of the four production sites had a trust answer at its call point. |
+| One probe per 2026-09-05 row, each observed failing | Ten of the surviving rows already had public-boundary probes that already run, so ten more would have duplicated them. `test/security-boundary/findings-2026-09-05.test.ts` binds each row to the test that answers it and reads the table out of the research document, so a row added with no disposition fails. Nine rows are retired against ADR 0032, which deleted their subject. |
+| Atomic publish tests including a simulated crash between write and rename | Staging a crash is not deterministic. A reader holding a descriptor across the publish is: truncate-in-place mutates the inode it holds, a rename does not. That case plus mode preservation, inode replacement, a name at the filesystem's length limit, the umask case for a new ungated file, the surviving identity check, and no stranded temporary. The symlinked destination is covered by `test/permissions/canonical-authorization.test.ts`. |
+| `bash` timeout tests | Default firing, explicit larger, the message naming both escape hatches, the schema no longer claiming there is no default, and a background launch staying unbounded. Writing them found that the default lived in one backend rather than at the tool. |
+| `npx tsgo --noEmit`, narrow suites, `npm test`, `npm run check` | Typecheck clean throughout. `npm run check` passed in the pre-commit hook on every commit. Full-suite result recorded in the closing commit. |
+| One required three-OS CI run on the finished branch | **Not done, and not doable from here.** The work is unpushed, so no run id exists. This is the operator gate for the row. The rename-based publish is the part that most needs it: Windows fails a rename over a destination another process holds open without `FILE_SHARE_DELETE`, and no local run on Linux can observe that. |
+
 
 ## Rollout
 

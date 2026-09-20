@@ -314,7 +314,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const modelsPath = options.agentDir ? join(agentDir, "models.json") : undefined;
 	const modelRuntime = options.modelRuntime ?? (await ModelRuntime.create({ authPath, modelsPath }));
 
-	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
+	// A caller wanting project scope supplies a manager built with the decision. ADR 0034.
+	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir, { projectTrusted: false });
 	const sessionManager = options.sessionManager ?? SessionManager.create(cwd, getDefaultSessionDir(cwd, agentDir));
 	const backgroundShellRegistry = options.backgroundShellRegistry ?? createBackgroundShellRegistry();
 	// One resolved per-run budget policy: the caller's override when supplied,

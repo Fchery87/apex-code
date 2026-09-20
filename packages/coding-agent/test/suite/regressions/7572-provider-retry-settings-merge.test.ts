@@ -24,7 +24,7 @@ describe("regression #7572: nested provider retry settings merge", () => {
 			}),
 		);
 
-		const settingsManager = SettingsManager.fromStorage(storage);
+		const settingsManager = SettingsManager.fromStorage(storage, { projectTrusted: true });
 
 		expect(settingsManager.getProviderRetrySettings()).toEqual({
 			timeoutMs: 30000,

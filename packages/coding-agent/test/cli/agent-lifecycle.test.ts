@@ -123,8 +123,9 @@ async function buildParentSession(providerId: string) {
 	});
 	runtime.registerNativeProvider(faux.provider);
 	await runtime.refresh({ allowNetwork: false, providers: [providerId] });
-	const settingsManager = SettingsManager.create(scratch, join(scratch, "agent"));
+	const settingsManager = SettingsManager.create(scratch, join(scratch, "agent"), { projectTrusted: true });
 	const store = new FilePermissionRuleStore({
+		projectTrusted: true,
 		cwd: scratch,
 		agentDir: join(scratch, "agent"),
 		policyPath: join(scratch, "missing-policy.json"),

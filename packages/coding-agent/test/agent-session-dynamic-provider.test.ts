@@ -51,7 +51,7 @@ describe("AgentSession dynamic provider registration", () => {
 	});
 
 	async function createSession(extensionFactories: ExtensionFactory[]) {
-		const settingsManager = SettingsManager.create(tempDir, agentDir);
+		const settingsManager = SettingsManager.create(tempDir, agentDir, { projectTrusted: true });
 		const sessionManager = SessionManager.inMemory();
 		const authStorage = AuthStorage.create(join(agentDir, "auth.json"));
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));

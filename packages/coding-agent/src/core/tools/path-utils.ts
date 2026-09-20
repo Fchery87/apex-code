@@ -1,21 +1,25 @@
+import { randomUUID } from "node:crypto";
 import {
 	accessSync,
 	closeSync,
 	constants,
 	existsSync,
+	fchmodSync,
 	fstatSync,
 	ftruncateSync,
 	mkdirSync,
 	openSync,
 	readSync,
 	realpathSync,
+	renameSync,
 	statSync,
+	unlinkSync,
 	writeSync,
 } from "node:fs";
 import { access } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, parse, sep } from "node:path";
 import { normalizePath, resolvePath } from "../../utils/paths.ts";
-import type { PreparedPathOperation } from "../permissions/operations.ts";
+import type { FileIdentity, PreparedPathOperation } from "../permissions/operations.ts";
 
 const NARROW_NO_BREAK_SPACE = "\u202F";
 
@@ -97,6 +101,144 @@ interface OpenDirectory {
 function openUnder(parent: OpenDirectory, name: string, flags: number, mode?: number): number {
 	if (useProcFd()) return openSync(`${PROC_FD}/${parent.fd}/${name}`, flags, mode);
 	return openSync(join(parent.path, name), flags, mode);
+}
+
+function renameUnder(parent: OpenDirectory, from: string, to: string): void {
+	if (useProcFd()) renameSync(`${PROC_FD}/${parent.fd}/${from}`, `${PROC_FD}/${parent.fd}/${to}`);
+	else renameSync(join(parent.path, from), join(parent.path, to));
+}
+
+function unlinkUnder(parent: OpenDirectory, name: string): void {
+	try {
+		if (useProcFd()) unlinkSync(`${PROC_FD}/${parent.fd}/${name}`);
+		else unlinkSync(join(parent.path, name));
+	} catch {}
+}
+
+/**
+ * The name of the sibling a publish stages into.
+ *
+ * It carries enough of the destination to be recognizable if a crash ever strands one, and
+ * a pid and a random suffix so two publishes in one directory cannot collide. The base is
+ * truncated to fit: a destination already at the filesystem's per-component limit would
+ * otherwise produce a staging name past it, and fail a write that truncate-in-place handled.
+ * 255 is the limit on every filesystem this runs on that has one at all.
+ */
+function stagingName(name: string): string {
+	const suffix = `.apex-${process.pid}-${randomUUID().slice(0, 8)}`;
+	const budget = 255 - suffix.length - 1;
+	return `.${name.slice(0, Math.max(1, budget))}${suffix}`;
+}
+
+/**
+ * Write `content` to a sibling of `name` and rename it over `name`.
+ *
+ * The rename is the publish. Until it runs, `name` still refers to the old inode with all
+ * of its old bytes, so a crash, a full disk, or a kill mid-write destroys nothing. The
+ * caller has already proved that `name` refers to the authorized target; this only decides
+ * how the bytes arrive.
+ *
+ * `mode` is the destination's, captured from the descriptor the identity check used, so a
+ * publish does not quietly reset a file's permissions to the temp file's. Ownership is not
+ * carried: a rename installs a file this process created, so a target owned by someone else
+ * and merely writable by us changes owner. That is inherent to publishing by rename and is
+ * the same trade the session store already makes.
+ *
+ * One guarantee narrows, and it is worth stating plainly rather than leaving for a reader to
+ * derive. ADR 0029's identity check still runs and still aborts on a mismatch, but it now
+ * proves the name referred to the authorized file at the moment of the check rather than at
+ * the moment of the write. Writing through the checked descriptor could not be redirected by
+ * a later swap; a rename can be, because it resolves the name again. The window is between
+ * the identity check and the rename, both anchored to the same validated parent descriptor,
+ * and exploiting it needs a local attacker placing a file at that exact name in a directory
+ * the call was already authorized to write. That is traded for crash safety, which is not a
+ * race: it is what every interrupted write did.
+ *
+ * Windows refuses a rename onto a destination another handle holds open, and an ordinary read
+ * handle is enough to trigger it. An earlier version of this comment called that an acceptable
+ * trade. Three-OS CI disproved it: the case is an editor, a watcher, or a language server with
+ * the file open, which is the common case rather than an exotic one, and failing the write
+ * there is not a trade a user opted into. It falls back to `writeInPlace` instead, so Windows
+ * gets atomic publish whenever it can and a working write when it cannot.
+ */
+function publishByRename(parent: OpenDirectory, name: string, content: string | Buffer, mode: number): boolean {
+	const temporary = stagingName(name);
+	let fd: number;
+	try {
+		fd = openUnder(
+			parent,
+			temporary,
+			constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+			mode,
+		);
+	} catch (error) {
+		throw new PreparedTargetChangedError("Authorized write could not stage its replacement", { cause: error });
+	}
+	try {
+		writeAll(fd, content);
+		// The create mode passes through umask; the destination's mode does not.
+		fchmodSync(fd, mode);
+		closeSync(fd);
+	} catch (error) {
+		try {
+			closeSync(fd);
+		} catch {}
+		unlinkUnder(parent, temporary);
+		throw error;
+	}
+	try {
+		renameUnder(parent, temporary, name);
+		return true;
+	} catch (error) {
+		unlinkUnder(parent, temporary);
+		if (isWindowsSharingViolation(error)) return false;
+		throw new PreparedTargetChangedError("Authorized write target changed before execution", { cause: error });
+	}
+}
+
+/**
+ * Windows refuses to rename onto a destination another handle holds open, and an ordinary
+ * read handle is enough. An editor, a watcher, or a language server with the file open is
+ * the common case, not an exotic one, so a rename that cannot land there has to fall back
+ * rather than fail the write.
+ *
+ * Three OS CI found this. The Linux and macOS jobs pass, because POSIX renames over an open
+ * file happily.
+ */
+function isWindowsSharingViolation(error: unknown): boolean {
+	if (process.platform !== "win32") return false;
+	const code = (error as { code?: unknown } | null)?.code;
+	return code === "EPERM" || code === "EACCES" || code === "EBUSY";
+}
+
+/**
+ * The pre-rename publish, kept for the one case that cannot use a rename.
+ *
+ * This is the truncate-then-write window the rename exists to close, so it runs only when
+ * Windows has refused the rename. Crash safety is lost for that write; the alternative is
+ * refusing to write a file something else has open, which is worse and is not a trade a
+ * user opted into. The identity check is re-run against a freshly opened descriptor, so the
+ * weaker durability does not come with a weaker target guarantee.
+ */
+function writeInPlace(parent: OpenDirectory, name: string, content: string | Buffer, identity?: FileIdentity): void {
+	let fd: number;
+	try {
+		fd = openUnder(parent, name, constants.O_WRONLY | constants.O_NOFOLLOW);
+	} catch (error) {
+		throw new PreparedTargetChangedError("Authorized write target changed before execution", { cause: error });
+	}
+	try {
+		if (identity) {
+			const stats = fstatSync(fd);
+			if (stats.dev !== identity.device || stats.ino !== identity.inode) {
+				throw new PreparedTargetChangedError("Authorized write target changed before execution");
+			}
+		}
+		ftruncateSync(fd, 0);
+		writeAll(fd, content);
+	} finally {
+		closeSync(fd);
+	}
 }
 
 function mkdirUnder(parent: OpenDirectory, name: string): void {
@@ -199,18 +341,24 @@ export function writePreparedPath(operation: PreparedPathOperation, content: str
 			} catch (error) {
 				throw new PreparedTargetChangedError("Authorized write target changed before execution", { cause: error });
 			}
+			let mode: number;
 			try {
 				const stats = fstatSync(fd);
 				if (stats.dev !== operation.identity.device || stats.ino !== operation.identity.inode) {
 					throw new PreparedTargetChangedError("Authorized write target changed before execution");
 				}
-				ftruncateSync(fd, 0);
-				writeAll(fd, content);
+				mode = stats.mode & 0o7777;
 			} finally {
 				closeSync(fd);
 			}
+			if (!publishByRename(parent, name, content, mode)) {
+				writeInPlace(parent, name, content, operation.identity);
+			}
 			return;
 		}
+		// The exclusive create is what proves the name was still absent, which is the whole
+		// authorization for a new-file write. It reserves the name; the rename below then
+		// replaces that empty placeholder, so the name never holds a half-written file.
 		let fd: number;
 		try {
 			fd = openUnder(
@@ -222,12 +370,68 @@ export function writePreparedPath(operation: PreparedPathOperation, content: str
 		} catch (error) {
 			throw new PreparedTargetChangedError("Authorized new-file target changed before execution", { cause: error });
 		}
+		closeSync(fd);
 		try {
+			// The reservation this just created is ours, so there is no prior identity to
+			// re-check if Windows refuses the rename onto it.
+			if (!publishByRename(parent, name, content, 0o600)) {
+				writeInPlace(parent, name, content);
+			}
+		} catch (error) {
+			unlinkUnder(parent, name);
+			throw error;
+		}
+	});
+}
+
+/**
+ * Atomic publish for an ungated write, where no prepared operation exists to pin the target.
+ *
+ * `writePreparedPath` is the gated path and the one that matters; this is its counterpart for
+ * a tool invoked outside the permission gate, so that neither route can leave a half-written
+ * file. It makes no containment claim: with no authorization there is no authorized target to
+ * hold the write to, and the no-follow walk would have nothing to check against.
+ */
+export function writePathAtomically(filePath: string, content: string | Buffer): void {
+	const temporary = join(dirname(filePath), stagingName(basename(filePath)));
+	// Only an existing destination has a mode worth carrying. For a new file there is
+	// nothing to capture, and chmod'ing to the 0o666 open default would force past the
+	// caller's umask and publish a world-writable file, which `writeFile` never did.
+	let destinationMode: number | undefined;
+	try {
+		destinationMode = statSync(filePath).mode & 0o7777;
+	} catch {}
+	const fd = openSync(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, destinationMode ?? 0o666);
+	try {
+		writeAll(fd, content);
+		if (destinationMode !== undefined) fchmodSync(fd, destinationMode);
+		closeSync(fd);
+	} catch (error) {
+		try {
+			closeSync(fd);
+		} catch {}
+		try {
+			unlinkSync(temporary);
+		} catch {}
+		throw error;
+	}
+	try {
+		renameSync(temporary, filePath);
+	} catch (error) {
+		try {
+			unlinkSync(temporary);
+		} catch {}
+		// Same Windows sharing case as the gated path, and the same answer: a file something
+		// else has open is still a file the caller asked to write.
+		if (!isWindowsSharingViolation(error)) throw error;
+		const fd = openSync(filePath, constants.O_WRONLY | constants.O_CREAT, destinationMode ?? 0o666);
+		try {
+			ftruncateSync(fd, 0);
 			writeAll(fd, content);
 		} finally {
 			closeSync(fd);
 		}
-	});
+	}
 }
 
 function tryMacOSScreenshotPath(filePath: string): string {

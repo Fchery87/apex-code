@@ -257,7 +257,7 @@ export async function createTestSession(options: TestSessionOptions = {}): Promi
 	const sessionManager = options.inMemory
 		? SessionManager.inMemory()
 		: SessionManager.create(tempDir, join(tempDir, "sessions"));
-	const settingsManager = SettingsManager.create(tempDir, tempDir);
+	const settingsManager = SettingsManager.create(tempDir, tempDir, { projectTrusted: true });
 
 	if (options.settingsOverrides) {
 		settingsManager.applyOverrides(options.settingsOverrides);

@@ -10,6 +10,7 @@ import {
 	type ToolResultMessage,
 	validateToolArguments,
 } from "@earendil-works/pi-ai";
+import { RepeatedToolErrors } from "./repeated-tool-errors.ts";
 import { getDefaultStreamFn } from "./stream-fn.ts";
 import type {
 	AgentContext,
@@ -166,6 +167,7 @@ async function runLoop(
 	let currentContext = initialContext;
 	let config = initialConfig;
 	let lastCompletedTurn: PrepareNextTurnContext | undefined;
+	const repeatedToolErrors = new RepeatedToolErrors();
 	// Check for steering messages at start (user may have typed while waiting)
 	let pendingMessages: AgentMessage[] = (await config.getSteeringMessages?.()) || [];
 
@@ -201,6 +203,7 @@ async function runLoop(
 
 			// Process pending messages (inject before next assistant response)
 			if (pendingMessages.length > 0) {
+				repeatedToolErrors.reset();
 				for (const message of pendingMessages) {
 					await emit({ type: "message_start", message });
 					await emit({ type: "message_end", message });
@@ -273,6 +276,35 @@ async function runLoop(
 			}
 
 			pendingMessages = (await config.getSteeringMessages?.()) || [];
+			if (repeatedToolErrors.record(toolCalls, toolResults) && pendingMessages.length === 0 && !signal?.aborted) {
+				const failureMessage: AssistantMessage = {
+					role: "assistant",
+					content: [],
+					api: config.model.api,
+					provider: config.model.provider,
+					model: config.model.id,
+					usage: {
+						input: 0,
+						output: 0,
+						cacheRead: 0,
+						cacheWrite: 0,
+						totalTokens: 0,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
+					stopReason: "error",
+					errorMessage:
+						"Stopped after 3 identical failed tool calls without successful work. Check the tool arguments and schema before continuing.",
+					timestamp: Date.now(),
+				};
+				currentContext.messages.push(failureMessage);
+				newMessages.push(failureMessage);
+				await emit({ type: "turn_start" });
+				await emit({ type: "message_start", message: failureMessage });
+				await emit({ type: "message_end", message: failureMessage });
+				await emit({ type: "turn_end", message: failureMessage, toolResults: [] });
+				await emit({ type: "agent_end", messages: newMessages, stopReason: { kind: "error" } });
+				return;
+			}
 		}
 
 		// Agent would stop here. Check for follow-up messages.
