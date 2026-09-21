@@ -1,9 +1,9 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.3.5/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
 	"linter": {
 		"enabled": true,
 		"rules": {
-			"recommended": true,
+			"preset": "recommended",
 			"style": {
 				"noNonNullAssertion": "off",
 				"useConst": "error",
@@ -32,6 +32,12 @@
 			"scripts/__tests__/**/*.ts",
 			"scripts/vitest.config.ts",
 			"fixtures/__tests__/**/*.ts",
+			"!packages/ai",
+			"!packages/tui",
+			"!packages/client",
+			"!packages/protocol",
+			"!packages/server",
+			"!packages/telemetry",
 			"!**/node_modules/**/*",
 			"!**/test-sessions.ts",
 			"!**/models.generated.ts",

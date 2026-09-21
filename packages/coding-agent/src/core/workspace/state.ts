@@ -196,7 +196,7 @@ function readTypedRecord<T extends { version: number }>(
 	entry: SessionEntry | undefined,
 	customType: string,
 ): T | undefined {
-	if (!entry || entry.type !== "custom") return undefined;
+	if (entry?.type !== "custom") return undefined;
 	const custom = entry as CustomEntry;
 	if (custom.customType !== customType) return undefined;
 	const data = custom.data as T | undefined;

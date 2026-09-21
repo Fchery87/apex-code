@@ -87,7 +87,7 @@ export class DurableStateDaemon {
 
 	#requireExclusiveAttachment(sessionId: string, clientId: string): void {
 		const attachment = this.#attachments.get(sessionId)?.get(clientId);
-		if (!attachment || attachment.mode !== "exclusive" || Date.parse(attachment.expiresAt) <= Date.now()) {
+		if (attachment?.mode !== "exclusive" || Date.parse(attachment.expiresAt) <= Date.now()) {
 			throw new Error(`Client does not hold an active exclusive lease for ${sessionId}`);
 		}
 	}

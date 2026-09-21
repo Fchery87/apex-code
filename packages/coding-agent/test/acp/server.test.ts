@@ -396,7 +396,7 @@ describe("acp server dispatch", () => {
 			send({ jsonrpc: "2.0", id, method, params });
 			await vi.waitFor(() => expect(responseFor(written, id)).toBeDefined());
 			expect(responseFor(written, id)?.error).toMatchObject({ code: -32000 });
-			expect((responseFor(written, id)?.error as { message: string }).message).toContain(
+			expect((responseFor(written, id)?.error as { message: string } | undefined)?.message).toContain(
 				'Unknown delegation handle "missing"',
 			);
 		}
@@ -576,7 +576,7 @@ describe("acp server dispatch", () => {
 		send({ jsonrpc: "2.0", id: 1, method: "agent/spawn", params: { agentType: "scout", task: "recon" } });
 		await vi.waitFor(() => expect(responseFor(written, 1)).toBeDefined());
 		expect(responseFor(written, 1)?.error).toMatchObject({ code: -32000 });
-		expect((responseFor(written, 1)?.error as { message: string }).message).toContain(
+		expect((responseFor(written, 1)?.error as { message: string } | undefined)?.message).toContain(
 			"No delegation runtime is configured",
 		);
 	});
@@ -650,7 +650,7 @@ describe("acp server dispatch", () => {
 		send({ jsonrpc: "2.0", id: 3, method: "agent/status", params: { runId: "missing" } });
 		await vi.waitFor(() => expect(responseFor(written, 3)).toBeDefined());
 		expect(responseFor(written, 3)?.error).toMatchObject({ code: -32000 });
-		expect((responseFor(written, 3)?.error as { message: string }).message).toContain(
+		expect((responseFor(written, 3)?.error as { message: string } | undefined)?.message).toContain(
 			'Unknown delegation handle "missing"',
 		);
 	});
