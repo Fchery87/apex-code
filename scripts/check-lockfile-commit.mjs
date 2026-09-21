@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+
+import { describeNpmMismatch, npmVersionFromUserAgent, readNpmPin } from "./npm-pin.mjs";
 
 const allowValue = process.env.PI_ALLOW_LOCKFILE_CHANGE;
 const allowed = allowValue === "1" || allowValue === "true" || allowValue === "yes";
@@ -74,6 +77,29 @@ function summarizeLockfileChange(changes) {
 	return summary;
 }
 
+function readRootManifest() {
+	try {
+		return JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * The npm that is running us. `npm_config_user_agent` is set when npm invoked the
+ * hook; husky calls node directly, so fall back to asking npm itself.
+ */
+function detectNpmVersion() {
+	const fromEnvironment = npmVersionFromUserAgent(process.env.npm_config_user_agent);
+	if (fromEnvironment) return fromEnvironment;
+	try {
+		const command = process.platform === "win32" ? "npm.cmd" : "npm";
+		return execFileSync(command, ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+	} catch {
+		return undefined;
+	}
+}
+
 const stagedFiles = git(["diff", "--cached", "--name-only"])
 	.split("\n")
 	.map((line) => line.trim())
@@ -81,6 +107,18 @@ const stagedFiles = git(["diff", "--cached", "--name-only"])
 
 if (!stagedFiles.includes("package-lock.json")) {
 	process.exit(0);
+}
+
+// Checked before PI_ALLOW_LOCKFILE_CHANGE on purpose. That flag asserts the package
+// changes were reviewed, which says nothing about whether the npm that produced them
+// writes a lockfile CI's npm can install from.
+const npmMismatchAllowed = ["1", "true", "yes"].includes(process.env.PI_ALLOW_NPM_VERSION_MISMATCH ?? "");
+if (!npmMismatchAllowed) {
+	const mismatch = describeNpmMismatch(readNpmPin(readRootManifest()), detectNpmVersion());
+	if (mismatch) {
+		console.error(mismatch);
+		process.exit(1);
+	}
 }
 
 if (allowed) {

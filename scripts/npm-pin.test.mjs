@@ -1,0 +1,66 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+import { parse } from "yaml";
+
+import { describeNpmMismatch, npmVersionFromUserAgent, readNpmPin } from "./npm-pin.mjs";
+
+const repoPackageJson = new URL("../package.json", import.meta.url);
+const ciWorkflow = new URL("../.github/workflows/ci.yml", import.meta.url);
+
+/**
+ * Which npm each Node line bundles. A Node major that is not listed fails the
+ * coupling test below on purpose: whoever moves CI onto it has to look up the
+ * bundled npm and update the pin in the same change.
+ */
+const BUNDLED_NPM_MAJOR = { 20: 10, 22: 10, 24: 11, 26: 11 };
+
+test("the repo pins an npm version", async () => {
+	const manifest = JSON.parse(await readFile(repoPackageJson, "utf8"));
+	const pin = readNpmPin(manifest);
+	assert.ok(pin, "root package.json must declare packageManager as npm@<version>");
+	assert.match(pin, /^\d+\.\d+\.\d+$/);
+});
+
+test("the pin matches the npm bundled with the Node version CI runs", async () => {
+	const manifest = JSON.parse(await readFile(repoPackageJson, "utf8"));
+	const pinnedMajor = Number(readNpmPin(manifest).split(".")[0]);
+
+	const workflow = parse(await readFile(ciWorkflow, "utf8"));
+	const nodeVersions = new Set();
+	for (const job of Object.values(workflow.jobs)) {
+		for (const step of job.steps ?? []) {
+			if (typeof step.uses === "string" && step.uses.startsWith("actions/setup-node@")) {
+				nodeVersions.add(Number(step.with["node-version"]));
+			}
+		}
+	}
+
+	assert.equal(nodeVersions.size, 1, `CI must use one Node version, saw ${[...nodeVersions].join(", ")}`);
+	const [nodeMajor] = [...nodeVersions];
+	const expected = BUNDLED_NPM_MAJOR[nodeMajor];
+	assert.ok(expected, `Node ${nodeMajor} is not in BUNDLED_NPM_MAJOR; look up its npm and add it`);
+	assert.equal(
+		pinnedMajor,
+		expected,
+		`packageManager pins npm ${pinnedMajor} but CI's Node ${nodeMajor} bundles npm ${expected}`,
+	);
+});
+
+test("npmVersionFromUserAgent reads the version npm reports", () => {
+	assert.equal(npmVersionFromUserAgent("npm/10.9.8 node/v22.23.2 linux x64 workspaces/false"), "10.9.8");
+	assert.equal(npmVersionFromUserAgent("npm/11.19.0 node/v24.15.0 linux x64"), "11.19.0");
+	assert.equal(npmVersionFromUserAgent("yarn/4.0.0 npm/? node/v22.0.0"), undefined);
+	assert.equal(npmVersionFromUserAgent(undefined), undefined);
+});
+
+test("describeNpmMismatch only objects across majors", () => {
+	assert.equal(describeNpmMismatch("10.9.8", "10.9.8"), undefined);
+	assert.equal(describeNpmMismatch("10.9.8", "10.2.0"), undefined, "a different patch is not a lockfile hazard");
+	assert.equal(describeNpmMismatch("10.9.8", undefined), undefined, "an undetectable npm must not block a commit");
+
+	const message = describeNpmMismatch("10.9.8", "11.19.0");
+	assert.ok(message);
+	assert.match(message, /11\.19\.0/);
+	assert.match(message, /10\.9\.8/);
+});
