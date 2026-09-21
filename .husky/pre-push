@@ -1,0 +1,5 @@
+#!/bin/sh
+
+# Refuse a direct push to main. See scripts/push-target.mjs for why the remote's
+# own branch protection is not sufficient on its own.
+node scripts/check-push-target.mjs

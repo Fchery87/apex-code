@@ -446,3 +446,40 @@ test("a real macOS packed functional smoke gates publication, not just a post-pu
 	// The Ubuntu publisher still carries the other supported platform's smoke.
 	assert.match(publish.steps.map((step) => step.run).filter(Boolean).join("\n"), /packed-product-surface\.mjs[\s\S]*?--smoke/);
 });
+
+test("release verification covers the Node floor that engines advertises", async () => {
+	const { workflow } = await readWorkflow();
+	const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+
+	const floor = Number(/(\d+)/.exec(manifest.engines.node)?.[1]);
+	assert.ok(Number.isInteger(floor), "root engines.node must name a Node major");
+
+	/** Node majors a job actually runs, resolving a `${{ matrix.* }}` reference to its values. */
+	function nodeMajorsOf(job) {
+		const majors = new Set();
+		for (const step of job.steps ?? []) {
+			if (typeof step.uses !== "string" || !step.uses.startsWith("actions/setup-node@")) continue;
+			const declared = String(step.with["node-version"]);
+			const matrixKey = /^\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}$/.exec(declared)?.[1];
+			for (const value of matrixKey ? (job.strategy?.matrix?.[matrixKey] ?? []) : [declared]) {
+				majors.add(Number(String(value).split(".")[0]));
+			}
+		}
+		return majors;
+	}
+
+	// Both the pre-publication packed smoke and the post-publish registry install must
+	// exercise the floor. `npm ci` and a global install both behave differently across npm
+	// majors, and the floor's Node bundles a different npm than the newest LTS does -- which
+	// is exactly the divergence ADR 0036 records. Verifying only the newest would leave the
+	// version we actually promise to support untested at the moment it ships.
+	for (const name of ["verify-macos-packed", "verify-macos-install"]) {
+		const job = workflow.jobs[name];
+		assert.ok(job, `expected a ${name} job`);
+		const majors = nodeMajorsOf(job);
+		assert.ok(
+			majors.has(floor),
+			`${name} verifies Node ${[...majors].join(", ") || "nothing"} but engines advertises >=${floor}`,
+		);
+	}
+});
