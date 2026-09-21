@@ -272,16 +272,23 @@ jobs:
   # and runs on the other supported platform -- it must never re-run the
   # publish steps, or the release would be published twice.
   verify-macos-packed:
-    name: Verify packed artifact smoke on macOS before publication
+    name: Verify packed artifact smoke on macOS before publication (Node ${{ matrix.node }})
     runs-on: macos-latest
     timeout-minutes: 25
+    # The floor `engines` advertises and the newest LTS. They bundle different npm
+    # majors, which do not install identically (ADR 0036), so verifying only the
+    # newest would leave the version we promise to support untested as it ships.
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24
+          node-version: ${{ matrix.node }}
           package-manager-cache: false
       - name: Install
         run: npm ci --ignore-scripts
@@ -291,14 +298,18 @@ jobs:
         run: node scripts/apex/packed-product-surface.mjs --out "${RUNNER_TEMP}/packed-macos" --smoke
 
   verify-macos-install:
-    name: Verify clean install on macOS
+    name: Verify clean install on macOS (Node ${{ matrix.node }})
     runs-on: macos-latest
     needs: publish
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
     steps:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24
+          node-version: ${{ matrix.node }}
           package-manager-cache: false
 
       - name: Verify clean registry install

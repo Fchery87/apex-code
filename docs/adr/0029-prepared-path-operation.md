@@ -41,6 +41,17 @@ refused rather than treated as an empty file. Making the missing-file case a sep
 variant rather than an optional identity field is what stops "identity absent" from being
 read as "identity matched".
 
+**A zero inode is "identity absent" wearing the other's clothes.** The union keeps the two
+states apart, but the comparison could still collapse them: POSIX reserves inode 0 for "no
+file", and Node reports 0 on Windows when the file index is unavailable for a handle.
+`0 !== 0` is false, so comparing two of them *succeeds*, and the check silently becomes a
+no-op at exactly the moment the platform could not say what the descriptor holds. A test
+that forces the platform's answer to 0 showed a gated write to a swapped target completing
+with no verification at all. `verifyPreparedIdentity` now rejects a zero inode on either
+side before comparing, with its own wording — "could not be verified" is a different fact
+from "changed", and the operator reading the refusal should be able to tell which happened.
+One helper serves all three call sites, so the rule cannot hold at one and lapse at another.
+
 **An operation class without a production caller is not declared.** An earlier draft
 declared `BashOperation`, `CommandOperation`, `CredentialOperation`, and
 `EvidenceOperation` alongside the path variants. None of them reached the gate or the

@@ -236,7 +236,9 @@ console.log();
 
 // 10. Push
 console.log("Pushing to remote...");
-run("git push origin main");
+// main is protected and the pre-push hook refuses it by default; a release is the one
+// push that means to land there. See scripts/push-target.mjs.
+run("git push origin main", { env: { ...process.env, PI_ALLOW_MAIN_PUSH: "1" } });
 run(`git push origin v${version}`);
 console.log();
 

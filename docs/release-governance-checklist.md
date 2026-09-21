@@ -131,6 +131,37 @@ Revisit this if `release.mjs` ever changes what it commits beyond the version an
 changelog, or if release authority stops being a sole maintainer under ADR 0014's succession
 process. Routing releases through a pull request is the fix if either happens.
 
+### An agent pushed feature work straight to `main`
+
+On 2026-09-19 a coding agent pushed `11795689a..27066ad8a` directly to `main`, bypassing all
+four required status checks. It had created `fix/trust-classification-completion` and never
+checked it out, so a bare `git push` from a `main` checkout sent `main` to `origin/main`. Pull
+request #123, opened for that work, auto-closed as MERGED when its commits arrived by another
+route.
+
+This is the same bypass the Release item above describes, and the mitigations that make that
+one acceptable do not apply here. Those commits are not mechanical: they are the trust-gate,
+atomic-publish, and `sessionDir` changes, real source that a pull request would have held for
+three-OS review. Nothing about the content was wrong -- CI on `main` at `27066ad8a` came back
+green on all three platforms afterwards -- but that evidence arrived after the commits had
+already landed, which is the opposite of what the checks are for.
+
+**Not reverted, deliberately.** `27066ad8a` is green, and twenty commits now build on it. A
+revert would remove working security fixes to punish a procedural failure, and would itself be
+a large unreviewed change. The defect was in how the commits arrived, not in what they say.
+
+**Guarded instead.** `.husky/pre-push` now refuses a push whose remote ref is
+`refs/heads/main`, so the specific mistake -- a branch created but never checked out -- cannot
+reach the remote from a repository with hooks installed. Tags are untouched, because a release
+pushes one and a tag cannot carry unreviewed source onto a protected branch. `release.mjs`
+sets `PI_ALLOW_MAIN_PUSH=1` on its own `main` push, which is the one push that means to land
+there. `scripts/push-target.test.mjs` covers the refusal, the tag, the opt-in, and a deletion.
+
+The hook is a local guard and travels with the checkout, not the repository, so it narrows the
+gap rather than closing it. Closing it properly means removing the maintainer bypass on `main`,
+which cannot be done while `release.mjs` pushes there directly. Revisit together: routing
+releases through a pull request is the change that makes both possible.
+
 ### A second workflow holds `contents: write`
 
 `.github/workflows/refresh-model-data.yml` grants its `refresh` job `contents: write` alongside

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Stats } from "node:fs";
 import {
 	accessSync,
 	closeSync,
@@ -39,6 +40,28 @@ export function preparePathOperation(filePath: string, cwd: string): PreparedPat
 }
 
 /**
+ * Verify a descriptor's identity against the one captured at authorization.
+ *
+ * A zero inode is not an identity. POSIX reserves inode 0 for "no file", and Node reports 0
+ * on Windows when the file index is unavailable for the handle. Comparing two of them
+ * succeeds trivially, which would turn this check -- the only thing standing between an
+ * authorized target and one swapped underneath it -- into a no-op at exactly the moment the
+ * platform could not say what we are holding. An unverifiable target is not an authorized
+ * one, so refuse rather than proceed.
+ *
+ * The mismatched case keeps its own wording: "changed" and "could not be verified" are
+ * different facts, and an operator reading the refusal should be able to tell them apart.
+ */
+function verifyPreparedIdentity(subject: "read" | "write", stats: Stats, identity: FileIdentity): void {
+	if (stats.ino === 0 || identity.inode === 0) {
+		throw new PreparedTargetChangedError(`Authorized ${subject} target identity could not be verified`);
+	}
+	if (stats.dev !== identity.device || stats.ino !== identity.inode) {
+		throw new PreparedTargetChangedError(`Authorized ${subject} target changed before execution`);
+	}
+}
+
+/**
  * Read the authorized target through a no-follow final-component open, verifying
  * the descriptor identity captured at authorization before any byte is returned.
  * A replaced alias or an injected symlink never matches and the read aborts.
@@ -56,9 +79,7 @@ export function readPreparedPath(operation: PreparedPathOperation, maxBytes?: nu
 		}
 		try {
 			const stats = fstatSync(fd);
-			if (stats.dev !== operation.identity.device || stats.ino !== operation.identity.inode) {
-				throw new PreparedTargetChangedError("Authorized read target changed before execution");
-			}
+			verifyPreparedIdentity("read", stats, operation.identity);
 			const length = maxBytes === undefined ? stats.size : Math.min(stats.size, maxBytes);
 			const buffer = Buffer.alloc(length);
 			let offset = 0;
@@ -229,10 +250,7 @@ function writeInPlace(parent: OpenDirectory, name: string, content: string | Buf
 	}
 	try {
 		if (identity) {
-			const stats = fstatSync(fd);
-			if (stats.dev !== identity.device || stats.ino !== identity.inode) {
-				throw new PreparedTargetChangedError("Authorized write target changed before execution");
-			}
+			verifyPreparedIdentity("write", fstatSync(fd), identity);
 		}
 		ftruncateSync(fd, 0);
 		writeAll(fd, content);
@@ -344,9 +362,7 @@ export function writePreparedPath(operation: PreparedPathOperation, content: str
 			let mode: number;
 			try {
 				const stats = fstatSync(fd);
-				if (stats.dev !== operation.identity.device || stats.ino !== operation.identity.inode) {
-					throw new PreparedTargetChangedError("Authorized write target changed before execution");
-				}
+				verifyPreparedIdentity("write", stats, operation.identity);
 				mode = stats.mode & 0o7777;
 			} finally {
 				closeSync(fd);
