@@ -50,6 +50,28 @@ Raising `engines` or moving CI to node 24 would make the override work, and both
 trade for a dev-only advisory: the first is a breaking change for users, the second stops
 testing the floor we claim to support.
 
+## The pin this produced
+
+The divergence was only visible because CI failed. Nothing in the repository declared which
+npm was correct, so a lockfile generated on npm 11 looked entirely healthy locally — full
+suite green — and broke every CI job on install.
+
+`package.json` now carries `"packageManager": "npm@10.9.8"`, the npm that Node 22 bundles and
+that CI therefore runs. corepack honors the field where it is enabled; npm does not enforce it
+on its own, so `scripts/check-lockfile-commit.mjs` checks it whenever a lockfile is staged and
+refuses the commit on a major mismatch, naming the `edgesOut` failure it prevents.
+
+That check runs *before* `PI_ALLOW_LOCKFILE_CHANGE`, because that flag asserts the package
+changes were reviewed, which is a different claim from having used an npm whose lockfile CI can
+install. It compares only the major — a patch difference is not a compatibility hazard, and
+failing on one would make the guard noise — and an npm it cannot detect is not treated as a
+mismatch, since the guard exists to catch a known-bad combination rather than to demand proof
+of a good one. `PI_ALLOW_NPM_VERSION_MISMATCH=1` overrides it.
+
+`scripts/npm-pin.test.mjs` ties the pin to CI: it fails if the two disagree, and if CI moves to
+a Node major whose bundled npm is not recorded, so raising the Node version forces the pin to
+be revisited in the same change.
+
 ## Consequences
 
 Five frozen packages still install `vitest@4.1.9`. The exposure is small and worth stating
