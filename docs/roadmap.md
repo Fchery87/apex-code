@@ -1358,6 +1358,7 @@ takes the next free number instead of a reserved one.
 | 0033 | 0.1.x is a stable release line; the pre-alpha label is retired | follow-up | ✅ |
 | 0034 | Project trust is a required constructor argument; no loader defaults to trusted | follow-up | ✅ |
 | 0035 | `bash` applies a one-hour default wall-clock timeout, derived from recorded suite runs | follow-up | ✅ |
+| 0036 | vitest is raised in the forked workspaces; the five frozen ones wait for upstream, and a root override cannot substitute | follow-up | ✅ |
 
 ## Cross-phase contracts
 
