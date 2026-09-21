@@ -920,7 +920,7 @@ export class ChildRunRegistry {
 		const record = this.records.get(id);
 		if (!record) throw new Error(`Unknown delegation handle "${id}".`);
 		const workspace = record.workspace;
-		if (!workspace || workspace.isolation !== "worktree" || !workspace.root) {
+		if (workspace?.isolation !== "worktree" || !workspace.root) {
 			throw new Error(
 				`Child workspace recovery refused for run "${id}": it has no worktree workspace to recover ` +
 					`(isolation: ${workspace?.isolation ?? "none"}). Only worktree-isolated children hold a recoverable workspace; ` +
@@ -1034,7 +1034,7 @@ export class ChildRunRegistry {
 	 */
 	private recordWorkspaceState(sessionId: string, outcome: WorkspaceReleaseOutcome): void {
 		const record = this.records.get(sessionId);
-		if (!record || record.workspace?.isolation !== "worktree") return;
+		if (record?.workspace?.isolation !== "worktree") return;
 		record.workspaceState = outcome.removed
 			? "released"
 			: outcome.kept === "dirty"

@@ -92,71 +92,69 @@ function printedAuthorizeUrl(printed: string[]): URL {
 }
 
 describe("runMcpOAuthFlow", () => {
-	it(
-		"discovers, registers, authorizes over loopback, exchanges with PKCE, and persists to the store",
-		{ timeout: 15_000 },
-		async () => {
-			const authority = await startAuthority({ registrationEndpoint: true });
-			try {
-				const credentials = AuthStorage.inMemory();
-				const printed: string[] = [];
-				const openBrowser = vi.fn();
+	it("discovers, registers, authorizes over loopback, exchanges with PKCE, and persists to the store", {
+		timeout: 15_000,
+	}, async () => {
+		const authority = await startAuthority({ registrationEndpoint: true });
+		try {
+			const credentials = AuthStorage.inMemory();
+			const printed: string[] = [];
+			const openBrowser = vi.fn();
 
-				const resultPromise = runMcpOAuthFlow({
-					serverName: "local",
-					serverUrl: new URL("/mcp", authority.url).toString(),
-					credentials,
-					deps: { print: (line) => printed.push(line), openBrowser },
-				});
+			const resultPromise = runMcpOAuthFlow({
+				serverName: "local",
+				serverUrl: new URL("/mcp", authority.url).toString(),
+				credentials,
+				deps: { print: (line) => printed.push(line), openBrowser },
+			});
 
-				// Simulate the browser: take the printed authorize URL, follow the redirect manually,
-				// then deliver the code to the loopback listener ourselves.
-				let callbackUrl: URL | undefined;
-				const result = await (async () => {
-					const promise = resultPromise;
-					for (let i = 0; i < 100 && printed.length === 0; i++) await new Promise((r) => setTimeout(r, 10));
-					expect(printed).toHaveLength(1);
-					const authorizeUrl = printedAuthorizeUrl(printed);
-					expect(authorizeUrl.searchParams.get("response_type")).toBe("code");
-					expect(authorizeUrl.searchParams.get("client_id")).toBe("dynamic-client");
-					expect(authorizeUrl.searchParams.get("resource")).toBe(new URL("/mcp", authority.url).toString());
-					const redirect = await fetch(authorizeUrl, { redirect: "manual" });
-					const location = redirect.headers.get("location");
-					expect(location).toBeTruthy();
-					callbackUrl = new URL(String(location));
-					const delivered = await fetch(callbackUrl);
-					expect(delivered.status).toBe(200);
-					return promise;
-				})();
+			// Simulate the browser: take the printed authorize URL, follow the redirect manually,
+			// then deliver the code to the loopback listener ourselves.
+			let callbackUrl: URL | undefined;
+			const result = await (async () => {
+				const promise = resultPromise;
+				for (let i = 0; i < 100 && printed.length === 0; i++) await new Promise((r) => setTimeout(r, 10));
+				expect(printed).toHaveLength(1);
+				const authorizeUrl = printedAuthorizeUrl(printed);
+				expect(authorizeUrl.searchParams.get("response_type")).toBe("code");
+				expect(authorizeUrl.searchParams.get("client_id")).toBe("dynamic-client");
+				expect(authorizeUrl.searchParams.get("resource")).toBe(new URL("/mcp", authority.url).toString());
+				const redirect = await fetch(authorizeUrl, { redirect: "manual" });
+				const location = redirect.headers.get("location");
+				expect(location).toBeTruthy();
+				callbackUrl = new URL(String(location));
+				const delivered = await fetch(callbackUrl);
+				expect(delivered.status).toBe(200);
+				return promise;
+			})();
 
-				expect(openBrowser).toHaveBeenCalledTimes(1);
-				expect(result.expiresAt).toBeGreaterThan(Date.now() + 3_000_000);
+			expect(openBrowser).toHaveBeenCalledTimes(1);
+			expect(result.expiresAt).toBeGreaterThan(Date.now() + 3_000_000);
 
-				const stored = await credentials.read("mcp/local");
-				expect(stored?.type).toBe("oauth");
-				if (stored?.type !== "oauth") throw new Error("unreachable");
-				expect(stored.access).toBe("fresh-access");
-				expect(stored.refresh).toBe("fresh-refresh");
-				expect(stored.tokenEndpoint).toBe(new URL("/token", authority.url).toString());
-				expect(stored.resource).toBe(new URL("/mcp", authority.url).toString());
+			const stored = await credentials.read("mcp/local");
+			expect(stored?.type).toBe("oauth");
+			if (stored?.type !== "oauth") throw new Error("unreachable");
+			expect(stored.access).toBe("fresh-access");
+			expect(stored.refresh).toBe("fresh-refresh");
+			expect(stored.tokenEndpoint).toBe(new URL("/token", authority.url).toString());
+			expect(stored.resource).toBe(new URL("/mcp", authority.url).toString());
 
-				// PKCE held end to end: the token endpoint received the verifier matching the challenge.
-				expect(authority.tokenBodies).toHaveLength(1);
-				const tokenBody = authority.tokenBodies[0]!;
-				expect(tokenBody.get("grant_type")).toBe("authorization_code");
-				const { createHash } = await import("node:crypto");
-				expect(
-					createHash("sha256")
-						.update(String(tokenBody.get("code_verifier")), "ascii")
-						.digest("base64url"),
-				).toBe(authority.challenge.value);
+			// PKCE held end to end: the token endpoint received the verifier matching the challenge.
+			expect(authority.tokenBodies).toHaveLength(1);
+			const tokenBody = authority.tokenBodies[0]!;
+			expect(tokenBody.get("grant_type")).toBe("authorization_code");
+			const { createHash } = await import("node:crypto");
+			expect(
+				createHash("sha256")
+					.update(String(tokenBody.get("code_verifier")), "ascii")
+					.digest("base64url"),
+			).toBe(authority.challenge.value);
 
-				await assertClosed(Number(callbackUrl!.port));
-			} finally {
-				await authority.close();
-			}
-		},
-	);
+			await assertClosed(Number(callbackUrl!.port));
+		} finally {
+			await authority.close();
+		}
+	});
 
 	it("keeps listening after a wrong-state callback and completes on the right one", { timeout: 15_000 }, async () => {
 		const authority = await startAuthority({ registrationEndpoint: true });
@@ -187,31 +185,29 @@ describe("runMcpOAuthFlow", () => {
 		}
 	});
 
-	it(
-		"fails with a named error and closes the listener when nobody completes the flow",
-		{ timeout: 15_000 },
-		async () => {
-			const authority = await startAuthority({ registrationEndpoint: true });
-			try {
-				const credentials = AuthStorage.inMemory();
-				const printed: string[] = [];
-				await expect(
-					runMcpOAuthFlow({
-						serverName: "local",
-						serverUrl: new URL("/mcp", authority.url).toString(),
-						credentials,
-						deps: { print: (line) => printed.push(line), openBrowser: () => {}, timeoutMs: 150 },
-					}),
-				).rejects.toBeInstanceOf(OAuthFlowError);
+	it("fails with a named error and closes the listener when nobody completes the flow", {
+		timeout: 15_000,
+	}, async () => {
+		const authority = await startAuthority({ registrationEndpoint: true });
+		try {
+			const credentials = AuthStorage.inMemory();
+			const printed: string[] = [];
+			await expect(
+				runMcpOAuthFlow({
+					serverName: "local",
+					serverUrl: new URL("/mcp", authority.url).toString(),
+					credentials,
+					deps: { print: (line) => printed.push(line), openBrowser: () => {}, timeoutMs: 150 },
+				}),
+			).rejects.toBeInstanceOf(OAuthFlowError);
 
-				const authorizeUrl = printedAuthorizeUrl(printed);
-				const port = Number(new URL(authorizeUrl.searchParams.get("redirect_uri")!).port);
-				await assertClosed(port);
-			} finally {
-				await authority.close();
-			}
-		},
-	);
+			const authorizeUrl = printedAuthorizeUrl(printed);
+			const port = Number(new URL(authorizeUrl.searchParams.get("redirect_uri")!).port);
+			await assertClosed(port);
+		} finally {
+			await authority.close();
+		}
+	});
 
 	it("uses a caller-provided client id without dynamic registration", { timeout: 15_000 }, async () => {
 		const authority = await startAuthority({ registrationEndpoint: false });
@@ -237,24 +233,22 @@ describe("runMcpOAuthFlow", () => {
 		}
 	});
 
-	it(
-		"fails with manual-registration guidance when there is no registration endpoint and no client id",
-		{ timeout: 15_000 },
-		async () => {
-			const authority = await startAuthority({ registrationEndpoint: false });
-			try {
-				const credentials = AuthStorage.inMemory();
-				await expect(
-					runMcpOAuthFlow({
-						serverName: "local",
-						serverUrl: new URL("/mcp", authority.url).toString(),
-						credentials,
-						deps: { print: () => {}, openBrowser: () => {} },
-					}),
-				).rejects.toThrow(/manual client registration/i);
-			} finally {
-				await authority.close();
-			}
-		},
-	);
+	it("fails with manual-registration guidance when there is no registration endpoint and no client id", {
+		timeout: 15_000,
+	}, async () => {
+		const authority = await startAuthority({ registrationEndpoint: false });
+		try {
+			const credentials = AuthStorage.inMemory();
+			await expect(
+				runMcpOAuthFlow({
+					serverName: "local",
+					serverUrl: new URL("/mcp", authority.url).toString(),
+					credentials,
+					deps: { print: () => {}, openBrowser: () => {} },
+				}),
+			).rejects.toThrow(/manual client registration/i);
+		} finally {
+			await authority.close();
+		}
+	});
 });
