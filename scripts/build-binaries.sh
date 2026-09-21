@@ -188,6 +188,22 @@ set_clipboard_target() {
     esac
 }
 
+# Stop Bun's tsconfig search before it reaches the repository root.
+#
+# The root tsconfig.json maps the `highlight.js` specifiers to local .d.ts files so the
+# package's own types -- which open with `/// <reference lib="dom" />` -- never enter the
+# program and never break frozen packages/ai. That mapping is for the type checker alone:
+# tsc emits the original specifier, which is why dist/ is correct. Bun's bundler honors
+# `paths` too and has no notion of a type-only redirect, so it resolved
+# `highlight.js/lib/core` to a declaration file and bundled it as runtime code. `declare
+# const hljs` emits nothing, and the compiled binary died on startup with
+# `ReferenceError: hljs is not defined` -- caught by the release smoke test, before publish.
+#
+# Bun searches upward from the entrypoint, so an empty tsconfig beside it ends the search
+# before the root is reached. dist/ is generated and gitignored, so this is written here
+# rather than committed.
+printf '{\n\t"compilerOptions": {}\n}\n' > ./dist/tsconfig.json
+
 for platform in "${PLATFORMS[@]}"; do
     echo "Building for $platform..."
     bun_target="bun-$platform"
