@@ -119,6 +119,7 @@ import { ensureTool, type ToolStatus } from "../../utils/tools-manager.ts";
 import { checkForNewApexCodeVersion, type LatestApexCodeRelease } from "../../utils/version-check.ts";
 import { ArminComponent } from "./components/armin.ts";
 import { AssistantMessageComponent } from "./components/assistant-message.ts";
+import { describeWithSource } from "./components/autocomplete-source.ts";
 import { BashExecutionComponent } from "./components/bash-execution.ts";
 import { BorderedLoader } from "./components/bordered-loader.ts";
 import { BranchSummaryMessageComponent } from "./components/branch-summary-message.ts";
@@ -759,39 +760,6 @@ export class InteractiveMode {
 		});
 	}
 
-	private getAutocompleteSourceTag(sourceInfo?: SourceInfo): string | undefined {
-		if (!sourceInfo) {
-			return undefined;
-		}
-
-		const scopePrefix = sourceInfo.scope === "user" ? "u" : sourceInfo.scope === "project" ? "p" : "t";
-		const source = sourceInfo.source.trim();
-
-		if (source === "auto" || source === "local" || source === "cli") {
-			return scopePrefix;
-		}
-
-		if (source.startsWith("npm:")) {
-			return `${scopePrefix}:${source}`;
-		}
-
-		const gitSource = parseGitUrl(source);
-		if (gitSource) {
-			const ref = gitSource.ref ? `@${gitSource.ref}` : "";
-			return `${scopePrefix}:git:${gitSource.host}/${gitSource.path}${ref}`;
-		}
-
-		return scopePrefix;
-	}
-
-	private prefixAutocompleteDescription(description: string | undefined, sourceInfo?: SourceInfo): string | undefined {
-		const sourceTag = this.getAutocompleteSourceTag(sourceInfo);
-		if (!sourceTag) {
-			return description;
-		}
-		return description ? `[${sourceTag}] ${description}` : `[${sourceTag}]`;
-	}
-
 	private getBuiltInCommandConflictDiagnostics(extensionRunner: ExtensionRunner): ResourceDiagnostic[] {
 		const builtinNames = new Set(BUILTIN_SLASH_COMMANDS.map((command) => command.name));
 		return extensionRunner
@@ -884,7 +852,7 @@ export class InteractiveMode {
 		// Convert prompt templates to SlashCommand format for autocomplete
 		const templateCommands: SlashCommand[] = this.session.promptTemplates.map((cmd) => ({
 			name: cmd.name,
-			description: this.prefixAutocompleteDescription(cmd.description, cmd.sourceInfo),
+			description: describeWithSource(cmd.description, cmd.sourceInfo),
 			...(cmd.argumentHint && { argumentHint: cmd.argumentHint }),
 		}));
 
@@ -895,7 +863,7 @@ export class InteractiveMode {
 			.filter((cmd) => !builtinCommandNames.has(cmd.name))
 			.map((cmd) => ({
 				name: cmd.invocationName,
-				description: this.prefixAutocompleteDescription(cmd.description, cmd.sourceInfo),
+				description: describeWithSource(cmd.description, cmd.sourceInfo),
 				getArgumentCompletions: cmd.getArgumentCompletions,
 			}));
 
@@ -908,7 +876,7 @@ export class InteractiveMode {
 				this.skillCommands.set(commandName, skill.filePath);
 				skillCommandList.push({
 					name: commandName,
-					description: this.prefixAutocompleteDescription(skill.description, skill.sourceInfo),
+					description: describeWithSource(skill.description, skill.sourceInfo),
 				});
 			}
 		}
