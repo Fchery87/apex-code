@@ -5,7 +5,7 @@ import { createAllToolDefinitions, type ToolName } from "../../../core/tools/ind
 import { getTextOutput as getRenderedTextOutput } from "../../../core/tools/render-utils.ts";
 import { convertToPng } from "../../../utils/image-convert.ts";
 import { theme } from "../theme/theme.ts";
-import { keyHint } from "./keybinding-hints.ts";
+import { formatHiddenLines, previewLineCount } from "./keybinding-hints.ts";
 import {
 	type ToolLifecycle,
 	ToolPanelComponent,
@@ -24,7 +24,6 @@ export interface ToolExecutionOptions {
 }
 
 /** The phrase every expand affordance ends with, here and in each tool's own renderer. */
-const EXPAND_HINT_LABEL = "to expand";
 
 export class ToolExecutionComponent extends Container {
 	private contentBox: Box;
@@ -58,7 +57,6 @@ export class ToolExecutionComponent extends Container {
 	// per-frame cost grow with the number of tools on screen; see
 	// test/tool-execution-render-cache.test.ts.
 	private displayVersion = 0;
-	private fallbackHidNothing = false;
 	private cachedRender?: { key: string; width: number; lines: string[] };
 	private result?: {
 		content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
@@ -173,15 +171,12 @@ export class ToolExecutionComponent extends Container {
 		}
 
 		const lines = output.split("\n");
-		const displayLines = this.expanded ? lines : lines.slice(0, FALLBACK_PREVIEW_LINES);
+		const displayLines = this.expanded
+			? lines
+			: lines.slice(0, previewLineCount(lines.length, FALLBACK_PREVIEW_LINES));
 		const remaining = lines.length - displayLines.length;
-		// The one path that composes the body itself, so the one path that can say
-		// for certain that expanding would reveal nothing.
-		this.fallbackHidNothing = remaining === 0;
 		let text = displayLines.map((line) => theme.fg("toolOutput", line)).join("\n");
-		if (remaining > 0) {
-			text += `${theme.fg("muted", `\n... (${remaining} more lines,`)} ${keyHint("app.tools.expand", EXPAND_HINT_LABEL)}${theme.fg("muted", ")")}`;
-		}
+		if (remaining > 0) text += `\n${formatHiddenLines(remaining, "more")}`;
 		return new Text(text, 0, 0);
 	}
 
@@ -314,32 +309,11 @@ export class ToolExecutionComponent extends Container {
 		if (!errorText || contentLines.length === 0) return contentLines;
 
 		const errorLines = new Text(theme.fg("toolOutput", errorText), 0, 0).render(width);
-		const previewLines = errorLines.slice(0, COLLAPSED_ERROR_VISUAL_LINE_LIMIT);
+		const previewLines = errorLines.slice(0, previewLineCount(errorLines.length, COLLAPSED_ERROR_VISUAL_LINE_LIMIT));
 		const omittedLines = errorLines.length - previewLines.length;
 		if (omittedLines === 0) return [...contentLines.slice(0, 1), ...previewLines];
 
-		const omission =
-			theme.fg("muted", `${omittedLines} more lines omitted, `) + keyHint("app.tools.expand", EXPAND_HINT_LABEL);
-		return [...contentLines.slice(0, 1), ...previewLines, omission];
-	}
-
-	/**
-	 * The affordance for a renderer that hides its body and says nothing itself.
-	 *
-	 * Every truncating renderer prints its own counted hint (`read.ts:196`,
-	 * `bash.ts:479`, `grep.ts:116`, `find.ts:111`, `ls.ts:90`, `write.ts:194`, and
-	 * the fallback below), which says more than this one does. Adding a second was
-	 * telling the reader less, twice. `read` is the case that still needs this: it
-	 * returns an empty body while collapsed and announces nothing.
-	 */
-	private renderDisclosureHint(width: number, contentLines: string[]): string[] {
-		if (this.expanded || !this.result || this.isPartial || width <= 0) return [];
-		if (this.fallbackHidNothing) return [];
-		// Matching the shared phrase rather than the key text, because the key text is
-		// empty until keybindings are installed and an unbound session would otherwise
-		// get the duplicate back.
-		if (contentLines.some((line) => line.includes(EXPAND_HINT_LABEL))) return [];
-		return new Text(keyHint("app.tools.expand", EXPAND_HINT_LABEL), 0, 0).render(width);
+		return [...contentLines.slice(0, 1), ...previewLines, formatHiddenLines(omittedLines, "more")];
 	}
 
 	override render(width: number): string[] {
@@ -383,7 +357,7 @@ export class ToolExecutionComponent extends Container {
 							this.result?.isError && !this.isPartial && !this.expanded
 								? this.renderCollapsedError(contentLines, innerWidth)
 								: contentLines;
-						return [...visibleLines, ...this.renderDisclosureHint(innerWidth, visibleLines)];
+						return visibleLines;
 					},
 					invalidate: () => shell.invalidate?.(),
 				};
@@ -394,7 +368,6 @@ export class ToolExecutionComponent extends Container {
 		if (visibleContentLines.length > 0) {
 			lines.push("");
 			lines.push(...visibleContentLines);
-			if (selfRendered) lines.push(...this.renderDisclosureHint(width, visibleContentLines));
 		}
 		for (let i = 0; i < this.imageComponents.length; i++) {
 			const spacer = this.imageSpacers[i];
@@ -407,7 +380,6 @@ export class ToolExecutionComponent extends Container {
 
 	private updateDisplay(): void {
 		this.displayVersion += 1;
-		this.fallbackHidNothing = false;
 		let hasContent = false;
 		this.hideComponent = false;
 		if (this.hasRendererDefinition()) {

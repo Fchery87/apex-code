@@ -12,7 +12,7 @@ import {
 import { stripAnsi } from "../../../utils/ansi.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
-import { keyHint, keyText } from "./keybinding-hints.ts";
+import { formatHiddenLines, keyHint, keyText, previewLineCount } from "./keybinding-hints.ts";
 import { truncateToVisualLines } from "./visual-truncate.ts";
 
 // Preview line limit when not expanded (matches tool execution behavior)
@@ -140,7 +140,7 @@ export class BashExecutionComponent extends Container {
 		const availableLines = contextTruncation.content ? contextTruncation.content.split("\n") : [];
 
 		// Apply preview truncation based on expanded state
-		const previewLogicalLines = availableLines.slice(-PREVIEW_LINES);
+		const previewLogicalLines = availableLines.slice(-previewLineCount(availableLines.length, PREVIEW_LINES));
 		const hiddenLineCount = availableLines.length - previewLogicalLines.length;
 
 		// Rebuild content container
@@ -192,9 +192,7 @@ export class BashExecutionComponent extends Container {
 						`${theme.fg("muted", "(")}${keyHint("app.tools.expand", "to collapse")}${theme.fg("muted", ")")}`,
 					);
 				} else {
-					statusParts.push(
-						`${theme.fg("muted", `... ${hiddenLineCount} more lines (`)}${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`,
-					);
+					statusParts.push(formatHiddenLines(hiddenLineCount, "earlier"));
 				}
 			}
 
