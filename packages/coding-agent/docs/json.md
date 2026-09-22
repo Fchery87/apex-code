@@ -96,3 +96,37 @@ fields. `message_end` contains the final authoritative message.
 ```bash
 apex-code --mode json "List files" 2>/dev/null | jq -c 'select(.type == "message_end")'
 ```
+
+## Result envelope and exit codes
+
+The last line of a `--mode json` run is a `result` envelope. It is written by print mode
+rather than emitted by the session, so it is not an `AgentSessionEvent` and does not appear
+in `--mode text`.
+
+```json
+{"type":"result","status":"completed"}
+```
+
+`status` is the run's terminal outcome, using the same vocabulary as the agent loop's
+`AgentStopReason`:
+
+| `status` | Meaning | Exit code |
+| --- | --- | --- |
+| `completed` | The run finished normally. | `0` |
+| `error` | The run failed, for example a provider error. | `1` |
+| `aborted` | The run was cancelled. | `1` |
+| `budget-exhausted` | A `runBudget` limit stopped the run. | `1` |
+
+Exit codes are `0` for `completed` and `1` for every other status. A caller that needs to
+distinguish the causes reads `status` rather than the exit code, so new statuses can be
+added without changing what an existing script sees. Signals are unchanged: `SIGTERM` exits
+`143` and `SIGHUP` exits `129`.
+
+Before this envelope existed, a failed `--mode json` run exited `0`, because the exit-code
+decision was reachable only from `--mode text`. Scripts written against that behavior treated
+every run as a success.
+
+```bash
+apex-code --mode json --permission-mode plan --print "Summarize the repository" \
+  | jq -r 'select(.type == "result") | .status'
+```

@@ -28,6 +28,50 @@ export interface PrintModeOptions {
 }
 
 /**
+ * Terminal status of a non-interactive run, written as the `result` envelope in
+ * JSON mode. The vocabulary is `AgentStopReason`'s own, rather than a second one
+ * defined here, so the two cannot drift.
+ */
+type PrintRunStatus = AgentStopReason["kind"];
+
+interface PrintRunOutcome {
+	status: PrintRunStatus;
+	/** What text mode prints to stderr. Empty when the run completed. */
+	message: string;
+}
+
+/**
+ * Resolve the run's terminal outcome.
+ *
+ * `agent_end`'s structured stop reason wins because the loop already applied its
+ * documented precedence (aborted > error > budget > completed) to produce it. The
+ * settled assistant message is only a fallback, for the runs that end without an
+ * `agent_end` reaching this mode at all.
+ */
+function resolveRunOutcome(
+	stopReason: AgentStopReason | undefined,
+	settled: AssistantMessage | undefined,
+): PrintRunOutcome {
+	if (stopReason?.kind === "budget-exhausted") {
+		const limit = stopReason.limit.replace(/-/g, " ");
+		return {
+			status: "budget-exhausted",
+			message: `Run stopped: the ${limit} budget was exhausted (runBudget settings).`,
+		};
+	}
+	const failure =
+		stopReason?.kind === "aborted" || stopReason?.kind === "error"
+			? stopReason.kind
+			: settled?.stopReason === "aborted" || settled?.stopReason === "error"
+				? settled.stopReason
+				: undefined;
+	if (failure) {
+		return { status: failure, message: settled?.errorMessage || `Request ${failure}` };
+	}
+	return { status: "completed", message: "" };
+}
+
+/**
  * Run in print (single-shot) mode.
  * Sends prompts to the agent and outputs the result.
  */
@@ -143,33 +187,28 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 			await session.prompt(message);
 		}
 
-		if (mode === "text") {
-			// A budget stop can settle after a tool result with no assistant message,
-			// so it is reported from the structured stop reason rather than inferred
-			// from the last message.
-			if (lastStopReason?.kind === "budget-exhausted") {
-				console.error(
-					`Run stopped: the ${lastStopReason.limit.replace(/-/g, " ")} budget was exhausted (runBudget settings).`,
-				);
-				exitCode = 1;
-			} else {
-				const state = session.state;
-				const lastMessage = state.messages[state.messages.length - 1];
+		// The outcome is resolved once, for every mode. Deciding it inside the text
+		// branch is what let a failed `--mode json` run exit 0: the stream carried the
+		// error and the exit code reported success.
+		const lastMessage = session.state.messages[session.state.messages.length - 1];
+		const outcome = resolveRunOutcome(
+			lastStopReason,
+			lastMessage?.role === "assistant" ? (lastMessage as AssistantMessage) : undefined,
+		);
+		exitCode = outcome.status === "completed" ? 0 : 1;
 
-				if (lastMessage?.role === "assistant") {
-					const assistantMsg = lastMessage as AssistantMessage;
-					if (assistantMsg.stopReason === "error" || assistantMsg.stopReason === "aborted") {
-						console.error(assistantMsg.errorMessage || `Request ${assistantMsg.stopReason}`);
-						exitCode = 1;
-					} else {
-						for (const content of assistantMsg.content) {
-							if (content.type === "text") {
-								writeRawStdout(`${content.text}\n`);
-							}
-						}
+		if (mode === "json") {
+			writeRawStdout(`${JSON.stringify({ type: "result", status: outcome.status })}\n`);
+		} else if (outcome.status === "completed") {
+			if (lastMessage?.role === "assistant") {
+				for (const content of (lastMessage as AssistantMessage).content) {
+					if (content.type === "text") {
+						writeRawStdout(`${content.text}\n`);
 					}
 				}
 			}
+		} else {
+			console.error(outcome.message);
 		}
 
 		return exitCode;

@@ -485,6 +485,12 @@ Use JSON/RPC when another process owns orchestration. The permission mode must b
 explicit for non-interactive modes, and secrets should be kept out of prompts and
 captured output.
 
+A non-interactive run exits `0` only when it completed. A provider error, a cancelled
+run, and an exhausted `runBudget` all exit `1`, in every mode. In `--mode json` the last
+line is a `result` envelope naming which of those happened, so a caller can branch on the
+cause rather than on the exit code alone. See
+[JSON event stream mode](packages/coding-agent/docs/json.md#result-envelope-and-exit-codes).
+
 `--mode acp` speaks the Agent Client Protocol over stdio JSON-RPC, which connects Apex
 Code to ACP clients such as Zed and the JetBrains IDEs.
 
