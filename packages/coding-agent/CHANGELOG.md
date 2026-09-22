@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`--mode json` exited `0` when the run failed.** Both assignments of a non-zero exit code sat inside a `if (mode === "text")` branch, so a provider error, a cancelled run, and an exhausted `runBudget` all reported success to the caller. The JSON stream carried the failure the whole time; only the exit code disagreed, which is the worst shape for the mode the README recommends for automation, because a CI job reads the code and not the stream. The outcome is now resolved once for every mode, from `agent_end`'s structured stop reason where there is one and from the settled assistant message otherwise. `--mode text` keeps its behavior on every path a run actually takes. Two edge cases do move, both toward the stop reason the loop decided rather than a message that may predate it: an `agent_end` failure whose last message is not an assistant message now exits 1 instead of 0, and a `completed` run whose last message still carries a stale error now exits 0 instead of 1. This is a deliberate break for anyone whose pipeline treated `0` from `--mode json` as "the process ran": those runs now exit `1`, which is what they always meant.
+
+### Added
+
+- **A `result` envelope ends a `--mode json` run.** The final line is `{"type":"result","status":"..."}`, where `status` is `completed`, `error`, `aborted`, or `budget-exhausted` — the agent loop's own `AgentStopReason` vocabulary rather than a second one that could drift from it. It lets a caller branch on why a run ended instead of inferring it from an integer, which is why the exit codes stay at `0` and `1` rather than growing a numeric taxonomy that would freeze today's guesses. It is written by print mode, not emitted by the session, so it is not an `AgentSessionEvent` and never appears in `--mode text`.
+
 ## [0.4.0] - 2026-09-21
 
 ### Changed
