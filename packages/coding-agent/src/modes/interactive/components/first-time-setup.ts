@@ -3,7 +3,7 @@ import { APP_NAME } from "../../../config.ts";
 import { APEX_MARK_BLOCK } from "../../../themes/apex-logo.ts";
 import { type TerminalTheme, theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
-import { keyHint, rawKeyHint } from "./keybinding-hints.ts";
+import { hintRow } from "./keybinding-hints.ts";
 import { paintBrandMark } from "./splash-header.ts";
 
 export interface FirstTimeSetupResult {
@@ -63,11 +63,11 @@ export class FirstTimeSetupComponent extends Container {
 		this.addChild(new Spacer(1));
 		this.addChild(
 			new Text(
-				rawKeyHint("↑↓", "navigate") +
-					"  " +
-					keyHint("tui.select.confirm", "finish") +
-					"  " +
-					keyHint("tui.select.cancel", "skip setup"),
+				hintRow([
+					[["tui.select.up", "tui.select.down"], "move"],
+					["tui.select.confirm", "finish"],
+					["tui.select.cancel", "skip setup"],
+				]),
 				1,
 				0,
 			),

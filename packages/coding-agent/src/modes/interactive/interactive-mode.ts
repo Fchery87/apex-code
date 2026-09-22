@@ -134,7 +134,7 @@ import { ExtensionInputComponent } from "./components/extension-input.ts";
 import { ExtensionSelectorComponent } from "./components/extension-selector.ts";
 import { type FirstUseHintId, FirstUseHints } from "./components/first-use-hints.ts";
 import { FooterComponent, formatTokens } from "./components/footer.ts";
-import { formatKeyText, keyDisplayText, keyHint, keyText, rawKeyHint } from "./components/keybinding-hints.ts";
+import { formatKeyText, hintRow, keyDisplayText, keyHint, keyText, rawKeyHint } from "./components/keybinding-hints.ts";
 import { LoginDialogComponent } from "./components/login-dialog.ts";
 import { createMermaidMarkdownTransformer } from "./components/mermaid.ts";
 import { ModelSelectorComponent } from "./components/model-selector.ts";
@@ -2039,13 +2039,15 @@ export class InteractiveMode {
 	 */
 	/** Live keybindings under the autocomplete dropdown. */
 	private buildAutocompleteFooter(): string {
-		const separator = theme.fg("borderMuted", this.settingsManager.getSymbolPreset() === "ascii" ? " - " : " · ");
-		return [
-			rawKeyHint(`${keyText("tui.select.up")}/${keyText("tui.select.down")}`, "move"),
-			keyHint("tui.select.confirm", "select"),
-			keyHint("tui.input.tab", "complete"),
-			keyHint("tui.select.cancel", "dismiss"),
-		].join(separator);
+		return hintRow(
+			[
+				[["tui.select.up", "tui.select.down"], "move"],
+				["tui.select.confirm", "select"],
+				["tui.input.tab", "complete"],
+				["tui.select.cancel", "dismiss"],
+			],
+			{ ascii: this.settingsManager.getSymbolPreset() === "ascii" },
+		);
 	}
 
 	private buildStartupShortcuts(): string {

@@ -21,7 +21,7 @@ import type { PackageSource, SettingsManager } from "../../../core/settings-mana
 import { canonicalizePath, isLocalPath, resolvePath } from "../../../utils/paths.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
-import { keyHint, rawKeyHint } from "./keybinding-hints.ts";
+import { hintRow } from "./keybinding-hints.ts";
 
 type ResourceType = "extensions" | "skills" | "prompts" | "themes";
 type ConfigWriteScope = "global" | "project";
@@ -205,11 +205,11 @@ class ConfigSelectorHeader implements Component {
 
 	render(width: number): string[] {
 		const title = theme.bold(this.writeScope === "project" ? "Project Local Resources" : "Global Resources");
-		const sep = theme.fg("muted", " · ");
-		const switchHint = this.projectModeAvailable ? keyHint("tui.input.tab", "switch mode") + sep : "";
-		const actionHint =
-			this.writeScope === "project" ? rawKeyHint("space", "cycle inherit/+/-") : rawKeyHint("space", "toggle");
-		const hint = switchHint + actionHint + sep + rawKeyHint("esc", "close");
+		const hint = hintRow([
+			...(this.projectModeAvailable ? [["tui.input.tab", "switch mode"] as const] : []),
+			[{ literal: "space" }, this.writeScope === "project" ? "cycle inherit/+/-" : "toggle"],
+			["tui.select.cancel", "close"],
+		]);
 		const spacing = Math.max(1, width - visibleWidth(title) - visibleWidth(hint));
 		const scopeHint =
 			this.writeScope === "project"

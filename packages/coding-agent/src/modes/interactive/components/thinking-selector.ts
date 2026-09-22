@@ -12,9 +12,9 @@ import {
 	Text,
 } from "@earendil-works/pi-tui";
 import type { ThinkingLevel } from "apex-code-agent-core";
-import { getSelectListTheme, theme } from "../theme/theme.ts";
+import { getSelectListTheme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
-import { keyDisplayText } from "./keybinding-hints.ts";
+import { hintRow, keyDisplayText } from "./keybinding-hints.ts";
 
 const THINKING_SELECT_LIST_LAYOUT: SelectListLayoutOptions = {
 	minPrimaryColumnWidth: 12,
@@ -91,7 +91,17 @@ export class ThinkingSelectorComponent extends Container implements Focusable {
 		this.selectListChildIndex = this.children.length;
 		this.addChild(this.selectList);
 		this.addChild(new Spacer(1));
-		this.addChild(new Text(theme.fg("dim", "  Enter to select · Ctrl+S to set as default · Esc to cancel"), 0, 0));
+		this.addChild(
+			new Text(
+				hintRow([
+					["tui.select.confirm", "select"],
+					[{ literal: "ctrl+s" }, "set as default"],
+					["tui.select.cancel", "close"],
+				]),
+				0,
+				0,
+			),
+		);
 
 		// Add bottom border
 		this.addChild(new DynamicBorder());

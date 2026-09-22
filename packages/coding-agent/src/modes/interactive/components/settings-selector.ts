@@ -7,6 +7,7 @@ import {
 	type SelectItem,
 	type SettingItem,
 	SettingsList,
+	type SettingsListTheme,
 	Spacer,
 	Text,
 } from "@earendil-works/pi-tui";
@@ -23,8 +24,33 @@ import type {
 } from "../../../core/settings-manager.ts";
 import { getSettingsListTheme, parseAutoThemeSetting, type TerminalTheme, theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
-import { keyDisplayText } from "./keybinding-hints.ts";
+import { hintRow, keyDisplayText } from "./keybinding-hints.ts";
 import { SelectSubmenu, SteppedSubmenu, type SteppedSubmenuStep } from "./settings-submenu.ts";
+
+/** The two hint rows `pi-tui`'s settings list writes, with and without search. */
+const SETTINGS_LIST_HINT_ROWS = new Set([
+	"Type to search · Enter/Space to change · Esc to cancel",
+	"Enter/Space to change · Esc to cancel",
+]);
+
+/**
+ * The settings list is `pi-tui`'s and writes its own hint row, but the theme it paints with is
+ * ours, so the row is swapped here for the shared grammar. The search box's prompt already
+ * says typing searches.
+ */
+function getSettingsSelectorListTheme(): SettingsListTheme {
+	const base = getSettingsListTheme();
+	return {
+		...base,
+		hint: (text: string) =>
+			SETTINGS_LIST_HINT_ROWS.has(text.trim())
+				? hintRow([
+						[["tui.select.confirm", { literal: "space" }], "change"],
+						["tui.select.cancel", "close"],
+					])
+				: base.hint(text),
+	};
+}
 
 const MODEL_PICKER_LAYOUT = { minPrimaryColumnWidth: 12, maxPrimaryColumnWidth: 46 };
 
@@ -196,7 +222,7 @@ class WarningSettingsSubmenu extends Container {
 		this.settingsList = new SettingsList(
 			items,
 			Math.min(items.length, 10),
-			getSettingsListTheme(),
+			getSettingsSelectorListTheme(),
 			(id, newValue) => {
 				switch (id) {
 					case "anthropic-extra-usage":
@@ -509,7 +535,7 @@ class ThemeSubmenu extends Container {
 		const settingsList = new SettingsList(
 			items,
 			Math.min(items.length, 10),
-			getSettingsListTheme(),
+			getSettingsSelectorListTheme(),
 			(id) => {
 				switch (id) {
 					case "single-mode":
@@ -957,11 +983,13 @@ export class SettingsSelectorComponent extends Container {
 
 		// Add borders
 		this.addChild(new DynamicBorder());
+		this.addChild(new Text(theme.bold(theme.fg("accent", "Settings")), 0, 0));
+		this.addChild(new Spacer(1));
 
 		this.settingsList = new SettingsList(
 			items,
 			10,
-			getSettingsListTheme(),
+			getSettingsSelectorListTheme(),
 			(id, newValue) => {
 				switch (id) {
 					case "autocompact":
