@@ -1,7 +1,24 @@
 import type { AssistantMessage, ImageContent } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { writeRawStdout } from "../src/core/output-guard.ts";
 import type { SessionShutdownEvent } from "../src/index.ts";
 import { runPrintMode } from "../src/modes/print-mode.ts";
+
+// Stdout is captured rather than written. The result envelope is part of the
+// contract these tests pin, and reading it back from the real fd would make the
+// assertion depend on the write queue draining.
+vi.mock("../src/core/output-guard.ts", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../src/core/output-guard.ts")>();
+	return { ...actual, writeRawStdout: vi.fn(), flushRawStdout: vi.fn(async () => {}) };
+});
+
+/** The JSON lines print mode wrote, in order. */
+function stdoutLines(): string[] {
+	return vi
+		.mocked(writeRawStdout)
+		.mock.calls.map(([text]) => text.trimEnd())
+		.filter((text) => text.length > 0);
+}
 
 type EmitEvent = SessionShutdownEvent;
 
@@ -176,5 +193,109 @@ describe("runPrintMode", () => {
 		expect(errorSpy).toHaveBeenCalledWith(
 			"Run stopped: the provider requests budget was exhausted (runBudget settings).",
 		);
+	});
+
+	// The JSON exit contract. Every assertion below failed against the tree that
+	// introduced it, because both exit-code assignments sat inside `if (mode ===
+	// "text")`. A failed `--mode json` run returned 0 and wrote no terminal event.
+
+	/** Drive the session so one `agent_end` carrying `stopReason` settles the run. */
+	function settleWith(session: FakeSession, stopReason: unknown): void {
+		type AgentEndEvent = { type: string; messages: unknown[]; willRetry: boolean; stopReason?: unknown };
+		let agentEnd: ((event: AgentEndEvent) => Promise<void> | void) | undefined;
+		session.subscribe = vi.fn((handler: (event: AgentEndEvent) => Promise<void> | void) => {
+			agentEnd = handler;
+			return () => {};
+		});
+		session.prompt = vi.fn(async () => {
+			await agentEnd?.({ type: "agent_end", messages: [], willRetry: false, stopReason });
+		});
+	}
+
+	/**
+	 * The `result` envelope print mode writes last, or undefined when it wrote none.
+	 * Text mode's last line is the assistant's prose, so a parse failure is an answer
+	 * here rather than an error.
+	 */
+	function resultEvent(): { type: string; status: string } | undefined {
+		const last = stdoutLines().at(-1);
+		if (last === undefined) return undefined;
+		let parsed: { type?: string; status?: string };
+		try {
+			parsed = JSON.parse(last) as { type?: string; status?: string };
+		} catch {
+			return undefined;
+		}
+		return parsed.type === "result" ? (parsed as { type: string; status: string }) : undefined;
+	}
+
+	it("returns non-zero on an assistant error in json mode", async () => {
+		const runtimeHost = createRuntimeHost(
+			createAssistantMessage({ stopReason: "error", errorMessage: "provider failure" }),
+		);
+		settleWith(runtimeHost.session, { kind: "error" });
+
+		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+			mode: "json",
+			initialMessage: "say hi",
+		});
+
+		expect(exitCode).toBe(1);
+		expect(resultEvent()).toEqual({ type: "result", status: "error" });
+	});
+
+	it("returns non-zero on a budget-exhausted stop in json mode", async () => {
+		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "done" }));
+		settleWith(runtimeHost.session, { kind: "budget-exhausted", limit: "provider-requests" });
+
+		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+			mode: "json",
+			initialMessage: "run tools",
+		});
+
+		expect(exitCode).toBe(1);
+		expect(resultEvent()).toEqual({ type: "result", status: "budget-exhausted" });
+	});
+
+	it("returns non-zero in json mode when only the assistant message carries the error", async () => {
+		// No agent_end reaches print mode here, so the outcome has to fall back to the
+		// settled message. Without the fallback this run reports success.
+		const runtimeHost = createRuntimeHost(
+			createAssistantMessage({ stopReason: "aborted", errorMessage: "cancelled" }),
+		);
+
+		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+			mode: "json",
+			initialMessage: "say hi",
+		});
+
+		expect(exitCode).toBe(1);
+		expect(resultEvent()).toEqual({ type: "result", status: "aborted" });
+	});
+
+	it("reports a completed run in json mode", async () => {
+		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "done" }));
+		settleWith(runtimeHost.session, { kind: "completed" });
+
+		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+			mode: "json",
+			initialMessage: "say hi",
+		});
+
+		expect(exitCode).toBe(0);
+		expect(resultEvent()).toEqual({ type: "result", status: "completed" });
+	});
+
+	it("writes no result envelope in text mode", async () => {
+		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "done" }));
+		settleWith(runtimeHost.session, { kind: "completed" });
+
+		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+			mode: "text",
+			initialMessage: "say hi",
+		});
+
+		expect(exitCode).toBe(0);
+		expect(resultEvent()).toBeUndefined();
 	});
 });
