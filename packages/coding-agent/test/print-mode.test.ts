@@ -286,6 +286,24 @@ describe("runPrintMode", () => {
 		expect(resultEvent()).toEqual({ type: "result", status: "completed" });
 	});
 
+	it("lets a completed stop reason outrank a stale errored message", async () => {
+		// `agent_end` is authoritative, so a settled message left carrying an error
+		// must not turn a completed run into a failure. Consulting the message
+		// whenever the stop reason is merely not a failure reintroduces this.
+		const runtimeHost = createRuntimeHost(
+			createAssistantMessage({ stopReason: "error", errorMessage: "stale failure" }),
+		);
+		settleWith(runtimeHost.session, { kind: "completed" });
+
+		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+			mode: "json",
+			initialMessage: "say hi",
+		});
+
+		expect(exitCode).toBe(0);
+		expect(resultEvent()).toEqual({ type: "result", status: "completed" });
+	});
+
 	it("writes no result envelope in text mode", async () => {
 		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "done" }));
 		settleWith(runtimeHost.session, { kind: "completed" });

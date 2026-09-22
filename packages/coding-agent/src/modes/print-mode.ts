@@ -59,16 +59,22 @@ function resolveRunOutcome(
 			message: `Run stopped: the ${limit} budget was exhausted (runBudget settings).`,
 		};
 	}
-	const failure =
-		stopReason?.kind === "aborted" || stopReason?.kind === "error"
-			? stopReason.kind
-			: settled?.stopReason === "aborted" || settled?.stopReason === "error"
-				? settled.stopReason
-				: undefined;
-	if (failure) {
-		return { status: failure, message: settled?.errorMessage || `Request ${failure}` };
+	const failed = (reason: "aborted" | "error"): PrintRunOutcome => ({
+		status: reason,
+		message: settled?.errorMessage || `Request ${reason}`,
+	});
+	const completed: PrintRunOutcome = { status: "completed", message: "" };
+
+	// A stop reason answers the question by itself, including when it says the run
+	// completed. Reading the settled message in that case would let one left over
+	// from an earlier failed turn outrank what the loop concluded.
+	if (stopReason !== undefined) {
+		return stopReason.kind === "aborted" || stopReason.kind === "error" ? failed(stopReason.kind) : completed;
 	}
-	return { status: "completed", message: "" };
+	if (settled?.stopReason === "aborted" || settled?.stopReason === "error") {
+		return failed(settled.stopReason);
+	}
+	return completed;
 }
 
 /**

@@ -99,9 +99,11 @@ apex-code --mode json "List files" 2>/dev/null | jq -c 'select(.type == "message
 
 ## Result envelope and exit codes
 
-The last line of a `--mode json` run is a `result` envelope. It is written by print mode
-rather than emitted by the session, so it is not an `AgentSessionEvent` and does not appear
-in `--mode text`.
+A `--mode json` run that reaches a normal terminal outcome ends with a `result` envelope.
+It is written by print mode rather than emitted by the session, so it is not an
+`AgentSessionEvent` and does not appear in `--mode text`. A run killed by `SIGTERM` or
+`SIGHUP` exits from the signal handler before the envelope is written, so a consumer
+treats a missing envelope as an incomplete run rather than as a success.
 
 ```json
 {"type":"result","status":"completed"}

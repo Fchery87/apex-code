@@ -131,8 +131,10 @@ because the laziness protocol's test applies directly: the defect is a misplaced
 the fix should read as one.
 
 `status` is deliberately a string rather than an integer so it can gain members without a
-compatibility event. `"success"` is emitted explicitly rather than inferred from the
-absence of a failure, so a truncated stream is distinguishable from a clean one.
+compatibility event. `"completed"` is emitted explicitly rather than inferred from the
+absence of a failure, so a truncated stream is distinguishable from a clean one. See the
+amendment below, which replaced this section's original `"success"` with the agent loop's
+own vocabulary.
 
 This touches no seam named in `docs/architecture/overview.md`. `beforeToolCall`,
 `ruleContent`, `transformContext`, and evidence capture are all upstream of the point where
