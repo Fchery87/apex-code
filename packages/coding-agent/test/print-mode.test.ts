@@ -304,6 +304,43 @@ describe("runPrintMode", () => {
 		expect(resultEvent()).toEqual({ type: "result", status: "completed" });
 	});
 
+	// Text mode's two moved edge cases, from the spec's second amendment. Both come
+	// from the stop reason deciding instead of the last message, and both were
+	// previously pinned in json mode only.
+
+	it("fails a text run whose stop reason failed with no assistant message", async () => {
+		// The base required `lastMessage?.role === "assistant"` before any failure
+		// path, so an agent_end error with no such message exited 0.
+		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "done" }));
+		runtimeHost.session.state.messages = [];
+		settleWith(runtimeHost.session, { kind: "error" });
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+			mode: "text",
+			initialMessage: "say hi",
+		});
+
+		expect(exitCode).toBe(1);
+		expect(errorSpy).toHaveBeenCalledWith("Request error");
+	});
+
+	it("passes a completed text run whose last message carries a stale error", async () => {
+		const runtimeHost = createRuntimeHost(
+			createAssistantMessage({ stopReason: "error", errorMessage: "stale failure" }),
+		);
+		settleWith(runtimeHost.session, { kind: "completed" });
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+			mode: "text",
+			initialMessage: "say hi",
+		});
+
+		expect(exitCode).toBe(0);
+		expect(errorSpy).not.toHaveBeenCalled();
+	});
+
 	it("writes no result envelope in text mode", async () => {
 		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "done" }));
 		settleWith(runtimeHost.session, { kind: "completed" });

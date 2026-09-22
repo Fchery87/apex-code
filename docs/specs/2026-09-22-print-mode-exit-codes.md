@@ -11,7 +11,7 @@
 | Last updated | 2026-09-22 |
 | Roadmap phase | none — product-surface follow-up |
 | Tracking issue/PR | none |
-| Compatibility posture | **Clean break for `--mode json` exit codes, additive everywhere else.** A `--mode json` run that failed exits `1` where it previously exited `0`. That is a break in the literal sense, and it is the right posture because the old value was a defect rather than a contract: it reported success for provider errors, aborted turns, and exhausted budgets, so no caller could have depended on it deliberately. Callers who scripted around it did so by parsing the event stream, which keeps working unchanged. `--mode text` behavior is untouched, and the `result` event is additive to a stream whose consumers already tolerate unknown event types. |
+| Compatibility posture | **Clean break for `--mode json` exit codes, additive everywhere else.** A `--mode json` run that failed exits `1` where it previously exited `0`. That is a break in the literal sense, and it is the right posture because the old value was a defect rather than a contract: it reported success for provider errors, aborted turns, and exhausted budgets, so no caller could have depended on it deliberately. Callers who scripted around it did so by parsing the event stream, which keeps working unchanged. The `result` event is additive to a stream whose consumers already tolerate unknown event types. `--mode text` is unchanged on every path a run actually takes, but see the second amendment: two edge cases move, both toward the stop reason the loop decided. |
 
 ## Executive summary
 
@@ -111,8 +111,10 @@ workarounds then become the compatibility obligation.
 - [ ] **Changing `--mode rpc` or `--mode acp`.** Both own their own lifecycle and neither
       routes through `runPrintMode`. Touching them here would widen the diff past the
       defect.
-- [ ] **Changing `--mode text` behavior.** It is correct today. The fix must leave it byte
-      identical, which is what makes the existing tests a regression guard.
+- [ ] **Changing `--mode text` behavior.** It is correct today on every path a run actually
+      takes, and the existing tests are the regression guard for those. This non-goal was
+      written as "byte identical" and the second amendment records where that turned out to
+      be too strong.
 
 ## Proposed solution
 
@@ -148,9 +150,11 @@ This touches no seam named in `docs/architecture/overview.md`. `beforeToolCall`,
 | The implicit contract that `--mode json` exits `0` on failure | behavior | removed; it was never written down and never intended |
 | `test/print-mode.test.ts:111`'s standing as the only JSON-mode assertion | doc | superseded by the JSON error, budget, and `result` cases added alongside it |
 
-Nothing else is removed. The text-mode path, the signal handlers, the session header line,
-and every existing event in the stream are unchanged, because the defect is one misplaced
-branch and widening the deletion past it would cost regression risk for no benefit.
+| Text mode's dependence on the last message when `agent_end` disagrees | behavior | removed; the stop reason now decides for both modes, which moves the two edge cases in the second amendment |
+
+The signal handlers, the session header line, and every existing event in the stream are
+unchanged. Text mode's observable behavior is unchanged on every path a run actually takes,
+and the second amendment records the two edge cases where it is not.
 
 ## Amendment — 2026-09-22, during implementation
 
@@ -171,6 +175,31 @@ it; the message is only a fallback for runs where no `agent_end` reaches print m
 pins that fallback, because removing it silently returns `0` for a message-only error.
 
 Neither changes the exit codes, the compatibility posture, or the deletion inventory.
+
+## Amendment — 2026-09-22, after independent verification
+
+This spec claimed `--mode text` was byte identical. An independent verifier on pull request
+#142 disproved it, and the claim is corrected above rather than defended.
+
+Two text-mode edge cases move, both because the stop reason now decides instead of the last
+message. Read against the base at `9a62c26d1`, where every text-mode failure path sat behind
+`if (lastMessage?.role === "assistant")`.
+
+1. **`agent_end` reports `error` or `aborted` and the last message is not an assistant
+   message.** The old guard failed, nothing ran, and the process exited `0`. It now exits
+   `1`. Reachable in principle, because auto-compaction reassigns `agent.state.messages`
+   (`core/agent-session.ts:3009`).
+2. **`agent_end` reports `completed` and a stale assistant message still carries an error.**
+   The old code exited `1` on the message. It now exits `0`, which is the correction commit
+   `adaefe83c` made deliberately after review, applied to both modes rather than only JSON.
+
+Both are the same improvement as the defect this spec fixes, pointed at text mode. Neither
+was intended when the non-goal was written, which is why the non-goal was wrong rather than
+the code.
+
+The verifier also found that `SIGTERM` drops the entire JSON stream, not only the `result`
+envelope, at both commits. That is pre-existing and out of scope here; `json.md` should not
+imply a partial stream arrives.
 
 ## Risks
 
