@@ -25,7 +25,7 @@ function renderDialog(dialog: LoginDialogComponent): string[] {
 }
 
 function countRenderedValue(lines: string[], value: string): number {
-	return lines.filter((line) => line.trim() === `> ${value}`).length;
+	return lines.filter((line) => line.trim() === `› ${value}`).length;
 }
 
 describe("LoginDialogComponent OAuth prompts", () => {

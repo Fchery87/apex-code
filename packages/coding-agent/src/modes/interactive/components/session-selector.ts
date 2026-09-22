@@ -7,7 +7,7 @@ import {
 	Container,
 	type Focusable,
 	getKeybindings,
-	Input,
+	type Input,
 	Spacer,
 	Text,
 	truncateToWidth,
@@ -19,6 +19,7 @@ import { canonicalizePath as _canonicalizePath } from "../../../utils/paths.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { hintRow, keyText } from "./keybinding-hints.ts";
+import { PromptInput } from "./prompt-input.ts";
 import { filterAndSortSessions, hasSessionName, type NameFilter, type SortMode } from "./session-selector-search.ts";
 
 type SessionScope = "current" | "all";
@@ -331,7 +332,7 @@ class SessionList implements Component, Focusable {
 	) {
 		this.allSessions = sessions;
 		this.filteredSessions = [];
-		this.searchInput = new Input();
+		this.searchInput = new PromptInput();
 		this.showCwd = showCwd;
 		this.sortMode = sortMode;
 		this.nameFilter = nameFilter;
@@ -717,7 +718,7 @@ export class SessionSelectorComponent extends Container implements Focusable {
 	private allLoadSeq = 0;
 
 	private mode: "list" | "rename" = "list";
-	private renameInput = new Input();
+	private renameInput = new PromptInput();
 	private renameTargetPath: string | null = null;
 
 	// Focusable implementation - propagate to sessionList for IME cursor positioning
@@ -872,7 +873,7 @@ export class SessionSelectorComponent extends Container implements Focusable {
 		this.renameInput.focused = true;
 
 		const panel = new Container();
-		panel.addChild(new Text(theme.bold("Rename Session"), 1, 0));
+		panel.addChild(new Text(theme.bold(theme.fg("accent", "Rename session")), 0, 0));
 		panel.addChild(new Spacer(1));
 		panel.addChild(this.renameInput);
 		panel.addChild(new Spacer(1));

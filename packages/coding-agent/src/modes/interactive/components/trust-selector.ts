@@ -51,8 +51,8 @@ export class TrustSelectorComponent extends Container {
 
 		this.addChild(new DynamicBorder());
 		this.addChild(new Spacer(1));
-		this.addChild(new Text(theme.fg("accent", theme.bold("Project trust")), 1, 0));
-		this.addChild(new Text(theme.fg("muted", options.cwd), 1, 0));
+		this.addChild(new Text(theme.fg("accent", theme.bold("Project trust")), 0, 0));
+		this.addChild(new Text(theme.fg("muted", options.cwd), 0, 0));
 		this.addChild(new Spacer(1));
 		this.addChild(
 			new Text(
@@ -60,12 +60,12 @@ export class TrustSelectorComponent extends Container {
 					"muted",
 					`Saved decision: ${formatDecision(this.trustOptions[0]?.savedPath, options.savedDecision)}`,
 				),
-				1,
+				0,
 				0,
 			),
 		);
 		this.addChild(
-			new Text(theme.fg("muted", `Current session: ${options.projectTrusted ? "trusted" : "untrusted"}`), 1, 0),
+			new Text(theme.fg("muted", `Current session: ${options.projectTrusted ? "trusted" : "untrusted"}`), 0, 0),
 		);
 		this.addChild(new Spacer(1));
 
@@ -79,7 +79,7 @@ export class TrustSelectorComponent extends Container {
 					["tui.select.confirm", "save"],
 					["tui.select.cancel", "cancel"],
 				]),
-				1,
+				0,
 				0,
 			),
 		);
@@ -110,7 +110,7 @@ export class TrustSelectorComponent extends Container {
 			const checkmark = isCurrent ? theme.fg("success", " ✓") : "";
 			const prefix = isSelected ? theme.fg("accent", "→ ") : "  ";
 			const label = isSelected ? theme.fg("accent", option.label) : theme.fg("text", option.label);
-			this.listContainer.addChild(new Text(`${prefix}${label}${checkmark}`, 1, 0));
+			this.listContainer.addChild(new Text(`${prefix}${label}${checkmark}`, 0, 0));
 		}
 	}
 

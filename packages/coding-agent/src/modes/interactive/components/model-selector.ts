@@ -11,7 +11,7 @@ import {
 	type Focusable,
 	fuzzyFilter,
 	getKeybindings,
-	Input,
+	type Input,
 	Key,
 	matchesKey,
 	Spacer,
@@ -33,6 +33,7 @@ import {
 	renderPricePanel,
 	type TrailingSegment,
 } from "./model-row.ts";
+import { PromptInput } from "./prompt-input.ts";
 
 interface ModelItem {
 	provider: string;
@@ -150,7 +151,7 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		this.addChild(new Spacer(1));
 
 		// Create search input
-		this.searchInput = new Input();
+		this.searchInput = new PromptInput();
 		if (initialSearchInput) {
 			this.searchInput.setValue(initialSearchInput);
 		}

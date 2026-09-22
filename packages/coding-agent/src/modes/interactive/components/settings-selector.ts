@@ -25,6 +25,7 @@ import type {
 import { getSettingsListTheme, parseAutoThemeSetting, type TerminalTheme, theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { hintRow, keyDisplayText } from "./keybinding-hints.ts";
+import { withComposerPrompt } from "./prompt-input.ts";
 import { SelectSubmenu, SteppedSubmenu, type SteppedSubmenuStep } from "./settings-submenu.ts";
 
 /** The two hint rows `pi-tui`'s settings list writes, with and without search. */
@@ -473,7 +474,7 @@ class ThemeSubmenu extends Container {
 	private showAutomaticMenu(): void {
 		this.mode = "automatic";
 		const content = new Container();
-		content.addChild(new Text(theme.bold(theme.fg("accent", "Automatic Theme")), 0, 0));
+		content.addChild(new Text(theme.bold(theme.fg("accent", "Automatic theme")), 0, 0));
 		content.addChild(new Spacer(1));
 		content.addChild(new Text(theme.fg("muted", "Choose themes for terminal light and dark appearance."), 0, 0));
 		content.addChild(new Text(theme.fg("muted", "Light/dark detection requires terminal support."), 0, 0));
@@ -1098,7 +1099,15 @@ export class SettingsSelectorComponent extends Container {
 			{ enableSearch: true },
 		);
 
-		this.addChild(this.settingsList);
+		// `pi-tui` builds this list's search box itself, so its prompt is swapped on the way out.
+		const settingsList = this.settingsList;
+		this.addChild({
+			render: (width: number) => {
+				const lines = settingsList.render(width);
+				return lines.length > 0 ? [withComposerPrompt(lines[0]!), ...lines.slice(1)] : lines;
+			},
+			invalidate: () => settingsList.invalidate(),
+		});
 		this.addChild(new DynamicBorder());
 	}
 

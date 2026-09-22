@@ -63,7 +63,7 @@ export class ExtensionEditorComponent extends Container implements Focusable {
 		this.addChild(new Spacer(1));
 
 		// Add title
-		this.addChild(new Text(theme.fg("accent", title), 1, 0));
+		this.addChild(new Text(theme.fg("accent", title), 0, 0));
 		this.addChild(new Spacer(1));
 
 		// Create editor
@@ -86,7 +86,7 @@ export class ExtensionEditorComponent extends Container implements Focusable {
 			["tui.select.cancel", "cancel"],
 			["app.editor.external", "external editor"],
 		]);
-		this.addChild(new Text(hint, 1, 0));
+		this.addChild(new Text(hint, 0, 0));
 
 		this.addChild(new Spacer(1));
 

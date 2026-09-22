@@ -9,7 +9,7 @@ import {
 	Container,
 	type Focusable,
 	getKeybindings,
-	Input,
+	type Input,
 	matchesKey,
 	Spacer,
 	truncateToWidth,
@@ -22,6 +22,7 @@ import { canonicalizePath, isLocalPath, resolvePath } from "../../../utils/paths
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { hintRow } from "./keybinding-hints.ts";
+import { PromptInput } from "./prompt-input.ts";
 
 type ResourceType = "extensions" | "skills" | "prompts" | "themes";
 type ConfigWriteScope = "global" | "project";
@@ -204,7 +205,9 @@ class ConfigSelectorHeader implements Component {
 	invalidate(): void {}
 
 	render(width: number): string[] {
-		const title = theme.bold(this.writeScope === "project" ? "Project Local Resources" : "Global Resources");
+		const title = theme.bold(
+			theme.fg("accent", this.writeScope === "project" ? "Project resources" : "Global resources"),
+		);
 		const hint = hintRow([
 			...(this.projectModeAvailable ? [["tui.input.tab", "switch mode"] as const] : []),
 			[{ literal: "space" }, this.writeScope === "project" ? "cycle inherit/+/-" : "toggle"],
@@ -264,7 +267,7 @@ class ResourceList implements Component, Focusable {
 		this.agentDir = agentDir;
 		this.writeScope = writeScope;
 		this.inheritedEnabledByKey = this.buildInheritedEnabledMap(groupsByScope.global);
-		this.searchInput = new Input();
+		this.searchInput = new PromptInput();
 		// 8 lines of chrome: top spacer + top border + spacer + header (2 lines) + spacer + bottom spacer + bottom border
 		const chrome = 8;
 		this.maxVisible = Math.max(5, (terminalHeight ?? 24) - chrome);
@@ -430,7 +433,7 @@ class ResourceList implements Component, Focusable {
 			} else {
 				// Resource item (cursor only on items)
 				const item = entry.item;
-				const cursor = isSelected ? "> " : "  ";
+				const cursor = isSelected ? "→ " : "  ";
 				const dimmed = this.isDimmedItem(item);
 				const nameText = isSelected && !dimmed ? theme.bold(item.displayName) : item.displayName;
 				const name = dimmed ? theme.fg("dim", nameText) : nameText;

@@ -3,7 +3,7 @@ import {
 	Container,
 	fuzzyFilter,
 	getKeybindings,
-	Input,
+	type Input,
 	type SelectItem,
 	SelectList,
 	type SelectListLayoutOptions,
@@ -12,6 +12,7 @@ import {
 } from "@earendil-works/pi-tui";
 import { getSelectListTheme, theme } from "../theme/theme.ts";
 import { hintRow } from "./keybinding-hints.ts";
+import { PromptInput } from "./prompt-input.ts";
 
 const SUBMENU_SELECT_LIST_LAYOUT: SelectListLayoutOptions = {
 	minPrimaryColumnWidth: 12,
@@ -69,7 +70,7 @@ export class SelectSubmenu extends Container {
 		// Search input
 		if (submenuOptions?.searchable) {
 			this.addChild(new Spacer(1));
-			this.searchInput = new Input();
+			this.searchInput = new PromptInput();
 			this.searchInput.onSubmit = () => {
 				this.selectList.handleInput("\r");
 			};
