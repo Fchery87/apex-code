@@ -1,6 +1,6 @@
 # Spec: One look per role in the transcript
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 
@@ -115,6 +115,23 @@ bash's `Took` / `Elapsed` row is deleted. The header owns duration.
 - `npx tsgo --noEmit`, then `npm test`.
 - Live session in tmux at 120 columns: a prompt, a bash call, a write, and a
   forced retry against an unavailable provider.
+
+Recorded on 2026-09-22. `npm test` passed: 403 files and 3,582 tests in the
+coding-agent package, with 6 files and 51 tests skipped. `npm run build` passed. A
+live session on `dist/cli.js` showed `│ Read…` with its gap, assistant text with
+no rail, one blank row under every tool header, no `Took` row, no hint under a
+fully shown `write`, and a collapsed read reading `... (1 line, ctrl+o to
+expand)`. Three real `service_unavailable` failures ended in exactly one line,
+`Error: service_unavailable: … (gave up after 3 retries)`.
+
+`test/streaming-render-bench.ts` could not run. It fails at startup on `main`
+with the same error as on this branch: tsx evaluates
+`src/utils/highlight-js-api.d.ts` and throws `ReferenceError: hljs is not defined`.
+That predates this change and is not addressed here. The render-cost guards that
+do run, `test/tui-flicker-red-loop.test.ts` and
+`test/tool-execution-render-cache.test.ts`, pass. The change removes per-frame
+work (bash's one-second invalidation and the assistant per-line spine pass) and
+adds none outside a leading-blank scan in the panel.
 
 ## Deletion inventory
 
