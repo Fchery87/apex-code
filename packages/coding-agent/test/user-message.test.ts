@@ -20,7 +20,7 @@ describe("UserMessageComponent", () => {
 		expect(lines[0]).toContain(OSC133_ZONE_START);
 		expect(lines[0].endsWith(BG_RESET)).toBe(true);
 		expect(lines[0]).not.toContain(OSC133_ZONE_END);
-		expect(stripAnsi(lines[1])).toContain("│hello");
+		expect(stripAnsi(lines[1])).toContain("│ hello");
 		expect(lines[2].startsWith(OSC133_ZONE_END + OSC133_ZONE_FINAL)).toBe(true);
 		expect(lines[2].endsWith(BG_RESET)).toBe(true);
 	});
@@ -38,13 +38,26 @@ describe("UserMessageComponent", () => {
 		}
 	});
 
+	test("keeps a blank column between the spine and the text", () => {
+		// With one column of padding the spine took the only gutter and the text touched it.
+		initTheme("dark");
+
+		for (const pad of [1, 2]) {
+			const text = new UserMessageComponent("hello", undefined, pad).render(40).map((line) => stripAnsi(line));
+			expect(
+				text.some((line) => line.startsWith("│ hello")),
+				`outputPad ${pad}`,
+			).toBe(true);
+		}
+	});
+
 	test("chains Markdown transformers with user message context", () => {
 		initTheme("dark");
 		const calls: string[] = [];
 		const component = new UserMessageComponent("The input is $x^2$.", undefined, 1, [
 			(markdown, context) => {
 				calls.push("formula");
-				expect(context).toEqual({ messageType: "user", isStreaming: false, availableWidth: 78 });
+				expect(context).toEqual({ messageType: "user", isStreaming: false, availableWidth: 76 });
 				return markdown.replace("$x^2$", "x²");
 			},
 			(markdown) => {

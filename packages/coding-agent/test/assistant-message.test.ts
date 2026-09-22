@@ -34,27 +34,16 @@ function createAssistantMessage(
 }
 
 describe("AssistantMessageComponent", () => {
-	test("uses the same conversational message spine as user messages", () => {
+	test("does not wear the user's spine", () => {
+		// A shared rail made the user's prompt and the assistant's answer read as one speaker.
 		initTheme("dark");
 
-		const component = new AssistantMessageComponent({
-			role: "assistant",
-			content: [{ type: "text", text: "hello" }],
-			api: "test",
-			provider: "test",
-			model: "test",
-			usage: {
-				input: 0,
-				output: 0,
-				cacheRead: 0,
-				cacheWrite: 0,
-				totalTokens: 0,
-			},
-			stopReason: "stop",
-			timestamp: Date.now(),
-		} as never);
+		const lines = new AssistantMessageComponent(createAssistantMessage([{ type: "text", text: "hello" }]))
+			.render(20)
+			.map((line) => stripAnsi(line).trimEnd());
 
-		expect(stripAnsi(component.render(20).join("\n"))).toContain("│hello");
+		expect(lines).toContain(" hello");
+		expect(lines.join("\n")).not.toContain("│");
 	});
 	test("adds OSC 133 zone markers to assistant messages without tool calls", () => {
 		initTheme("dark");
@@ -150,10 +139,8 @@ describe("AssistantMessageComponent", () => {
 		);
 		const lines = component.render(80).map((line) => stripAnsi(line));
 
-		// The spine occupies the single padding column rather than sitting beside it, so the
-		// line keeps the width it was rendered for.
-		expect(lines.some((line) => line.includes("│hello"))).toBe(true);
-		expect(lines.some((line) => line.includes("│reasoning"))).toBe(true);
+		expect(lines.some((line) => line.startsWith(" hello"))).toBe(true);
+		expect(lines.some((line) => line.startsWith(" reasoning"))).toBe(true);
 
 		component.setOutputPad(0);
 		const updatedLines = component.render(80).map((line) => stripAnsi(line));
@@ -279,7 +266,7 @@ describe("AssistantMessageComponent", () => {
 
 		const paddedComponent = new UserMessageComponent("hello", undefined, 1);
 		const paddedLines = paddedComponent.render(40).map((line) => stripAnsi(line));
-		expect(paddedLines.some((line) => line.includes("│hello"))).toBe(true);
+		expect(paddedLines.some((line) => line.includes("│ hello"))).toBe(true);
 
 		const unpaddedComponent = new UserMessageComponent("hello", undefined, 0);
 		const unpaddedLines = unpaddedComponent.render(40).map((line) => stripAnsi(line));
