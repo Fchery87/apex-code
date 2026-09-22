@@ -225,7 +225,7 @@ export interface Settings {
 	defaultProjectTrust?: DefaultProjectTrust; // default: "ask"; global setting only
 	shellCommandPrefix?: string; // Prefix prepended to every bash command (e.g., "shopt -s expand_aliases" for alias support)
 	npmCommand?: string[]; // Command used for npm package lookup/install operations, argv-style (e.g., ["mise", "exec", "node@20", "--", "npm"])
-	collapseChangelog?: boolean; // Show condensed changelog after update (use /changelog for full)
+	collapseChangelog?: boolean; // Show one line after an update (default true; /changelog for the full notes)
 	// default: true - HTTP attribution headers (e.g. OpenRouter/NVIDIA billing-origin
 	// tags) sent to the LLM provider you configured, for that provider's own
 	// attribution purposes. Never sent to a third party (roadmap Phase 9).
@@ -1350,7 +1350,7 @@ export class SettingsManager {
 	}
 
 	getCollapseChangelog(): boolean {
-		return this.settings.collapseChangelog ?? false;
+		return this.settings.collapseChangelog ?? true;
 	}
 
 	setCollapseChangelog(collapse: boolean): void {
