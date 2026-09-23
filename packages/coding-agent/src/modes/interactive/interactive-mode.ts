@@ -6360,18 +6360,17 @@ export class InteractiveMode {
 		this.resetExtensionUI();
 
 		const reloadBox = new Container();
-		const borderColor = (s: string) => theme.fg("border", s);
-		reloadBox.addChild(new DynamicBorder(borderColor));
+		reloadBox.addChild(new DynamicBorder());
 		reloadBox.addChild(new Spacer(1));
 		reloadBox.addChild(
 			new Text(
 				theme.fg("muted", "Reloading keybindings, extensions, skills, prompts, themes, and context files..."),
-				1,
+				0,
 				0,
 			),
 		);
 		reloadBox.addChild(new Spacer(1));
-		reloadBox.addChild(new DynamicBorder(borderColor));
+		reloadBox.addChild(new DynamicBorder());
 
 		const previousEditor = this.editor;
 		this.editorContainer.clear();
