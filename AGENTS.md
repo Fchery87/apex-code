@@ -31,6 +31,8 @@ See ADR 0002. This is a legal boundary, not a style preference.
 - Run the narrowest relevant test file before broadening scope.
 - Run `npm test` once at the end of a completed implementation slice.
 - Never claim verification you did not run. Paste the command and its real output.
+- Run TypeScript from source with `npx tsx --tsconfig tsconfig.runtime.json <file>`. The
+  root `tsconfig.json` holds a type-only redirect that tsx would execute.
 - `test/streaming-render-bench.ts` is contaminated by any recent load, including a test
   run that has already exited, and every row is affected. Identical code has read 21.72
   and 7.59 ms/frame minutes apart. Measure trunk and head back to back on an idle host,

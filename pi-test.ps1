@@ -64,7 +64,7 @@ if (-not (Test-Path -LiteralPath $tsxBin)) {
 }
 
 $cliPath = Join-Path $scriptDir "packages/coding-agent/src/cli.ts"
-& $tsxBin $cliPath @forwardArgs
+& $tsxBin --tsconfig (Join-Path $scriptDir "tsconfig.runtime.json") $cliPath @forwardArgs
 $exitCode = $LASTEXITCODE
 if ($exitCode -ne 0) {
 	exit $exitCode
