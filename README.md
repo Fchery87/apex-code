@@ -124,7 +124,7 @@ git clone https://github.com/Fchery87/apex-code.git
 cd apex-code
 npm install
 npm run build
-npx tsx packages/coding-agent/src/cli.ts --version
+npx tsx --tsconfig tsconfig.runtime.json packages/coding-agent/src/cli.ts --version
 ```
 
 The repository is an npm workspace. `npm install` installs the workspace dependencies;
