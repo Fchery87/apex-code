@@ -24,7 +24,7 @@ function createFakeInteractiveModeThis() {
 		footer: { invalidate: vi.fn() },
 		ui: { requestRender: vi.fn() } as unknown as TUI,
 		session: { retryAttempt: 0, abortRetry: vi.fn() },
-		defaultEditor: { onEscape: undefined },
+		defaultEditor: { onEscape: undefined as (() => void) | undefined },
 		clearPendingTools: vi.fn(),
 		updateEditorBorderColor: vi.fn(),
 		maybeShowCacheMissNotice: vi.fn(),
@@ -102,6 +102,7 @@ describe("a retried request in the chat", () => {
 		const fakeThis = createFakeInteractiveModeThis();
 		await fail(fakeThis);
 		await scheduleRetry(fakeThis, 1);
+		fakeThis.defaultEditor.onEscape?.();
 		await handleEvent.call(fakeThis, {
 			type: "auto_retry_end",
 			success: false,
@@ -110,6 +111,22 @@ describe("a retried request in the chat", () => {
 		});
 
 		expect(errorLines(fakeThis)).toEqual([`Error: ${UNAVAILABLE} (retry cancelled)`]);
+	});
+
+	test("says the retries ran out when the failed attempts carried tool calls", async () => {
+		const fakeThis = createFakeInteractiveModeThis();
+		const failWithToolCall = async () => {
+			fakeThis.pendingTools.set("call-1", { updateResult: vi.fn() });
+			await fail(fakeThis);
+		};
+		await failWithToolCall();
+		for (const attempt of [1, 2, 3]) {
+			await scheduleRetry(fakeThis, attempt);
+			await failWithToolCall();
+		}
+		await handleEvent.call(fakeThis, { type: "auto_retry_end", success: false, attempt: 3, finalError: UNAVAILABLE });
+
+		expect(errorLines(fakeThis).at(-1)).toBe(`Error: ${UNAVAILABLE} (gave up after 3 retries)`);
 	});
 
 	test("leaves no error line when a retry succeeds", async () => {

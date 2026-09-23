@@ -152,7 +152,9 @@ export class BashExecutionComponent extends Container {
 
 		// Output
 		if (availableLines.length > 0) {
-			if (this.expanded) {
+			// A preview that hides no line shows all of it. Capping its rows as well would cut
+			// wrapped lines with nothing to say so, since the hint counts hidden lines.
+			if (this.expanded || hiddenLineCount === 0) {
 				// Show all lines
 				const displayText = availableLines.map((line) => theme.fg("muted", line)).join("\n");
 				this.contentContainer.addChild(new Text(`\n${displayText}`, 1, 0));
