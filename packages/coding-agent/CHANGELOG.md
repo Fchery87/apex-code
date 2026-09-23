@@ -2,7 +2,21 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **An update shows one line at launch instead of the full release notes.** `collapseChangelog` now defaults to `true`. Run `/changelog` for the full notes, or set `collapseChangelog: false` to see them at launch again.
+- **Pickers, dialogs, and extension components in the composer area line up with the composer.** They start on the `›` column, two columns in. An extension component mounted there moves with them.
+- **An extension renderer that collapses its output now states what it hides.** The generic `ctrl+o to expand` hint the panel used to append is gone, because it also appeared under output that was shown in full. Built-in tools print a counted hint, `... (12 more lines, ctrl+o to expand)`; an extension should do the same.
+- **The interface speaks one grammar.** Key hints read `up/down move · enter select · escape/ctrl+c close` everywhere and name the key you bound. Text fields use the composer's `›` prompt. Picker titles are sentence case, and `/settings` has one.
+
 ### Fixed
+
+- **Your message and the assistant's answer looked the same.** Both wore the same accent rail. Your message keeps the rail, now with a gap before the text; the assistant's has none.
+- **A failed retry run stacked one error per attempt.** It now ends in one line, `Error: … (gave up after 3 retries)` or `(retry cancelled)`.
+- **Tool panels contradicted themselves.** bash showed its duration twice with two different numbers, a panel offered `ctrl+o to expand` under output it already showed in full, and a preview could hide a single line behind a hint that took the same row. Each panel now has one blank row under its header.
+- **The footer said `CH95.0%`.** It now reads `cache 95%`, and usage below 0.1% reads `<0.1%` instead of `0.0%` beside a lit gauge cell.
+- **Palette rows carried an unexplained `[u]`, `[p]`, or `[t]`.** The scope letter is gone; a skill or command from a package still names it, `[npm:…]` or `[git:…]`.
+- **Running from source failed at startup with `hljs is not defined`.** Use `npx tsx --tsconfig tsconfig.runtime.json`, which `pi-test.sh` and the README now do.
 
 - **`--mode json` exited `0` when the run failed.** Both assignments of a non-zero exit code sat inside a `if (mode === "text")` branch, so a provider error, a cancelled run, and an exhausted `runBudget` all reported success to the caller. The JSON stream carried the failure the whole time; only the exit code disagreed, which is the worst shape for the mode the README recommends for automation, because a CI job reads the code and not the stream. The outcome is now resolved once for every mode, from `agent_end`'s structured stop reason where there is one and from the settled assistant message otherwise. `--mode text` keeps its behavior on every path a run actually takes. Two edge cases do move, both toward the stop reason the loop decided rather than a message that may predate it: an `agent_end` failure whose last message is not an assistant message now exits 1 instead of 0, and a `completed` run whose last message still carries a stale error now exits 0 instead of 1. This is a deliberate break for anyone whose pipeline treated `0` from `--mode json` as "the process ran": those runs now exit `1`, which is what they always meant.
 
