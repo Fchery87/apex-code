@@ -75,9 +75,10 @@ picker, dialog, and extension component mounted there inherits one left edge fro
 one place. Components that padded themselves by one column stop, so they are not
 inset twice.
 
-**Prompt glyph.** `SearchInput` extends `Input` and draws `› ` in place of `> `.
-Both are two columns wide, so the cursor position is unchanged. Every Apex picker
-constructs it.
+**Prompt glyph.** `PromptInput` extends `Input` and draws `› ` in place of `> `.
+Both are two columns wide, so the cursor position is unchanged. Every Apex text field
+constructs it. The settings list builds its own `Input` inside `pi-tui`, so its first
+line is swapped through `withComposerPrompt` on the way out.
 
 **Titles.** Sentence case everywhere. `/settings` gains a "Settings" title in the
 shared style.
