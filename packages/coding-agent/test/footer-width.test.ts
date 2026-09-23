@@ -162,11 +162,18 @@ describe("FooterComponent width handling", () => {
 		const tray = stripAnsi(footer.render(42)[0]);
 		expect(tray).toContain("bypassPermissions");
 		expect(tray).toContain("context 95.0%!!");
-		expect(tray).not.toContain("CH");
+		expect(tray).not.toContain("cache");
 		expect(tray).not.toContain("$1.234");
 		// The gauge is the first rung to go. It must never cost the tray its
 		// spelled-out permission mode on the way down.
 		expect(tray).not.toMatch(/[█░]/);
+	});
+
+	it("never shows a lit gauge cell beside a figure that reads zero", () => {
+		const session = createSession({ sessionName: "", percent: 0.03 });
+		const footer = new FooterComponent(session, createFooterData(1));
+
+		expect(stripAnsi(footer.render(120)[0])).toMatch(/context █░{7} <0\.1%/);
 	});
 
 	it("drops the context gauge before it drops the spelled-out permission mode", () => {
@@ -282,7 +289,8 @@ describe("FooterComponent width handling", () => {
 		const footer = new FooterComponent(session, createFooterData(1));
 
 		const statsLine = stripAnsi(footer.render(120).join("\n"));
-		expect(statsLine).toContain("CH25.0%");
+		expect(statsLine).toContain("cache 25%");
+		expect(statsLine).not.toContain("CH");
 	});
 
 	it("marks Kimi Coding costs as subscription estimates", () => {

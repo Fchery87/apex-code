@@ -36,6 +36,15 @@ describe("SettingsManager", () => {
 		]);
 	});
 
+	it("shows one line of release notes after an update unless asked for all of them", async () => {
+		const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
+		expect(manager.getCollapseChangelog()).toBe(true);
+
+		manager.setCollapseChangelog(false);
+		await manager.flush();
+		expect(SettingsManager.create(projectDir, agentDir, { projectTrusted: true }).getCollapseChangelog()).toBe(false);
+	});
+
 	describe("preserves externally added settings", () => {
 		it("should preserve enabledModels when changing thinking level", async () => {
 			// Create initial settings file

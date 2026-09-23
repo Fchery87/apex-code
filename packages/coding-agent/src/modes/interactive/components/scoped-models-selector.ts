@@ -4,7 +4,7 @@ import {
 	type Focusable,
 	fuzzyFilter,
 	getKeybindings,
-	Input,
+	type Input,
 	Key,
 	matchesKey,
 	Spacer,
@@ -14,6 +14,7 @@ import { getModelSearchText } from "../model-search.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyText } from "./keybinding-hints.ts";
+import { PromptInput } from "./prompt-input.ts";
 
 // EnabledIds: null = all enabled (no filter), string[] = explicit ordered list
 type EnabledIds = string[] | null;
@@ -129,14 +130,14 @@ export class ScopedModelsSelectorComponent extends Container implements Focusabl
 		// Header
 		this.addChild(new DynamicBorder());
 		this.addChild(new Spacer(1));
-		this.addChild(new Text(theme.fg("accent", theme.bold("Model Configuration")), 0, 0));
+		this.addChild(new Text(theme.bold(theme.fg("accent", "Model configuration")), 0, 0));
 		this.addChild(
 			new Text(theme.fg("muted", `Session-only. ${keyText("app.models.save")} to save to settings.`), 0, 0),
 		);
 		this.addChild(new Spacer(1));
 
 		// Search input
-		this.searchInput = new Input();
+		this.searchInput = new PromptInput();
 		this.addChild(this.searchInput);
 		this.addChild(new Spacer(1));
 

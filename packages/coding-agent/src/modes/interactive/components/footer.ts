@@ -218,7 +218,13 @@ export class FooterComponent implements Component {
 		const contextUsage = this.session.getContextUsage();
 		const contextWindow = contextUsage?.contextWindow ?? state.model?.contextWindow ?? 0;
 		const contextPercentValue = contextUsage?.percent ?? 0;
-		const contextPercent = contextUsage?.percent !== null ? contextPercentValue.toFixed(1) : "?";
+		// The gauge lights a cell for any usage at all, so a figure that rounds to zero says so.
+		const contextPercent =
+			contextUsage?.percent === null
+				? "?"
+				: contextPercentValue > 0 && contextPercentValue < 0.05
+					? "<0.1"
+					: contextPercentValue.toFixed(1);
 
 		// Replace home directory with ~
 		let pwd = formatCwdForFooter(this.session.sessionManager.getCwd(), process.env.HOME || process.env.USERPROFILE);
@@ -246,7 +252,7 @@ export class FooterComponent implements Component {
 			if (usageTotals.cacheRead) statsParts.push(`R${formatTokenCount(usageTotals.cacheRead)}`);
 			if (usageTotals.cacheWrite) statsParts.push(`W${formatTokenCount(usageTotals.cacheWrite)}`);
 			if ((usageTotals.cacheRead > 0 || usageTotals.cacheWrite > 0) && latestCacheHitRate !== undefined) {
-				statsParts.push(`CH${latestCacheHitRate.toFixed(1)}%`);
+				statsParts.push(`cache ${Math.round(latestCacheHitRate)}%`);
 			}
 		}
 
@@ -402,7 +408,7 @@ export class FooterComponent implements Component {
 				(usageTotals.cacheRead > 0 || usageTotals.cacheWrite > 0) &&
 				latestCacheHitRate !== undefined
 			) {
-				optional.push(theme.fg("dim", `CH${latestCacheHitRate.toFixed(1)}%`));
+				optional.push(theme.fg("dim", `cache ${Math.round(latestCacheHitRate)}%`));
 			}
 			if (tokenUsageDisplay !== "off" && (usageTotals.cost || usingSubscription)) {
 				optional.push(theme.fg("dim", `$${usageTotals.cost.toFixed(3)}${usingSubscription ? " (sub)" : ""}`));

@@ -3,7 +3,6 @@ import {
 	Container,
 	type Focusable,
 	fuzzyFilter,
-	Input,
 	type SelectItem,
 	SelectList,
 	Spacer,
@@ -16,6 +15,7 @@ import type { ExtensionCommandContext } from "../../core/extensions/types.ts";
 import type { KeybindingsManager } from "../../core/keybindings.ts";
 import { DynamicBorder } from "../../modes/interactive/components/dynamic-border.ts";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
+import { PromptInput } from "../../modes/interactive/components/prompt-input.ts";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import type { LlamaModelInfo, LlamaProgress } from "./client.ts";
 import type { HuggingFaceModel } from "./huggingface.ts";
@@ -100,7 +100,7 @@ class HuggingFaceSearch extends Container implements Focusable {
 	private readonly search: (query: string, signal: AbortSignal) => Promise<HuggingFaceModel[]>;
 	private readonly cache: Map<string, HuggingFaceModel[]>;
 	private readonly onSelectModel: (model: string | undefined) => void;
-	private readonly input = new Input();
+	private readonly input = new PromptInput();
 	private readonly resultsContainer = new Container();
 	private results: HuggingFaceModel[] = [];
 	private filteredResults: HuggingFaceModel[] = [];

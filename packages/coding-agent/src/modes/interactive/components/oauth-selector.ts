@@ -4,12 +4,13 @@ import {
 	type Focusable,
 	fuzzyFilter,
 	getKeybindings,
-	Input,
+	type Input,
 	Spacer,
 	TruncatedText,
 } from "@earendil-works/pi-tui";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
+import { PromptInput } from "./prompt-input.ts";
 
 export type AuthSelectorProvider = {
 	id: string;
@@ -70,10 +71,10 @@ export class OAuthSelectorComponent extends Container implements Focusable {
 
 		// Add title
 		const title = mode === "login" ? "Select provider to configure:" : "Select provider to logout:";
-		this.addChild(new TruncatedText(theme.fg("accent", theme.bold(title)), 1, 0));
+		this.addChild(new TruncatedText(theme.fg("accent", theme.bold(title)), 0, 0));
 		this.addChild(new Spacer(1));
 
-		this.searchInput = new Input();
+		this.searchInput = new PromptInput();
 		if (initialSearchInput) {
 			this.searchInput.setValue(initialSearchInput);
 		}
@@ -141,12 +142,12 @@ export class OAuthSelectorComponent extends Container implements Focusable {
 				line = text + authTypeLabel + statusIndicator;
 			}
 
-			this.listContainer.addChild(new TruncatedText(line, 1, 0));
+			this.listContainer.addChild(new TruncatedText(line, 0, 0));
 		}
 
 		if (startIndex > 0 || endIndex < this.filteredProviders.length) {
 			const scrollInfo = theme.fg("muted", `  (${this.selectedIndex + 1}/${this.filteredProviders.length})`);
-			this.listContainer.addChild(new TruncatedText(scrollInfo, 1, 0));
+			this.listContainer.addChild(new TruncatedText(scrollInfo, 0, 0));
 		}
 
 		// Show "no providers" if empty
@@ -157,7 +158,7 @@ export class OAuthSelectorComponent extends Container implements Focusable {
 						? "No providers available"
 						: "No providers logged in. Use /login first."
 					: "No matching providers";
-			this.listContainer.addChild(new TruncatedText(theme.fg("muted", `  ${message}`), 1, 0));
+			this.listContainer.addChild(new TruncatedText(theme.fg("muted", `  ${message}`), 0, 0));
 		}
 	}
 

@@ -7,6 +7,7 @@ import {
 	SettingsSelectorComponent,
 } from "../src/modes/interactive/components/settings-selector.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { stripAnsi } from "../src/utils/ansi.ts";
 
 describe("SettingsSelectorComponent", () => {
 	beforeAll(() => {
@@ -47,6 +48,24 @@ describe("SettingsSelectorComponent", () => {
 		expect(onScrollbarChange.mock.calls.flat()).toEqual(["always", "hidden", "auto"]);
 		cycle("Fullscreen copy on select", 2);
 		expect(onCopyOnSelectChange.mock.calls.flat()).toEqual([false, true]);
+	});
+
+	it("titles the panel and speaks the shared hint grammar", () => {
+		const selector = new SettingsSelectorComponent(
+			{
+				fullscreenScrollbar: "auto",
+				warnings: {},
+				availableDefaultModels: [],
+				availableThinkingLevels: [],
+				availableThemes: [],
+			} as unknown as SettingsConfig,
+			{} as unknown as SettingsCallbacks,
+		);
+		const lines = selector.render(100).map((line) => stripAnsi(line).trimEnd());
+
+		expect(lines).toContain("Settings");
+		expect(lines).toContain("enter/space change · escape/ctrl+c close");
+		expect(lines.join("\n")).not.toMatch(/Type to search|Esc to cancel/);
 	});
 
 	function openPermissionMode(onPermissionModeChange: SettingsCallbacks["onPermissionModeChange"]) {

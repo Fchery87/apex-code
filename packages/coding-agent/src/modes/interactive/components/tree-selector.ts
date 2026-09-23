@@ -3,7 +3,7 @@ import {
 	Container,
 	type Focusable,
 	getKeybindings,
-	Input,
+	type Input,
 	type Keybinding,
 	Spacer,
 	sliceByColumn,
@@ -15,7 +15,8 @@ import {
 import type { SessionTreeNode } from "../../../core/session-manager.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
-import { formatKeyText, keyHint } from "./keybinding-hints.ts";
+import { formatKeyText, hintRow } from "./keybinding-hints.ts";
+import { PromptInput } from "./prompt-input.ts";
 
 /** Gutter info: position (displayIndent where connector was) and whether to show │ */
 interface GutterInfo {
@@ -1286,7 +1287,7 @@ class LabelInput implements Component, Focusable {
 
 	constructor(entryId: string, currentLabel: string | undefined) {
 		this.entryId = entryId;
-		this.input = new Input();
+		this.input = new PromptInput();
 		if (currentLabel) {
 			this.input.setValue(currentLabel);
 		}
@@ -1302,7 +1303,10 @@ class LabelInput implements Component, Focusable {
 		lines.push(...this.input.render(availableWidth).map((line) => truncateToWidth(`${indent}${line}`, width)));
 		lines.push(
 			truncateToWidth(
-				`${indent}${keyHint("tui.select.confirm", "save")}  ${keyHint("tui.select.cancel", "cancel")}`,
+				`${indent}${hintRow([
+					["tui.select.confirm", "save"],
+					["tui.select.cancel", "cancel"],
+				])}`,
 				width,
 			),
 		);
@@ -1374,7 +1378,7 @@ export class TreeSelectorComponent extends Container implements Focusable {
 
 		this.addChild(new Spacer(1));
 		this.addChild(new DynamicBorder());
-		this.addChild(new Text(theme.bold("  Session Tree"), 1, 0));
+		this.addChild(new Text(theme.bold(theme.fg("accent", "Session tree")), 0, 0));
 		this.addChild(new TreeHelp());
 		this.addChild(new SearchLine(this.treeList));
 		this.addChild(new DynamicBorder());

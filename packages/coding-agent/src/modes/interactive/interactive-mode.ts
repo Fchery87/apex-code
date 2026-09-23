@@ -119,10 +119,12 @@ import { ensureTool, type ToolStatus } from "../../utils/tools-manager.ts";
 import { checkForNewApexCodeVersion, type LatestApexCodeRelease } from "../../utils/version-check.ts";
 import { ArminComponent } from "./components/armin.ts";
 import { AssistantMessageComponent } from "./components/assistant-message.ts";
+import { describeWithSource } from "./components/autocomplete-source.ts";
 import { BashExecutionComponent } from "./components/bash-execution.ts";
 import { BorderedLoader } from "./components/bordered-loader.ts";
 import { BranchSummaryMessageComponent } from "./components/branch-summary-message.ts";
 import { CompactionSummaryMessageComponent } from "./components/compaction-summary-message.ts";
+import { ComposerDock } from "./components/composer-dock.ts";
 import { CustomEditor } from "./components/custom-editor.ts";
 import { CustomEntryComponent } from "./components/custom-entry.ts";
 import { CustomMessageComponent } from "./components/custom-message.ts";
@@ -134,7 +136,7 @@ import { ExtensionInputComponent } from "./components/extension-input.ts";
 import { ExtensionSelectorComponent } from "./components/extension-selector.ts";
 import { type FirstUseHintId, FirstUseHints } from "./components/first-use-hints.ts";
 import { FooterComponent, formatTokens } from "./components/footer.ts";
-import { formatKeyText, keyDisplayText, keyHint, keyText, rawKeyHint } from "./components/keybinding-hints.ts";
+import { formatKeyText, hintRow, keyDisplayText, keyHint, keyText, rawKeyHint } from "./components/keybinding-hints.ts";
 import { LoginDialogComponent } from "./components/login-dialog.ts";
 import { createMermaidMarkdownTransformer } from "./components/mermaid.ts";
 import { ModelSelectorComponent } from "./components/model-selector.ts";
@@ -520,7 +522,7 @@ export class InteractiveMode {
 	private autocompleteProvider: AutocompleteProvider | undefined;
 	private autocompleteProviderWrappers: AutocompleteProviderFactory[] = [];
 	private fdPath: string | undefined;
-	private editorContainer: Container;
+	private editorContainer: ComposerDock;
 	private activeSelectorToken?: object;
 	private activeSelectorDispose?: () => void;
 	private footer: FooterComponent;
@@ -736,7 +738,7 @@ export class InteractiveMode {
 			autocompleteFooter: () => this.buildAutocompleteFooter(),
 		});
 		this.editor = this.defaultEditor;
-		this.editorContainer = new Container();
+		this.editorContainer = new ComposerDock(() => this.editor as Component);
 		this.editorContainer.addChild(this.editor as Component);
 		this.footerDataProvider = new FooterDataProvider(this.sessionManager.getCwd());
 		this.footer = new FooterComponent(this.session, this.footerDataProvider, this.settingsManager);
@@ -756,39 +758,6 @@ export class InteractiveMode {
 			onChanged: () => this.updateEditorBorderColor(),
 			initialThemeSetting: options.initialThemeSetting,
 		});
-	}
-
-	private getAutocompleteSourceTag(sourceInfo?: SourceInfo): string | undefined {
-		if (!sourceInfo) {
-			return undefined;
-		}
-
-		const scopePrefix = sourceInfo.scope === "user" ? "u" : sourceInfo.scope === "project" ? "p" : "t";
-		const source = sourceInfo.source.trim();
-
-		if (source === "auto" || source === "local" || source === "cli") {
-			return scopePrefix;
-		}
-
-		if (source.startsWith("npm:")) {
-			return `${scopePrefix}:${source}`;
-		}
-
-		const gitSource = parseGitUrl(source);
-		if (gitSource) {
-			const ref = gitSource.ref ? `@${gitSource.ref}` : "";
-			return `${scopePrefix}:git:${gitSource.host}/${gitSource.path}${ref}`;
-		}
-
-		return scopePrefix;
-	}
-
-	private prefixAutocompleteDescription(description: string | undefined, sourceInfo?: SourceInfo): string | undefined {
-		const sourceTag = this.getAutocompleteSourceTag(sourceInfo);
-		if (!sourceTag) {
-			return description;
-		}
-		return description ? `[${sourceTag}] ${description}` : `[${sourceTag}]`;
 	}
 
 	private getBuiltInCommandConflictDiagnostics(extensionRunner: ExtensionRunner): ResourceDiagnostic[] {
@@ -883,7 +852,7 @@ export class InteractiveMode {
 		// Convert prompt templates to SlashCommand format for autocomplete
 		const templateCommands: SlashCommand[] = this.session.promptTemplates.map((cmd) => ({
 			name: cmd.name,
-			description: this.prefixAutocompleteDescription(cmd.description, cmd.sourceInfo),
+			description: describeWithSource(cmd.description, cmd.sourceInfo),
 			...(cmd.argumentHint && { argumentHint: cmd.argumentHint }),
 		}));
 
@@ -894,7 +863,7 @@ export class InteractiveMode {
 			.filter((cmd) => !builtinCommandNames.has(cmd.name))
 			.map((cmd) => ({
 				name: cmd.invocationName,
-				description: this.prefixAutocompleteDescription(cmd.description, cmd.sourceInfo),
+				description: describeWithSource(cmd.description, cmd.sourceInfo),
 				getArgumentCompletions: cmd.getArgumentCompletions,
 			}));
 
@@ -907,7 +876,7 @@ export class InteractiveMode {
 				this.skillCommands.set(commandName, skill.filePath);
 				skillCommandList.push({
 					name: commandName,
-					description: this.prefixAutocompleteDescription(skill.description, skill.sourceInfo),
+					description: describeWithSource(skill.description, skill.sourceInfo),
 				});
 			}
 		}
@@ -957,7 +926,7 @@ export class InteractiveMode {
 			const condensedText = `Updated to v${latestVersion}. Use ${theme.bold("/changelog")} to view full changelog.`;
 			this.chatContainer.addChild(new Text(condensedText, 1, 0));
 		} else {
-			this.chatContainer.addChild(new Text(theme.bold(theme.fg("accent", "What's New")), 1, 0));
+			this.chatContainer.addChild(new Text(theme.bold(theme.fg("accent", "What's new")), 1, 0));
 			this.chatContainer.addChild(new Spacer(1));
 			this.chatContainer.addChild(
 				new Markdown(this.changelogMarkdown.trim(), 1, 0, this.getMarkdownThemeWithSettings()),
@@ -1115,25 +1084,25 @@ export class InteractiveMode {
 			// The full cheatsheet is verbose-only. The default screen leads with the
 			// mark and the runtime facts that actually differ between launches.
 			const expandedInstructions = [
-				hint("app.interrupt", "to interrupt"),
-				hint("app.clear", "to clear"),
-				rawKeyHint(`${keyText("app.clear")} twice`, "to exit"),
-				hint("app.exit", "to exit (empty)"),
-				hint("app.suspend", "to suspend"),
-				keyHint("tui.editor.deleteToLineEnd", "to delete to end"),
-				hint("app.thinking.cycle", "to cycle thinking level"),
-				rawKeyHint(`${keyText("app.model.cycleForward")}/${keyText("app.model.cycleBackward")}`, "to cycle models"),
-				hint("app.model.select", "to select model"),
-				hint("app.tools.expand", "to expand tools"),
-				hint("app.thinking.toggle", "to expand thinking"),
-				hint("app.editor.external", "for external editor"),
-				rawKeyHint("/", "for commands"),
-				rawKeyHint("!", "to run bash"),
-				rawKeyHint("!!", "to run bash (no context)"),
-				hint("app.message.followUp", "to queue follow-up"),
-				hint("app.message.dequeue", "to edit all queued messages"),
-				hint("app.clipboard.pasteImage", "to paste image (with text fallback)"),
-				rawKeyHint("drop files", "to attach"),
+				hint("app.interrupt", "interrupt"),
+				hint("app.clear", "clear"),
+				rawKeyHint(`${keyText("app.clear")} twice`, "exit"),
+				hint("app.exit", "exit (empty)"),
+				hint("app.suspend", "suspend"),
+				keyHint("tui.editor.deleteToLineEnd", "delete to end"),
+				hint("app.thinking.cycle", "cycle thinking level"),
+				rawKeyHint(`${keyText("app.model.cycleForward")}/${keyText("app.model.cycleBackward")}`, "cycle models"),
+				hint("app.model.select", "select model"),
+				hint("app.tools.expand", "expand tools"),
+				hint("app.thinking.toggle", "expand thinking"),
+				hint("app.editor.external", "external editor"),
+				rawKeyHint("/", "commands"),
+				rawKeyHint("!", "run bash"),
+				rawKeyHint("!!", "run bash (no context)"),
+				hint("app.message.followUp", "queue follow-up"),
+				hint("app.message.dequeue", "edit all queued messages"),
+				hint("app.clipboard.pasteImage", "paste image (with text fallback)"),
+				rawKeyHint("drop files", "attach"),
 			].join("\n");
 			this.builtInHeader = new ApexSplashHeader(
 				this.version,
@@ -2039,13 +2008,15 @@ export class InteractiveMode {
 	 */
 	/** Live keybindings under the autocomplete dropdown. */
 	private buildAutocompleteFooter(): string {
-		const separator = theme.fg("borderMuted", this.settingsManager.getSymbolPreset() === "ascii" ? " - " : " · ");
-		return [
-			rawKeyHint(`${keyText("tui.select.up")}/${keyText("tui.select.down")}`, "move"),
-			keyHint("tui.select.confirm", "select"),
-			keyHint("tui.input.tab", "complete"),
-			keyHint("tui.select.cancel", "dismiss"),
-		].join(separator);
+		return hintRow(
+			[
+				[["tui.select.up", "tui.select.down"], "move"],
+				["tui.select.confirm", "select"],
+				["tui.input.tab", "complete"],
+				["tui.select.cancel", "dismiss"],
+			],
+			{ ascii: this.settingsManager.getSymbolPreset() === "ascii" },
+		);
 	}
 
 	private buildStartupShortcuts(): string {
@@ -6389,18 +6360,17 @@ export class InteractiveMode {
 		this.resetExtensionUI();
 
 		const reloadBox = new Container();
-		const borderColor = (s: string) => theme.fg("border", s);
-		reloadBox.addChild(new DynamicBorder(borderColor));
+		reloadBox.addChild(new DynamicBorder());
 		reloadBox.addChild(new Spacer(1));
 		reloadBox.addChild(
 			new Text(
 				theme.fg("muted", "Reloading keybindings, extensions, skills, prompts, themes, and context files..."),
-				1,
+				0,
 				0,
 			),
 		);
 		reloadBox.addChild(new Spacer(1));
-		reloadBox.addChild(new DynamicBorder(borderColor));
+		reloadBox.addChild(new DynamicBorder());
 
 		const previousEditor = this.editor;
 		this.editorContainer.clear();
@@ -6792,7 +6762,7 @@ export class InteractiveMode {
 
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new DynamicBorder());
-		this.chatContainer.addChild(new Text(theme.bold(theme.fg("accent", "What's New")), 1, 0));
+		this.chatContainer.addChild(new Text(theme.bold(theme.fg("accent", "What's new")), 1, 0));
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new Markdown(changelogMarkdown, 1, 1, this.getMarkdownThemeWithSettings()));
 		this.chatContainer.addChild(new DynamicBorder());
