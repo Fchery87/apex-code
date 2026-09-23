@@ -4,7 +4,7 @@ import type { AgentTool } from "apex-code-agent-core";
 import { mkdir as fsMkdir } from "fs/promises";
 import { dirname } from "path";
 import { type Static, Type } from "typebox";
-import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
+import { formatHiddenLines, previewLineCount } from "../../modes/interactive/components/keybinding-hints.ts";
 import { getLanguageFromPath, highlightCode, type Theme } from "../../modes/interactive/theme/theme.ts";
 import { getExperimentalToolSampling } from "../experimental.ts";
 import type { ToolRenderResultOptions } from "../extensions/types.ts";
@@ -186,13 +186,12 @@ function formatWriteCall(
 			? (cache?.highlightedLines ?? highlightCode(replaceTabs(normalizeDisplayText(fileContent)), lang))
 			: normalizeDisplayText(fileContent).split("\n");
 		const lines = trimTrailingEmptyLines(renderedLines);
-		const totalLines = lines.length;
-		const maxLines = options.expanded ? lines.length : 10;
+		const maxLines = options.expanded ? lines.length : previewLineCount(lines.length, 10);
 		const displayLines = lines.slice(0, maxLines);
-		const remaining = lines.length - maxLines;
+		const remaining = lines.length - displayLines.length;
 		text += `\n\n${displayLines.map((line) => (lang ? line : theme.fg("toolOutput", replaceTabs(line)))).join("\n")}`;
 		if (remaining > 0) {
-			text += `${theme.fg("muted", `\n... (${remaining} more lines, ${totalLines} total,`)} ${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`;
+			text += `\n${formatHiddenLines(remaining, "more")}`;
 		}
 	}
 

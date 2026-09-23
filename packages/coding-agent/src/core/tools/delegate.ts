@@ -2,6 +2,7 @@ import { Text } from "@earendil-works/pi-tui";
 import type { AgentToolResult } from "apex-code-agent-core";
 import { minimatch } from "minimatch";
 import { type Static, Type } from "typebox";
+import { formatHiddenLines } from "../../modes/interactive/components/keybinding-hints.ts";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import type { DelegationRuntimeOptions } from "../delegation/runtime.ts";
 import { retrieveDelegationResult, runDelegation } from "../delegation/runtime.ts";
@@ -75,8 +76,7 @@ function formatDelegateCall(input: DelegateInput, theme: Theme): string {
 
 function formatDelegateResult(details: DelegateDetails, expanded: boolean, theme: Theme): string {
 	if (expanded) return theme.fg("toolOutput", details.output);
-	const lineCount = details.output ? details.output.split("\n").length : 0;
-	return `${theme.fg("accent", details.agentType)} · ${lineCount} ${lineCount === 1 ? "line" : "lines"}`;
+	return formatHiddenLines(details.output ? details.output.split("\n").length : 0, "all");
 }
 
 /**

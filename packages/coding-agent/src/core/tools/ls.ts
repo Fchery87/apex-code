@@ -3,7 +3,7 @@ import { Text } from "@earendil-works/pi-tui";
 import type { AgentTool } from "apex-code-agent-core";
 import nodePath from "path";
 import { type Static, Type } from "typebox";
-import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
+import { formatHiddenLines, previewLineCount } from "../../modes/interactive/components/keybinding-hints.ts";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import type { ToolRenderResultOptions } from "../extensions/types.ts";
 import { getPreparedPathOperation } from "../permissions/operations.ts";
@@ -82,12 +82,12 @@ function formatLsResult(
 	let text = "";
 	if (output) {
 		const lines = output.split("\n");
-		const maxLines = options.expanded ? lines.length : 20;
+		const maxLines = options.expanded ? lines.length : previewLineCount(lines.length, 20);
 		const displayLines = lines.slice(0, maxLines);
-		const remaining = lines.length - maxLines;
+		const remaining = lines.length - displayLines.length;
 		text += `\n${displayLines.map((line) => theme.fg("toolOutput", line)).join("\n")}`;
 		if (remaining > 0) {
-			text += `${theme.fg("muted", `\n... (${remaining} more lines,`)} ${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`;
+			text += `\n${formatHiddenLines(remaining, "more")}`;
 		}
 	}
 

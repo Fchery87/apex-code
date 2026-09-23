@@ -6,6 +6,7 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, it } from "vitest";
 import { BashExecutionComponent } from "../src/modes/interactive/components/bash-execution.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { stripAnsi } from "../src/utils/ansi.ts";
 
 /** Minimal TUI stub that only exposes terminal.columns */
 function createTuiStub(columns: number): { columns: number; stub: any } {
@@ -76,5 +77,19 @@ describe("BashExecutionComponent width handling (#2569)", () => {
 			const w = visibleWidth(lines60[i]);
 			expect(w, `Line ${i} visibleWidth=${w} > 60`).toBeLessThanOrEqual(60);
 		}
+	});
+
+	it("shows every row of a preview that hides no line, however it wraps", () => {
+		const { stub } = createTuiStub(80);
+		const component = new BashExecutionComponent("cat wide.txt", stub);
+		// Twelve lines that each wrap to two rows: nothing is hidden, but the preview is 24 rows.
+		const lines = Array.from({ length: 12 }, (_, i) => `row-${String(i).padStart(2, "0")}-${"y".repeat(100)}`);
+		component.appendOutput(`${lines.join("\n")}\n`);
+		component.setComplete(0, false);
+
+		const rendered = stripAnsi(component.render(80).join("\n"));
+
+		for (let i = 0; i < 12; i++) expect(rendered).toContain(`row-${String(i).padStart(2, "0")}`);
+		expect(rendered).not.toContain("to expand");
 	});
 });

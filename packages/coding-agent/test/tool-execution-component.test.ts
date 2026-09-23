@@ -1,9 +1,10 @@
 import { join, resolve } from "node:path";
-import { Text, type TUI, visibleWidth } from "@earendil-works/pi-tui";
+import { setKeybindings, Text, type TUI, visibleWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { getReadmePath } from "../src/config.ts";
 import type { ToolDefinition } from "../src/core/extensions/types.ts";
+import { KeybindingsManager } from "../src/core/keybindings.ts";
 import { type BashOperations, createBashToolDefinition } from "../src/core/tools/bash.ts";
 import { createReadTool, createReadToolDefinition } from "../src/core/tools/read.ts";
 import { createWriteToolDefinition } from "../src/core/tools/write.ts";
@@ -33,6 +34,7 @@ function createFakeTui(): TUI {
 describe("ToolExecutionComponent parity", () => {
 	beforeAll(() => {
 		initTheme("dark");
+		setKeybindings(new KeybindingsManager());
 	});
 
 	afterEach(() => {
@@ -721,17 +723,16 @@ describe("ToolExecutionComponent parity", () => {
 		expect(collapsed).toContain("Error: something failed");
 		// The flat panel contributes one deliberate blank separator row.
 		expect(collapsed.split("\n").length).toBeLessThanOrEqual(8);
-		expect(collapsed).toMatch(/\d+ more lines omitted/);
-		expect(collapsed).toContain("to expand");
+		expect(collapsed).toMatch(/\.\.\. \(\d+ more lines, ctrl\+o to expand\)/);
 
 		component.updateResult({ content: [{ type: "text", text: longError }], details: {}, isError: true }, true);
 		const expanded = stripAnsi(component.render(120).join("\n"));
 		expect(expanded).toContain("at line 19");
-		expect(expanded).not.toContain("more lines omitted");
+		expect(expanded).not.toContain("more lines");
 		expect(expanded).not.toContain("to expand");
 	});
 
-	test("short errors are not truncated when collapsed", () => {
+	test("short errors are shown whole, with nothing to expand", () => {
 		const component = new ToolExecutionComponent(
 			"custom_tool",
 			"tool-short-error",
@@ -746,8 +747,7 @@ describe("ToolExecutionComponent parity", () => {
 		const collapsed = stripAnsi(component.render(120).join("\n"));
 		expect(collapsed).toContain("Error: small failure");
 		expect(collapsed).toContain("at index.ts:1");
-		expect(collapsed).not.toContain("omitted");
-		expect(collapsed).toContain("to expand");
+		expect(collapsed).not.toContain("to expand");
 	});
 
 	test("renders no expand hint when the result hides nothing", () => {
@@ -789,6 +789,73 @@ describe("ToolExecutionComponent parity", () => {
 		// count-less one told the reader less and repeated the first.
 		expect(rendered.split("to expand")).toHaveLength(2);
 		expect(rendered).toContain("10 more lines");
+	});
+
+	function renderDone(
+		name: string,
+		definition: ConstructorParameters<typeof ToolExecutionComponent>[4],
+		args: Record<string, unknown>,
+		output: string,
+	): string[] {
+		const component = new ToolExecutionComponent(
+			name,
+			`tool-${name}`,
+			args,
+			{},
+			definition,
+			createFakeTui(),
+			process.cwd(),
+		);
+		component.setArgsComplete();
+		component.markExecutionStarted();
+		component.updateResult({ content: [{ type: "text", text: output }], isError: false }, false);
+		return component.render(100).map((line) =>
+			stripAnsi(line)
+				.replace(/^[▌┆|]/, "")
+				.trimEnd(),
+		);
+	}
+
+	test("offers no expand key for a body it already shows in full", () => {
+		const bash = renderDone("bash", createBashToolDefinition(process.cwd()), { command: "echo hi" }, "hi");
+		const write = renderDone(
+			"write",
+			createWriteToolDefinition(process.cwd()),
+			{ path: "n.md", content: "one\ntwo" },
+			"",
+		);
+
+		expect(bash.join("\n")).not.toContain("to expand");
+		expect(write.join("\n")).not.toContain("to expand");
+	});
+
+	test("leaves duration to the header", () => {
+		const bash = renderDone("bash", createBashToolDefinition(process.cwd()), { command: "echo hi" }, "hi");
+
+		expect(bash.join("\n")).not.toMatch(/Took|Elapsed/);
+	});
+
+	test("shows a sixth line instead of hiding it behind a hint", () => {
+		const bash = renderDone("bash", createBashToolDefinition(process.cwd()), { command: "ls" }, "a\nb\nc\nd\ne\nf");
+
+		expect(bash.filter((line) => /^ [a-f]$/.test(line))).toHaveLength(6);
+		expect(bash.join("\n")).not.toContain("to expand");
+	});
+
+	test("separates every header from its body with exactly one blank row", () => {
+		const bash = renderDone("bash", createBashToolDefinition(process.cwd()), { command: "echo hi" }, "hi");
+		const write = renderDone("write", createWriteToolDefinition(process.cwd()), { path: "n.md", content: "one" }, "");
+
+		expect(bash[2]).toBe("");
+		expect(bash[3]).toBe(" hi");
+		expect(write[2]).toBe("");
+		expect(write[3]).toBe(" one");
+	});
+
+	test("counts a collapsed read it hides entirely", () => {
+		const read = renderDone("read", createReadToolDefinition(process.cwd()), { path: "notes.txt" }, "hello");
+
+		expect(read.join("\n").match(/to expand/g)).toHaveLength(1);
 	});
 
 	test("expanding one call leaves the cache of that call, and only that call, stale", () => {

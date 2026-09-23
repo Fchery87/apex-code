@@ -53,3 +53,20 @@ export function keyHint(keybinding: Keybinding, description: string): string {
 export function rawKeyHint(key: string, description: string): string {
 	return theme.fg("dim", formatKeyText(key)) + theme.fg("muted", ` ${description}`);
 }
+
+/**
+ * The one shape for "output is hidden here": `... (12 more lines, ctrl+o to expand)`.
+ * `all` is a body collapsed to nothing. Empty when nothing is hidden, so a caller can
+ * append it unconditionally.
+ */
+export function formatHiddenLines(count: number, position: "more" | "earlier" | "all"): string {
+	if (count <= 0) return "";
+	const noun = count === 1 ? "line" : "lines";
+	const counted = position === "all" ? `${count} ${noun}` : `${count} ${position} ${noun}`;
+	return `${theme.fg("muted", `... (${counted},`)} ${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`;
+}
+
+/** How many lines a collapsed preview shows. Hiding one line would spend its row on the hint. */
+export function previewLineCount(total: number, limit: number): number {
+	return total <= limit + 1 ? total : limit;
+}

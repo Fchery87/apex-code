@@ -607,6 +607,13 @@ export class InteractiveMode {
 
 	// Auto-retry state
 	private retryEscapeHandler?: () => void;
+	/**
+	 * The failed attempt an auto-retry would supersede. `component` is set while its error is
+	 * still on screen, and a retry removes it from the chat.
+	 */
+	private retriedAttempt?: { error: string; component?: AssistantMessageComponent };
+	/** Set when the user presses Escape during a retry wait, which is the only way to cancel one. */
+	private retryCancelled = false;
 
 	// Messages queued while compaction is running
 	private compactionQueuedMessages: CompactionQueuedMessage[] = [];
@@ -3533,6 +3540,7 @@ export class InteractiveMode {
 					this.updatePendingMessagesDisplay();
 					this.ui.requestRender();
 				} else if (event.message.role === "assistant") {
+					this.retriedAttempt = undefined;
 					this.streamingComponent = new AssistantMessageComponent(
 						undefined,
 						this.isThinkingHidden(),
@@ -3603,6 +3611,9 @@ export class InteractiveMode {
 					if (this.streamingMessage.stopReason === "aborted" || this.streamingMessage.stopReason === "error") {
 						if (!errorMessage) {
 							errorMessage = this.streamingMessage.errorMessage || "Error";
+						}
+						if (this.streamingMessage.stopReason === "error" && this.pendingTools.size === 0) {
+							this.retriedAttempt = { error: errorMessage, component: this.streamingComponent };
 						}
 						for (const [, component] of this.pendingTools.entries()) {
 							component.updateResult({
@@ -3758,9 +3769,16 @@ export class InteractiveMode {
 			}
 
 			case "auto_retry_start": {
+				// The session drops the failed attempt from agent state; the chat drops it too, and
+				// the retry indicator carries the attempt count instead.
+				if (this.retriedAttempt?.component) {
+					this.chatContainer.removeChild(this.retriedAttempt.component);
+					this.retriedAttempt = { error: this.retriedAttempt.error };
+				}
 				// Set up escape to abort retry
 				this.retryEscapeHandler = this.defaultEditor.onEscape;
 				this.defaultEditor.onEscape = () => {
+					this.retryCancelled = true;
 					this.session.abortRetry();
 				};
 				this.showStatusIndicator(
@@ -3779,8 +3797,15 @@ export class InteractiveMode {
 				this.clearStatusIndicator("retry");
 				// Show error only on final failure (success shows normal response)
 				if (!event.success) {
-					this.showError(`Retry failed after ${event.attempt} attempts: ${event.finalError || "Unknown error"}`);
+					const lastAttempt = this.retriedAttempt;
+					if (lastAttempt?.component) this.chatContainer.removeChild(lastAttempt.component);
+					const outcome = this.retryCancelled
+						? "retry cancelled"
+						: `gave up after ${event.attempt} ${event.attempt === 1 ? "retry" : "retries"}`;
+					this.showError(`${lastAttempt?.error ?? event.finalError ?? "Unknown error"} (${outcome})`);
 				}
+				this.retriedAttempt = undefined;
+				this.retryCancelled = false;
 				this.ui.requestRender();
 				break;
 			}

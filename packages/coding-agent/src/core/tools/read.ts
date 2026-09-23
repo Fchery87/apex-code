@@ -6,7 +6,7 @@ import { constants } from "fs";
 import { access as fsAccess, readFile as fsReadFile } from "fs/promises";
 import { type Static, Type } from "typebox";
 import { getReadmePath } from "../../config.ts";
-import { keyHint, keyText } from "../../modes/interactive/components/keybinding-hints.ts";
+import { formatHiddenLines, keyText, previewLineCount } from "../../modes/interactive/components/keybinding-hints.ts";
 import { getLanguageFromPath, highlightCode, type Theme } from "../../modes/interactive/theme/theme.ts";
 import { processImage } from "../../utils/image-process.ts";
 import { detectSupportedImageMimeType, detectSupportedImageMimeTypeFromFile } from "../../utils/mime.ts";
@@ -176,24 +176,26 @@ function formatReadResult(
 	options: ToolRenderResultOptions,
 	theme: Theme,
 	showImages: boolean,
-	_cwd: string,
+	cwd: string,
 	isError: boolean,
 ): string {
-	if (!options.expanded && !isError) {
-		return "";
-	}
-
 	const rawPath = str(args?.file_path ?? args?.path);
 	const output = getTextOutput(result, showImages);
+	if (!options.expanded && !isError) {
+		// A compact read names its expand key in the call row already.
+		if (getCompactReadClassification(args, cwd)) return "";
+		return `\n${formatHiddenLines(trimTrailingEmptyLines(output.split("\n")).length, "all")}`;
+	}
+
 	const lang = !isError && rawPath ? getLanguageFromPath(rawPath) : undefined;
 	const renderedLines = lang ? highlightCode(replaceTabs(output), lang) : output.split("\n");
 	const lines = trimTrailingEmptyLines(renderedLines);
-	const maxLines = options.expanded ? lines.length : 10;
+	const maxLines = options.expanded ? lines.length : previewLineCount(lines.length, 10);
 	const displayLines = lines.slice(0, maxLines);
-	const remaining = lines.length - maxLines;
+	const remaining = lines.length - displayLines.length;
 	let text = `\n${displayLines.map((line) => (lang ? replaceTabs(line) : theme.fg("toolOutput", replaceTabs(line)))).join("\n")}`;
 	if (remaining > 0) {
-		text += `${theme.fg("muted", `\n... (${remaining} more lines,`)} ${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`;
+		text += `\n${formatHiddenLines(remaining, "more")}`;
 	}
 
 	const truncation = result.details?.truncation;
