@@ -86,8 +86,12 @@ export class ToolPanelComponent implements Component {
 			stateWidth < innerWidth
 				? `${truncateToWidth(label, innerWidth - stateWidth, "")}${separator}${state}`
 				: truncateToWidth(state, innerWidth, "");
+		// Renderers written before the panel open their body with their own blank row. The
+		// panel owns that separation, so it drops theirs and inserts exactly one.
+		let bodyStart = 1;
+		while (bodyStart < childLines.length && visibleWidth(childLines[bodyStart].trim()) === 0) bodyStart++;
 		const panelLines = [header];
-		if (childLines.length > 1) panelLines.push("", ...childLines.slice(1));
+		if (bodyStart < childLines.length) panelLines.push("", ...childLines.slice(bodyStart));
 
 		const background = lifecycleBackground(lifecycle);
 		// The spine occupies the first column of the existing left padding, so it

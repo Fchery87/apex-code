@@ -98,7 +98,7 @@ describe("session selector rename", () => {
 
 		// Rename mode layout
 		const output = selector.render(120).join("\n");
-		expect(output).toContain("Rename Session");
+		expect(output).toContain("Rename session");
 		expect(output).not.toContain("Resume Session");
 
 		// Type and submit

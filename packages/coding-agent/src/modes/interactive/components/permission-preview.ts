@@ -15,11 +15,11 @@ import { theme } from "../theme/theme.ts";
  */
 export function renderPermissionPreview(preview: PermissionPreview): Component {
 	if (preview.kind === "unavailable") {
-		return new Text(theme.fg("warning", `Cannot show the change. ${preview.reason}`), 1, 0);
+		return new Text(theme.fg("warning", `Cannot show the change. ${preview.reason}`), 0, 0);
 	}
 
 	if (preview.kind === "summary") {
-		return new Text(preview.lines.map((line) => theme.fg("muted", line)).join("\n"), 1, 0);
+		return new Text(preview.lines.map((line) => theme.fg("muted", line)).join("\n"), 0, 0);
 	}
 
 	const body = preview.lines.map((line) => {
@@ -30,5 +30,5 @@ export function renderPermissionPreview(preview: PermissionPreview): Component {
 	if (preview.omittedLines > 0) {
 		body.push(theme.fg("muted", `... ${preview.omittedLines} more lines not shown`));
 	}
-	return new Text([theme.fg("muted", preview.path), ...body].join("\n"), 1, 0);
+	return new Text([theme.fg("muted", preview.path), ...body].join("\n"), 0, 0);
 }

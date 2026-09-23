@@ -120,11 +120,11 @@ export class UserMessageSelectorComponent extends Container {
 
 		// Add header
 		this.addChild(new Spacer(1));
-		this.addChild(new Text(theme.bold("Fork from Message"), 1, 0));
+		this.addChild(new Text(theme.bold(theme.fg("accent", "Fork from message")), 0, 0));
 		this.addChild(
 			new Text(
 				theme.fg("muted", "Select a user message to copy the active path up to that point into a new session"),
-				1,
+				0,
 				0,
 			),
 		);

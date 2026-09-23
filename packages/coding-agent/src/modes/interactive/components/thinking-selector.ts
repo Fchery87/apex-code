@@ -3,7 +3,7 @@ import {
 	type Focusable,
 	fuzzyFilter,
 	getKeybindings,
-	Input,
+	type Input,
 	matchesKey,
 	type SelectItem,
 	SelectList,
@@ -12,9 +12,10 @@ import {
 	Text,
 } from "@earendil-works/pi-tui";
 import type { ThinkingLevel } from "apex-code-agent-core";
-import { getSelectListTheme, theme } from "../theme/theme.ts";
+import { getSelectListTheme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
-import { keyDisplayText } from "./keybinding-hints.ts";
+import { hintRow, keyDisplayText } from "./keybinding-hints.ts";
+import { PromptInput } from "./prompt-input.ts";
 
 const THINKING_SELECT_LIST_LAYOUT: SelectListLayoutOptions = {
 	minPrimaryColumnWidth: 12,
@@ -81,7 +82,7 @@ export class ThinkingSelectorComponent extends Container implements Focusable {
 		this.addChild(new Text(`${keyDisplayText("app.thinking.cycle")} cycles thinking levels in-session`, 0, 0));
 		this.addChild(new Spacer(1));
 
-		this.searchInput = new Input();
+		this.searchInput = new PromptInput();
 		this.searchInput.onSubmit = () => this.selectList.handleInput("\r");
 		this.addChild(this.searchInput);
 		this.addChild(new Spacer(1));
@@ -91,7 +92,17 @@ export class ThinkingSelectorComponent extends Container implements Focusable {
 		this.selectListChildIndex = this.children.length;
 		this.addChild(this.selectList);
 		this.addChild(new Spacer(1));
-		this.addChild(new Text(theme.fg("dim", "  Enter to select · Ctrl+S to set as default · Esc to cancel"), 0, 0));
+		this.addChild(
+			new Text(
+				hintRow([
+					["tui.select.confirm", "select"],
+					[{ literal: "ctrl+s" }, "set as default"],
+					["tui.select.cancel", "close"],
+				]),
+				0,
+				0,
+			),
+		);
 
 		// Add bottom border
 		this.addChild(new DynamicBorder());

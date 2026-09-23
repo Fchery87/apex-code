@@ -4,7 +4,7 @@ import { Container, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { type AgentTool, type AgentToolResult, ToolExecutionError } from "apex-code-agent-core";
 import { spawn } from "child_process";
 import { type Static, Type } from "typebox";
-import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
+import { formatHiddenLines, previewLineCount } from "../../modes/interactive/components/keybinding-hints.ts";
 import { truncateToVisualLines } from "../../modes/interactive/components/visual-truncate.ts";
 import { theme } from "../../modes/interactive/theme/theme.ts";
 import { waitForChildProcess } from "../../utils/child-process.ts";
@@ -437,12 +437,6 @@ export interface BashToolOptions {
 const BASH_PREVIEW_LINES = 5;
 const BASH_UPDATE_THROTTLE_MS = 100;
 
-export type BashRenderState = {
-	startedAt: number | undefined;
-	endedAt: number | undefined;
-	interval: NodeJS.Timeout | undefined;
-};
-
 type BashResultRenderState = {
 	cachedWidth: number | undefined;
 	cachedLines: string[] | undefined;
@@ -455,10 +449,6 @@ class BashResultRenderComponent extends Container {
 		cachedLines: undefined,
 		cachedSkipped: undefined,
 	};
-}
-
-function formatDuration(ms: number): string {
-	return `${(ms / 1000).toFixed(1)}s`;
 }
 
 export function formatShellCall(
@@ -497,8 +487,6 @@ function rebuildBashResultRenderComponent(
 	},
 	options: ToolRenderResultOptions,
 	showImages: boolean,
-	startedAt: number | undefined,
-	endedAt: number | undefined,
 ): void {
 	const state = component.state;
 	component.clear();
@@ -525,15 +513,15 @@ function rebuildBashResultRenderComponent(
 			component.addChild({
 				render: (width: number) => {
 					if (state.cachedLines === undefined || state.cachedWidth !== width) {
-						const preview = truncateToVisualLines(styledOutput, BASH_PREVIEW_LINES, width);
+						let preview = truncateToVisualLines(styledOutput, BASH_PREVIEW_LINES, width);
+						const shown = previewLineCount(preview.visualLines.length + preview.skippedCount, BASH_PREVIEW_LINES);
+						if (shown > preview.visualLines.length) preview = truncateToVisualLines(styledOutput, shown, width);
 						state.cachedLines = preview.visualLines;
 						state.cachedSkipped = preview.skippedCount;
 						state.cachedWidth = width;
 					}
 					if (state.cachedSkipped && state.cachedSkipped > 0) {
-						const hint =
-							theme.fg("muted", `... (${state.cachedSkipped} earlier lines,`) +
-							` ${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`;
+						const hint = formatHiddenLines(state.cachedSkipped, "earlier");
 						return ["", truncateToWidth(hint, width, "..."), ...(state.cachedLines ?? [])];
 					}
 					return ["", ...(state.cachedLines ?? [])];
@@ -563,12 +551,6 @@ function rebuildBashResultRenderComponent(
 		}
 		component.addChild(new Text(`\n${theme.fg("warning", `[${warnings.join(". ")}]`)}`, 0, 0));
 	}
-
-	if (startedAt !== undefined) {
-		const label = options.isPartial ? "Elapsed" : "Took";
-		const endTime = endedAt ?? Date.now();
-		component.addChild(new Text(`\n${theme.fg("muted", `${label} ${formatDuration(endTime - startedAt)}`)}`, 0, 0));
-	}
 }
 
 export interface ShellToolConfig {
@@ -585,7 +567,7 @@ export function createShellToolDefinition(
 	cwd: string,
 	config: ShellToolConfig,
 	options?: BashToolOptions,
-): ApexToolDefinition<typeof bashSchema, BashToolDetails | undefined, BashRenderState> {
+): ApexToolDefinition<typeof bashSchema, BashToolDetails | undefined> {
 	const ops = options?.operations ?? createLocalBashOperations({ shellPath: options?.shellPath });
 	const commandPrefix = options?.commandPrefix;
 	const exposeSessionEnvironment = options?.exposeSessionEnvironment ?? true;
@@ -842,37 +824,14 @@ export function createShellToolDefinition(
 			}
 		},
 		renderCall(args, _theme, context) {
-			const state = context.state;
-			if (context.executionStarted && state.startedAt === undefined) {
-				state.startedAt = Date.now();
-				state.endedAt = undefined;
-			}
 			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
 			text.setText(formatShellCall(args, config.prompt));
 			return text;
 		},
 		renderResult(result, options, _theme, context) {
-			const state = context.state;
-			if (state.startedAt !== undefined && options.isPartial && !state.interval) {
-				state.interval = setInterval(() => context.invalidate(), 1000);
-			}
-			if (!options.isPartial || context.isError) {
-				state.endedAt ??= Date.now();
-				if (state.interval) {
-					clearInterval(state.interval);
-					state.interval = undefined;
-				}
-			}
 			const component =
 				(context.lastComponent as BashResultRenderComponent | undefined) ?? new BashResultRenderComponent();
-			rebuildBashResultRenderComponent(
-				component,
-				result as any,
-				options,
-				context.showImages,
-				state.startedAt,
-				state.endedAt,
-			);
+			rebuildBashResultRenderComponent(component, result as any, options, context.showImages);
 			component.invalidate();
 			return component;
 		},
@@ -892,7 +851,7 @@ const bashToolConfig: ShellToolConfig = {
 export function createBashToolDefinition(
 	cwd: string,
 	options?: BashToolOptions,
-): ApexToolDefinition<typeof bashSchema, BashToolDetails | undefined, BashRenderState> {
+): ApexToolDefinition<typeof bashSchema, BashToolDetails | undefined> {
 	return createShellToolDefinition(cwd, bashToolConfig, options);
 }
 

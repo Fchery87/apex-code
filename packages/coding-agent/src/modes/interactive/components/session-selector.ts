@@ -7,7 +7,7 @@ import {
 	Container,
 	type Focusable,
 	getKeybindings,
-	Input,
+	type Input,
 	Spacer,
 	Text,
 	truncateToWidth,
@@ -18,7 +18,8 @@ import type { SessionInfo, SessionListProgress } from "../../../core/session-man
 import { canonicalizePath as _canonicalizePath } from "../../../utils/paths.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
-import { keyHint, keyText } from "./keybinding-hints.ts";
+import { hintRow, keyText } from "./keybinding-hints.ts";
+import { PromptInput } from "./prompt-input.ts";
 import { filterAndSortSessions, hasSessionName, type NameFilter, type SortMode } from "./session-selector-search.ts";
 
 type SessionScope = "current" | "all";
@@ -156,7 +157,10 @@ class SessionSelectorHeader implements Component {
 		let hintLine1: string;
 		let hintLine2: string;
 		if (this.confirmingDeletePath !== null) {
-			const confirmHint = `Delete session? ${keyHint("tui.select.confirm", "confirm")} · ${keyHint("tui.select.cancel", "cancel")}`;
+			const confirmHint = `Delete session? ${hintRow([
+				["tui.select.confirm", "confirm"],
+				["tui.select.cancel", "cancel"],
+			])}`;
 			hintLine1 = theme.fg("error", truncateToWidth(confirmHint, width, "…"));
 			hintLine2 = "";
 		} else if (this.statusMessage) {
@@ -165,19 +169,18 @@ class SessionSelectorHeader implements Component {
 			hintLine2 = "";
 		} else {
 			const pathState = this.showPath ? "(on)" : "(off)";
-			const sep = theme.fg("muted", " · ");
-			const hint1 =
-				keyHint("tui.input.tab", "scope") + sep + theme.fg("muted", 're:<pattern> regex · "phrase" exact');
-			const hint2Parts = [
-				keyHint("app.session.toggleSort", "sort"),
-				keyHint("app.session.toggleNamedFilter", "named"),
-				keyHint("app.session.delete", "delete"),
-				keyHint("app.session.togglePath", `path ${pathState}`),
-			];
-			if (this.showRenameHint) {
-				hint2Parts.push(keyHint("app.session.rename", "rename"));
-			}
-			const hint2 = hint2Parts.join(sep);
+			const hint1 = hintRow([
+				["tui.input.tab", "scope"],
+				[{ literal: "re:<pattern>" }, "regex"],
+				[{ literal: '"phrase"' }, "exact"],
+			]);
+			const hint2 = hintRow([
+				["app.session.toggleSort", "sort"],
+				["app.session.toggleNamedFilter", "named"],
+				["app.session.delete", "delete"],
+				["app.session.togglePath", `path ${pathState}`],
+				...(this.showRenameHint ? [["app.session.rename", "rename"] as const] : []),
+			]);
 			hintLine1 = truncateToWidth(hint1, width, "…");
 			hintLine2 = truncateToWidth(hint2, width, "…");
 		}
@@ -329,7 +332,7 @@ class SessionList implements Component, Focusable {
 	) {
 		this.allSessions = sessions;
 		this.filteredSessions = [];
-		this.searchInput = new Input();
+		this.searchInput = new PromptInput();
 		this.showCwd = showCwd;
 		this.sortMode = sortMode;
 		this.nameFilter = nameFilter;
@@ -715,7 +718,7 @@ export class SessionSelectorComponent extends Container implements Focusable {
 	private allLoadSeq = 0;
 
 	private mode: "list" | "rename" = "list";
-	private renameInput = new Input();
+	private renameInput = new PromptInput();
 	private renameTargetPath: string | null = null;
 
 	// Focusable implementation - propagate to sessionList for IME cursor positioning
@@ -870,14 +873,17 @@ export class SessionSelectorComponent extends Container implements Focusable {
 		this.renameInput.focused = true;
 
 		const panel = new Container();
-		panel.addChild(new Text(theme.bold("Rename Session"), 1, 0));
+		panel.addChild(new Text(theme.bold(theme.fg("accent", "Rename session")), 0, 0));
 		panel.addChild(new Spacer(1));
 		panel.addChild(this.renameInput);
 		panel.addChild(new Spacer(1));
 		panel.addChild(
 			new Text(
-				theme.fg("muted", `${keyText("tui.select.confirm")} to save · ${keyText("tui.select.cancel")} to cancel`),
-				1,
+				hintRow([
+					["tui.select.confirm", "save"],
+					["tui.select.cancel", "cancel"],
+				]),
+				0,
 				0,
 			),
 		);

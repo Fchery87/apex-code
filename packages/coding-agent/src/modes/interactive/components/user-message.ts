@@ -2,7 +2,6 @@ import { Box, Container, Markdown, type MarkdownTheme } from "@earendil-works/pi
 import type { MarkdownTransformer } from "../../../core/extensions/types.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
 import { createMarkdownTransform } from "./markdown-transform.ts";
-import { withAccentSpine } from "./message-spine.ts";
 
 const OSC133_ZONE_START = "\x1b]133;A\x07";
 const OSC133_ZONE_END = "\x1b]133;B\x07";
@@ -38,8 +37,12 @@ export class UserMessageComponent extends Container {
 
 	private rebuild(): void {
 		this.clear();
-		const contentBox = new Box(this.outputPad, 1, (content: string) => {
-			return theme.bg("userMessageBg", this.outputPad > 0 ? withAccentSpine(content) : content);
+		// The spine takes the first padding column in place, so the line keeps its width. A
+		// second column keeps the text off the spine when the configured padding is one.
+		const padding = this.outputPad > 0 ? Math.max(this.outputPad, 2) : 0;
+		const contentBox = new Box(padding, 1, (content: string) => {
+			const line = padding > 0 ? theme.fg("accent", "│") + content.slice(1) : content;
+			return theme.bg("userMessageBg", line);
 		});
 		contentBox.addChild(
 			new Markdown(

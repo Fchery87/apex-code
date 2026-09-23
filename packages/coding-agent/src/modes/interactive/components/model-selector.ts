@@ -11,7 +11,7 @@ import {
 	type Focusable,
 	fuzzyFilter,
 	getKeybindings,
-	Input,
+	type Input,
 	Key,
 	matchesKey,
 	Spacer,
@@ -23,7 +23,7 @@ import { refreshModelCatalogs } from "../model-catalog-refresh.ts";
 import { getModelSelectorSearchText } from "../model-search.ts";
 import { paintSelectedRow, paintSelectedRowToWidth, theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
-import { keyHint, keyText, rawKeyHint } from "./keybinding-hints.ts";
+import { type HintKey, hintRow } from "./keybinding-hints.ts";
 import {
 	composeModelRow,
 	type EffortLayout,
@@ -33,6 +33,7 @@ import {
 	renderPricePanel,
 	type TrailingSegment,
 } from "./model-row.ts";
+import { PromptInput } from "./prompt-input.ts";
 
 interface ModelItem {
 	provider: string;
@@ -150,7 +151,7 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		this.addChild(new Spacer(1));
 
 		// Create search input
-		this.searchInput = new Input();
+		this.searchInput = new PromptInput();
 		if (initialSearchInput) {
 			this.searchInput.setValue(initialSearchInput);
 		}
@@ -368,23 +369,16 @@ export class ModelSelectorComponent extends Container implements Focusable {
 	}
 
 	private getHintText(): string {
-		const hints: string[] = [
-			// Both arrows, since either one moves the selection.
-			rawKeyHint(`${keyText("tui.select.up")}/${keyText("tui.select.down")}`, "move"),
-			keyHint("tui.select.confirm", "select"),
+		const hints: Array<readonly [HintKey, string]> = [
+			[["tui.select.up", "tui.select.down"], "move"],
+			["tui.select.confirm", "select"],
 		];
-		if (this.hasAdjustableEffort()) {
-			const left = keyText("tui.editor.cursorLeft", { primaryOnly: true });
-			const right = keyText("tui.editor.cursorRight", { primaryOnly: true });
-			hints.push(rawKeyHint(`${left}/${right}`, "effort"));
-		}
-		if (this.scopedModelItems.length > 0) {
-			hints.push(keyHint("tui.input.tab", "scope") + theme.fg("muted", " (all/scoped)"));
-		}
-		if (this.onSelectAsDefaultCallback) hints.push(rawKeyHint("ctrl+s", "set as default"));
-		if (this.canGoBack()) hints.push(rawKeyHint("escape", "providers"), rawKeyHint("ctrl+c", "close"));
-		else hints.push(keyHint("tui.select.cancel", "close"));
-		return hints.join(theme.fg("borderMuted", " · "));
+		if (this.hasAdjustableEffort()) hints.push([["tui.editor.cursorLeft", "tui.editor.cursorRight"], "effort"]);
+		if (this.scopedModelItems.length > 0) hints.push(["tui.input.tab", "scope"]);
+		if (this.onSelectAsDefaultCallback) hints.push([{ literal: "ctrl+s" }, "set as default"]);
+		if (this.canGoBack()) hints.push([{ literal: "escape" }, "providers"], [{ literal: "ctrl+c" }, "close"]);
+		else hints.push(["tui.select.cancel", "close"]);
+		return hintRow(hints);
 	}
 
 	/** Levels worth dialling. A model with nothing but "off" has no cluster to show. */

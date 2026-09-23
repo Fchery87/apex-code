@@ -2,11 +2,12 @@
  * Simple text input component for extensions.
  */
 
-import { Container, type Focusable, getKeybindings, Input, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
+import { Container, type Focusable, getKeybindings, type Input, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
 import { theme } from "../theme/theme.ts";
 import { CountdownTimer } from "./countdown-timer.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
-import { keyHint } from "./keybinding-hints.ts";
+import { hintRow } from "./keybinding-hints.ts";
+import { PromptInput } from "./prompt-input.ts";
 
 export interface ExtensionInputOptions {
 	tui?: TUI;
@@ -47,7 +48,7 @@ export class ExtensionInputComponent extends Container implements Focusable {
 		this.addChild(new DynamicBorder());
 		this.addChild(new Spacer(1));
 
-		this.titleText = new Text(theme.fg("accent", title), 1, 0);
+		this.titleText = new Text(theme.fg("accent", title), 0, 0);
 		this.addChild(this.titleText);
 		this.addChild(new Spacer(1));
 
@@ -60,11 +61,18 @@ export class ExtensionInputComponent extends Container implements Focusable {
 			);
 		}
 
-		this.input = new Input();
+		this.input = new PromptInput();
 		this.addChild(this.input);
 		this.addChild(new Spacer(1));
 		this.addChild(
-			new Text(`${keyHint("tui.select.confirm", "submit")}  ${keyHint("tui.select.cancel", "cancel")}`, 1, 0),
+			new Text(
+				hintRow([
+					["tui.select.confirm", "submit"],
+					["tui.select.cancel", "cancel"],
+				]),
+				0,
+				0,
+			),
 		);
 		this.addChild(new Spacer(1));
 		this.addChild(new DynamicBorder());

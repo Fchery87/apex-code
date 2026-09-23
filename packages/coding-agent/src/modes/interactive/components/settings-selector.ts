@@ -7,6 +7,7 @@ import {
 	type SelectItem,
 	type SettingItem,
 	SettingsList,
+	type SettingsListTheme,
 	Spacer,
 	Text,
 } from "@earendil-works/pi-tui";
@@ -23,8 +24,34 @@ import type {
 } from "../../../core/settings-manager.ts";
 import { getSettingsListTheme, parseAutoThemeSetting, type TerminalTheme, theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
-import { keyDisplayText } from "./keybinding-hints.ts";
+import { hintRow, keyDisplayText } from "./keybinding-hints.ts";
+import { withComposerPrompt } from "./prompt-input.ts";
 import { SelectSubmenu, SteppedSubmenu, type SteppedSubmenuStep } from "./settings-submenu.ts";
+
+/** The two hint rows `pi-tui`'s settings list writes, with and without search. */
+const SETTINGS_LIST_HINT_ROWS = new Set([
+	"Type to search · Enter/Space to change · Esc to cancel",
+	"Enter/Space to change · Esc to cancel",
+]);
+
+/**
+ * The settings list is `pi-tui`'s and writes its own hint row, but the theme it paints with is
+ * ours, so the row is swapped here for the shared grammar. The search box's prompt already
+ * says typing searches.
+ */
+function getSettingsSelectorListTheme(): SettingsListTheme {
+	const base = getSettingsListTheme();
+	return {
+		...base,
+		hint: (text: string) =>
+			SETTINGS_LIST_HINT_ROWS.has(text.trim())
+				? hintRow([
+						[["tui.select.confirm", { literal: "space" }], "change"],
+						["tui.select.cancel", "close"],
+					])
+				: base.hint(text),
+	};
+}
 
 const MODEL_PICKER_LAYOUT = { minPrimaryColumnWidth: 12, maxPrimaryColumnWidth: 46 };
 
@@ -196,7 +223,7 @@ class WarningSettingsSubmenu extends Container {
 		this.settingsList = new SettingsList(
 			items,
 			Math.min(items.length, 10),
-			getSettingsListTheme(),
+			getSettingsSelectorListTheme(),
 			(id, newValue) => {
 				switch (id) {
 					case "anthropic-extra-usage":
@@ -447,7 +474,7 @@ class ThemeSubmenu extends Container {
 	private showAutomaticMenu(): void {
 		this.mode = "automatic";
 		const content = new Container();
-		content.addChild(new Text(theme.bold(theme.fg("accent", "Automatic Theme")), 0, 0));
+		content.addChild(new Text(theme.bold(theme.fg("accent", "Automatic theme")), 0, 0));
 		content.addChild(new Spacer(1));
 		content.addChild(new Text(theme.fg("muted", "Choose themes for terminal light and dark appearance."), 0, 0));
 		content.addChild(new Text(theme.fg("muted", "Light/dark detection requires terminal support."), 0, 0));
@@ -509,7 +536,7 @@ class ThemeSubmenu extends Container {
 		const settingsList = new SettingsList(
 			items,
 			Math.min(items.length, 10),
-			getSettingsListTheme(),
+			getSettingsSelectorListTheme(),
 			(id) => {
 				switch (id) {
 					case "single-mode":
@@ -957,11 +984,13 @@ export class SettingsSelectorComponent extends Container {
 
 		// Add borders
 		this.addChild(new DynamicBorder());
+		this.addChild(new Text(theme.bold(theme.fg("accent", "Settings")), 0, 0));
+		this.addChild(new Spacer(1));
 
 		this.settingsList = new SettingsList(
 			items,
 			10,
-			getSettingsListTheme(),
+			getSettingsSelectorListTheme(),
 			(id, newValue) => {
 				switch (id) {
 					case "autocompact":
@@ -1070,7 +1099,15 @@ export class SettingsSelectorComponent extends Container {
 			{ enableSearch: true },
 		);
 
-		this.addChild(this.settingsList);
+		// `pi-tui` builds this list's search box itself, so its prompt is swapped on the way out.
+		const settingsList = this.settingsList;
+		this.addChild({
+			render: (width: number) => {
+				const lines = settingsList.render(width);
+				return lines.length > 0 ? [withComposerPrompt(lines[0]!), ...lines.slice(1)] : lines;
+			},
+			invalidate: () => settingsList.invalidate(),
+		});
 		this.addChild(new DynamicBorder());
 	}
 
