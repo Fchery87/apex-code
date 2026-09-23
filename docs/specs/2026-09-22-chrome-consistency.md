@@ -1,6 +1,6 @@
 # Spec: One grammar for the chrome around the transcript
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 
@@ -93,16 +93,19 @@ the version and `/changelog`.
 
 ## Acceptance criteria
 
-- [ ] No hint row in `components/` or `interactive-mode.ts` is hand-joined, and none
-      uses capitalised keys or "to" phrasing.
-- [ ] `/settings` shows `enter/space change · escape/ctrl+c close` or the rebound
+- [x] No single-line hint row in `components/` or `interactive-mode.ts` is
+      hand-joined, and none uses capitalised keys or "to" phrasing. Two surfaces
+      are deliberately left: the tree selector's wrapped multi-line help grid, which
+      lays out a dozen bindings with arrow glyphs, and status-line text such as
+      `Retrying (2/3) in 4s… (escape to cancel)`, which is a sentence, not a row.
+- [x] `/settings` shows `enter/space change · escape/ctrl+c close` or the rebound
       equivalent.
-- [ ] Every component mounted in the composer dock starts at column 2.
-- [ ] Every Apex picker's search box starts with `›`.
-- [ ] Every picker title is sentence case, and `/settings` has one.
-- [ ] No palette row carries `[u]`, `[p]`, or `[t]`.
-- [ ] The footer reads `cache N%`, and usage between 0 and 0.1% reads `<0.1%`.
-- [ ] An update with default settings shows one line of release notes.
+- [x] Every component mounted in the composer dock starts at column 2.
+- [x] Every Apex picker's search box starts with `›`.
+- [x] Every picker title is sentence case, and `/settings` has one.
+- [x] No palette row carries `[u]`, `[p]`, or `[t]`.
+- [x] The footer reads `cache N%`, and usage between 0 and 0.1% reads `<0.1%`.
+- [x] An update with default settings shows one line of release notes.
 
 ## Verification
 
@@ -110,6 +113,18 @@ the version and `/changelog`.
   `npm test`.
 - Live session in tmux at 120 columns: the palette, `/model`, `/settings`, a
   settings submenu, and the footer after a turn.
+
+Recorded on 2026-09-22. `npm test` passed: 405 files and 3,579 tests in the
+coding-agent package, with 6 files and 51 tests skipped. `npm run build` passed. A
+live session on `dist/cli.js` showed the palette, both `/model` steps, and
+`/settings` sharing one rule and hint column at 2, each search box drawing `›`,
+`/settings` titled, hint rows reading `up/down move · enter select · …`, skill
+rows with no scope letter, and the footer reading `cache 91%` and `<0.1%` beside
+one lit cell.
+
+Still out of reach: the palette truncates a skill's name and description without
+an ellipsis (`skill:principle-outcome-orient`). The truncation happens inside a
+private `pi-tui` `Editor` method, so it needs an upstream change.
 
 ## Deletion inventory
 
