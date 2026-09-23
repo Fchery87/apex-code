@@ -25,9 +25,12 @@ test("the runtime tsconfig is the root's paths without the type-only highlight.j
 });
 
 test("the CLI runs from source through tsx", () => {
+	// tsx's own entry point through this node, since `npx` is `npx.cmd` on Windows and
+	// cannot be spawned without a shell.
+	const tsxCli = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url));
 	const version = execFileSync(
-		"npx",
-		["tsx", "--tsconfig", "tsconfig.runtime.json", "packages/coding-agent/src/cli.ts", "--version"],
+		process.execPath,
+		[tsxCli, "--tsconfig", "tsconfig.runtime.json", "packages/coding-agent/src/cli.ts", "--version"],
 		{ cwd: root, encoding: "utf8" },
 	);
 	assert.match(version.trim(), /^\d+\.\d+\.\d+/);
