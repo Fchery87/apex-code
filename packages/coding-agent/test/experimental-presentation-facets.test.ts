@@ -19,6 +19,7 @@ import { PresentationPlugins } from "../src/experimental/services/plugins.ts";
 const runtimes = new Set<ClientRuntime>();
 const runningServers = new Set<RunningServer>();
 const directories = new Set<string>();
+const ipcTempRoot = process.platform === "win32" ? tmpdir() : "/tmp";
 
 afterEach(async () => {
 	await Promise.allSettled([...runtimes].map((runtime) => runtime.dispose()));
@@ -41,7 +42,7 @@ describe("server-selected presentation facets", () => {
 	});
 
 	test("restores plugin package selections for later server generations", async () => {
-		const directory = await mkdtemp(join(tmpdir(), "pi-presentation-profile-"));
+		const directory = await mkdtemp(join(ipcTempRoot, "pi-presentation-profile-"));
 		directories.add(directory);
 		const serverId = randomUUID();
 		const packagePaths = [join(directory, "first-plugin"), join(directory, "second-plugin")];
@@ -52,7 +53,7 @@ describe("server-selected presentation facets", () => {
 	});
 
 	test("builds conventional plugin entries into the server-owned plugin cache", async () => {
-		const directory = await mkdtemp(join(tmpdir(), "pi-presentation-package-"));
+		const directory = await mkdtemp(join(ipcTempRoot, "pi-presentation-package-"));
 		directories.add(directory);
 		const serverId = randomUUID();
 		const packagePath = join(directory, "pi-example-plugin");
@@ -157,7 +158,7 @@ describe("server-selected presentation facets", () => {
 	});
 
 	test("builds the example plugin package without a package-owned build script", async () => {
-		const directory = await mkdtemp(join(tmpdir(), "pi-example-plugin-"));
+		const directory = await mkdtemp(join(ipcTempRoot, "pi-example-plugin-"));
 		directories.add(directory);
 		const serverId = randomUUID();
 		const packagePath = fileURLToPath(new URL("../examples/plugins/pi-example-plugin", import.meta.url));
