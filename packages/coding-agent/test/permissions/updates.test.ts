@@ -95,6 +95,27 @@ describe("FilePermissionRuleStore", () => {
 		expect(modesBySource.has("local")).toBe(false);
 	});
 
+	it("reads rules without creating any file or directory", async () => {
+		// Reading went through the write lock, which creates the file it locks, so every
+		// trusted project grew an untracked .apex-code/permissions.json on first use.
+		const cwd = join(sharedTempDir, "read-creates-nothing", "project");
+		const agentDir = join(sharedTempDir, "read-creates-nothing", "agent");
+		mkdirSync(cwd, { recursive: true });
+		const store = new FilePermissionRuleStore({
+			projectTrusted: true,
+			cwd,
+			agentDir,
+			policyPath: join(sharedTempDir, "read-creates-nothing", "missing-policy.json"),
+		});
+
+		const { rules, errors } = await store.snapshot();
+
+		expect(rules).toEqual([]);
+		expect(errors).toEqual([]);
+		expect(existsSync(join(cwd, ".apex-code"))).toBe(false);
+		expect(existsSync(agentDir)).toBe(false);
+	});
+
 	it("never writes a session-destination update to disk", async () => {
 		const cwd = join(sharedTempDir, "session-runtime-only", "project");
 		const agentDir = join(sharedTempDir, "session-runtime-only", "agent");

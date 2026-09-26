@@ -11,6 +11,7 @@
  * settings domain.
  */
 
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getAgentDir } from "../../config.ts";
@@ -179,6 +180,8 @@ export interface CreateFilePermissionRuleStoreOptions {
 /** File-backed store for policy/local/project/user, in-memory for command/session. */
 export class FilePermissionRuleStore implements PermissionRuleStore {
 	private readonly backends: Record<FileBackedSource, AuthStorageBackend>;
+	/** Files behind the default backends; an injected backend has none. */
+	private readonly backendPaths: Partial<Record<FileBackedSource, string>>;
 	private readonly policyPath: string;
 	private readonly initialRules: readonly PermissionRule[];
 	private readonly runtimeRules: Record<RuntimeSource, StoredPermissionRule[]> = { command: [], session: [] };
@@ -192,12 +195,22 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 	constructor(options: CreateFilePermissionRuleStoreOptions) {
 		const agentDir = options.agentDir ?? getAgentDir();
 		const cwd = resolvePath(options.cwd);
+		const paths: Record<FileBackedSource, string> = {
+			user: join(agentDir, "permissions.json"),
+			project: projectResourcePathByName(cwd, PROJECT_PERMISSIONS_FILE),
+			local: projectResourcePathByName(cwd, PROJECT_LOCAL_PERMISSIONS_FILE),
+		};
 		this.backends = {
-			user: new FileAuthStorageBackend(join(agentDir, "permissions.json")),
-			project: new FileAuthStorageBackend(projectResourcePathByName(cwd, PROJECT_PERMISSIONS_FILE)),
-			local: new FileAuthStorageBackend(projectResourcePathByName(cwd, PROJECT_LOCAL_PERMISSIONS_FILE)),
+			user: new FileAuthStorageBackend(paths.user),
+			project: new FileAuthStorageBackend(paths.project),
+			local: new FileAuthStorageBackend(paths.local),
 			...options.backends,
 		};
+		this.backendPaths = Object.fromEntries(
+			(Object.keys(paths) as FileBackedSource[])
+				.filter((source) => !options.backends?.[source])
+				.map((source) => [source, paths[source]]),
+		);
 		this.policyPath = options.policyPath ?? defaultPolicyPath();
 		this.initialRules = options.initialRules ?? [];
 		// A JavaScript caller reaches this with no compiler in between, so the type is not
@@ -223,6 +236,11 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 	private async readFileBackedScope(
 		source: FileBackedSource,
 	): Promise<{ scope: StoredPermissionScope; error?: Error }> {
+		// The lock is the write path and creates the file it locks, so a missing file is
+		// read as empty without taking it. An existing one is still read under the lock,
+		// because the writer rewrites in place and an unlocked read could see it half-written.
+		const path = this.backendPaths[source];
+		if (path !== undefined && !existsSync(path)) return { scope: emptyScope() };
 		try {
 			let content: string | undefined;
 			await this.backends[source].withLockAsync(async (current) => {
