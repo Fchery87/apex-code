@@ -2,6 +2,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { Container, Markdown, type MarkdownTheme, MouseRegion, Spacer, Text } from "@earendil-works/pi-tui";
 import type { MarkdownTransformer } from "../../../core/extensions/types.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
+import { keyHint } from "./keybinding-hints.ts";
 import { createMarkdownTransform } from "./markdown-transform.ts";
 
 const OSC133_ZONE_START = "\x1b]133;A\x07";
@@ -296,7 +297,7 @@ export class AssistantMessageComponent extends Container {
 					// Show one static label for each run of thinking blocks when hidden.
 					specs.push({
 						kind: "thinking-label",
-						text: theme.italic(theme.fg("thinkingText", this.hiddenThinkingLabel)),
+						text: `${theme.italic(theme.fg("thinkingText", this.hiddenThinkingLabel))} ${keyHint("app.tools.expand", "to expand")}`,
 						run,
 					});
 				} else {
