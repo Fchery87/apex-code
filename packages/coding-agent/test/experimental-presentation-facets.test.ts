@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { readFacetBundleManifest } from "@earendil-works/chord/node";
@@ -31,6 +31,8 @@ afterEach(async () => {
 });
 
 describe("server-selected presentation facets", () => {
+	const unixOnlyTest = process.platform === "win32" ? test.skip : test;
+
 	test("rejects local plugin paths for Radius servers", async () => {
 		await expect(
 			openClientRuntime({
@@ -52,7 +54,8 @@ describe("server-selected presentation facets", () => {
 		await expect(restoreServerPluginPackageProfile(directory, serverId)).resolves.toEqual([]);
 	});
 
-	test("builds conventional plugin entries into the server-owned plugin cache", async () => {
+	// This integration path starts a local Unix server, which is unsupported on Windows.
+	unixOnlyTest("builds conventional plugin entries into the server-owned plugin cache", async () => {
 		const directory = await mkdtemp(join(ipcTempRoot, "pi-presentation-package-"));
 		directories.add(directory);
 		const serverId = randomUUID();
@@ -78,9 +81,13 @@ describe("server-selected presentation facets", () => {
 
 		const first = await plugin.build();
 		expect(first).toHaveLength(1);
-		expect(plugin.manifestPath).toMatch(
-			new RegExp(`/plugin-builds/${serverId}/pi-example-plugin-[a-f0-9]{12}/chord-facets\\.json$`, "u"),
-		);
+		const manifestSegments = relative(directory, plugin.manifestPath).split(sep);
+		expect(manifestSegments).toEqual([
+			"plugin-builds",
+			serverId,
+			expect.stringMatching(/^pi-example-plugin-[a-f0-9]{12}$/u),
+			"chord-facets.json",
+		]);
 		expect(first[0]?.plugin).toEqual({ id: "@earendil-works/test-plugin", version: "1.0.0" });
 		const firstLoaded = await createPresentationFacetLoaders(createPresentationFacetData(first))[0]!.load();
 		expect(firstLoaded.facets.map(({ id }) => id)).toEqual(["built-a"]);

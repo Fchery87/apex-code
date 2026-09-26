@@ -18,6 +18,7 @@ import { createTempDir } from "./session-test-utils.ts";
 
 const NOW = 1_700_000_000_000;
 const WORKSPACE = resolve("/workspace");
+const WORKSPACE_SEGMENT = `--${WORKSPACE.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
 
 class FailableRenameNodeExecutionEnv extends NodeExecutionEnv {
 	failRename = false;
@@ -69,7 +70,7 @@ describe("JSONL v3 migration", () => {
 		records: readonly unknown[],
 		headerOptions: { parentSession?: string } = {},
 	): Promise<{ path: string; content: string }> {
-		const directory = getOrThrow(await fileSystem.joinPath(["sessions", "--workspace--"], BACKGROUND_CONTEXT));
+		const directory = getOrThrow(await fileSystem.joinPath(["sessions", WORKSPACE_SEGMENT], BACKGROUND_CONTEXT));
 		getOrThrow(await fileSystem.createDir(directory, undefined, BACKGROUND_CONTEXT));
 		const relativePath = getOrThrow(await fileSystem.joinPath([directory, "legacy.jsonl"], BACKGROUND_CONTEXT));
 		const path = getOrThrow(await fileSystem.absolutePath(relativePath, BACKGROUND_CONTEXT));
