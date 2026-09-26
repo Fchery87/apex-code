@@ -1,12 +1,12 @@
 import type { Model } from "@earendil-works/pi-ai";
 import { setKeybindings, type TUI } from "@earendil-works/pi-tui";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { KeybindingsManager } from "../src/core/keybindings.ts";
 import { ModelSelectorComponent } from "../src/modes/interactive/components/model-selector.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 import { createHarness, type Harness } from "./suite/harness.ts";
-import { selectorRowIds } from "./suite/selector-rows.ts";
+import { selectedRowId, selectorRowIds } from "./suite/selector-rows.ts";
 import { accentOpen, paintedWidth, selectedRowOpen } from "./suite/theme-ansi.ts";
 
 const ENTER = "\r";
@@ -28,6 +28,10 @@ describe("model selector", () => {
 
 	beforeAll(() => {
 		initTheme("dark");
+		setKeybindings(new KeybindingsManager());
+	});
+
+	beforeEach(() => {
 		setKeybindings(new KeybindingsManager());
 	});
 
@@ -57,6 +61,64 @@ describe("model selector", () => {
 		);
 		return selector;
 	}
+
+	// Upstream's version of this test pins pi's `→ ✓ id [provider]` row. Apex rows
+	// carry `current` in the trailing cluster instead, so the same behaviour is
+	// asserted against that shape.
+	it("keeps the current model marked while browsing", async () => {
+		harness = await createHarness({
+			models: [
+				{ id: "current-model", name: "Current Model", reasoning: true },
+				{ id: "browsed-model", name: "Browsed Model", reasoning: true },
+			],
+		});
+		const currentModel = harness.getModel("current-model")!;
+		const selector = new ModelSelectorComponent(
+			createFakeTui(),
+			currentModel,
+			harness.session.modelRuntime,
+			[],
+			() => {},
+			() => {},
+		);
+
+		const getModelRow = (id: string): string | undefined =>
+			render(selector)
+				.split("\n")
+				.find((line) => selectorRowIds(line)[0] === id)
+				?.trimEnd();
+
+		expect(selectedRowId(render(selector))).toBe("current-model");
+		expect(getModelRow("current-model")).toMatch(/current-model · current$/);
+		selector.handleInput(DOWN);
+		expect(selectedRowId(render(selector))).toBe("browsed-model");
+		expect(getModelRow("current-model")).toMatch(/current-model · current$/);
+		expect(getModelRow("browsed-model")).toMatch(/browsed-model$/);
+		selector.dispose();
+	});
+
+	it("uses the configured save binding", async () => {
+		setKeybindings(new KeybindingsManager({ "app.models.save": "ctrl+r" }));
+		harness = await createHarness();
+		const currentModel = harness.getModel()!;
+		const saveDefault = vi.fn();
+		const selector = new ModelSelectorComponent(
+			createFakeTui(),
+			currentModel,
+			harness.session.modelRuntime,
+			[],
+			() => {},
+			() => {},
+			undefined,
+			saveDefault,
+		);
+
+		expect(render(selector)).toContain("ctrl+r set as default");
+		selector.handleInput("\x13");
+		expect(saveDefault).not.toHaveBeenCalled();
+		selector.handleInput("\x12");
+		expect(saveDefault).toHaveBeenCalledWith(currentModel, undefined);
+	});
 
 	it("lists every catalog that failed to refresh", async () => {
 		harness = await createHarness();

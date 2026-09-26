@@ -193,7 +193,9 @@ describe("FooterDataProvider reftable branch detection", () => {
 		}
 	});
 
+	// Drive debounce behavior explicitly; native fs.watch delivery can race watcher startup.
 	it("does not notify listeners when reftable updates keep the same branch", async () => {
+		vi.useFakeTimers();
 		const { worktreeDir } = createReftableWorktree(tempDir);
 		process.chdir(worktreeDir);
 
@@ -205,7 +207,7 @@ describe("FooterDataProvider reftable branch detection", () => {
 			provider.onBranchChange(onBranchChange);
 
 			emitReftableChange(provider);
-			await waitFor(() => vi.mocked(execFile).mock.calls.length === 1);
+			await vi.advanceTimersByTimeAsync(501);
 
 			expect(vi.mocked(execFile)).toHaveBeenCalledTimes(1);
 			expect(vi.mocked(spawnSync)).not.toHaveBeenCalled();
@@ -213,10 +215,12 @@ describe("FooterDataProvider reftable branch detection", () => {
 			expect(onBranchChange).not.toHaveBeenCalled();
 		} finally {
 			provider.dispose();
+			vi.useRealTimers();
 		}
 	});
 
 	it("debounces rapid reftable updates into a single async refresh", async () => {
+		vi.useFakeTimers();
 		const { worktreeDir } = createReftableWorktree(tempDir);
 		process.chdir(worktreeDir);
 
@@ -228,12 +232,15 @@ describe("FooterDataProvider reftable branch detection", () => {
 			emitReftableChange(provider);
 			emitReftableChange(provider);
 			emitReftableChange(provider);
-			await waitFor(() => vi.mocked(execFile).mock.calls.length === 1);
-			await new Promise((resolve) => setTimeout(resolve, 650));
-
+			await vi.advanceTimersByTimeAsync(499);
+			expect(vi.mocked(execFile)).not.toHaveBeenCalled();
+			await vi.advanceTimersByTimeAsync(2);
+			expect(vi.mocked(execFile)).toHaveBeenCalledTimes(1);
+			await vi.advanceTimersByTimeAsync(650);
 			expect(vi.mocked(execFile)).toHaveBeenCalledTimes(1);
 		} finally {
 			provider.dispose();
+			vi.useRealTimers();
 		}
 	});
 

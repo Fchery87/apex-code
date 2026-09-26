@@ -44,7 +44,6 @@ describe("apex theme", () => {
 		// a background key via fg() throws, so route each through its own accessor.
 		const backgroundKeys = new Set([
 			"selectedBg",
-			"scrollbarThumb",
 			"userMessageBg",
 			"customMessageBg",
 			"toolPendingBg",

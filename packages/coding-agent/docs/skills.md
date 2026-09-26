@@ -77,8 +77,9 @@ For project-level Claude Code skills, add to `.apex-code/settings.json`:
    points at `skill_search`
 3. When a name looks relevant, the agent calls `skill_search` to read that skill's
    description before committing to it
-4. The agent uses `read` to load the full SKILL.md (models don't always do this on
-   their own; use prompting or `/skill:name` to force it)
+4. The agent uses `read`, or `bash` when `read` is not enabled, to load the full
+   SKILL.md (models don't always do this on their own; use prompting or
+   `/skill:name` to force it)
 5. The agent follows the instructions, using relative paths to reference scripts and
    assets
 

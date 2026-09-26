@@ -1,7 +1,8 @@
 import type { Component, Terminal, TUI } from "@earendil-works/pi-tui";
-import { Container, isViewportTUI, Text } from "@earendil-works/pi-tui";
+import { Container, getKeybindings, isViewportTUI, ScrollView, setKeybindings, Text } from "@earendil-works/pi-tui";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { VirtualTerminal } from "../../tui/test/virtual-terminal.ts";
+import { KeybindingsManager } from "../src/core/keybindings.ts";
 import type { FullscreenExitOutput, TuiMode } from "../src/core/settings-manager.ts";
 import type { StatusIndicatorKind } from "../src/modes/interactive/components/status-indicator.ts";
 import {
@@ -9,6 +10,7 @@ import {
 	createInteractiveTuiReference,
 	InteractiveMode,
 } from "../src/modes/interactive/interactive-mode.ts";
+import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 
 const clipboardMocks = vi.hoisted(() => ({
 	copyToClipboard: vi.fn<(text: string) => Promise<void>>(),
@@ -67,6 +69,35 @@ describe("createInteractiveTui", () => {
 		await altTerminal.waitForRender();
 		expect(altTerminal.writes.some((write) => write.includes("\x1b[?1049h"))).toBe(true);
 		altTui.stop();
+	});
+
+	it("shows the configured jump-to-bottom shortcut while scrolled up", async () => {
+		initTheme("dark");
+		const previousKeybindings = getKeybindings();
+		setKeybindings(new KeybindingsManager({ "tui.altScreen.bottom": "ctrl+j" }));
+		const terminal = new RecordingTerminal(50, 4);
+		const ui = createInteractiveTui({
+			tuiMode: "fullscreen",
+			showHardwareCursor: false,
+			logDirectory: "/tmp",
+			terminal,
+		});
+		ui.setLayoutRoot(
+			new ScrollView(new Text(Array.from({ length: 8 }, (_, index) => `line ${index + 1}`).join("\n"), 0, 0), {
+				follow: "end",
+				primary: true,
+			}),
+		);
+		ui.start();
+		try {
+			await terminal.waitForRender();
+			terminal.sendInput("\x1b[<64;1;1M");
+			await terminal.waitForRender();
+			expect(terminal.getViewport()[3]).toContain("↓ Jump to latest message · Ctrl+J");
+		} finally {
+			ui.stop();
+			setKeybindings(previousKeybindings);
+		}
 	});
 
 	it("replaces the renderer and restores the previous screen for resume-hint exits", async () => {
@@ -313,21 +344,36 @@ describe("InteractiveMode copy confirmation", () => {
 	});
 });
 
+type StatusEditor = {
+	embedWorkingStatus: boolean;
+	setWorkingStatusIndicator: (indicator: undefined) => void;
+};
+
 type ClearStatusContext = {
 	activeStatusIndicator: { kind: StatusIndicatorKind; dispose: () => void } | undefined;
+	activeWorkingIndicatorEmbedded: boolean;
 	statusContainer: Container;
+	defaultEditor: StatusEditor;
+	editor: Partial<StatusEditor>;
 	options: { tuiMode?: TuiMode };
 	ui: { getClearOnShrink: () => boolean };
 	idleStatus: Component;
 	footer: { setActivity: (activity: Component | undefined) => void };
 	customFooter: object | undefined;
+	setEditorWorkingStatusIndicator(indicator: undefined): boolean;
 };
 
 type InteractiveModePrototype = {
 	clearStatusIndicator(this: ClearStatusContext, kind?: StatusIndicatorKind): void;
+	setEditorWorkingStatusIndicator(this: ClearStatusContext, indicator: undefined): boolean;
 };
 
 const interactiveModePrototype = InteractiveMode.prototype as unknown as InteractiveModePrototype;
+
+/** Apex's default composer leaves `embedWorkingStatus` off; the footer tray carries working. */
+function createDefaultEditor(): StatusEditor {
+	return { embedWorkingStatus: false, setWorkingStatusIndicator: vi.fn() };
+}
 
 describe("clear-on-shrink status spacing", () => {
 	it("reserves status height only on the main-screen renderer", () => {
@@ -336,15 +382,20 @@ describe("clear-on-shrink status spacing", () => {
 			["fullscreen", 0],
 		] as const) {
 			const dispose = vi.fn();
+			const defaultEditor = createDefaultEditor();
 			const context: ClearStatusContext = {
 				// Retry keeps its own rows, so it is the kind that still reserves height.
 				activeStatusIndicator: { kind: "retry", dispose },
+				activeWorkingIndicatorEmbedded: false,
 				statusContainer: new Container(),
+				defaultEditor,
+				editor: defaultEditor,
 				options: { tuiMode },
 				ui: { getClearOnShrink: () => true },
 				idleStatus: new Text("", 0, 0),
 				footer: { setActivity: () => {} },
 				customFooter: undefined,
+				setEditorWorkingStatusIndicator: interactiveModePrototype.setEditorWorkingStatusIndicator,
 			};
 
 			interactiveModePrototype.clearStatusIndicator.call(context);
@@ -357,14 +408,19 @@ describe("clear-on-shrink status spacing", () => {
 	it("reserves no status height for working, which the tray draws instead", () => {
 		const dispose = vi.fn();
 		const setActivity = vi.fn();
+		const defaultEditor = createDefaultEditor();
 		const context: ClearStatusContext = {
 			activeStatusIndicator: { kind: "working", dispose },
+			activeWorkingIndicatorEmbedded: false,
 			statusContainer: new Container(),
+			defaultEditor,
+			editor: defaultEditor,
 			options: { tuiMode: "regular" },
 			ui: { getClearOnShrink: () => true },
 			idleStatus: new Text("", 0, 0),
 			footer: { setActivity },
 			customFooter: undefined,
+			setEditorWorkingStatusIndicator: interactiveModePrototype.setEditorWorkingStatusIndicator,
 		};
 
 		interactiveModePrototype.clearStatusIndicator.call(context);
@@ -375,20 +431,57 @@ describe("clear-on-shrink status spacing", () => {
 		expect(context.statusContainer.children).toHaveLength(0);
 	});
 
-	it("keeps working in its own rows when an extension owns the footer", () => {
+	it("keeps working in its own rows when an extension owns the footer and the editor has not opted in", () => {
+		for (const [tuiMode, expectedChildren] of [
+			["regular", 1],
+			["fullscreen", 0],
+		] as const) {
+			const defaultEditor = createDefaultEditor();
+			const customEditor = { embedWorkingStatus: false, setWorkingStatusIndicator: vi.fn() };
+			const context: ClearStatusContext = {
+				activeStatusIndicator: { kind: "working", dispose: vi.fn() },
+				activeWorkingIndicatorEmbedded: false,
+				statusContainer: new Container(),
+				defaultEditor,
+				editor: customEditor,
+				options: { tuiMode },
+				ui: { getClearOnShrink: () => true },
+				idleStatus: new Text("", 0, 0),
+				footer: { setActivity: () => {} },
+				customFooter: {},
+				setEditorWorkingStatusIndicator: interactiveModePrototype.setEditorWorkingStatusIndicator,
+			};
+
+			interactiveModePrototype.clearStatusIndicator.call(context);
+
+			expect(defaultEditor.setWorkingStatusIndicator).toHaveBeenCalledWith(undefined);
+			expect(customEditor.setWorkingStatusIndicator).not.toHaveBeenCalled();
+			expect(context.statusContainer.children).toHaveLength(expectedChildren);
+		}
+	});
+
+	it("does not reserve status height for a working indicator embedded in an opted-in editor border", () => {
 		const dispose = vi.fn();
+		const editor: StatusEditor = { embedWorkingStatus: true, setWorkingStatusIndicator: vi.fn() };
 		const context: ClearStatusContext = {
 			activeStatusIndicator: { kind: "working", dispose },
+			activeWorkingIndicatorEmbedded: true,
 			statusContainer: new Container(),
+			defaultEditor: createDefaultEditor(),
+			editor,
 			options: { tuiMode: "regular" },
 			ui: { getClearOnShrink: () => true },
 			idleStatus: new Text("", 0, 0),
 			footer: { setActivity: () => {} },
+			// Only a custom footer takes the tray away, which is when the border is used.
 			customFooter: {},
+			setEditorWorkingStatusIndicator: interactiveModePrototype.setEditorWorkingStatusIndicator,
 		};
 
 		interactiveModePrototype.clearStatusIndicator.call(context);
 
-		expect(context.statusContainer.children).toHaveLength(1);
+		expect(dispose).toHaveBeenCalledOnce();
+		expect(editor.setWorkingStatusIndicator).toHaveBeenCalledWith(undefined);
+		expect(context.statusContainer.children).toHaveLength(0);
 	});
 });

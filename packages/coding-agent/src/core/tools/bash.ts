@@ -1,12 +1,8 @@
 import { constants } from "node:fs";
 import { access as fsAccess } from "node:fs/promises";
-import { Container, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { type AgentTool, type AgentToolResult, ToolExecutionError } from "apex-code-agent-core";
 import { spawn } from "child_process";
 import { type Static, Type } from "typebox";
-import { formatHiddenLines, previewLineCount } from "../../modes/interactive/components/keybinding-hints.ts";
-import { truncateToVisualLines } from "../../modes/interactive/components/visual-truncate.ts";
-import { theme } from "../../modes/interactive/theme/theme.ts";
 import { waitForChildProcess } from "../../utils/child-process.ts";
 import {
 	getShellConfig,
@@ -18,12 +14,12 @@ import {
 } from "../../utils/shell.ts";
 import { setApexEnvironment } from "../environment.ts";
 import { getExperimentalToolSampling } from "../experimental.ts";
-import type { ExtensionContext, ToolRenderResultOptions } from "../extensions/types.ts";
+import type { ExtensionContext } from "../extensions/types.ts";
 import { type BackgroundShellRegistry, createBackgroundShellRegistry } from "./background-shell.ts";
 import { classifyBashCommand } from "./bash-command-segments.ts";
 import { type ApexToolDefinition, type PermissionSpec, toolUnion } from "./contract.ts";
 import { OutputAccumulator } from "./output-accumulator.ts";
-import { getTextOutput, invalidArgText, str } from "./render-utils.ts";
+import { BASH_UPDATE_THROTTLE_MS, createShellRenderers } from "./renderers/bash.ts";
 import { parseShellOperation } from "./shell-operation.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, type TruncationResult } from "./truncate.ts";
@@ -434,124 +430,11 @@ export interface BashToolOptions {
 	backgroundRegistry?: BackgroundShellRegistry;
 }
 
-const BASH_PREVIEW_LINES = 5;
-const BASH_UPDATE_THROTTLE_MS = 100;
-
-type BashResultRenderState = {
-	cachedWidth: number | undefined;
-	cachedLines: string[] | undefined;
-	cachedSkipped: number | undefined;
-};
-
-class BashResultRenderComponent extends Container {
-	state: BashResultRenderState = {
-		cachedWidth: undefined,
-		cachedLines: undefined,
-		cachedSkipped: undefined,
-	};
-}
-
-export function formatShellCall(
-	args: { command?: string; timeout?: number; handle?: string; kill?: boolean } | undefined,
-	prompt: string,
-): string {
-	const invalid = () => theme.fg("toolTitle", theme.bold(`${prompt} ${invalidArgText(theme)}`));
-	const command = str(args?.command);
-	const handle = str(args?.handle);
-	if (command === null || handle === null) return invalid();
-
-	const parsed = parseShellOperation(args ?? {});
-	if (!parsed.ok) {
-		// Arguments still arriving name no operation yet, so they render as a
-		// placeholder. Anything that already names one and still fails to parse is
-		// rejected at execution, and naming its command would describe something
-		// that never runs.
-		if (!command && !handle) {
-			return theme.fg("toolTitle", theme.bold(`${prompt} ${theme.fg("toolOutput", "...")}`));
-		}
-		return invalid();
-	}
-	if (parsed.operation.kind !== "run") {
-		const suffix = parsed.operation.kind === "kill" ? " · kill" : "";
-		return theme.fg("toolTitle", theme.bold(`${prompt} ${parsed.operation.handle}${suffix}`));
-	}
-	const timeoutSuffix = parsed.operation.timeout ? theme.fg("muted", ` (timeout ${parsed.operation.timeout}s)`) : "";
-	return theme.fg("toolTitle", theme.bold(`${prompt} ${parsed.operation.command}`)) + timeoutSuffix;
-}
-
-function rebuildBashResultRenderComponent(
-	component: BashResultRenderComponent,
-	result: {
-		content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
-		details?: BashToolDetails;
-	},
-	options: ToolRenderResultOptions,
-	showImages: boolean,
-): void {
-	const state = component.state;
-	component.clear();
-
-	let output = getTextOutput(result as any, showImages).trim();
-	const truncation = result.details?.truncation;
-	const fullOutputPath = result.details?.fullOutputPath;
-	if (!options.isPartial && truncation?.truncated && fullOutputPath && output.endsWith("]")) {
-		const footerStart = output.lastIndexOf("\n\n[");
-		if (footerStart !== -1 && output.slice(footerStart).includes(fullOutputPath)) {
-			output = output.slice(0, footerStart).trimEnd();
-		}
-	}
-
-	if (output) {
-		const styledOutput = output
-			.split("\n")
-			.map((line) => theme.fg("toolOutput", line))
-			.join("\n");
-
-		if (options.expanded) {
-			component.addChild(new Text(`\n${styledOutput}`, 0, 0));
-		} else {
-			component.addChild({
-				render: (width: number) => {
-					if (state.cachedLines === undefined || state.cachedWidth !== width) {
-						let preview = truncateToVisualLines(styledOutput, BASH_PREVIEW_LINES, width);
-						const shown = previewLineCount(preview.visualLines.length + preview.skippedCount, BASH_PREVIEW_LINES);
-						if (shown > preview.visualLines.length) preview = truncateToVisualLines(styledOutput, shown, width);
-						state.cachedLines = preview.visualLines;
-						state.cachedSkipped = preview.skippedCount;
-						state.cachedWidth = width;
-					}
-					if (state.cachedSkipped && state.cachedSkipped > 0) {
-						const hint = formatHiddenLines(state.cachedSkipped, "earlier");
-						return ["", truncateToWidth(hint, width, "..."), ...(state.cachedLines ?? [])];
-					}
-					return ["", ...(state.cachedLines ?? [])];
-				},
-				invalidate: () => {
-					state.cachedWidth = undefined;
-					state.cachedLines = undefined;
-					state.cachedSkipped = undefined;
-				},
-			});
-		}
-	}
-
-	if (truncation?.truncated || fullOutputPath) {
-		const warnings: string[] = [];
-		if (fullOutputPath) {
-			warnings.push(`Full output: ${fullOutputPath}`);
-		}
-		if (truncation?.truncated) {
-			if (truncation.truncatedBy === "lines") {
-				warnings.push(`Truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines`);
-			} else {
-				warnings.push(
-					`Truncated: ${truncation.outputLines} lines shown (${formatSize(truncation.maxBytes ?? DEFAULT_MAX_BYTES)} limit)`,
-				);
-			}
-		}
-		component.addChild(new Text(`\n${theme.fg("warning", `[${warnings.join(". ")}]`)}`, 0, 0));
-	}
-}
+/**
+ * Re-exported so callers that format a shell call keep importing it from the tool module. The
+ * renderer itself lives in `renderers/bash.ts` since upstream split presentation from execution.
+ */
+export { formatShellCall } from "./renderers/bash.ts";
 
 export interface ShellToolConfig {
 	name: string;
@@ -647,7 +530,7 @@ export function createShellToolDefinition(
 			},
 		},
 		constrainedSampling: getExperimentalToolSampling(),
-		async execute(_toolCallId, input: BashToolInput, signal?: AbortSignal, onUpdate?, ctx?) {
+		async execute(_toolCallId, input: BashToolInput, signal?: AbortSignal, onUpdate?, ctx?: ExtensionContext) {
 			const parsed = parseShellOperation(input);
 			if (!parsed.ok) throw new ToolExecutionError(parsed.reason, undefined);
 			if (parsed.operation.kind !== "run") {
@@ -655,7 +538,13 @@ export function createShellToolDefinition(
 			}
 			const { command, timeout, background } = parsed.operation;
 			const resolvedCommand = commandPrefix ? `${commandPrefix}\n${command}` : command;
-			const spawnContext = resolveSpawnContext(resolvedCommand, cwd, spawnHook, exposeSessionEnvironment, ctx);
+			const spawnContext = resolveSpawnContext(
+				resolvedCommand,
+				ctx?.cwd || cwd,
+				spawnHook,
+				exposeSessionEnvironment,
+				ctx,
+			);
 
 			if (background) {
 				const spawnBg = ops.spawnBackground;
@@ -823,18 +712,7 @@ export function createShellToolDefinition(
 				clearUpdateTimer();
 			}
 		},
-		renderCall(args, _theme, context) {
-			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			text.setText(formatShellCall(args, config.prompt));
-			return text;
-		},
-		renderResult(result, options, _theme, context) {
-			const component =
-				(context.lastComponent as BashResultRenderComponent | undefined) ?? new BashResultRenderComponent();
-			rebuildBashResultRenderComponent(component, result as any, options, context.showImages);
-			component.invalidate();
-			return component;
-		},
+		...createShellRenderers(config.prompt),
 	};
 }
 

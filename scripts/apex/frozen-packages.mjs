@@ -9,6 +9,7 @@
  * tooling must never write inside these directories -- ADR 0018).
  */
 export const FROZEN_PACKAGE_DIRECTORIES = [
+	"packages/chord",
 	"packages/ai",
 	"packages/tui",
 	"packages/client",

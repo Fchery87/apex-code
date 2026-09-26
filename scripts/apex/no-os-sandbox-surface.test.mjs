@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import test from "node:test";
+import { UPSTREAM_OWNED_DOCS } from "./upstream-owned-docs.mjs";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -118,6 +119,7 @@ const HISTORICAL_RECORDS = [
 	// tense by design. The check that matters for a plan is that the source files it names
 	// still exist, which `scripts/validate-docs-lifecycle.mjs` already enforces.
 	"docs/plans/",
+	...UPSTREAM_OWNED_DOCS,
 ];
 
 /**
