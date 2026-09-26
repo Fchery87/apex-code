@@ -131,6 +131,7 @@ import { CustomMessageComponent } from "./components/custom-message.ts";
 import { DaxnutsComponent } from "./components/daxnuts.ts";
 import { DynamicBorder } from "./components/dynamic-border.ts";
 import { EarendilAnnouncementComponent } from "./components/earendil-announcement.ts";
+import { collapsedErrorLine, summarizeError } from "./components/error-summary.ts";
 import { ExtensionEditorComponent } from "./components/extension-editor.ts";
 import { ExtensionInputComponent } from "./components/extension-input.ts";
 import { ExtensionSelectorComponent } from "./components/extension-selector.ts";
@@ -265,6 +266,24 @@ class ExpandableText extends Text implements Expandable {
 	setExpanded(expanded: boolean): void {
 		this.setText(expanded ? this.getExpandedText() : this.getCollapsedText());
 	}
+}
+
+/**
+ * An error line that joins the detail cycle: a multi-line error folds to its
+ * summary until the transcript is fully expanded. `outcome` trails both forms,
+ * so what happened to the request stays visible while the detail is folded.
+ */
+function errorText(message: string, expanded: boolean, paddingX: number, outcome = ""): Text {
+	const summary = summarizeError(message);
+	const full = () => theme.fg("error", `${message}${outcome}`);
+	if (summary === undefined) return new Text(full(), paddingX, 0);
+	return new ExpandableText(
+		() => collapsedErrorLine(theme.fg("error", `${summary}${outcome}`)),
+		full,
+		expanded,
+		paddingX,
+		0,
+	);
 }
 
 type CompactionQueuedMessage = {
@@ -3520,6 +3539,7 @@ export class InteractiveMode {
 						this.outputPad,
 						this.getMarkdownTransformers(),
 					);
+					this.adoptChatDetail(this.streamingComponent);
 					this.streamingMessage = event.message;
 					this.chatContainer.addChild(this.streamingComponent);
 					this.streamingComponent.updateContent(this.streamingMessage, true);
@@ -3731,7 +3751,7 @@ export class InteractiveMode {
 						this.showError(event.errorMessage);
 					} else {
 						this.chatContainer.addChild(new Spacer(1));
-						this.chatContainer.addChild(new Text(theme.fg("error", event.errorMessage), 1, 0));
+						this.chatContainer.addChild(errorText(event.errorMessage, this.toolOutputExpanded, 1));
 					}
 				}
 				void this.flushCompactionQueue({ willRetry: event.willRetry });
@@ -3773,7 +3793,7 @@ export class InteractiveMode {
 					const outcome = this.retryCancelled
 						? "retry cancelled"
 						: `gave up after ${event.attempt} ${event.attempt === 1 ? "retry" : "retries"}`;
-					this.showError(`${lastAttempt?.error ?? event.finalError ?? "Unknown error"} (${outcome})`);
+					this.showError(lastAttempt?.error ?? event.finalError ?? "Unknown error", ` (${outcome})`);
 				}
 				this.retriedAttempt = undefined;
 				this.retryCancelled = false;
@@ -3975,6 +3995,7 @@ export class InteractiveMode {
 					this.outputPad,
 					this.getMarkdownTransformers(),
 				);
+				this.adoptChatDetail(assistantComponent);
 				this.chatContainer.addChild(assistantComponent);
 				break;
 			}
@@ -4601,9 +4622,11 @@ export class InteractiveMode {
 		this.ui.requestRender();
 	}
 
-	showError(errorMessage: string): void {
+	showError(errorMessage: string, outcome?: string): void {
 		this.chatContainer.addChild(new Spacer(1));
-		this.chatContainer.addChild(new Text(theme.fg("error", `Error: ${errorMessage}`), this.outputPad, 0));
+		this.chatContainer.addChild(
+			errorText(`Error: ${errorMessage}`, this.toolOutputExpanded, this.outputPad, outcome),
+		);
 		this.ui.requestRender();
 	}
 

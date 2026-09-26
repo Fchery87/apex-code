@@ -2,6 +2,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { Container, Markdown, type MarkdownTheme, Spacer, Text } from "@earendil-works/pi-tui";
 import type { MarkdownTransformer } from "../../../core/extensions/types.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
+import { collapsedErrorLine, summarizeError } from "./error-summary.ts";
 import { keyHint } from "./keybinding-hints.ts";
 import { createMarkdownTransform } from "./markdown-transform.ts";
 
@@ -106,6 +107,7 @@ export class AssistantMessageComponent extends Container {
 	private markdownTransformers: readonly MarkdownTransformer[];
 	private lastMessage?: AssistantMessage;
 	private hasToolCalls = false;
+	private expanded = false;
 	private isStreaming = false;
 	private forceFullRebuild = true;
 	private sections: Section[] = [];
@@ -145,6 +147,16 @@ export class AssistantMessageComponent extends Container {
 
 	setHideThinkingBlock(hide: boolean): void {
 		this.hideThinkingBlock = hide;
+		if (this.lastMessage) {
+			this.forceFullRebuild = true;
+			this.updateContent(this.lastMessage);
+		}
+	}
+
+	/** Multi-line errors show only their summary until the transcript is fully expanded. */
+	setExpanded(expanded: boolean): void {
+		if (this.expanded === expanded) return;
+		this.expanded = expanded;
 		if (this.lastMessage) {
 			this.forceFullRebuild = true;
 			this.updateContent(this.lastMessage);
@@ -298,13 +310,18 @@ export class AssistantMessageComponent extends Container {
 						? message.errorMessage
 						: "Operation aborted";
 				specs.push({ kind: "spacer" });
-				specs.push({ kind: "label", text: theme.fg("error", abortMessage) });
+				specs.push({ kind: "label", text: this.errorLabel(abortMessage) });
 			} else if (message.stopReason === "error") {
 				const errorMsg = message.errorMessage || "Unknown error";
 				specs.push({ kind: "spacer" });
-				specs.push({ kind: "label", text: theme.fg("error", `Error: ${errorMsg}`) });
+				specs.push({ kind: "label", text: this.errorLabel(`Error: ${errorMsg}`) });
 			}
 		}
+	}
+
+	private errorLabel(text: string): string {
+		const summary = this.expanded ? undefined : summarizeError(text);
+		return summary === undefined ? theme.fg("error", text) : collapsedErrorLine(theme.fg("error", summary));
 	}
 
 	/**
