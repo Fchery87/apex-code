@@ -26,7 +26,8 @@ import {
 	type WorkerOperationScope,
 } from "./session-worker.ts";
 
-const WORKER_STARTUP_TIMEOUT_MS = 15_000;
+// Cold Session workers can exceed 15 seconds when several module graphs start together.
+const WORKER_STARTUP_TIMEOUT_MS = 30_000;
 const WORKER_SHUTDOWN_TIMEOUT_MS = 10_000;
 const WORKER_DISCOVERY_TIMEOUT_MS = 5_000;
 const WORKER_DEMAND_TIMEOUT_MS = 5_000;

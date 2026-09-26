@@ -374,6 +374,16 @@ replacing the server” (`ServerError: Internal server error`). That same test p
 (1 passed, 25 skipped). This points to a suite-load-sensitive failure, but does not prove
 its cause; the full-suite gate remains open.
 
+Tagged server-side diagnostics on a subsequent four-worker run identified a 15-second
+Session worker startup timeout during “observes keyed service instances and fences
+replacement generations over framed transport.” The timeout is now 30 seconds. The next
+four-worker run no longer failed that case, but still had two failures: profile lock
+contention during concurrent cold activation and a 30-second cold-server activation
+timeout during plugin restoration. With one worker, the full remote-runtime file passed
+26/26; the replacement test also passed three serial repetitions. The test host had load
+average 7–12 and all 2 GiB of swap in use. Resource pressure is the leading explanation,
+not a proven cause. The full-suite verification gate remains open.
+
 ## v0.84.4 — taken 2026-08-30
 
 The cheapest release taken so far, and the first where the cost was not in the merge.
