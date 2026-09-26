@@ -9,6 +9,7 @@ import {
 } from "@earendil-works/pi-tui";
 import type { AppKeybinding, KeybindingsManager } from "../../../core/keybindings.ts";
 import { stripAnsi } from "../../../utils/ansi.ts";
+import type { WorkingStatusIndicator } from "./status-indicator.ts";
 
 /** Which marker the dock draws. The set is closed so a mode cannot arrive without a marker. */
 export type PromptMode = "agent" | "bash";
@@ -34,6 +35,13 @@ export interface CustomEditorOptions extends EditorOptions {
 	autocompleteRule?: (width: number) => string;
 	/** Keybinding footer drawn under the autocomplete rows. Omit for no footer. */
 	autocompleteFooter?: () => string;
+	/**
+	 * Render the streaming working status in the editor's top border. Apex's
+	 * default composer leaves this off: the footer tray carries the working
+	 * status, and the filled surface drops the top border anyway. Kept so a
+	 * custom editor built on this class can opt in, as upstream allows.
+	 */
+	embedWorkingStatus?: boolean;
 }
 
 /** Box-drawing horizontal rule: the character the base Editor draws borders from. */
@@ -171,6 +179,8 @@ export class CustomEditor extends Editor {
 	private readonly placeholder: string | undefined;
 	private readonly autocompleteRule: ((width: number) => string) | undefined;
 	private readonly autocompleteFooter: (() => string) | undefined;
+	private workingStatusIndicator: WorkingStatusIndicator | undefined;
+	public readonly embedWorkingStatus: boolean;
 	public actionHandlers: Map<AppKeybinding, () => void> = new Map();
 
 	// Special handlers that can be dynamically replaced
@@ -201,6 +211,7 @@ export class CustomEditor extends Editor {
 		this.surfaceColor = options?.surfaceColor;
 		this.autocompleteRule = options?.autocompleteRule;
 		this.autocompleteFooter = options?.autocompleteFooter;
+		this.embedWorkingStatus = options?.embedWorkingStatus ?? false;
 	}
 
 	override render(width: number): string[] {
@@ -421,6 +432,55 @@ export class CustomEditor extends Editor {
 	private sliceLeadingCursorCell(line: string): string {
 		const match = /^(?:\x1b_pi:c\x07)?(?:\x1b\[7m.\x1b\[(?:0|27)m)?/.exec(line);
 		return match?.[0] ?? "";
+	}
+
+	setWorkingStatusIndicator(indicator: WorkingStatusIndicator | undefined): void {
+		this.workingStatusIndicator = indicator;
+	}
+
+	protected override renderTopBorder(width: number, hiddenLineCount: number): string {
+		if (!this.embedWorkingStatus || !this.workingStatusIndicator || width <= 0) {
+			return super.renderTopBorder(width, hiddenLineCount);
+		}
+
+		let status = this.workingStatusIndicator.renderInBorder(Math.max(1, width - 5));
+		let statusWidth = visibleWidth(status);
+		if (statusWidth === 0) return super.renderTopBorder(width, hiddenLineCount);
+
+		const overflowLabel = hiddenLineCount > 0 ? ` ↑ ${hiddenLineCount} more ` : undefined;
+		const overflowLabelWidth = overflowLabel ? visibleWidth(overflowLabel) : 0;
+		const overflowStart = Math.floor((width - overflowLabelWidth) / 2);
+		const canFitOverflow = () =>
+			overflowLabel !== undefined && overflowLabelWidth + 2 <= width && overflowStart - (3 + statusWidth + 1) >= 1;
+
+		if (overflowLabel && !canFitOverflow()) {
+			status = this.workingStatusIndicator.renderSpinnerInBorder(width);
+			statusWidth = visibleWidth(status);
+		}
+
+		if (canFitOverflow()) {
+			const leftBlockWidth = 3 + statusWidth + 1;
+			return (
+				this.borderColor("── ") +
+				status +
+				this.borderColor(
+					` ${"─".repeat(overflowStart - leftBlockWidth)}${overflowLabel}${"─".repeat(width - overflowStart - overflowLabelWidth)}`,
+				)
+			);
+		}
+
+		if (width >= statusWidth + 5) {
+			return this.borderColor("── ") + status + this.borderColor(` ${"─".repeat(width - statusWidth - 4)}`);
+		}
+
+		status = this.workingStatusIndicator.renderSpinnerInBorder(width);
+		statusWidth = visibleWidth(status);
+		const prefixWidth = Math.min(3, Math.max(0, width - statusWidth));
+		return (
+			this.borderColor("─".repeat(prefixWidth)) +
+			status +
+			this.borderColor("─".repeat(Math.max(0, width - prefixWidth - statusWidth)))
+		);
 	}
 
 	/**

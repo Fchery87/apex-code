@@ -8,8 +8,7 @@ import type {
 	Model,
 	OpenAICompletionsCompat,
 } from "@earendil-works/pi-ai/compat";
-import { getApiProvider, getSupportedThinkingLevels } from "@earendil-works/pi-ai/compat";
-import { GITHUB_COPILOT_MODELS } from "@earendil-works/pi-ai/providers/github-copilot.models";
+import { getApiProvider, getModels, getSupportedThinkingLevels } from "@earendil-works/pi-ai/compat";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import type { ModelsJsonProvider } from "../src/core/model-config.ts";
@@ -19,7 +18,6 @@ import { createModelRegistry } from "./model-runtime-test-utils.ts";
 
 // The Copilot catalog is regenerated from models.dev during the build, so any literal
 // model id here rots the moment upstream retires it. Bind to what the catalog ships.
-const [copilotModelId] = Object.values(GITHUB_COPILOT_MODELS).map((model) => model.id);
 
 describe("ModelRegistry", () => {
 	let tempDir: string;
@@ -69,6 +67,12 @@ describe("ModelRegistry", () => {
 
 	function getModelsForProvider(registry: ModelRegistry, provider: string) {
 		return registry.getAll().filter((m) => m.provider === provider);
+	}
+
+	function getOpenRouterCompletionsModelIds(): string[] {
+		return getModels("openrouter")
+			.filter((model) => model.api === "openai-completions")
+			.map((model) => model.id);
 	}
 
 	function toShPath(value: string): string {
@@ -774,10 +778,12 @@ describe("ModelRegistry", () => {
 		});
 
 		test("supportsFinishReason can be configured at provider and model levels", async () => {
+			const [overriddenModelId, inheritedModelId] = getOpenRouterCompletionsModelIds();
+			expect(inheritedModelId).toBeDefined();
 			const provider: ModelsJsonProvider = {
 				compat: { supportsFinishReason: true },
 				modelOverrides: {
-					"anthropic/claude-sonnet-4": {
+					[overriddenModelId!]: {
 						compat: { supportsFinishReason: false },
 					},
 				},
@@ -786,11 +792,11 @@ describe("ModelRegistry", () => {
 
 			const registry = await createModelRegistry(authStorage, modelsJsonPath);
 			const models = getModelsForProvider(registry, "openrouter");
-			const sonnet = models.find((model) => model.id === "anthropic/claude-sonnet-4");
-			const opus = models.find((model) => model.id === "anthropic/claude-opus-4");
+			const overriddenModel = models.find((model) => model.id === overriddenModelId);
+			const inheritedModel = models.find((model) => model.id === inheritedModelId);
 
-			expect((sonnet?.compat as OpenAICompletionsCompat | undefined)?.supportsFinishReason).toBe(false);
-			expect((opus?.compat as OpenAICompletionsCompat | undefined)?.supportsFinishReason).toBe(true);
+			expect((overriddenModel?.compat as OpenAICompletionsCompat | undefined)?.supportsFinishReason).toBe(false);
+			expect((inheritedModel?.compat as OpenAICompletionsCompat | undefined)?.supportsFinishReason).toBe(true);
 		});
 
 		test("model override deep merges compat settings", async () => {
@@ -816,13 +822,15 @@ describe("ModelRegistry", () => {
 		});
 
 		test("multiple model overrides on same provider", async () => {
+			const [firstModelId, secondModelId] = getOpenRouterCompletionsModelIds();
+			expect(secondModelId).toBeDefined();
 			writeRawModelsJson({
 				openrouter: {
 					modelOverrides: {
-						"anthropic/claude-sonnet-4": {
+						[firstModelId!]: {
 							compat: { openRouterRouting: { only: ["amazon-bedrock"] } },
 						},
-						"anthropic/claude-opus-4": {
+						[secondModelId!]: {
 							compat: { openRouterRouting: { only: ["anthropic"] } },
 						},
 					},
@@ -832,21 +840,23 @@ describe("ModelRegistry", () => {
 			const registry = await createModelRegistry(authStorage, modelsJsonPath);
 			const models = getModelsForProvider(registry, "openrouter");
 
-			const sonnet = models.find((m) => m.id === "anthropic/claude-sonnet-4");
-			const opus = models.find((m) => m.id === "anthropic/claude-opus-4");
+			const firstModel = models.find((m) => m.id === firstModelId);
+			const secondModel = models.find((m) => m.id === secondModelId);
 
-			const sonnetCompat = sonnet?.compat as OpenAICompletionsCompat | undefined;
-			const opusCompat = opus?.compat as OpenAICompletionsCompat | undefined;
-			expect(sonnetCompat?.openRouterRouting).toEqual({ only: ["amazon-bedrock"] });
-			expect(opusCompat?.openRouterRouting).toEqual({ only: ["anthropic"] });
+			const firstModelCompat = firstModel?.compat as OpenAICompletionsCompat | undefined;
+			const secondModelCompat = secondModel?.compat as OpenAICompletionsCompat | undefined;
+			expect(firstModelCompat?.openRouterRouting).toEqual({ only: ["amazon-bedrock"] });
+			expect(secondModelCompat?.openRouterRouting).toEqual({ only: ["anthropic"] });
 		});
 
 		test("model override combined with baseUrl override", async () => {
+			const [overriddenModelId, inheritedModelId] = getOpenRouterCompletionsModelIds();
+			expect(inheritedModelId).toBeDefined();
 			writeRawModelsJson({
 				openrouter: {
 					baseUrl: "https://my-proxy.example.com/v1",
 					modelOverrides: {
-						"anthropic/claude-sonnet-4": {
+						[overriddenModelId!]: {
 							name: "Proxied Sonnet",
 						},
 					},
@@ -855,16 +865,16 @@ describe("ModelRegistry", () => {
 
 			const registry = await createModelRegistry(authStorage, modelsJsonPath);
 			const models = getModelsForProvider(registry, "openrouter");
-			const sonnet = models.find((m) => m.id === "anthropic/claude-sonnet-4");
+			const overriddenModel = models.find((m) => m.id === overriddenModelId);
 
 			// Both overrides should apply
-			expect(sonnet?.baseUrl).toBe("https://my-proxy.example.com/v1");
-			expect(sonnet?.name).toBe("Proxied Sonnet");
+			expect(overriddenModel?.baseUrl).toBe("https://my-proxy.example.com/v1");
+			expect(overriddenModel?.name).toBe("Proxied Sonnet");
 
 			// Other models should have the baseUrl but not the name override
-			const opus = models.find((m) => m.id === "anthropic/claude-opus-4");
-			expect(opus?.baseUrl).toBe("https://my-proxy.example.com/v1");
-			expect(opus?.name).not.toBe("Proxied Sonnet");
+			const inheritedModel = models.find((m) => m.id === inheritedModelId);
+			expect(inheritedModel?.baseUrl).toBe("https://my-proxy.example.com/v1");
+			expect(inheritedModel?.name).not.toBe("Proxied Sonnet");
 		});
 
 		test("model override for non-existent model ID is ignored", async () => {
@@ -1884,12 +1894,15 @@ describe("ModelRegistry", () => {
 			});
 
 			test("getAvailable filters GitHub Copilot OAuth models to account picker availability", async () => {
+				const copilotModel = getModels("github-copilot")[0];
+				if (!copilotModel) throw new Error("Expected at least one GitHub Copilot model");
+
 				await authStorage.modify("github-copilot", async () => ({
 					type: "oauth",
 					refresh: "github-access-token",
 					access: "tid=test;exp=9999999999;proxy-ep=proxy.individual.githubcopilot.com;",
 					expires: Date.now() + 60_000,
-					availableModelIds: [copilotModelId],
+					availableModelIds: [copilotModel.id],
 				}));
 
 				const registry = await createModelRegistry(authStorage, modelsJsonPath);
@@ -1899,7 +1912,7 @@ describe("ModelRegistry", () => {
 						.getAvailable()
 						.filter((m) => m.provider === "github-copilot")
 						.map((m) => m.id),
-				).toEqual([copilotModelId]);
+				).toEqual([copilotModel.id]);
 			});
 
 			test("getApiKeyAndHeaders resolves authHeader on every request", async () => {

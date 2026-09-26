@@ -1,7 +1,37 @@
-import { Box, type Component, Container, getCapabilities, Image, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
-import type { ToolDefinition, ToolRenderContext } from "../../../core/extensions/types.ts";
-import type { ApexToolDefinition } from "../../../core/tools/contract.ts";
-import { createAllToolDefinitions, type ToolName } from "../../../core/tools/index.ts";
+import {
+	Box,
+	type Component,
+	Container,
+	getCapabilities,
+	Image,
+	MouseRegion,
+	Spacer,
+	Text,
+	type TUI,
+	type TuiMouseEvent,
+} from "@earendil-works/pi-tui";
+import type { AgentToolResult } from "apex-code-agent-core";
+import type { ToolDefinition, ToolRenderContext, ToolRenderResultOptions } from "../../../core/extensions/types.ts";
+import type { Theme } from "../theme/theme.ts";
+
+/**
+ * What this component needs from a tool: how to draw it. It neither executes tools nor reads their
+ * parameter schemas, so a definition and a bare renderer pair are equally acceptable.
+ *
+ * The renderer parameters are `any` on purpose: a `ToolDefinition` types them from its schema, and
+ * narrowing them here would make those definitions unassignable.
+ */
+export interface ToolRenderers {
+	renderShell?: "default" | "self";
+	renderCall?: (args: any, theme: Theme, context: ToolRenderContext<any, any>) => Component;
+	renderResult?: (
+		result: AgentToolResult<any>,
+		options: ToolRenderResultOptions,
+		theme: Theme,
+		context: ToolRenderContext<any, any>,
+	) => Component;
+}
+
 import { getTextOutput as getRenderedTextOutput } from "../../../core/tools/render-utils.ts";
 import { convertToPng } from "../../../utils/image-convert.ts";
 import { theme } from "../theme/theme.ts";
@@ -28,6 +58,7 @@ export interface ToolExecutionOptions {
 export class ToolExecutionComponent extends Container {
 	private contentBox: Box;
 	private contentText: Text;
+	private contentTextRegion: MouseRegion;
 	private selfRenderContainer: Container;
 	private callRendererComponent?: Component;
 	private resultRendererComponent?: Component;
@@ -42,8 +73,7 @@ export class ToolExecutionComponent extends Container {
 	private showImages: boolean;
 	private imageWidthCells: number;
 	private isPartial = true;
-	private toolDefinition?: ToolDefinition<any, any> | ApexToolDefinition<any, any>;
-	private builtInToolDefinition?: ToolDefinition<any, any> | ApexToolDefinition<any, any>;
+	private toolDefinition?: ToolRenderers;
 	private ui: TUI;
 	private cwd: string;
 	private executionStarted = false;
@@ -71,7 +101,7 @@ export class ToolExecutionComponent extends Container {
 		toolCallId: string,
 		args: any,
 		options: ToolExecutionOptions = {},
-		toolDefinition: ToolDefinition<any, any> | ApexToolDefinition<any, any> | undefined,
+		toolDefinition: ToolRenderers | ToolDefinition<any, any, any> | undefined,
 		ui: TUI,
 		cwd: string,
 	) {
@@ -80,7 +110,6 @@ export class ToolExecutionComponent extends Container {
 		this.toolCallId = toolCallId;
 		this.args = args;
 		this.toolDefinition = toolDefinition;
-		this.builtInToolDefinition = createAllToolDefinitions(cwd)[toolName as ToolName];
 		this.showImages = options.showImages ?? true;
 		this.imageWidthCells = options.imageWidthCells ?? 60;
 		this.symbolPreset = options.symbolPreset ?? "unicode";
@@ -94,49 +123,32 @@ export class ToolExecutionComponent extends Container {
 		// contentText is reserved for generic fallback rendering when no tool definition exists.
 		this.contentBox = new Box(0, 0);
 		this.contentText = new Text("", 0, 0);
+		this.contentTextRegion = this.createResultRegion(this.contentText);
 		this.selfRenderContainer = new Container();
 
 		if (this.hasRendererDefinition()) {
 			this.addChild(this.getRenderShell() === "self" ? this.selfRenderContainer : this.contentBox);
 		} else {
-			this.addChild(this.contentText);
+			this.addChild(this.contentTextRegion);
 		}
 
 		this.updateDisplay();
 	}
 
 	private getCallRenderer(): ToolDefinition<any, any>["renderCall"] | undefined {
-		if (!this.builtInToolDefinition) {
-			return this.toolDefinition?.renderCall;
-		}
-		if (!this.toolDefinition) {
-			return this.builtInToolDefinition.renderCall;
-		}
-		return this.toolDefinition.renderCall ?? this.builtInToolDefinition.renderCall;
+		return this.toolDefinition?.renderCall;
 	}
 
 	private getResultRenderer(): ToolDefinition<any, any>["renderResult"] | undefined {
-		if (!this.builtInToolDefinition) {
-			return this.toolDefinition?.renderResult;
-		}
-		if (!this.toolDefinition) {
-			return this.builtInToolDefinition.renderResult;
-		}
-		return this.toolDefinition.renderResult ?? this.builtInToolDefinition.renderResult;
+		return this.toolDefinition?.renderResult;
 	}
 
 	private hasRendererDefinition(): boolean {
-		return this.builtInToolDefinition !== undefined || this.toolDefinition !== undefined;
+		return this.toolDefinition !== undefined;
 	}
 
 	private getRenderShell(): "default" | "self" {
-		if (!this.builtInToolDefinition) {
-			return this.toolDefinition?.renderShell ?? "default";
-		}
-		if (!this.toolDefinition) {
-			return this.builtInToolDefinition.renderShell ?? "default";
-		}
-		return this.toolDefinition.renderShell ?? this.builtInToolDefinition.renderShell ?? "default";
+		return this.toolDefinition?.renderShell ?? "default";
 	}
 
 	private getRenderContext(lastComponent: Component | undefined): ToolRenderContext {
@@ -178,6 +190,14 @@ export class ToolExecutionComponent extends Container {
 		let text = displayLines.map((line) => theme.fg("toolOutput", line)).join("\n");
 		if (remaining > 0) text += `\n${formatHiddenLines(remaining, "more")}`;
 		return new Text(text, 0, 0);
+	}
+
+	private createResultRegion(component: Component): MouseRegion {
+		return new MouseRegion(component, (event) => {
+			if (!this.result || event.type !== "click" || event.button !== "left") return undefined;
+			this.setExpanded(!this.expanded);
+			return { handled: true };
+		});
 	}
 
 	updateArgs(args: any): void {
@@ -378,6 +398,29 @@ export class ToolExecutionComponent extends Container {
 		return lines;
 	}
 
+	/**
+	 * A left click on the panel toggles the result, as upstream's per-region
+	 * handlers do. Apex composes the panel itself (lifecycle header, spine,
+	 * padding, the separator row it inserts), so rendered rows do not line up
+	 * with the children's rows and the inherited child-by-child dispatch would
+	 * resolve the wrong region. Row 0 is the leading spacer and is inert.
+	 */
+	override handleMouse(event: TuiMouseEvent): ReturnType<Container["handleMouse"]> {
+		if (this.hideComponent || event.y <= 0 || event.y >= event.height) return undefined;
+		if (!this.result || event.type !== "click" || event.button !== "left") return undefined;
+		this.setExpanded(!this.expanded);
+		return {
+			handled: true,
+			target: {
+				component: this,
+				originX: event.screenX - event.x,
+				originY: event.screenY - event.y,
+				width: event.width,
+				height: event.height,
+			},
+		};
+	}
+
 	private updateDisplay(): void {
 		this.displayVersion += 1;
 		let hasContent = false;
@@ -388,17 +431,17 @@ export class ToolExecutionComponent extends Container {
 
 			const callRenderer = this.getCallRenderer();
 			if (!callRenderer) {
-				renderContainer.addChild(this.createCallFallback());
+				renderContainer.addChild(this.createResultRegion(this.createCallFallback()));
 				hasContent = true;
 			} else {
 				try {
 					const component = callRenderer(this.args, theme, this.getRenderContext(this.callRendererComponent));
 					this.callRendererComponent = component;
-					renderContainer.addChild(component);
+					renderContainer.addChild(this.createResultRegion(component));
 					hasContent = true;
 				} catch {
 					this.callRendererComponent = undefined;
-					renderContainer.addChild(this.createCallFallback());
+					renderContainer.addChild(this.createResultRegion(this.createCallFallback()));
 					hasContent = true;
 				}
 			}
@@ -408,7 +451,7 @@ export class ToolExecutionComponent extends Container {
 				if (!resultRenderer) {
 					const component = this.createResultFallback();
 					if (component) {
-						renderContainer.addChild(component);
+						renderContainer.addChild(this.createResultRegion(component));
 						hasContent = true;
 					}
 				} else {
@@ -420,13 +463,13 @@ export class ToolExecutionComponent extends Container {
 							this.getRenderContext(this.resultRendererComponent),
 						);
 						this.resultRendererComponent = component;
-						renderContainer.addChild(component);
+						renderContainer.addChild(this.createResultRegion(component));
 						hasContent = true;
 					} catch {
 						this.resultRendererComponent = undefined;
 						const component = this.createResultFallback();
 						if (component) {
-							renderContainer.addChild(component);
+							renderContainer.addChild(this.createResultRegion(component));
 							hasContent = true;
 						}
 					}

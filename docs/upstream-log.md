@@ -80,6 +80,7 @@ three merges that follow Phase 2, not from a Phase 0 rehearsal.
 | 2026-08-27 | `v0.84.2` | **53** | 49 (27 in forked paths) | 100 (+5,654 / −4,198) | First merge since the graft that actually ran; see "The merge path was broken" below. Total: 191 files, +14,555 / −4,541. |
 | 2026-08-27 | `v0.84.3` | — | — | — | Taken at `89424bcb7`; see the v0.84.3 section below. This row was missing until 2026-08-30, which made the table read one release behind `.upstream-tag`. |
 | 2026-08-30 | `v0.84.4` | **15** | 16 (11 in forked paths) | 69 (+1,683 / −232) | Total: 112 files, +2,786 / −378. Zero conflicts in frozen packages. |
+| 2026-09-25 | `v0.85.1` | **138** | 79 (58 in forked paths) | 438 (+72,131 / −14,925) | Takes `v0.85.0` and `v0.85.1`. Under the 159 ceiling. Total: 708 files, +96,348 / −25,254. Zero conflicts in frozen packages; new frozen package `chord`. |
 | 2026-08-09 | Apex Code identity rename | — (fork divergence, not a merge) | — | 218 files (+736 / −744), 602 diff hunks | Renamed the two forked package identities, active imports/docs/examples, binary, and global config root. Recorded separately from upstream merge conflicts. |
 
 ### Two kinds of merge cost, tracked separately
@@ -220,6 +221,144 @@ upstream's own history.
 contains `e8c632ef6`. The gate enforces this rather than trusting anyone to remember: a
 backport the baseline already carries fails with an instruction to delete it.
 
+
+## v0.85.1 — taken 2026-09-25
+
+Takes `v0.85.0` and `v0.85.1` together; they shipped a day apart. This is the first merge
+measured against the ADR 0003 ceiling, which was set to **159** in the same change.
+
+| Signal | Value |
+| --- | --- |
+| Conflicted hunks | 138 (123 in forked paths; 23 are generated lockfiles, 2 identity files) |
+| Conflicted files | 79 (58 in forked paths), plus 21 modify/delete with no markers |
+| Churn, forked paths | 438 files, +72,131 / −14,925 |
+| Churn, total | 708 files, +96,348 / −25,254 |
+| Conflicts in frozen packages | **0** |
+
+The churn is thirteen times the previous largest merge, and most of it merged clean:
+upstream's harness v2 (lanes, durable drive, session storage conformance), a new
+`experimental/` client and server layer, and design notes. The conflicts sat where Apex
+has diverged, not where upstream grew.
+
+### A new consumed package
+
+Upstream added `packages/chord`, an application-composition runtime, and both forked
+packages now import it. Per ADR 0001 it joins `FROZEN_PACKAGE_DIRECTORIES` and matches
+`v0.85.1` byte for byte. Three places learned about it: the build order in
+`package.json`, the Biome exclusions (the first `npm run check` rewrote
+`chord/src/types.ts` before that exclusion existed, and the frozen gate caught it), and the
+docs validator, which now skips frozen packages' prose.
+
+The lockfile generators treated only `@earendil-works/pi-*` as workspace packages, so
+`chord` failed to resolve. Their workspace prefix is now `@earendil-works/`, which cannot
+catch the external `@earendil-works/gondolin` because the scan only reads `packages/`.
+Apex's version-match rule stays limited to its two owned packages.
+
+### Deleted paths came back, again
+
+Fourteen files Apex deletes returned as modify/delete conflicts: `packages/evals`,
+`packages/session-backends`, upstream's `build-binaries.yml`, the old
+`modes/interactive/session-share.ts`, and `package-distribution.test.ts`. Nineteen more
+`session-backends` files arrived as plain additions with no conflict at all, which only
+`ls packages/` showed. All are deleted again. Seven files went the other way (upstream
+deleted them, Apex had edited them); every Apex edit was lint or rename work, so
+upstream's deletion stands.
+
+### The rename tax, and a registry package it pulled in
+
+`packages/server`, which is frozen, now depends on `@earendil-works/pi-agent-core`. That
+name does not exist in this workspace, so **npm installed upstream's published package**,
+the same failure the v0.84.4 entry recorded. It is tolerable only because `server` is a
+dev-only dependency. The real risk was 31 new upstream files (the experimental layer, its
+tests, an example plugin, two regression tests) importing that name and
+`@earendil-works/pi-coding-agent`, which would have compiled and tested against upstream's
+package. All 31 now use `apex-code-agent-core` and `apex-code`.
+
+With Apex's names, the experimental layer then needed `AgentHarness`, which ADR 0027 keeps
+out of the public index. The merge keeps the ADR: those files import harness names from
+`apex-code-agent-core/harness/agent-harness`, moved by a codemod that only moves names
+the compiler reported missing. **ADR 0027's premise no longer holds**, though:
+v0.85.1's harness has no `HarnessNotImplemented` stubs left (five references on `main`,
+zero upstream). Whether to re-export it is a public-API decision for its own change.
+
+The experimental layer also called `SettingsManager.create` without the trust decision
+ADR 0034 requires. It is source-only and ships in nothing, so it passes
+`projectTrusted: false` and fails closed.
+
+### Where the cost actually is
+
+- **Tool renderers moved.** Upstream split every built-in tool's rendering into
+  `core/tools/renderers/`. The first resolution took the moved files verbatim, which
+  silently dropped Apex's transcript-polish work (counted `formatHiddenLines` hints, no
+  duplicate bash duration, edit diffs that follow the detail cycle). Apex's render diff
+  against `v0.84.4` was re-applied to each renderer. This is the "upstream moved code"
+  hazard the v0.84.2 entry describes, at eight files at once.
+- **`ctx.cwd` in the tools (#8627).** Taken as the fallback beneath Apex's gated path.
+  A gated call still resolves against the factory cwd because `createPathPermissionSpec`
+  binds it, so upstream's fix covers ungated calls only. Follow-up.
+- **Managed tool downloads.** Apex keeps pinned, digest-verified downloads (ADR 0017).
+  Upstream's `getLatestVersion` (#8708) is not taken, and its musl builds (#9070) need new
+  verified pins before they can be. Follow-up.
+- **Skills with only `bash` (#8552).** Ported into Apex's budgeted names-only catalog
+  (ADR 0021) as a `fileReadTool` parameter rather than taking upstream's formatter.
+- **Session manager.** Upstream moved the `fileEntries` assignment into `_loadEntries`;
+  Apex's `entriesVersion` bump moved with it.
+- **The working indicator in the editor border (#8799)** is adopted as an opt-in only.
+  Apex's footer tray owns working status, and the composer's filled surface has no top
+  border to draw into.
+- **Upstream's new check scripts.** `check-runtime-deps.mjs` and its test are deleted: the
+  script reads upstream's release package list, so its own test fails against Apex's
+  `release-packages.mjs`. Expect it back as a modify/delete conflict. `check-entry-graphs`
+  and `coding-agent-consumer` pass their tests and stay, but are not wired into
+  `npm run check`, because they hard-code upstream's package names. Adapting them is a
+  follow-up.
+- **Upstream-owned prose.** Two Apex checks read every current document: the docs
+  lifecycle validator and the no-OS-sandbox surface test. Both failed on upstream's new
+  design notes, which describe upstream's tree and use "supervisor" in its process
+  sense. Both now skip one shared list, `scripts/apex/upstream-owned-docs.mjs`: those
+  notes, the experimental layer's READMEs, and every frozen package.
+
+### The model-data snapshot could not be refreshed with upstream's generator
+
+`v0.85.1`'s `pi-ai` types read shapes the `v0.84.4` snapshot in `vendor/model-data` did
+not have, so the build failed until the snapshot was regenerated. The generator then
+failed against the live API: models.dev renamed `kimi-for-coding` to
+`kimi-code-plan-global`, and every upstream tag through `v0.87.1` reads the old key. The
+snapshot was regenerated with the frozen generator unchanged, under a `NODE_OPTIONS`
+preload that aliases the old key in the fetched JSON for that one run. Until upstream
+reads the new key, `npm run refresh:model-data` fails the same way.
+
+### Resumed verification — 2026-09-26
+
+The merge was resumed from an interrupted, uncommitted worktree. The missing
+session-specific `2026-09-25-collapsed-by-default-transcript` spec and plan were not in
+this checkout. The newest tracked active spec is the unrelated
+`2026-09-22-print-mode-exit-codes.md`; the only merge plan available was a temporary
+resume checklist. This entry records the remaining v0.85.1 work directly.
+
+The resumed pass corrected the experimental test alias to resolve internal agent-core
+subpaths from workspace source without widening package exports (ADR 0027 still governs
+the public `AgentHarness` decision). It also repaired stale test fixtures and expectations
+for Apex environment names, the current OpenRouter catalog, foreground scrollbar colors,
+and the keybinding hint grammar. The server activation budget is 30 seconds; the
+concurrent cold-activation test passes with it. The plugin cold-server test has a
+120-second test budget because its two source-mode server generations exceed the old
+60-second limit under load.
+
+Focused verification passed: all 19 experimental suites (132 tests), the remote-runtime
+suite (26 tests), the theme/environment/model-registry/thinking-selector suites (116
+tests), and the environment/CLI/session-directory suites (25 tests). `npx tsgo --noEmit`
+and `npm run check` also passed.
+
+The full root `npm test` did not reach a clean run on this host. Its first run passed
+3,712 tests and skipped 51, with one timing-ratio failure in `packages/agent` and the
+remote plugin test timing out; both passed when isolated. A second full run passed the
+agent suite (705 tests) but produced 16 remote-runtime failures. A four-worker coding-agent
+run passed 3,708 tests and skipped 51, with five internal-server errors in remote-runtime
+cases. Those cases passed in focused reruns, and the full remote-runtime file then passed
+26/26. The host reported load average 18 and swap exhaustion during these runs, so resource
+contention is the likely explanation, but that remains an inference. A clean full-suite or
+CI run is still required before marking this merge verified.
 
 ## v0.84.4 — taken 2026-08-30
 

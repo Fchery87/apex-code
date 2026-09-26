@@ -1,6 +1,6 @@
 # ADR 0003 — Upstream merge cadence, patch-surface ceiling, and abandonment tripwires
 
-**Status:** Accepted · **Date:** 2026-08-08 · **Amended:** 2026-08-09 (ceiling basis moved from Phase 0 to post-Phase 2 — see Ceiling)
+**Status:** Accepted · **Date:** 2026-08-08 · **Amended:** 2026-08-09 (ceiling basis moved from Phase 0 to post-Phase 2 — see Ceiling); 2026-09-25 (ceiling set to 159 — see Ceiling)
 
 Pi ships fast. At the time of this decision, one installed harness on this machine
 tracked 0.83.0 while the predecessor extension layer was still built against 0.80.6 —
@@ -45,6 +45,14 @@ What Phase 0 did establish is **upstream churn**, the leading indicator: one *pa
 release moved 57 files and 2,049 lines inside the two forked packages. That rate is
 why the cadence above is a requirement and not a preference — see
 `docs/upstream-log.md`.
+
+**Set 2026-09-25: the ceiling is 159 conflicted hunks per merge.** The first three
+merges after Phase 2 recorded 53 (`v0.84.2`), 75 (`v0.84.3`), and 15 (`v0.84.4`)
+hunks; the median is 53, and 3 × 53 = 159. Those three counts are totals as
+`scripts/apex/upstream-merge.sh` reports them, so later merges compare the same total,
+and `docs/upstream-log.md` also records the forked-path share and the generated-lockfile
+share so a breach can be attributed. The number was derivable from 2026-08-30 and went
+unrecorded until the `v0.85.1` merge needed it.
 
 Two costs are tracked separately and must not be summed:
 

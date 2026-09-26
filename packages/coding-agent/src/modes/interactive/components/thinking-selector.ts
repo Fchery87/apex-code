@@ -4,7 +4,6 @@ import {
 	fuzzyFilter,
 	getKeybindings,
 	type Input,
-	matchesKey,
 	type SelectItem,
 	SelectList,
 	type SelectListLayoutOptions,
@@ -69,7 +68,7 @@ export class ThinkingSelectorComponent extends Container implements Focusable {
 
 		this.allItems = availableLevels.map((level) => ({
 			value: level,
-			label: level,
+			label: `${level === currentLevel ? "✓ " : "  "}${level}`,
 			description:
 				level === defaultThinkingLevel ? `${LEVEL_DESCRIPTIONS[level]} · default` : LEVEL_DESCRIPTIONS[level],
 		}));
@@ -96,7 +95,7 @@ export class ThinkingSelectorComponent extends Container implements Focusable {
 			new Text(
 				hintRow([
 					["tui.select.confirm", "select"],
-					[{ literal: "ctrl+s" }, "set as default"],
+					["app.thinking.save", "set as default"],
 					["tui.select.cancel", "close"],
 				]),
 				0,
@@ -121,7 +120,7 @@ export class ThinkingSelectorComponent extends Container implements Focusable {
 
 	private applyFilter(query: string): void {
 		const filtered = query
-			? fuzzyFilter(this.allItems, query, (item) => `${item.label} ${item.description ?? ""}`)
+			? fuzzyFilter(this.allItems, query, (item) => `${item.value} ${item.description ?? ""}`)
 			: this.allItems;
 		const selectedValue = this.selectList.getSelectedItem()?.value as ThinkingLevel | undefined;
 		const newList = this.buildSelectList(filtered, selectedValue);
@@ -130,13 +129,13 @@ export class ThinkingSelectorComponent extends Container implements Focusable {
 	}
 
 	handleInput(keyData: string): void {
-		if (matchesKey(keyData, "ctrl+s") && this.onSelectAsDefault) {
+		const kb = getKeybindings();
+		if (kb.matches(keyData, "app.thinking.save") && this.onSelectAsDefault) {
 			const item = this.selectList.getSelectedItem();
 			if (item) this.onSelectAsDefault(item.value as ThinkingLevel);
 			return;
 		}
 
-		const kb = getKeybindings();
 		const isNav =
 			kb.matches(keyData, "tui.select.up") ||
 			kb.matches(keyData, "tui.select.down") ||

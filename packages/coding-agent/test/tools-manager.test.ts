@@ -24,6 +24,7 @@ vi.mock("child_process", async (importOriginal) => {
 afterEach(() => {
 	if (originalOffline === undefined) delete process.env.PI_OFFLINE;
 	else process.env.PI_OFFLINE = originalOffline;
+	vi.unstubAllGlobals();
 });
 
 describe("ensureTool", () => {
@@ -43,5 +44,28 @@ describe("ensureTool", () => {
 		]);
 		expect(consoleLog).not.toHaveBeenCalled();
 		consoleLog.mockRestore();
+	});
+
+	it("surfaces the error cause chain when a download fails", async () => {
+		delete process.env.PI_OFFLINE;
+		const cause = new Error("connect ETIMEDOUT 140.82.113.3:443");
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => {
+				throw new TypeError("fetch failed", { cause });
+			}),
+		);
+		const statuses: ToolStatus[] = [];
+
+		const result = await ensureTool("fd", (status) => statuses.push(status));
+
+		expect(result).toBeUndefined();
+		expect(statuses).toEqual([
+			{ type: "info", message: "fd not found. Downloading..." },
+			{
+				type: "warning",
+				message: "Failed to download fd: fetch failed: connect ETIMEDOUT 140.82.113.3:443",
+			},
+		]);
 	});
 });
