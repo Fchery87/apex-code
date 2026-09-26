@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { VERSION } from "../src/config.ts";
 
@@ -20,7 +21,7 @@ function runEntry(entry: string, experimental: boolean) {
 		process.execPath,
 		[
 			"--import",
-			sourceResolverPath,
+			pathToFileURL(sourceResolverPath).href,
 			resolve(__dirname, "../src", entry),
 			"server",
 			"--server-id",

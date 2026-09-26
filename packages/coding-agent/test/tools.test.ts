@@ -1072,7 +1072,7 @@ describe("tool cwd resolution", () => {
 			fakeCtx(testDir),
 		);
 		const output = getTextOutput(result);
-		expect(output).toContain(testDir);
+		expect(output).toContain(basename(testDir));
 	});
 });
 

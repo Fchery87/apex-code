@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
@@ -40,7 +41,7 @@ describe("server-selected presentation facets", () => {
 	});
 
 	test("restores plugin package selections for later server generations", async () => {
-		const directory = await mkdtemp("/tmp/pi-presentation-profile-");
+		const directory = await mkdtemp(join(tmpdir(), "pi-presentation-profile-"));
 		directories.add(directory);
 		const serverId = randomUUID();
 		const packagePaths = [join(directory, "first-plugin"), join(directory, "second-plugin")];
@@ -51,7 +52,7 @@ describe("server-selected presentation facets", () => {
 	});
 
 	test("builds conventional plugin entries into the server-owned plugin cache", async () => {
-		const directory = await mkdtemp("/tmp/pi-presentation-package-");
+		const directory = await mkdtemp(join(tmpdir(), "pi-presentation-package-"));
 		directories.add(directory);
 		const serverId = randomUUID();
 		const packagePath = join(directory, "pi-example-plugin");
@@ -156,7 +157,7 @@ describe("server-selected presentation facets", () => {
 	});
 
 	test("builds the example plugin package without a package-owned build script", async () => {
-		const directory = await mkdtemp("/tmp/pi-example-plugin-");
+		const directory = await mkdtemp(join(tmpdir(), "pi-example-plugin-"));
 		directories.add(directory);
 		const serverId = randomUUID();
 		const packagePath = fileURLToPath(new URL("../examples/plugins/pi-example-plugin", import.meta.url));
