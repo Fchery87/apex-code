@@ -26,7 +26,7 @@ Use `/trust` in interactive mode to save a project trust decision for future ses
 ### Model & Thinking
 
 | Setting | Type | Default | Description |
-|---|---|---|---|
+|---------|------|---------|-------------|
 | `defaultProvider` | string | Automatic | Startup AI provider. |
 | `defaultModel` | string | Automatic | Startup model ID. |
 | `defaultThinkingLevel` | `"off" \| "minimal" \| "low" \| "medium" \| "high" \| "xhigh" \| "max"` | `"medium"` | Startup thinking level. |
@@ -34,6 +34,7 @@ Use `/trust` in interactive mode to save a project trust decision for future ses
 | `thinkingBudgets` | object | Built-in budgets | Token budgets for `minimal`, `low`, `medium`, and `high` thinking levels. |
 | `enabledModels` | `string[]` | All available models | Model patterns used for startup selection and model cycling. Uses the same format as `--models`. |
 | `hideThinkingBlock` | boolean | `false` | Hide thinking blocks in the transcript. |
+| `chatDetail` | `"overview" \| "details" \| "all"` | unset | Transcript detail level for new sessions. `unset` opens at overview; the saved value changes when you cycle detail with `ctrl+o` or select it in `/settings`. |
 | `showCacheMissNotices` | boolean | `false` | Show notices for significant cache misses, successful cache warming, compaction usage, and provider recovery. |
 | `cacheWarming` | `"off" \| "streaming" \| "idle"` | `"streaming"` | Keep eligible provider prompt caches warm during active runs or, with `"idle"`, between runs. Global setting only. |
 

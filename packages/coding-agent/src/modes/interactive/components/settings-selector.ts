@@ -18,6 +18,8 @@ import { PERMISSION_MODES, type PermissionMode } from "../../../core/permissions
 import {
 	CACHE_WARMING_MODES,
 	type CacheWarmingMode,
+	CHAT_DETAILS,
+	type ChatDetail,
 	type DefaultProjectTrust,
 	type FullscreenExitOutput,
 	type MermaidRenderingMode,
@@ -139,6 +141,7 @@ export interface SettingsConfig {
 	terminalTheme: TerminalTheme;
 	availableThemes: string[];
 	hideThinkingBlock: boolean;
+	chatDetail: ChatDetail;
 	mermaidRenderingMode: MermaidRenderingMode;
 	showCacheMissNotices: boolean;
 	collapseChangelog: boolean;
@@ -179,6 +182,7 @@ export interface SettingsCallbacks {
 	onThemeChange: (theme: string) => void;
 	onThemePreview?: (theme: string) => void;
 	onHideThinkingBlockChange: (hidden: boolean) => void;
+	onChatDetailChange: (detail: ChatDetail) => void;
 	onMermaidRenderingModeChange: (mode: MermaidRenderingMode) => void;
 	onShowCacheMissNoticesChange: (shown: boolean) => void;
 	onCollapseChangelogChange: (collapsed: boolean) => void;
@@ -680,6 +684,14 @@ export class SettingsSelectorComponent extends Container {
 				values: ["true", "false"],
 			},
 			{
+				id: "chat-detail",
+				label: "Conversation detail",
+				description:
+					"How much of the transcript shows: overview collapses everything, details shows diffs and thinking, all shows full tool output",
+				currentValue: config.chatDetail,
+				values: [...CHAT_DETAILS],
+			},
+			{
 				id: "mermaid-rendering",
 				label: "Mermaid diagrams",
 				description: "Render Mermaid code blocks as Unicode diagrams",
@@ -1048,6 +1060,9 @@ export class SettingsSelectorComponent extends Container {
 						break;
 					case "hide-thinking":
 						callbacks.onHideThinkingBlockChange(newValue === "true");
+						break;
+					case "chat-detail":
+						callbacks.onChatDetailChange(newValue as ChatDetail);
 						break;
 					case "mermaid-rendering":
 						callbacks.onMermaidRenderingModeChange(newValue as MermaidRenderingMode);
