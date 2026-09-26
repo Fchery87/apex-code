@@ -47,9 +47,10 @@ export function spawnInternalProcess(
 		throw new Error("A compiled Bun executable cannot launch an external internal-process entrypoint");
 	}
 	const entryUrl = defaultEntryUrl(role, options.entryUrl);
-	const sourceRuntimeArgs = import.meta.url.endsWith(".ts")
-		? ["--import", new URL("source-resolver.ts", import.meta.url).href]
-		: [];
+	const sourceResolverUrl = new URL("source-resolver.ts", import.meta.url);
+	const sourceResolverSpecifier =
+		process.platform === "win32" ? sourceResolverUrl.href : fileURLToPath(sourceResolverUrl);
+	const sourceRuntimeArgs = import.meta.url.endsWith(".ts") ? ["--import", sourceResolverSpecifier] : [];
 	const child = spawn(
 		process.execPath,
 		isBunBinary ? [...args] : [...sourceRuntimeArgs, fileURLToPath(entryUrl), ...args],
