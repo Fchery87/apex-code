@@ -188,11 +188,11 @@ import { InteractiveThemeController } from "./theme/theme-controller.ts";
  *
  * One cycled value rather than a set of independent booleans, because the
  * readings are ordered and only three of the eight combinations are coherent.
- * `details` is the default and reproduces the pre-cycle behaviour exactly, so
- * the rung exists in both directions and an upgrade changes nothing until the
- * key is pressed.
  */
 export type ChatDetail = "overview" | "details" | "all";
+
+/** A session opens with everything collapsed; the expand key opens it rung by rung. */
+export const INITIAL_CHAT_DETAIL: ChatDetail = "overview";
 
 const CHAT_DETAIL_ORDER: readonly ChatDetail[] = ["overview", "details", "all"];
 
@@ -207,11 +207,11 @@ export interface ChatDetailView {
 	/** Inline diffs are shown rather than reduced to their line counts. */
 	editDiffsExpanded: boolean;
 	/**
-	 * Thinking blocks are shown even when the user's persisted setting hides them.
-	 * Only `all` does this, because only `all` is an unambiguous request for
-	 * everything; the override is never written back to settings.
+	 * Whether thinking blocks show. `preference` defers to the persisted
+	 * hide-thinking setting; the other two override it for presentation only
+	 * and are never written back to settings.
 	 */
-	revealThinking: boolean;
+	thinking: "collapsed" | "preference" | "revealed";
 }
 
 /** The single place the three rungs turn into rendering flags. */
@@ -219,7 +219,7 @@ export function chatDetailView(detail: ChatDetail): ChatDetailView {
 	return {
 		toolOutputExpanded: detail === "all",
 		editDiffsExpanded: detail !== "overview",
-		revealThinking: detail === "all",
+		thinking: detail === "overview" ? "collapsed" : detail === "details" ? "preference" : "revealed",
 	};
 }
 
@@ -570,9 +570,9 @@ export class InteractiveMode {
 	private pendingTools = new Map<string, ToolExecutionComponent>();
 
 	// Tool output expansion state
-	private chatDetail: ChatDetail = "details";
-	private toolOutputExpanded = false;
-	private editDiffsExpanded = true;
+	private chatDetail: ChatDetail = INITIAL_CHAT_DETAIL;
+	private toolOutputExpanded = chatDetailView(INITIAL_CHAT_DETAIL).toolOutputExpanded;
+	private editDiffsExpanded = chatDetailView(INITIAL_CHAT_DETAIL).editDiffsExpanded;
 
 	// Thinking block visibility state
 	private hideThinkingBlock = false;
@@ -4518,7 +4518,8 @@ export class InteractiveMode {
 
 	/** True when thinking blocks are hidden right now, setting and detail level combined. */
 	private isThinkingHidden(): boolean {
-		return this.hideThinkingBlock && !chatDetailView(this.chatDetail).revealThinking;
+		const { thinking } = chatDetailView(this.chatDetail);
+		return thinking === "preference" ? this.hideThinkingBlock : thinking === "collapsed";
 	}
 
 	private applyChatDetail(): void {
@@ -4567,6 +4568,8 @@ export class InteractiveMode {
 		this.offerFirstUseHint("thinking");
 		this.hideThinkingBlock = !this.hideThinkingBlock;
 		this.settingsManager.setHideThinkingBlock(this.hideThinkingBlock);
+		// Overview collapses thinking regardless of the preference, so asking to see it has to leave overview.
+		if (!this.hideThinkingBlock && this.chatDetail === "overview") this.setChatDetail("details");
 		this.updateThinkingBlockVisibility();
 		this.showStatus(`Thinking blocks: ${this.hideThinkingBlock ? "hidden" : "visible"}`);
 	}

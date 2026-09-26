@@ -246,6 +246,30 @@ describe("InteractiveMode conversation detail", () => {
 		// The override is presentation only; the preference itself is untouched.
 		expect(mode.hideThinkingBlock).toBe(true);
 	});
+
+	test("collapses visible thinking at overview and shows it again at details", () => {
+		const { mode } = createMode();
+		mode.hideThinkingBlock = false;
+
+		mode.setChatDetail("overview");
+		expect(mode.isThinkingHidden()).toBe(true);
+		mode.setChatDetail("details");
+		expect(mode.isThinkingHidden()).toBe(false);
+		expect(mode.hideThinkingBlock).toBe(false);
+	});
+
+	test("showing thinking from overview opens the transcript far enough to see it", () => {
+		const { mode } = createMode();
+		mode.hideThinkingBlock = true;
+		Object.defineProperty(mode, "settingsManager", { value: { setHideThinkingBlock: vi.fn() } });
+		mode.offerFirstUseHint = vi.fn();
+		mode.setChatDetail("overview");
+
+		mode.toggleThinkingBlockVisibility();
+
+		expect(mode.chatDetail).toBe("details");
+		expect(mode.isThinkingHidden()).toBe(false);
+	});
 });
 
 describe("InteractiveMode.createExtensionUIContext setTheme", () => {

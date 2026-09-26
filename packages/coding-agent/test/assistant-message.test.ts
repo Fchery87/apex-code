@@ -1,6 +1,7 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import { visibleWidth } from "@earendil-works/pi-tui";
+import { setKeybindings, visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, test } from "vitest";
+import { KeybindingsManager } from "../src/core/keybindings.ts";
 import { AssistantMessageComponent } from "../src/modes/interactive/components/assistant-message.ts";
 import { UserMessageComponent } from "../src/modes/interactive/components/user-message.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
@@ -101,6 +102,20 @@ describe("AssistantMessageComponent", () => {
 
 		expect(rendered.match(/Thinking\.\.\./g)).toHaveLength(1);
 		expect(rendered).toContain("answer");
+	});
+
+	test("tells the reader how to expand collapsed thinking", () => {
+		initTheme("dark");
+		setKeybindings(new KeybindingsManager());
+
+		const component = new AssistantMessageComponent(
+			createAssistantMessage([{ type: "thinking", thinking: "private reasoning" }]),
+			true,
+		);
+		const rendered = stripAnsi(component.render(80).join("\n"));
+
+		expect(rendered).toContain("Thinking... ctrl+o to expand");
+		expect(rendered).not.toContain("private reasoning");
 	});
 
 	test("never renders wider than the width it was given", () => {
