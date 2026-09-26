@@ -187,7 +187,9 @@ describe("InteractiveMode conversation detail", () => {
 			ui: { requestRender: vi.fn() },
 			showStatus: vi.fn(),
 		});
-		return { mode, header, loadedResourcesChild, chatChild };
+		const settings = { setChatDetail: vi.fn(), setHideThinkingBlock: vi.fn() };
+		Object.defineProperty(mode, "settingsManager", { value: settings });
+		return { mode, header, loadedResourcesChild, chatChild, settings };
 	}
 
 	test("applies expansion state to the active header and chat entries", () => {
@@ -225,6 +227,35 @@ describe("InteractiveMode conversation detail", () => {
 		expect(mode.chatDetail).toBe("details");
 	});
 
+	test("remembers the level the user cycles to", () => {
+		const { mode, settings } = createMode();
+
+		mode.cycleChatDetail();
+
+		expect(settings.setChatDetail).toHaveBeenCalledWith("all");
+	});
+
+	test("does not remember a level an extension asks for", () => {
+		const { mode, settings } = createMode();
+
+		mode.setToolsExpanded(true);
+
+		expect(settings.setChatDetail).not.toHaveBeenCalled();
+	});
+
+	test("opens at the remembered level, or collapsed when there is none", () => {
+		const { mode } = createMode();
+
+		mode.loadChatDetail(undefined);
+		expect(mode.chatDetail).toBe("overview");
+		expect(mode.editDiffsExpanded).toBe(false);
+
+		mode.loadChatDetail("all");
+		expect(mode.chatDetail).toBe("all");
+		expect(mode.toolOutputExpanded).toBe(true);
+		expect(mode.editDiffsExpanded).toBe(true);
+	});
+
 	test("collapses diffs only at overview", () => {
 		const { mode, chatChild } = createMode();
 
@@ -245,6 +276,30 @@ describe("InteractiveMode conversation detail", () => {
 		expect(mode.isThinkingHidden()).toBe(true);
 		// The override is presentation only; the preference itself is untouched.
 		expect(mode.hideThinkingBlock).toBe(true);
+	});
+
+	test("collapses visible thinking at overview and shows it again at details", () => {
+		const { mode } = createMode();
+		mode.hideThinkingBlock = false;
+
+		mode.setChatDetail("overview");
+		expect(mode.isThinkingHidden()).toBe(true);
+		mode.setChatDetail("details");
+		expect(mode.isThinkingHidden()).toBe(false);
+		expect(mode.hideThinkingBlock).toBe(false);
+	});
+
+	test("showing thinking from overview opens the transcript far enough to see it", () => {
+		const { mode, settings } = createMode();
+		mode.hideThinkingBlock = true;
+		mode.offerFirstUseHint = vi.fn();
+		mode.setChatDetail("overview");
+
+		mode.toggleThinkingBlockVisibility();
+
+		expect(mode.chatDetail).toBe("details");
+		expect(settings.setChatDetail).toHaveBeenCalledWith("details");
+		expect(mode.isThinkingHidden()).toBe(false);
 	});
 });
 

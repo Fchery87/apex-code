@@ -36,6 +36,23 @@ describe("SettingsManager", () => {
 		]);
 	});
 
+	it("remembers the conversation detail level across sessions", async () => {
+		const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
+		expect(manager.getChatDetail()).toBeUndefined();
+
+		manager.setChatDetail("all");
+		await manager.flush();
+
+		expect(SettingsManager.create(projectDir, agentDir, { projectTrusted: true }).getChatDetail()).toBe("all");
+		expect(JSON.parse(readFileSync(join(agentDir, "settings.json"), "utf-8")).chatDetail).toBe("all");
+	});
+
+	it("ignores a conversation detail level it does not know", () => {
+		expect(
+			SettingsManager.inMemory({ chatDetail: "verbose" } as unknown as Settings).getChatDetail(),
+		).toBeUndefined();
+	});
+
 	it("shows one line of release notes after an update unless asked for all of them", async () => {
 		const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 		expect(manager.getCollapseChangelog()).toBe(true);

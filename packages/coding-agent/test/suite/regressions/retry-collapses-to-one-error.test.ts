@@ -1,7 +1,8 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import { Container, type TUI } from "@earendil-works/pi-tui";
+import { Container, setKeybindings, type TUI } from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import type { AgentSessionEvent } from "../../../src/core/agent-session.ts";
+import { KeybindingsManager } from "../../../src/core/keybindings.ts";
 import { InteractiveMode } from "../../../src/modes/interactive/interactive-mode.ts";
 import { initTheme } from "../../../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../../../src/utils/ansi.ts";
@@ -34,10 +35,13 @@ function createFakeInteractiveModeThis() {
 		showStatusIndicator: (indicator: { dispose(): void }) => indicator.dispose(),
 		clearStatusIndicator: vi.fn(),
 		showError: prototype.showError,
+		adoptChatDetail: prototype.adoptChatDetail,
+		toolOutputExpanded: false,
+		editDiffsExpanded: false,
 	};
 }
 
-function failedAttempt(): AssistantMessage {
+function failedAttempt(errorMessage = UNAVAILABLE): AssistantMessage {
 	return {
 		role: "assistant",
 		content: [],
@@ -53,13 +57,13 @@ function failedAttempt(): AssistantMessage {
 			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 		},
 		stopReason: "error",
-		errorMessage: UNAVAILABLE,
+		errorMessage,
 		timestamp: Date.now(),
 	};
 }
 
-async function fail(fakeThis: unknown): Promise<void> {
-	const message = failedAttempt();
+async function fail(fakeThis: unknown, errorMessage?: string): Promise<void> {
+	const message = failedAttempt(errorMessage);
 	await handleEvent.call(fakeThis, { type: "message_start", message });
 	await handleEvent.call(fakeThis, { type: "message_end", message });
 }
@@ -84,6 +88,7 @@ function errorLines(fakeThis: { chatContainer: Container }): string[] {
 describe("a retried request in the chat", () => {
 	beforeAll(() => {
 		initTheme("dark");
+		setKeybindings(new KeybindingsManager());
 	});
 
 	test("leaves one error line when every retry fails", async () => {
@@ -127,6 +132,17 @@ describe("a retried request in the chat", () => {
 		await handleEvent.call(fakeThis, { type: "auto_retry_end", success: false, attempt: 3, finalError: UNAVAILABLE });
 
 		expect(errorLines(fakeThis).at(-1)).toBe(`Error: ${UNAVAILABLE} (gave up after 3 retries)`);
+	});
+
+	test("keeps the outcome on the folded line of a multi-line error", async () => {
+		const fakeThis = createFakeInteractiveModeThis();
+		const detailed = `${UNAVAILABLE}\nrequest id: abc123`;
+		await fail(fakeThis, detailed);
+		await scheduleRetry(fakeThis, 1);
+		await fail(fakeThis, detailed);
+		await handleEvent.call(fakeThis, { type: "auto_retry_end", success: false, attempt: 1, finalError: detailed });
+
+		expect(errorLines(fakeThis)).toEqual([`Error: ${UNAVAILABLE} (gave up after 1 retry) ctrl+o to expand`]);
 	});
 
 	test("leaves no error line when a retry succeeds", async () => {
