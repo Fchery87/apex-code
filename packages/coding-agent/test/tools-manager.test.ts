@@ -2,6 +2,7 @@ import type * as ChildProcess from "node:child_process";
 import type * as Fs from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ensureTool, type ToolStatus } from "../src/utils/tools-manager.ts";
+import { allowNetwork } from "./test-network-env.ts";
 
 const originalOffline = process.env.PI_OFFLINE;
 
@@ -47,6 +48,7 @@ describe("ensureTool", () => {
 	});
 
 	it("surfaces the error cause chain when a download fails", async () => {
+		allowNetwork();
 		delete process.env.PI_OFFLINE;
 		const cause = new Error("connect ETIMEDOUT 140.82.113.3:443");
 		vi.stubGlobal(

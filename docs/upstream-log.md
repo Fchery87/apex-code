@@ -360,6 +360,14 @@ cases. Those cases passed in focused reruns, and the full remote-runtime file th
 contention is the likely explanation, but that remains an inference. A clean full-suite or
 CI run is still required before marking this merge verified.
 
+A later full run with local IPC permission passed the script suite (215 tests, four skipped)
+and agent suite (705 tests, one skipped), but coding-agent reported 14 failures. Thirteen
+were package-manager/tool tests that expected mocked network paths while Vitest's default
+`APEX_CODE_OFFLINE=1` remained set; those tests only cleared the legacy `PI_OFFLINE` name.
+The tests now use the existing `allowNetwork()` helper. Both affected files pass together
+(125 tests), and the remaining remote-runtime failure passed in isolation. The full suite
+has not yet been rerun against this correction, so the verification gate remains open.
+
 ## v0.84.4 — taken 2026-08-30
 
 The cheapest release taken so far, and the first where the cost was not in the merge.
