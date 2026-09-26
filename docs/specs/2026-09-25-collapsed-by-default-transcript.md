@@ -11,7 +11,7 @@
 | Last updated | `2026-09-25` |
 | Roadmap phase | `none — product-surface follow-up` |
 | Tracking issue/PR | `none` |
-| Compatibility posture | `Presentation only, clean break on the default. No session file, setting, CLI flag, or extension API changes shape. A session now opens at overview instead of details. Nothing persists the detail level, so no user has a stored value to migrate.` |
+| Compatibility posture | `Clean break on the default, additive in settings. A session with no saved level now opens at overview instead of details. A new optional global setting, chatDetail, stores the level the user last chose; an unknown value reads as unset, so no user has a stored value to migrate. No session file, CLI flag, or extension API changes shape.` |
 
 ## Summary
 
@@ -50,11 +50,15 @@ that did not collapse thinking.
 - The collapsed thinking line names the key that expands it.
 - Showing thinking with `ctrl+t` while at `overview` actually shows it.
 - A multi-line error shows one summary line plus the expand hint until `all`.
+- The level the user picks is remembered, so the next session opens at it.
 
 ## Non-goals
 
 - Collapsing assistant answer text. The answer is the thing the user reads.
-- Persisting the detail level across sessions. Every session starts collapsed.
+- Saving a level an extension requests through `setToolsExpanded`. An extension
+  should not decide how the next session opens.
+- A per-project detail level. How much detail a person likes is a habit, not a
+  property of the repository.
 - Collapsing one-line errors. There is nothing to fold.
 
 ## Proposed solution
@@ -83,16 +87,28 @@ Errors open at `all`, the same rung as tool output, as in Prime.
 Turning thinking on with `app.thinking.toggle` at `overview` moves to `details`,
 because `overview` would otherwise swallow the request.
 
+The level is remembered in global settings as `chatDetail`, the same shape Prime
+uses. `CHAT_DETAILS` in `core/settings-manager.ts` owns the three values and
+their cycle order. `getChatDetail()` returns undefined for an unset or unknown
+value, and interactive mode falls back to `INITIAL_CHAT_DETAIL`, so the default
+lives in one place. `chooseChatDetail()` saves and applies; it serves the expand
+key, the `ctrl+t` escape from `overview`, and a new Conversation detail row in
+`/settings`. `setToolsExpanded` applies without saving. The saved level is read
+at startup and on `/reload`, before the transcript renders. The `all` rung's
+thinking override is still never written to the hide-thinking setting.
+
 ## Deletion inventory
 
 - `ChatDetailView.revealThinking`, replaced by `thinking`.
 - The "details reproduces pre-cycle behaviour" rationale in the `ChatDetail` doc
   comment, which no longer holds.
+- `CHAT_DETAIL_ORDER` in `interactive-mode.ts`, replaced by `CHAT_DETAILS` in
+  settings so the cycle and the setting share one list.
 
 ## Risks
 
-- Users who liked seeing thinking by default now press `ctrl+o` once per session.
-  Mitigation if it proves unpopular: a `chatDetail` setting, as Prime has.
+- A user who leaves the level at `all` resumes a long session fully expanded. One
+  `ctrl+o` collapses it, and that choice is saved too.
 
 ## Verification
 
@@ -103,6 +119,11 @@ because `overview` would otherwise swallow the request.
   `Thinking... ctrl+o to expand` and hides the reasoning, and that a multi-line
   error folds until `setExpanded(true)` while a one-line error is left alone.
 - `test/error-summary.test.ts` pins the summary rule.
+- `test/settings-manager.test.ts` round-trips `chatDetail` through the global
+  settings file and ignores an unknown value.
+- `test/interactive-mode-status.test.ts` saves a cycled level, does not save an
+  extension's request, and opens at the saved level or `overview` when unset.
+- `test/settings-selector.test.ts` cycles the Conversation detail row.
 - `test/suite/regressions/retry-collapses-to-one-error.test.ts` keeps the retry
   outcome on the folded line.
 

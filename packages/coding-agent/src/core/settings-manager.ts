@@ -155,6 +155,10 @@ export interface ThinkingBudgetsSettings {
 
 export type MermaidRenderingMode = "off" | "final" | "streaming";
 
+/** How much of the transcript is on screen; the expand key cycles it in this order. */
+export const CHAT_DETAILS = ["overview", "details", "all"] as const;
+export type ChatDetail = (typeof CHAT_DETAILS)[number];
+
 export interface MarkdownSettings {
 	codeBlockIndent?: string; // default: "  "
 	mermaid?: MermaidRenderingMode; // default: "streaming"
@@ -225,6 +229,7 @@ export interface Settings {
 	defaultProjectTrust?: DefaultProjectTrust; // default: "ask"; global setting only
 	shellCommandPrefix?: string; // Prefix prepended to every bash command (e.g., "shopt -s expand_aliases" for alias support)
 	npmCommand?: string[]; // Command used for npm package lookup/install operations, argv-style (e.g., ["mise", "exec", "node@20", "--", "npm"])
+	chatDetail?: ChatDetail; // Transcript detail level, saved when the user changes it (unset opens collapsed)
 	collapseChangelog?: boolean; // Show one line after an update (default true; /changelog for the full notes)
 	// default: true - HTTP attribution headers (e.g. OpenRouter/NVIDIA billing-origin
 	// tags) sent to the LLM provider you configured, for that provider's own
@@ -1346,6 +1351,18 @@ export class SettingsManager {
 	setNpmCommand(command: string[] | undefined): void {
 		this.globalSettings.npmCommand = command ? [...command] : undefined;
 		this.markModified("npmCommand");
+		this.save();
+	}
+
+	/** The saved detail level, or undefined when none is saved or the saved value is unknown. */
+	getChatDetail(): ChatDetail | undefined {
+		const detail = this.settings.chatDetail;
+		return CHAT_DETAILS.find((known) => known === detail);
+	}
+
+	setChatDetail(detail: ChatDetail): void {
+		this.globalSettings.chatDetail = detail;
+		this.markModified("chatDetail");
 		this.save();
 	}
 

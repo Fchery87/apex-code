@@ -89,6 +89,9 @@ type RebindContext = {
 
 type ReloadCommandContext = {
 	hideThinkingBlock: boolean;
+	chatDetail?: string;
+	loadChatDetail: (saved: string | undefined) => void;
+	assignChatDetail: (detail: string) => void;
 	session: {
 		isStreaming: boolean;
 		isCompacting: boolean;
@@ -100,6 +103,7 @@ type ReloadCommandContext = {
 	settingsManager: {
 		getHttpIdleTimeoutMs: () => number;
 		getHideThinkingBlock: () => boolean;
+		getChatDetail: () => string | undefined;
 		getOutputPad: () => 0 | 1;
 		getEditorPaddingX: () => number;
 		getAutocompleteMaxVisible: () => number;
@@ -158,6 +162,8 @@ function createReloadCommandContext(overrides: ReloadCommandContextOverrides = {
 	const editor = overrides.editor ?? {};
 	return {
 		hideThinkingBlock: overrides.hideThinkingBlock ?? false,
+		loadChatDetail: (InteractiveMode.prototype as unknown as ReloadCommandContext).loadChatDetail,
+		assignChatDetail: (InteractiveMode.prototype as unknown as ReloadCommandContext).assignChatDetail,
 		session: {
 			isStreaming: false,
 			isCompacting: false,
@@ -172,6 +178,7 @@ function createReloadCommandContext(overrides: ReloadCommandContextOverrides = {
 		settingsManager: {
 			getHttpIdleTimeoutMs: () => 0,
 			getHideThinkingBlock: () => false,
+			getChatDetail: () => undefined,
 			getOutputPad: () => 1,
 			getEditorPaddingX: () => 1,
 			getAutocompleteMaxVisible: () => 10,
@@ -450,12 +457,12 @@ describe("regression #5943: session_start transient UI", () => {
 		}
 	});
 
-	it("refreshes hideThinkingBlock before rebuilding chat during reload", async () => {
+	it("refreshes hideThinkingBlock and the saved detail level before rebuilding chat during reload", async () => {
 		initTheme("dark", false);
 		const events: string[] = [];
 		let context: ReloadCommandContext;
 		context = createReloadCommandContext({
-			settingsManager: { getHideThinkingBlock: () => true },
+			settingsManager: { getHideThinkingBlock: () => true, getChatDetail: () => "all" },
 			session: {
 				reload: async (options) => {
 					events.push("reload");
@@ -464,14 +471,14 @@ describe("regression #5943: session_start transient UI", () => {
 				},
 			},
 			rebuildChatFromMessages: () => {
-				events.push(`rebuild:${context.hideThinkingBlock}`);
+				events.push(`rebuild:${context.hideThinkingBlock}:${context.chatDetail}`);
 			},
 		});
 
 		await interactiveModePrototype.handleReloadCommand.call(context);
 
 		expect(context.hideThinkingBlock).toBe(true);
-		expect(events).toEqual(["reload", "rebuild:true", "start:true"]);
+		expect(events).toEqual(["reload", "rebuild:true:all", "start:true"]);
 	});
 
 	it("keeps the reload blocker focused until async reload completes", async () => {

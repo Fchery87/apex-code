@@ -100,7 +100,7 @@ import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
 import { type SessionEntry, SessionManager, sessionEntryToContextMessages } from "../../core/session-manager.ts";
 import { formatShareUnavailableMessage, publishSessionShare } from "../../core/session-share.ts";
-import type { FullscreenExitOutput, TuiMode } from "../../core/settings-manager.ts";
+import { CHAT_DETAILS, type ChatDetail, type FullscreenExitOutput, type TuiMode } from "../../core/settings-manager.ts";
 import { slugifySkillCommandName } from "../../core/skills.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
@@ -190,16 +190,14 @@ import { InteractiveThemeController } from "./theme/theme-controller.ts";
  * One cycled value rather than a set of independent booleans, because the
  * readings are ordered and only three of the eight combinations are coherent.
  */
-export type ChatDetail = "overview" | "details" | "all";
+export type { ChatDetail };
 
 /** A session opens with everything collapsed; the expand key opens it rung by rung. */
 export const INITIAL_CHAT_DETAIL: ChatDetail = "overview";
 
-const CHAT_DETAIL_ORDER: readonly ChatDetail[] = ["overview", "details", "all"];
-
 /** The next rung, wrapping from `all` back to `overview`. */
 export function nextChatDetail(detail: ChatDetail): ChatDetail {
-	return CHAT_DETAIL_ORDER[(CHAT_DETAIL_ORDER.indexOf(detail) + 1) % CHAT_DETAIL_ORDER.length] ?? "details";
+	return CHAT_DETAILS[(CHAT_DETAILS.indexOf(detail) + 1) % CHAT_DETAILS.length] ?? INITIAL_CHAT_DETAIL;
 }
 
 export interface ChatDetailView {
@@ -765,8 +763,8 @@ export class InteractiveMode {
 		this.footerContainer = new Container();
 		this.footerContainer.addChild(this.footer);
 
-		// Load hide thinking block setting
 		this.hideThinkingBlock = this.settingsManager.getHideThinkingBlock();
+		this.loadChatDetail(this.settingsManager.getChatDetail());
 		this.outputPad = this.settingsManager.getOutputPad();
 
 		// Register themes from resource loader and initialize
@@ -4518,21 +4516,36 @@ export class InteractiveMode {
 		if (hasEditDiffsExpansion(component)) component.setEditDiffsExpanded(this.editDiffsExpanded);
 	}
 
+	/** The expand key. A level the user picks is saved, so the next session opens at it. */
 	private cycleChatDetail(): void {
-		this.setChatDetail(nextChatDetail(this.chatDetail));
+		this.chooseChatDetail(nextChatDetail(this.chatDetail));
+	}
+
+	private chooseChatDetail(detail: ChatDetail): void {
+		this.settingsManager.setChatDetail(detail);
+		this.setChatDetail(detail);
+	}
+
+	/** Adopt a saved level before the transcript renders; unset opens collapsed. */
+	private loadChatDetail(saved: ChatDetail | undefined): void {
+		this.assignChatDetail(saved ?? INITIAL_CHAT_DETAIL);
+	}
+
+	private assignChatDetail(detail: ChatDetail): void {
+		const view = chatDetailView(detail);
+		this.chatDetail = detail;
+		this.toolOutputExpanded = view.toolOutputExpanded;
+		this.editDiffsExpanded = view.editDiffsExpanded;
 	}
 
 	/**
-	 * Presentation only. This never rewrites messages, settings, or the session
-	 * transcript, which is why it may override the persisted thinking preference
-	 * at `all` without saving that override.
+	 * Presentation only. This never rewrites messages or the session transcript,
+	 * and never the hide-thinking preference, which `all` overrides unsaved.
+	 * Saving the level itself is `chooseChatDetail`'s job, for user choices only.
 	 */
 	private setChatDetail(detail: ChatDetail): void {
 		if (detail === this.chatDetail) return;
-		this.chatDetail = detail;
-		const view = chatDetailView(detail);
-		this.toolOutputExpanded = view.toolOutputExpanded;
-		this.editDiffsExpanded = view.editDiffsExpanded;
+		this.assignChatDetail(detail);
 		this.applyChatDetail();
 		this.showStatus(`Conversation detail: ${detail}`);
 	}
@@ -4569,7 +4582,8 @@ export class InteractiveMode {
 	 *
 	 * Collapsing maps to `details` rather than `overview`, because an extension
 	 * asking to collapse tool output has not asked to hide edit diffs, and
-	 * `details` is the level where only tool output is collapsed.
+	 * `details` is the level where only tool output is collapsed. Not saved: an
+	 * extension's request should not decide how the next session opens.
 	 */
 	private setToolsExpanded(expanded: boolean): void {
 		this.setChatDetail(expanded ? "all" : "details");
@@ -4590,7 +4604,7 @@ export class InteractiveMode {
 		this.hideThinkingBlock = !this.hideThinkingBlock;
 		this.settingsManager.setHideThinkingBlock(this.hideThinkingBlock);
 		// Overview collapses thinking regardless of the preference, so asking to see it has to leave overview.
-		if (!this.hideThinkingBlock && this.chatDetail === "overview") this.setChatDetail("details");
+		if (!this.hideThinkingBlock && this.chatDetail === "overview") this.chooseChatDetail("details");
 		this.updateThinkingBlockVisibility();
 		this.showStatus(`Thinking blocks: ${this.hideThinkingBlock ? "hidden" : "visible"}`);
 	}
@@ -4996,6 +5010,7 @@ export class InteractiveMode {
 					permissionMode,
 					editorPaddingX: this.settingsManager.getEditorPaddingX(),
 					outputPad: this.settingsManager.getOutputPad(),
+					chatDetail: this.chatDetail,
 					autocompleteMaxVisible: this.settingsManager.getAutocompleteMaxVisible(),
 					quietStartup: this.settingsManager.getQuietStartup(),
 					clearOnShrink: this.settingsManager.getClearOnShrink(),
@@ -5078,6 +5093,7 @@ export class InteractiveMode {
 						void this.themeController.setThemeSetting(themeSetting);
 					},
 					onThemePreview: (themeName) => this.themeController.preview(themeName),
+					onChatDetailChange: (detail) => this.chooseChatDetail(detail),
 					onHideThinkingBlockChange: (hidden) => {
 						this.hideThinkingBlock = hidden;
 						this.settingsManager.setHideThinkingBlock(hidden);
@@ -6419,6 +6435,7 @@ export class InteractiveMode {
 				return;
 			}
 			this.hideThinkingBlock = this.settingsManager.getHideThinkingBlock();
+			this.loadChatDetail(this.settingsManager.getChatDetail());
 			this.outputPad = this.settingsManager.getOutputPad();
 			this.rebuildChatFromMessages();
 			chatRestoredBeforeSessionStart = true;
