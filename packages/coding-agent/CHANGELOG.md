@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **A session opens with everything collapsed.** Tool output shows a counted preview, edit diffs show their line counts, and thinking shows one `Thinking... ctrl+o to expand` line. Press `ctrl+o` to step through overview, details, and all. Turning thinking on with `ctrl+t` opens the transcript far enough to show it.
+- **A session opens with everything collapsed.** Tool output shows a counted preview, edit diffs show their line counts, thinking shows one `Thinking... ctrl+o to expand` line, and a multi-line error shows its first line (or, for a Python traceback, the raised error) with the same hint. Press `ctrl+o` to step through overview, details, and all. Turning thinking on with `ctrl+t` opens the transcript far enough to show it.
 
 ## [0.5.0] - 2026-09-23
 

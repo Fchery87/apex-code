@@ -13,7 +13,7 @@ const OSC133_ZONE_FINAL = "\x1b]133;C\x07";
 
 function createAssistantMessage(
 	content: AssistantMessage["content"],
-	overrides: Partial<Pick<AssistantMessage, "stopReason">> = {},
+	overrides: Partial<Pick<AssistantMessage, "stopReason" | "errorMessage">> = {},
 ): AssistantMessage {
 	return {
 		role: "assistant",
@@ -30,6 +30,7 @@ function createAssistantMessage(
 			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 		},
 		stopReason: overrides.stopReason ?? "stop",
+		errorMessage: overrides.errorMessage,
 		timestamp: Date.now(),
 	};
 }
@@ -102,6 +103,35 @@ describe("AssistantMessageComponent", () => {
 
 		expect(rendered.match(/Thinking\.\.\./g)).toHaveLength(1);
 		expect(rendered).toContain("answer");
+	});
+
+	test("folds a multi-line error to its first line until expanded", () => {
+		initTheme("dark");
+		setKeybindings(new KeybindingsManager());
+
+		const component = new AssistantMessageComponent(
+			createAssistantMessage([], { stopReason: "error", errorMessage: "400 invalid request\nrequest id: abc123" }),
+		);
+		const collapsed = stripAnsi(component.render(80).join("\n"));
+		expect(collapsed).toContain("Error: 400 invalid request ctrl+o to expand");
+		expect(collapsed).not.toContain("abc123");
+
+		component.setExpanded(true);
+		const expanded = stripAnsi(component.render(80).join("\n"));
+		expect(expanded).toContain("request id: abc123");
+		expect(expanded).not.toContain("to expand");
+	});
+
+	test("leaves a one-line error as it is", () => {
+		initTheme("dark");
+		setKeybindings(new KeybindingsManager());
+
+		const component = new AssistantMessageComponent(
+			createAssistantMessage([], { stopReason: "error", errorMessage: "rate limited" }),
+		);
+		const rendered = stripAnsi(component.render(80).join("\n"));
+		expect(rendered).toContain("Error: rate limited");
+		expect(rendered).not.toContain("to expand");
 	});
 
 	test("tells the reader how to expand collapsed thinking", () => {
