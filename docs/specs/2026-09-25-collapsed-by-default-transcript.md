@@ -1,6 +1,6 @@
 # Spec: A transcript that opens collapsed
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 
@@ -8,7 +8,7 @@
 | --- | --- |
 | Author | `fchery87` |
 | Created | `2026-09-25` |
-| Last updated | `2026-09-25` |
+| Last updated | `2026-09-27` |
 | Roadmap phase | `none — product-surface follow-up` |
 | Tracking issue/PR | `#148` |
 | Compatibility posture | `Clean break on the default, additive in settings. A session with no saved level now opens at overview instead of details. A new optional global setting, chatDetail, stores the level the user last chose; an unknown value reads as unset, so no user has a stored value to migrate. No session file, CLI flag, or extension API changes shape.` |
