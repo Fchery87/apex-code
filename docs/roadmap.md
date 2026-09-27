@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0 through 12 landed · **Created:** 2026-08-08 · **Last updated:** 2026-09-06
+**Status:** Active — Phases 0 through 12 landed · **Created:** 2026-08-08 · **Last updated:** 2026-09-27
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -112,7 +112,7 @@ capable and measurably worse.
 | MCP OAuth, host-owned | **landed** — OAUTH.1 through OAUTH.8 · `4a63d0615` (three-OS CI run 33567719304) | [spec](specs/2026-09-01-mcp-oauth.md) | — |
 | Git-backed session checkpoints | **landed** — 8 of 8 tasks · `075fac684` | [spec](specs/2026-08-28-git-checkpoints.md) | — |
 | Dependency updates that can merge | **landed** — `262d673cb` | [spec](specs/2026-08-29-dependency-updates-that-can-merge.md) | — |
-| Upstream catch-up v0.86.0–v0.87.1 | **active** — reconciling one tag at a time under the upstream merge ceiling | [ADR 0003](adr/0003-upstream-merge-cadence.md) | [plan](plans/2026-09-27-upstream-catchup.md) |
+| Upstream catch-up v0.86.0 through v0.87.1 | **landed** — sequential reconciliation recorded in `docs/upstream-log.md`; v0.87.1's 165 conflicted hunks exceeded the 159 ceiling by six. PR #152 merged at `f279f2c7f`; PR #148 merged at `786a3bb49` after CI run 36348108639 passed; PR #149 merged at `5a249505c` after CI run 36349272406 passed on Ubuntu, macOS, and Windows | [ADR 0003](adr/0003-upstream-merge-cadence.md) | — |
 | Documented surfaces that do not exist | **landed** — 4 of 4 tasks · `d2cb6ea0f` | [spec](specs/2026-08-29-documented-surfaces-that-do-not-exist.md) | — |
 | Release tags and the spec status gate | **landed** — pull request #63 | [spec](specs/2026-08-29-claims-the-repository-cannot-check.md) | — |
 | Mid-run auto-compaction | **landed** — `61be67e27` | [spec](specs/2026-08-29-mid-run-auto-compaction.md) | — |
