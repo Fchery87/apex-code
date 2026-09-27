@@ -32,6 +32,7 @@
 			"scripts/__tests__/**/*.ts",
 			"scripts/vitest.config.ts",
 			"fixtures/__tests__/**/*.ts",
+			"!packages/chord",
 			"!packages/ai",
 			"!packages/tui",
 			"!packages/client",

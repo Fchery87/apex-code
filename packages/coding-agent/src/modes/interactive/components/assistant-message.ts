@@ -1,5 +1,5 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import { Container, Markdown, type MarkdownTheme, Spacer, Text } from "@earendil-works/pi-tui";
+import { Container, Markdown, type MarkdownTheme, MouseRegion, Spacer, Text } from "@earendil-works/pi-tui";
 import type { MarkdownTransformer } from "../../../core/extensions/types.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
 import { createMarkdownTransform } from "./markdown-transform.ts";
@@ -81,16 +81,33 @@ export function splitStreamingMarkdown(text: string): string[] {
 	return units;
 }
 
+/**
+ * `run` numbers the message's thinking runs in order. It keys the per-run
+ * visibility override that a click toggles, so two thinking sections are the
+ * same slot only when they belong to the same run.
+ */
 type SectionSpec =
 	| { kind: "spacer" }
 	| { kind: "markdown-text"; text: string }
-	| { kind: "markdown-thinking"; text: string }
+	| { kind: "markdown-thinking"; text: string; run: number }
+	| { kind: "thinking-label"; text: string; run: number }
 	| { kind: "label"; text: string };
 
-type Section = { spec: SectionSpec; component: Container["children"][number] };
+type SectionComponent = Container["children"][number];
+
+/**
+ * `content` is the Text or Markdown whose text an in-place update replaces;
+ * `component` is what the container holds, which for a thinking section is a
+ * MouseRegion wrapping `content`.
+ */
+type Section = { spec: SectionSpec; component: SectionComponent; content: SectionComponent };
 
 function specText(spec: SectionSpec): string | undefined {
 	return spec.kind === "spacer" ? undefined : spec.text;
+}
+
+function specRun(spec: SectionSpec): number | undefined {
+	return spec.kind === "markdown-thinking" || spec.kind === "thinking-label" ? spec.run : undefined;
 }
 
 /**
@@ -108,6 +125,7 @@ export class AssistantMessageComponent extends Container {
 	private isStreaming = false;
 	private forceFullRebuild = true;
 	private sections: Section[] = [];
+	private thinkingVisibilityOverrides = new Map<number, boolean>();
 
 	constructor(
 		message?: AssistantMessage,
@@ -144,6 +162,7 @@ export class AssistantMessageComponent extends Container {
 
 	setHideThinkingBlock(hide: boolean): void {
 		this.hideThinkingBlock = hide;
+		this.thinkingVisibilityOverrides.clear();
 		if (this.lastMessage) {
 			this.forceFullRebuild = true;
 			this.updateContent(this.lastMessage);
@@ -190,20 +209,21 @@ export class AssistantMessageComponent extends Container {
 		for (let i = 0; i < specs.length; i++) {
 			const spec = specs[i];
 			const previous = rebuildAll ? undefined : this.sections[i];
-			const sameKind = previous !== undefined && previous.spec.kind === spec.kind;
+			const sameKind =
+				previous !== undefined && previous.spec.kind === spec.kind && specRun(previous.spec) === specRun(spec);
 			if (sameKind && (spec.kind === "spacer" || specText(previous.spec) === specText(spec))) {
-				sections.push({ spec, component: previous.component });
+				sections.push({ ...previous, spec });
 				continue;
 			}
 			if (sameKind && spec.kind !== "spacer") {
 				// Same slot, new content (the growing tail of a streamed
 				// message): update in place so only this unit re-parses.
-				const component = previous.component as Text;
-				component.setText(specText(spec) ?? "");
-				sections.push({ spec, component: previous.component });
+				const content = previous.content as Text;
+				content.setText(specText(spec) ?? "");
+				sections.push({ ...previous, spec });
 				continue;
 			}
-			sections.push({ spec, component: this.createComponent(spec) });
+			sections.push(this.createSection(spec));
 		}
 
 		this.forceFullRebuild = false;
@@ -238,12 +258,13 @@ export class AssistantMessageComponent extends Container {
 		}
 
 		// Render content in order
+		let thinkingRunIndex = 0;
 		for (let i = 0; i < message.content.length; i++) {
 			const content = message.content[i];
 			if (content.type === "text" && content.text.trim()) {
 				// Assistant text messages with no background - trim the text
 				// Set paddingY=0 to avoid extra spacing before tool executions
-				this.pushMarkdownSpecs(specs, content.text.trim(), "markdown-text");
+				this.pushMarkdownSpecs(specs, content.text.trim(), { kind: "markdown-text" });
 			} else if (content.type === "thinking") {
 				const thinkingBlocks: string[] = [];
 				for (; i < message.content.length; i++) {
@@ -268,15 +289,19 @@ export class AssistantMessageComponent extends Container {
 					.slice(i + 1)
 					.some((c) => (c.type === "text" && c.text.trim()) || (c.type === "thinking" && c.thinking.trim()));
 
-				if (this.hideThinkingBlock) {
+				// Each run can be expanded or collapsed on its own by clicking it; the
+				// global hide setting is the default for runs nobody has clicked.
+				const run = thinkingRunIndex++;
+				if (this.isThinkingRunHidden(run)) {
 					// Show one static label for each run of thinking blocks when hidden.
 					specs.push({
-						kind: "label",
+						kind: "thinking-label",
 						text: theme.italic(theme.fg("thinkingText", this.hiddenThinkingLabel)),
+						run,
 					});
 				} else {
 					// Render each run of thinking blocks as one Markdown section.
-					this.pushMarkdownSpecs(specs, thinkingBlocks.join("\n\n"), "markdown-thinking");
+					this.pushMarkdownSpecs(specs, thinkingBlocks.join("\n\n"), { kind: "markdown-thinking", run });
 				}
 				if (hasVisibleContentAfter) {
 					specs.push({ kind: "spacer" });
@@ -318,21 +343,43 @@ export class AssistantMessageComponent extends Container {
 	 * equivalent). A transformer that genuinely needs whole-message context
 	 * still gets it: a non-streaming update always renders whole blocks.
 	 */
-	private pushMarkdownSpecs(specs: SectionSpec[], text: string, kind: "markdown-text" | "markdown-thinking"): void {
+	private pushMarkdownSpecs(
+		specs: SectionSpec[],
+		text: string,
+		slot: { kind: "markdown-text" } | { kind: "markdown-thinking"; run: number },
+	): void {
 		if (this.isStreaming) {
 			for (const unit of splitStreamingMarkdown(text)) {
-				specs.push({ kind, text: unit });
+				specs.push({ ...slot, text: unit });
 			}
 			return;
 		}
-		specs.push({ kind, text });
+		specs.push({ ...slot, text });
 	}
 
-	private createComponent(spec: SectionSpec): Section["component"] {
+	private isThinkingRunHidden(run: number): boolean {
+		return this.thinkingVisibilityOverrides.get(run) ?? this.hideThinkingBlock;
+	}
+
+	private createSection(spec: SectionSpec): Section {
+		const content = this.createComponent(spec);
+		const run = specRun(spec);
+		if (run === undefined) return { spec, component: content, content };
+		const component = new MouseRegion(content, (event) => {
+			if (event.type !== "click" || event.button !== "left") return undefined;
+			this.thinkingVisibilityOverrides.set(run, !this.isThinkingRunHidden(run));
+			if (this.lastMessage) this.updateContent(this.lastMessage);
+			return { handled: true };
+		});
+		return { spec, component, content };
+	}
+
+	private createComponent(spec: SectionSpec): SectionComponent {
 		switch (spec.kind) {
 			case "spacer":
 				return new Spacer(1);
 			case "label":
+			case "thinking-label":
 				return new Text(spec.text, this.outputPad, 0);
 			case "markdown-text":
 				return new Markdown(spec.text, this.outputPad, 0, this.markdownTheme, undefined, {

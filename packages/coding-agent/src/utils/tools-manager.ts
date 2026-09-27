@@ -238,7 +238,7 @@ async function downloadFile(url: string, dest: string, maxBytes: number): Promis
 	const response = await fetchWithRetry(url, undefined, { timeoutMs: DOWNLOAD_TIMEOUT_MS });
 
 	if (!response.ok) {
-		throw new Error(`Failed to download: ${response.status}`);
+		throw new Error(`Download failed with HTTP ${response.status}: ${url}`);
 	}
 
 	if (!response.body) {
@@ -537,9 +537,21 @@ export async function ensureTool(
 		onStatus?.({ type: "info", message: `${config.name} installed to ${path}` });
 		return path;
 	} catch (e) {
+		// Include the error cause chain: fetch failures surface as a bare
+		// "fetch failed" TypeError with the actionable detail (DNS, TLS,
+		// timeout) hidden in the cause. Depth-capped to guard against
+		// circular cause chains.
+		const messages: string[] = [];
+		for (
+			let current: unknown = e, depth = 0;
+			current instanceof Error && depth < 5;
+			current = current.cause, depth++
+		) {
+			if (!messages.includes(current.message)) messages.push(current.message);
+		}
 		onStatus?.({
 			type: "warning",
-			message: `Failed to download ${config.name}: ${e instanceof Error ? e.message : e}`,
+			message: `Failed to download ${config.name}: ${messages.length > 0 ? messages.join(": ") : String(e)}`,
 		});
 		return undefined;
 	}

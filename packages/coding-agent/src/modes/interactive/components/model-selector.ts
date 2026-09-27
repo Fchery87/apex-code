@@ -375,7 +375,7 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		];
 		if (this.hasAdjustableEffort()) hints.push([["tui.editor.cursorLeft", "tui.editor.cursorRight"], "effort"]);
 		if (this.scopedModelItems.length > 0) hints.push(["tui.input.tab", "scope"]);
-		if (this.onSelectAsDefaultCallback) hints.push([{ literal: "ctrl+s" }, "set as default"]);
+		if (this.onSelectAsDefaultCallback) hints.push(["app.models.save", "set as default"]);
 		if (this.canGoBack()) hints.push([{ literal: "escape" }, "providers"], [{ literal: "ctrl+c" }, "close"]);
 		else hints.push(["tui.select.cancel", "close"]);
 		return hintRow(hints);
@@ -642,8 +642,8 @@ export class ModelSelectorComponent extends Container implements Focusable {
 			this.dispose();
 			this.onCancelCallback();
 		}
-		// Ctrl+S — select and save as default
-		else if (matchesKey(keyData, "ctrl+s") && this.onSelectAsDefaultCallback) {
+		// Select and save as default
+		else if (kb.matches(keyData, "app.models.save") && this.onSelectAsDefaultCallback) {
 			const row = this.filteredRows[this.selectedIndex];
 			if (row?.kind === "model") {
 				this.dispose();

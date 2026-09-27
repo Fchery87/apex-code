@@ -10,10 +10,11 @@ const codingAgentDir = join(repoRoot, "packages/coding-agent");
 const codingAgentLockPath = "packages/coding-agent";
 const rootLockfilePath = join(repoRoot, "package-lock.json");
 const shrinkwrapPath = join(codingAgentDir, "npm-shrinkwrap.json");
-const internalPackagePrefix = "@earendil-works/pi-";
+const internalPackagePrefix = "@earendil-works/";
 const internalPackageNames = new Set(["apex-code", "apex-code-agent-core"]);
 const allowedInstallScriptPackages = new Map([
 	["@google/genai@1.52.0", "preinstall is a no-op in the published package"],
+	["esbuild@0.28.1", "postinstall selects and verifies the platform-specific esbuild binary"],
 	["protobufjs@7.6.5", "postinstall only warns about protobufjs version scheme mismatches"],
 ]);
 

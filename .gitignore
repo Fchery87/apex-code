@@ -127,3 +127,4 @@ auth.json
 *.heapsnapshot
 test-providers.js
 .worktrees/
+packages/agent/docs/extensions/pi-server-artifact/index.md

@@ -54,9 +54,8 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 
 	const contextFiles = providedContextFiles ?? [];
 	const skills = providedSkills ?? [];
-
 	const tools = selectedTools || ["read", "bash", "edit", "write"];
-	const hasRead = tools.includes("read");
+	const skillFileReadTool = (["read", "bash"] as const).find((tool) => tools.includes(tool));
 
 	// A tool appears in Available tools only when the caller provides a one-line snippet.
 	const visibleTools = tools.filter((name) => !!toolSnippets?.[name]);
@@ -137,8 +136,8 @@ Apex Code documentation (read only when the user asks about Apex Code itself, it
 		prompt += "</project_context>\n";
 	}
 
-	if (hasRead && skills.length > 0) {
-		prompt += formatSkillsForPrompt(skills, SKILL_CATALOG_PREFIX_BUDGET_TOKENS);
+	if (skillFileReadTool && skills.length > 0) {
+		prompt += formatSkillsForPrompt(skills, SKILL_CATALOG_PREFIX_BUDGET_TOKENS, skillFileReadTool);
 	}
 
 	prompt += `\nCurrent working directory: ${promptCwd}`;

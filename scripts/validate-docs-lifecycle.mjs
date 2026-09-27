@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join, normalize, relative, resolve, sep } from "node:path";
+import { UPSTREAM_OWNED_DOCS } from "./apex/upstream-owned-docs.mjs";
 
 const root = resolve(process.argv[2] ?? process.cwd());
 const docsDir = join(root, "docs");
@@ -271,7 +272,14 @@ for (const [number, adr] of adrs) {
 // linked `containerization.md` one directory away from the file. All three are the same
 // failure: prose outliving what it describes. Code fences are skipped, because an example
 // of how to write a link is not a link.
-const HISTORICAL_DOCS = ["docs/specs/", "docs/adr/", "docs/research/", "docs/roadmap.md", "docs/upstream-log.md"];
+const HISTORICAL_DOCS = [
+	"docs/specs/",
+	"docs/adr/",
+	"docs/research/",
+	"docs/roadmap.md",
+	"docs/upstream-log.md",
+	...UPSTREAM_OWNED_DOCS,
+];
 const UNREAD_DOC_DIRS = new Set([".git", ".worktrees", ".apex-code", ".pi", "node_modules", "dist", "vendor", "examples"]);
 
 async function currentDocs(directory) {

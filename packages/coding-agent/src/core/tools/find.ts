@@ -1,18 +1,15 @@
 import { createInterface } from "node:readline";
-import { Text } from "@earendil-works/pi-tui";
 import type { AgentTool } from "apex-code-agent-core";
 import { spawn } from "child_process";
 import path from "path";
 import { type Static, Type } from "typebox";
-import { formatHiddenLines, previewLineCount } from "../../modes/interactive/components/keybinding-hints.ts";
-import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import { ensureTool } from "../../utils/tools-manager.ts";
-import type { ToolRenderResultOptions } from "../extensions/types.ts";
+import type { ExtensionContext } from "../extensions/types.ts";
 import { getPreparedPathOperation } from "../permissions/operations.ts";
 import type { ApexToolDefinition } from "./contract.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
 import { pathExists, resolveToCwd } from "./path-utils.ts";
-import { getTextOutput, invalidArgText, shortenPath, str } from "./render-utils.ts";
+import { findRenderers } from "./renderers/find.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateHead } from "./truncate.ts";
 
@@ -73,56 +70,6 @@ export interface FindToolOptions {
 	operations?: FindOperations;
 }
 
-function formatFindCall(args: { pattern: string; path?: string; limit?: number } | undefined, theme: Theme): string {
-	const pattern = str(args?.pattern);
-	const rawPath = str(args?.path);
-	const path = rawPath !== null ? shortenPath(rawPath || ".") : null;
-	const limit = args?.limit;
-	const invalidArg = invalidArgText(theme);
-	let text =
-		theme.fg("toolTitle", theme.bold("find")) +
-		" " +
-		(pattern === null ? invalidArg : theme.fg("accent", pattern || "")) +
-		theme.fg("toolOutput", ` in ${path === null ? invalidArg : path}`);
-	if (limit !== undefined) {
-		text += theme.fg("toolOutput", ` (limit ${limit})`);
-	}
-	return text;
-}
-
-function formatFindResult(
-	result: {
-		content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
-		details?: FindToolDetails;
-	},
-	options: ToolRenderResultOptions,
-	theme: Theme,
-	showImages: boolean,
-): string {
-	const output = getTextOutput(result, showImages).trim();
-	let text = "";
-	if (output) {
-		const lines = output.split("\n");
-		const maxLines = options.expanded ? lines.length : previewLineCount(lines.length, 20);
-		const displayLines = lines.slice(0, maxLines);
-		const remaining = lines.length - displayLines.length;
-		text += `\n${displayLines.map((line) => theme.fg("toolOutput", line)).join("\n")}`;
-		if (remaining > 0) {
-			text += `\n${formatHiddenLines(remaining, "more")}`;
-		}
-	}
-
-	const resultLimit = result.details?.resultLimitReached;
-	const truncation = result.details?.truncation;
-	if (resultLimit || truncation?.truncated) {
-		const warnings: string[] = [];
-		if (resultLimit) warnings.push(`${resultLimit} results limit`);
-		if (truncation?.truncated) warnings.push(`${formatSize(truncation.maxBytes ?? DEFAULT_MAX_BYTES)} limit`);
-		text += `\n${theme.fg("warning", `[Truncated: ${warnings.join(", ")}]`)}`;
-	}
-	return text;
-}
-
 export function createFindToolDefinition(
 	cwd: string,
 	options?: FindToolOptions,
@@ -150,7 +97,7 @@ export function createFindToolDefinition(
 			input: { pattern: string; path?: string; limit?: number },
 			signal?: AbortSignal,
 			_onUpdate?,
-			_ctx?,
+			ctx?: ExtensionContext,
 		) {
 			const { pattern, path: searchDir, limit } = input;
 			return new Promise((resolve, reject) => {
@@ -177,7 +124,7 @@ export function createFindToolDefinition(
 				(async () => {
 					try {
 						const prepared = getPreparedPathOperation(input);
-						const searchPath = prepared ? prepared.path.value : resolveToCwd(searchDir || ".", cwd);
+						const searchPath = prepared ? prepared.path.value : resolveToCwd(searchDir || ".", ctx?.cwd || cwd);
 						const effectiveLimit = limit ?? DEFAULT_LIMIT;
 						const ops = customOps ?? defaultFindOperations;
 
@@ -378,16 +325,7 @@ export function createFindToolDefinition(
 				})();
 			});
 		},
-		renderCall(args, theme, context) {
-			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			text.setText(formatFindCall(args, theme));
-			return text;
-		},
-		renderResult(result, options, theme, context) {
-			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			text.setText(formatFindResult(result as any, options, theme, context.showImages));
-			return text;
-		},
+		...findRenderers,
 	};
 }
 

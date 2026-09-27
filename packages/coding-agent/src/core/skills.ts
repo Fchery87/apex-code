@@ -385,8 +385,8 @@ function estimateTextTokens(text: string): number {
  * unlike every other prefix contributor, the catalog is sized by the user's skill
  * library rather than by the product, so a token budget bounds it rather than a
  * fixed schema. Descriptions resolve on demand through the `skill_search` tool
- * (`core/tools/skill-search.ts`, SKILL.7); content still loads through `read`,
- * unchanged. Once one name fails to fit, every remaining name (in sorted order) is
+ * (`core/tools/skill-search.ts`, SKILL.7); content loads through `read`, or through
+ * `bash` when `read` is not enabled. Once one name fails to fit, every remaining name (in sorted order) is
  * counted as omitted rather than skipping ahead to a shorter one that might fit --
  * the catalog is always a clean prefix of the sorted list, not a best-fit selection.
  *
@@ -400,6 +400,7 @@ function omittedCommentLine(omittedCount: number): string {
 export function formatSkillsForPrompt(
 	skills: Skill[],
 	budgetTokens: number = SKILL_CATALOG_PREFIX_BUDGET_TOKENS,
+	fileReadTool: "read" | "bash" = "read",
 ): string {
 	const visibleSkills = skills.filter((s) => !s.disableModelInvocation);
 	if (visibleSkills.length === 0) {
@@ -407,11 +408,12 @@ export function formatSkillsForPrompt(
 	}
 
 	const sortedNames = visibleSkills.map((s) => s.name).sort((a, b) => a.localeCompare(b));
+	const loadInstruction = fileReadTool === "read" ? "use the read tool" : "use bash";
 	const header = [
 		"",
 		"",
 		"The following skill names are available. Each provides specialized instructions for a specific task.",
-		"Call skill_search with a name or a query to see a skill's description, then use the read tool to load its file when the task matches.",
+		`Call skill_search with a name or a query to see a skill's description, then ${loadInstruction} to load its file when the task matches.`,
 		"",
 		"<available_skills>",
 	].join("\n");
