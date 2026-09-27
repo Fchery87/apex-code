@@ -1,4 +1,4 @@
-import type { Api, ImageContent, Model, TextContent } from "@earendil-works/pi-ai";
+import type { Api, ImageContent, Model, ModelImageResizeOptions, TextContent } from "@earendil-works/pi-ai";
 import type { AgentTool } from "apex-code-agent-core";
 import { constants } from "fs";
 import { access as fsAccess, readFile as fsReadFile } from "fs/promises";
@@ -52,8 +52,10 @@ const defaultReadOperations: ReadOperations = {
 };
 
 export interface ReadToolOptions {
-	/** Whether to auto-resize images to 2000x2000 max. Default: true */
+	/** Whether to auto-resize images. Default: true */
 	autoResizeImages?: boolean;
+	/** Fallback resize profile when the execution context has no model metadata. */
+	resizeOptions?: ModelImageResizeOptions;
 	/** Custom operations for file reading. Default: local filesystem */
 	operations?: ReadOperations;
 }
@@ -70,6 +72,7 @@ export function createReadToolDefinition(
 	options?: ReadToolOptions,
 ): ApexToolDefinition<typeof readSchema, ReadToolDetails | undefined> {
 	const autoResizeImages = options?.autoResizeImages ?? true;
+	const fallbackResizeOptions = options?.resizeOptions;
 	const ops = options?.operations ?? defaultReadOperations;
 	return {
 		name: "read",
@@ -89,7 +92,7 @@ export function createReadToolDefinition(
 			context: { resultRecoverable: true, deferSchema: false },
 			evidence: { emits: new Set(), capture: () => [] },
 		},
-		constrainedSampling: getExperimentalToolSampling(),
+		constrainedSampling: getExperimentalToolSampling() ?? { type: "json_schema", strict: "prefer" },
 		async execute(
 			_toolCallId,
 			input: { path: string; offset?: number; limit?: number },
@@ -132,7 +135,10 @@ export function createReadToolDefinition(
 							if (mimeType) {
 								// Read image as binary.
 								const imageBuffer = buffer ?? (await ops.readFile(absolutePath));
-								const processed = await processImage(imageBuffer, mimeType, { autoResizeImages });
+								const processed = await processImage(imageBuffer, mimeType, {
+									autoResizeImages,
+									resizeOptions: ctx?.model?.inputLimits?.images?.resize ?? fallbackResizeOptions,
+								});
 								if (!processed.ok) {
 									let textNote = `Read image file [${mimeType}]\n${processed.message}`;
 									if (nonVisionImageNote) textNote += `\n${nonVisionImageNote}`;

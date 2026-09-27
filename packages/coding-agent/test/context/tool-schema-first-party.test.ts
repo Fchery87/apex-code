@@ -8,6 +8,7 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getCurrentTools } from "@earendil-works/pi-ai";
 import { Agent } from "apex-code-agent-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AgentSession } from "../../src/core/agent-session.ts";
@@ -79,11 +80,11 @@ describe("deferred schema load path against a real first-party tool (task 4.7)",
 		expect(faux.callCount).toBe(3);
 
 		// First request: grep is announced by name only, no "pattern" property visible.
-		const firstGrep = faux.contexts[0]?.tools?.find((tool) => tool.name === "grep");
+		const firstGrep = getCurrentTools(faux.contexts[0]?.messages ?? []).find((tool) => tool.name === "grep");
 		expect(JSON.stringify(firstGrep?.parameters)).not.toContain("pattern");
 
 		// Second request: after loading, grep's real schema (with "pattern") is projected.
-		const secondGrep = faux.contexts[1]?.tools?.find((tool) => tool.name === "grep");
+		const secondGrep = getCurrentTools(faux.contexts[1]?.messages ?? []).find((tool) => tool.name === "grep");
 		expect(JSON.stringify(secondGrep?.parameters)).toContain("pattern");
 
 		// The schema tool's own result carried the real schema.

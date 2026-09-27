@@ -122,7 +122,7 @@ describe("Radius provider", () => {
 			allowModelNetwork: true,
 		});
 
-		expect(runtime.getModels(RADIUS_PROVIDER_ID)).toEqual([]);
+		expect(runtime.getAvailableSnapshot().filter((model) => model.provider === RADIUS_PROVIDER_ID)).toEqual([]);
 		expect(fetchSpy.mock.calls.some(([url]) => String(url).includes("radius.pi.dev/v1/config"))).toBe(false);
 	});
 

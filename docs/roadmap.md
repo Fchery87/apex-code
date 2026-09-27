@@ -112,6 +112,7 @@ capable and measurably worse.
 | MCP OAuth, host-owned | **landed** — OAUTH.1 through OAUTH.8 · `4a63d0615` (three-OS CI run 33567719304) | [spec](specs/2026-09-01-mcp-oauth.md) | — |
 | Git-backed session checkpoints | **landed** — 8 of 8 tasks · `075fac684` | [spec](specs/2026-08-28-git-checkpoints.md) | — |
 | Dependency updates that can merge | **landed** — `262d673cb` | [spec](specs/2026-08-29-dependency-updates-that-can-merge.md) | — |
+| Upstream catch-up v0.86.0–v0.87.1 | **active** — reconciling one tag at a time under the upstream merge ceiling | [ADR 0003](adr/0003-upstream-merge-cadence.md) | [plan](plans/2026-09-27-upstream-catchup.md) |
 | Documented surfaces that do not exist | **landed** — 4 of 4 tasks · `d2cb6ea0f` | [spec](specs/2026-08-29-documented-surfaces-that-do-not-exist.md) | — |
 | Release tags and the spec status gate | **landed** — pull request #63 | [spec](specs/2026-08-29-claims-the-repository-cannot-check.md) | — |
 | Mid-run auto-compaction | **landed** — `61be67e27` | [spec](specs/2026-08-29-mid-run-auto-compaction.md) | — |

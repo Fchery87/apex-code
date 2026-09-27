@@ -14,16 +14,14 @@
  * The two stages land in different seams because they operate on different halves
  * of the outbound request. Eviction is a pure function of `AgentMessage[]`, which is
  * exactly what `transformContext` sees, immediately before `convertToLlm` — so it is
- * wired there. Deferred-schema resolution operates on the *tool list*, not messages;
- * `transformContext`'s signature has no tools parameter, and `AgentContext.tools` is
- * a snapshot taken once per prompt rather than rebuilt per request. The seam that
- * actually sees the assembled outbound tool list on every request is
- * `streamFunction` — it receives the full `Context`, tools included, immediately
- * before the provider call — so the projection is applied there instead. Because the
- * two stages act on disjoint fields of the request with no data dependency between
- * them, this does not change the observable pipeline order.
+ * wired there. Deferred-schema resolution operates on tool declarations carried by
+ * the transcript's system-message timeline. `transformContext` sees messages before
+ * conversion to that transcript, so the request-local projection is applied at the
+ * `streamFunction` boundary instead. It preserves each declaration's original event
+ * position and leaves the agent's stored transcript untouched.
  */
 
+import { normalizeContext, type TranscriptContext } from "@earendil-works/pi-ai";
 import { streamSimple } from "@earendil-works/pi-ai/compat";
 import type { Agent, StreamFn } from "apex-code-agent-core";
 import { resolveToolContext } from "../tools/contract.ts";
@@ -87,6 +85,25 @@ export function projectToolSchemas<T extends { name: string; description: string
 	return tools.map((tool, index) => ({ ...tool, parameters: announced[index].parameters }));
 }
 
+/** Project deferred schemas in the request-local transcript without changing tool event positions. */
+export function projectTranscriptToolSchemas(
+	context: TranscriptContext,
+	contractLookup: ContractLookup,
+	loadedSchemaNames: ReadonlySet<string> = new Set(),
+): TranscriptContext {
+	let hasToolDeclarations = false;
+	const messages = context.messages.map((message) => {
+		if (message.role !== "system" || !message.toolsAdded?.length) return message;
+		hasToolDeclarations = true;
+		return {
+			...message,
+			toolsAdded: projectToolSchemas(message.toolsAdded, contractLookup, loadedSchemaNames),
+		};
+	});
+
+	return hasToolDeclarations ? normalizeContext({ messages }) : context;
+}
+
 const defaultStreamFunctions = new WeakSet<StreamFn>();
 
 /** Returns true for the built-in streamSimple function, including its context-pipeline wrapper. */
@@ -130,12 +147,9 @@ export function installContextPipeline(agent: Agent, options: ContextPipelineOpt
 		context: Parameters<typeof previousStreamFunction>[1],
 		streamOptions: Parameters<typeof previousStreamFunction>[2],
 	) => {
-		if (!context.tools || context.tools.length === 0) {
-			return previousStreamFunction(model, context, streamOptions);
-		}
 		return previousStreamFunction(
 			model,
-			{ ...context, tools: projectToolSchemas(context.tools, contractLookup, loadedSchemaNames) },
+			projectTranscriptToolSchemas(context, contractLookup, loadedSchemaNames),
 			streamOptions,
 		);
 	};

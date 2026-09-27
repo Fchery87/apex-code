@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { validateToolArguments } from "@earendil-works/pi-ai";
+import { type JsonObject, normalizeContext, validateToolArguments } from "@earendil-works/pi-ai";
 import { stream } from "@earendil-works/pi-ai/api/anthropic-messages";
 import { getModel } from "@earendil-works/pi-ai/compat";
 import { Agent } from "apex-code-agent-core";
@@ -34,10 +34,10 @@ describe("bash provider schema", () => {
 		let payload: unknown;
 		const result = await stream(
 			getModel("anthropic", "claude-sonnet-4-5")!,
-			{
+			normalizeContext({
 				messages: [{ role: "user", content: "Run pwd", timestamp: Date.now() }],
 				tools: [tool],
-			},
+			}),
 			{
 				apiKey: "unused-offline-test",
 				fetch,
@@ -70,7 +70,7 @@ describe("bash provider schema", () => {
 		});
 	});
 
-	it.each([
+	it.each<JsonObject>([
 		{ command: "pwd" },
 		{ command: "pwd", kill: false },
 		{ command: "pwd", timeout: 5 },
@@ -136,7 +136,7 @@ describe("every tool advertises its fields to Anthropic", () => {
 
 		await stream(
 			getModel("anthropic", "claude-sonnet-4-5")!,
-			{ messages: [{ role: "user", content: "go", timestamp: Date.now() }], tools },
+			normalizeContext({ messages: [{ role: "user", content: "go", timestamp: Date.now() }], tools }),
 			{
 				apiKey: "unused-offline-test",
 				fetch,

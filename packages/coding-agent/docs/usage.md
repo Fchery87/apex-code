@@ -1,38 +1,28 @@
 # Using Apex Code
 
-This page collects day-to-day usage details that do not fit on the quickstart page.
+Run `pi` from the folder you want to work in. Pi uses that folder to discover files, instructions, and configuration, and to group saved sessions. If you have not installed Pi or chosen a model yet, follow the [Quickstart](quickstart.md).
 
-## Interactive Mode
+Pi may ask whether you trust the working folder before loading its project resources. See [Project trust](security.md#understand-project-trust).
 
-<p align="center"><img src="images/interactive-mode.png" alt="Interactive Mode" width="600"></p>
+<p align="center"><img src="images/interactive-mode.png" alt="Pi interactive mode showing a conversation, editor, and status information" width="750"></p>
 
-The interface has four main areas:
+The transcript shows your prompts, Pi's responses, tool calls, results, and errors. You write prompts and commands in the editor. The footer shows the current folder, session, model, context usage, and accumulated usage and cost.
 
-- **Startup header** - shortcuts, loaded context files, prompt templates, skills, and extensions
-- **Messages** - user messages, assistant responses, tool calls, tool results, notifications, errors, and extension UI
-- **Editor** - where you type; border color indicates the current thinking level
-- **Footer** - working directory, session name, token/cache usage, cost, context usage, and current model. Totals include assistant responses, usage reported by tools, and summary generation.
+## Enter a prompt
 
-The editor can be replaced temporarily by built-in UI such as `/settings` or by custom extension UI.
+Type a request and press `Enter` to send it. Use `Shift+Enter` to add a line, or press `Ctrl+G` to work on a longer prompt in your configured external editor.
 
-### Editor Features
+To include files or images:
 
-| Feature | How |
-|---------|-----|
-| File reference | Type `@` to fuzzy-search project files |
-| Path completion | Press Tab to complete paths |
-| Multi-line input | Shift+Enter, or Ctrl+Enter on Windows Terminal |
-| Copy response | Ctrl+X copies the selected message in `/tree`; otherwise it copies the last assistant message, or the active fullscreen text selection when `fullscreenCopyOnSelect` is disabled |
-| Images | Paste with Ctrl+V, Alt+V on Windows, or drag into the terminal |
-| Shell command | `!command` runs and sends output to the model |
-| Hidden shell command | `!!command` runs without sending output to the model |
-| External editor | Ctrl+G opens `externalEditor`, `$VISUAL`, `$EDITOR`, Notepad on Windows, or `nano` elsewhere |
+- Type `@` to search for a file and add it to your prompt.
+- Press `Tab` to complete a path.
+- Paste an image or drag it into a compatible terminal.
 
-See [Keybindings](keybindings.md) for all shortcuts and customization.
+## Follow Pi's work
 
-## Slash Commands
+Pi shows each tool call and result while it works. Press `Ctrl+O` to expand or collapse tool output. Press `Ctrl+T` to show or hide thinking blocks.
 
-Type `/` in the editor to open command completion. Extensions can register custom commands, skills are available as `/skill:name`, and prompt templates expand via `/templatename`.
+The startup header lists the instructions and resources Pi loaded. The editor border indicates the current thinking level. The footer updates as the model uses context and reports usage.
 
 | Command | Description |
 |---------|-------------|
@@ -55,25 +45,28 @@ Type `/` in the editor to open command completion. Extensions can register custo
 | `/export [file]` | Export session to HTML or JSONL |
 | `/import <file>` | Import and resume a session from a JSONL file |
 | `/share` | Upload as private GitHub gist with shareable HTML link |
+| `/bug [description]` | Report a bug to the Pi developers; see [Sessions](sessions.md#reporting-bugs) |
 | `/reload` | Reload keybindings, extensions, skills, prompts, themes, and context files |
 | `/hotkeys` | Show all keyboard shortcuts |
 | `/changelog` | Display version history |
 | `/quit` | Quit Apex Code |
 
-## Message Queue
+## Change direction
 
-You can submit messages while the agent is still working:
+You can send more input while Pi is working:
 
-- **Enter** queues a steering message, delivered after the current assistant turn finishes executing its tool calls.
-- **Alt+Enter** queues a follow-up message, delivered after the agent finishes all work.
-- **Escape** aborts and restores queued messages to the editor.
-- **Alt+Up** retrieves queued messages back to the editor.
+| What you want | Action |
+|---|---|
+| Adjust the current task | Type a message and press `Enter` |
+| Add work after the current task | Type a message and press `Alt+Enter` |
+| Return queued messages to the editor | Press `Alt+Up` |
+| Stop the current task | Press `Escape` |
 
 On Windows Terminal, Alt+Enter is fullscreen by default. Remap it as described in [Terminal setup](terminal-setup.md) if you want Apex Code to receive the shortcut.
 
-Configure delivery in [Settings](settings.md) with `steeringMode` and `followUpMode`.
+Windows Terminal reserves some Alt shortcuts. See [Terminal Setup](terminal-setup.md) for the Windows alternatives.
 
-## Sessions
+## Change the model or settings
 
 Sessions are saved automatically to `~/.apex-code/agent/sessions/`, organized by working directory.
 
@@ -86,17 +79,13 @@ apex-code --session <path|id> # Use a specific session file or session ID
 apex-code --fork <path|id>    # Fork a session into a new session file
 ```
 
-Useful session commands:
+Use `!!` when you want to run a command without sending its output to the model.
 
-- `/session` shows the current session file and ID.
-- `/tree` navigates the in-file session tree and can summarize abandoned branches.
-- `/fork` creates a new session from an earlier user message.
-- `/clone` duplicates the current active branch into a new session file.
-- `/compact` summarizes older messages to free context.
+## Copy, export, or share results
 
-See [Sessions](sessions.md) and [Compaction](compaction.md) for details.
+Press `Ctrl+X` or run `/copy` to copy the last assistant response. Use `/export` to save the session as HTML or JSONL.
 
-## Context Files
+Use `/share` to upload the session and get a viewer link. With Radius authentication, the artifact is visible to your Radius organization. Otherwise, Pi creates a private GitHub gist through the GitHub CLI. Review the session first because it can contain prompts, tool output, file contents, and credentials exposed during the conversation.
 
 Apex Code loads `AGENTS.md` or `CLAUDE.md` at startup from:
 
@@ -106,9 +95,9 @@ Apex Code loads `AGENTS.md` or `CLAUDE.md` at startup from:
 
 If a directory contains `AGENTS.override.md`, Apex Code loads it instead of `AGENTS.md` or `CLAUDE.md` from that directory. Context files from other directories still layer normally.
 
-Use context files for project conventions, commands, safety rules, and preferences. Disable loading with `--no-context-files` or `-nc`.
+## Collect diagnostic information
 
-### System Prompt Files
+When troubleshooting terminal rendering or conversation state, run `/debug`. Pi writes the rendered terminal lines and current session messages to `pi-debug.log` in your [agent directory](configuration.md#agent-directory).
 
 Replace the default system prompt with:
 
@@ -277,7 +266,7 @@ apex-code "List all .ts files in src/"
 apex-code -p "Summarize this codebase"
 
 # Prompt beginning with a dash
-pi -p -- "- Summarize these points"
+apex-code -p -- "- Summarize these points"
 
 # Non-interactive with piped stdin
 cat README.md | apex-code -p "Summarize this text"

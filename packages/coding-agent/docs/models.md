@@ -1,22 +1,50 @@
-# Custom Models
+# Choose a Model
 
 Add custom providers and models (Ollama, vLLM, LM Studio, proxies) via `~/.apex-code/agent/models.json`.
 
-## Table of Contents
+## Choose a connection
 
-- [Minimal Example](#minimal-example)
-- [Full Example](#full-example)
-- [Supported APIs](#supported-apis)
-- [Provider Configuration](#provider-configuration)
-- [Model Configuration](#model-configuration)
-- [Overriding Built-in Providers](#overriding-built-in-providers)
-- [Per-model Overrides](#per-model-overrides)
-- [Anthropic Messages Compatibility](#anthropic-messages-compatibility)
-- [OpenAI Compatibility](#openai-compatibility)
+| What you have | Recommended setup |
+|---|---|
+| A supported subscription | Sign in through `/login` |
+| A provider API key | Store it through `/login` or set its environment variable |
+| A local GGUF model | Connect Apex Code to the llama.cpp router |
+| An OpenAI-, Anthropic-, or Google-compatible endpoint | Add it to `models.json` |
+| A provider with a custom protocol or authentication flow | Build or install a provider extension |
 
-## Minimal Example
+The bundled model catalog works offline. To overlay catalog data from a service you operate, set `APEX_CODE_MODEL_CATALOG_URL`; Apex Code does not contact an upstream hosted catalog by default. Run `apex-code update --models` to refresh configured catalog data.
 
-For local models (Ollama, LM Studio, vLLM), only `id` is required per model:
+## Authenticate
+
+Run `/login` and select a provider. Apex Code stores credentials in [`auth.json`](configuration.md#agent-directory). Run `/logout` to remove stored credentials for a provider.
+
+You can instead provide an API key through the provider's environment variable. This is useful in CI and other environments where Apex Code should not write credentials. [Provider Authentication](providers.md) lists the variables and cloud-provider setup.
+
+When several credential sources are configured, Apex Code uses a runtime `--api-key` first, then a stored `auth.json` credential, an `apiKey` from `models.json`, and finally the provider's environment variables or ambient cloud credentials. Provider extensions can define their own authentication behavior.
+
+Keep `auth.json` and any credential commands private. Project settings and extensions can execute inside the Apex Code process after you trust a project. Review [Security](security.md) before loading configuration from an untrusted directory.
+
+## Select a model
+
+Run `/model` to search available models. The picker shows models whose providers have usable authentication. Press `Ctrl+S` on a model to save it as the default for new sessions.
+
+Run `/thinking` to select the thinking level for the current model. Press `Ctrl+S` there to save the startup level. Apex Code limits the choices to levels supported by the selected model.
+
+`Ctrl+P` cycles through available models. Use `/scoped-models` to control that cycle and save the selection, or configure model patterns through [Settings](settings.md#model-cycling).
+
+A session records model and thinking-level changes. Resuming the session restores them without changing defaults for new sessions.
+
+## Connect local models
+
+Apex Code integrates directly with the llama.cpp router. The router discovers GGUF files and loads models on demand. Apex Code's `/llama` command manages the router, while `/model` selects one of its loaded models.
+
+Follow [Local Models with llama.cpp](llama-cpp.md) for server startup, model layout, downloads, and connection troubleshooting.
+
+For Ollama, LM Studio, vLLM, SGLang, and other compatible servers, [configure a compatible endpoint](#configure-a-compatible-endpoint) in `models.json`.
+
+## Configure a compatible endpoint
+
+Use [`models.json`](configuration.md#agent-directory) when an endpoint speaks an API Apex Code already supports. This includes most Ollama, LM Studio, vLLM, SGLang, and proxy deployments.
 
 ```json
 {
@@ -26,7 +54,6 @@ For local models (Ollama, LM Studio, vLLM), only `id` is required per model:
       "api": "openai-completions",
       "apiKey": "ollama",
       "models": [
-        { "id": "llama3.1:8b" },
         { "id": "qwen2.5-coder:7b" }
       ]
     }
@@ -38,7 +65,7 @@ The `apiKey` value is a placeholder because Ollama ignores it. Apex Code still t
 
 Some OpenAI-compatible servers do not understand the `developer` role used for reasoning-capable models. For those providers, set `compat.supportsDeveloperRole` to `false` so Apex Code sends the system prompt as a `system` message instead. If the server also does not support `reasoning_effort`, set `compat.supportsReasoningEffort` to `false` too.
 
-You can set `compat` at the provider level to apply to all models, or at the model level to override a specific model. This commonly applies to Ollama, vLLM, SGLang, and similar OpenAI-compatible servers.
+### Describe model input and caching
 
 ```json
 {
@@ -204,10 +231,12 @@ If your command is slow, expensive, rate-limited, or should keep using a previou
 | `reasoning` | No | `false` | Supports extended thinking |
 | `thinkingLevelMap` | No | omitted | Maps Apex Code thinking levels to provider values and marks unsupported levels (see below) |
 | `input` | No | `["text"]` | Input types: `["text"]` or `["text", "image"]` |
+| `inputLimits` | No | omitted | Request limits and image preprocessing for this model (see below) |
 | `contextWindow` | No | `128000` | Context window size in tokens |
 | `maxTokens` | No | `16384` | Maximum output tokens |
 | `samplingParams` | No | omitted | Sampling parameters merged verbatim into every request body (see below) |
 | `cost` | No | all zeros | Per-million-token rates with optional request-wide input pricing tiers |
+| `promptCache` | No | omitted | Best-effort prompt cache lifetime in seconds per retention tier (see below) |
 | `compat` | No | provider `compat` | Provider compatibility overrides. Merged with provider-level `compat` when both are set. |
 
 A cost tier supplies a complete alternate rate set and applies to the full request when total input usage (`input + cacheRead + cacheWrite`) exceeds `inputTokensAbove`. When multiple tiers match, the highest threshold wins.
@@ -236,54 +265,60 @@ Current behavior:
 - `/model`, `--list-models`, and the interactive footer display entries by model `id`.
 - The configured `name` is used for model matching and secondary model detail text. It does not replace the footer/status-bar model id.
 
-### Sampling Parameters
+### Image Input Limits
+
+Use `inputLimits.images.resize` to configure how new images are encoded before they enter conversation history:
+
+```json
+{
+  "id": "vision-model",
+  "input": ["text", "image"],
+  "inputLimits": {
+    "images": {
+      "resize": {
+        "maxWidth": 1568,
+        "maxHeight": 1568,
+        "maxBytes": 524288,
+        "jpegQuality": 75
+      }
+    }
+  }
+}
+```
+
+`maxBytes` limits the base64-encoded payload. Omitted resize fields use conservative defaults of 2000 by 2000 pixels, 4.5 MiB encoded, and JPEG quality 80. Images are encoded once; changing models does not rewrite historical images. The catalog can also describe hard request limits with `inputLimits.maxRequestBytes`, `images.maxPerMessage`, and `images.maxPerRequest`, but Apex Code does not yet rewrite or reject history based on them.
+
+<a id="prompt-cache-lifetimes"></a>
+
+Use `promptCache` to declare the provider's best-effort cache lifetime in seconds for the `short` or `long` retention tier:
+
+```json
+{ "id": "claude-sonnet-5", "promptCache": { "short": 300, "long": 3600 } }
+```
+
+Choose the conservative end of any published range. A model without a lifetime for the active tier is not eligible for cache warming. A `modelOverrides` entry can set `inputLimits` or `promptCache` for a built-in or extension model, including a model accessed through a validated proxy. See [`cacheWarming`](settings.md#model-and-thinking).
+
+Compatibility settings should describe verified differences in the endpoint's request or response behavior. Do not enable them based only on an endpoint advertising OpenAI or Anthropic compatibility.
 
 `samplingParams` is a free-form object merged verbatim into every request body for the model, after the fields Apex Code sets itself, so its keys win. Use it to send sampling parameters Apex Code does not model — including server-specific ones like llama.cpp's `min_p` or vLLM's `top_k`:
 
-```json
-{
-  "id": "deepseek-v4-flash",
-  "samplingParams": {
-    "temperature": 1.0,
-    "top_p": 0.95,
-    "top_k": 0,
-    "min_p": 0.0
-  }
-}
-```
+Use an extension when the provider needs custom streaming, model discovery, or authentication behavior. See [Custom Providers](custom-provider.md) for the extension workflow.
 
 Only OpenAI-compatible APIs apply it (`openai-completions`, `openai-responses`, `azure-openai-responses`); other APIs ignore it. Keys override Apex Code's named request fields (for example a `temperature` key here beats the request-level temperature), so prefer it as the single source of sampling truth for a model. In `modelOverrides`, `samplingParams` merges per key with the base model's value.
 
-A constant thinking-token cap can go here too, but it will not follow `thinkingBudgets` or leave room for the answer. Prefer `compat.thinkingTokenBudgetField` (or the `supportsThinkingTokenBudget` alias) for that.
+### A model does not appear
 
-### Thinking Level Map
+Confirm that its provider has usable authentication. Custom models can load from `models.json` but remain unavailable in `/model` until Apex Code can resolve credentials. For llama.cpp, only models currently loaded by the router appear.
 
 Use `thinkingLevelMap` on a model to describe model-specific thinking controls. Keys are Apex Code thinking levels: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. Maps may contain holes; for example, a model can expose `high` and `max` without exposing `xhigh`.
 
-Values are tristate:
+Check whether the key came from an environment variable rather than `auth.json`. Environment variables must be present in the process that starts Apex Code.
 
-| Value | Meaning |
-|-------|---------|
-| omitted | Standard levels through `high` use the provider's default mapping; extended `xhigh` and `max` levels are unsupported |
-| string | Level is supported and this value is sent to the provider |
-| `null` | Level is unsupported and hidden/skipped/clamped away |
+### Sign-in opens a browser on a remote machine
 
-Example for a model that only supports off, high, and max reasoning:
+Complete the provider's headless authentication flow when available. Some providers let you paste the final redirect URL or authorization code back into Apex Code. See [Authenticate interactively](providers.md#authenticate-interactively).
 
-```json
-{
-  "id": "deepseek-v4-pro",
-  "reasoning": true,
-  "thinkingLevelMap": {
-    "minimal": null,
-    "low": null,
-    "medium": null,
-    "high": "high",
-    "xhigh": null,
-    "max": "max"
-  }
-}
-```
+### A compatible endpoint rejects requests
 
 Example for a model where thinking cannot be disabled:
 
@@ -359,7 +394,23 @@ Use `modelOverrides` to customize built-in models and matching extension-registe
 }
 ```
 
-`modelOverrides` supports these fields per model: `name`, `reasoning`, `thinkingLevelMap`, `input`, `cost` (partial), `contextWindow`, `maxTokens`, `samplingParams` (merged per key), `headers`, `compat`.
+`modelOverrides` supports these fields per model: `name`, `reasoning`, `thinkingLevelMap`, `input`, `inputLimits` (deep-merged), `cost` (partial), `promptCache` (merged per tier), `contextWindow`, `maxTokens`, `samplingParams` (merged per key), `headers`, `compat`.
+
+Use a `promptCache` override to enable cache warming through a proxy whose backing cache you know, for example OpenRouter routed to Anthropic:
+
+```json
+{
+  "providers": {
+    "openrouter": {
+      "modelOverrides": {
+        "anthropic/claude-sonnet-4": {
+          "promptCache": { "short": 300 }
+        }
+      }
+    }
+  }
+}
+```
 
 Direct OpenAI GPT-5.6 Sol, Terra, and Luna default to a `272000` context window so requests remain within OpenAI's short-context pricing tier. To opt into OpenAI's 1.05M context window, increase it for each model you use:
 
@@ -394,7 +445,7 @@ By default Apex Code sends per-tool `eager_input_streaming: true`. If a proxy or
 
 Some Anthropic models require adaptive thinking (`thinking.type: "adaptive"` plus `output_config.effort`) instead of the legacy budget-based thinking payload. Built-in models set this automatically. For custom providers or aliases that route to those models, set `forceAdaptiveThinking` to `true`.
 
-Claude models with per-turn effort support use `supportsMidConvoEffort`. Pi then persists each response's provider effort, reconstructs effort-only system messages on later requests, and sends thinking binding controls with `prefix_mismatch_behavior: "drop_block"` to avoid stale signed-thinking prefixes causing persistent 400 responses. Set this only for the exact supported Claude model on a faithful Anthropic Messages transport; do not enable it for APIs that merely imitate the Messages shape.
+Claude models with per-turn effort support use `supportsMidConvoEffort`. Apex Code then persists each response's provider effort, reconstructs effort-only system messages on later requests, and sends thinking binding controls with `prefix_mismatch_behavior: "drop_block"` to avoid stale signed-thinking prefixes causing persistent 400 responses. Set this only for the exact supported Claude model on a faithful Anthropic Messages transport; do not enable it for APIs that merely imitate the Messages shape.
 
 Some Anthropic-compatible providers emit thinking blocks with empty signatures and still expect them on replay. Set `allowEmptySignature` to `true` only for those providers; real Anthropic rejects empty thinking signatures.
 
@@ -432,9 +483,10 @@ Built-in Anthropic models enable `supportsStrictTools` in their model metadata. 
 | `sendSessionAffinityHeaders` | Whether to send `x-session-affinity` from the session id when caching is enabled. Default: auto-detected for known providers. |
 | `supportsCacheControlOnTools` | Whether the provider accepts Anthropic-style `cache_control` markers on tool definitions. Default: `true`. |
 | `forceAdaptiveThinking` | Whether to send adaptive thinking (`thinking.type: "adaptive"` plus `output_config.effort`) for this model. Built-in adaptive models set this automatically. Default: `false`. |
-| `supportsMidConvoEffort` | Whether the exact Claude model transport supports per-turn effort system messages and thinking binding controls. Pi persists native effort levels and always sends `drop_block` when enabled. Default: `false`. |
+| `supportsMidConvoEffort` | Whether the exact Claude model transport supports per-turn effort system messages and thinking binding controls. Apex Code persists native effort levels and always sends `drop_block` when enabled. Default: `false`. |
 | `allowEmptySignature` | Whether to replay empty thinking signatures as `signature: ""` instead of converting thinking to text. Default: `false`. |
 | `supportsStrictTools` | Whether the provider accepts strict JSON-schema tool definitions. Default: `false`; built-in Anthropic models enable it in generated metadata. |
+| `allowedFallbackModels` | Up to three server-side fallback models, each with `provider`, `model`, and complete `cost` metadata. An empty array disables fallback. |
 
 ## OpenAI Compatibility
 
@@ -481,7 +533,6 @@ For providers with partial OpenAI compatibility, use the `compat` field.
 | `sessionAffinityFormat` | For `openai-completions` and `openai-responses`, the session-affinity header format: `openai` sends `session_id`/`x-client-request-id` (completions also `x-session-affinity`), `openai-nosession` omits the underscore-containing `session_id` header, `openrouter` sends `x-session-id`. Does not affect the `prompt_cache_key` body param. Default: auto-detected. |
 | `supportsStrictMode` | Whether the provider accepts strict JSON-schema function tool definitions. Custom `openai-responses` models default to `true` when omitted; an explicit `false` opts out. Other APIs are unchanged. |
 | `supportsOpenAIGrammarTools` | Whether OpenAI-compatible APIs emit custom Lark/regex grammar tools. When `false`, grammar-constrained tools fall back to normal function tools. Default: `false`; the built-in model catalog enables it for GPT-5+ models on OpenAI, OpenAI Codex, Azure OpenAI, GitHub Copilot, opencode, and Cloudflare AI Gateway. |
-| `deferredToolsMode` | Use provider-specific deferred tool serialization. Currently only `"kimi"` is supported for Kimi's OpenAI-compatible Chat Completions format. |
 | `supportsLongCacheRetention` | Whether the provider accepts long cache retention when cache retention is `long`: `prompt_cache_options.ttl: "30m"` for GPT-5.6+ Responses models, `prompt_cache_retention: "24h"` for earlier OpenAI models, or `cache_control.ttl: "1h"` when `cacheControlFormat` is `anthropic`. Default: `true`. |
 | `openRouterRouting` | OpenRouter provider routing preferences. This object is sent as-is in the `provider` field of the [OpenRouter API request](https://openrouter.ai/docs/guides/routing/provider-selection). |
 | `vercelGatewayRouting` | Vercel AI Gateway routing config for provider selection (`only`, `order`) |

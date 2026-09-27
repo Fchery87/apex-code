@@ -81,6 +81,8 @@ three merges that follow Phase 2, not from a Phase 0 rehearsal.
 | 2026-08-27 | `v0.84.3` | — | — | — | Taken at `89424bcb7`; see the v0.84.3 section below. This row was missing until 2026-08-30, which made the table read one release behind `.upstream-tag`. |
 | 2026-08-30 | `v0.84.4` | **15** | 16 (11 in forked paths) | 69 (+1,683 / −232) | Total: 112 files, +2,786 / −378. Zero conflicts in frozen packages. |
 | 2026-09-25 | `v0.85.1` | **138** | 79 (58 in forked paths) | 438 (+72,131 / −14,925) | Takes `v0.85.0` and `v0.85.1`. Under the 159 ceiling. Total: 708 files, +96,348 / −25,254. Zero conflicts in frozen packages; new frozen package `chord`. |
+| 2026-09-27 | `v0.86.0` | **163** | 58 total; 7 markerless resurrected paths | 308 (+45,932 / −4,998) | Total: 566 files, +63,405 / −10,737. Four hunks over the 159 ceiling; ≈2h39 wall-clock. Review: the spike coincides with upstream's TranscriptContext/tool-state API transition and model-catalog refresh; Apex adaptations stayed at public boundaries, consumed packages remain frozen, and build/check/full-test gates pass. One breach only; continue and measure v0.86.1 separately. |
+| 2026-09-27 | `v0.86.1` | **19** | 15 total (11 in forked paths); 3 markerless resurrected paths | 29 (+667 / −295) | Total: 72 files, +1,327 / −360. Under the 159 ceiling. Removed the three previously deleted package paths again; refreshed the vendor model snapshot to supply Meta's five models; frozen packages remained byte-identical and all release gates passed. |
 | 2026-08-09 | Apex Code identity rename | — (fork divergence, not a merge) | — | 218 files (+736 / −744), 602 diff hunks | Renamed the two forked package identities, active imports/docs/examples, binary, and global config root. Recorded separately from upstream merge conflicts. |
 
 ### Two kinds of merge cost, tracked separately
@@ -717,3 +719,95 @@ The general lesson for this merge: a clean three-way diff and a passing typechec
 isolation are not the same claim as "nothing broke" — only a full-tree build, typecheck,
 and test run catches code whose only fault is depending on something a neighboring,
 unconflicted diff quietly removed.
+
+### v0.86.0 ceiling review
+
+This merge recorded 163 conflicted hunks across 58 files, four above ADR 0003's
+159-hunk ceiling. The review attributes the spike to a one-release upstream API wave:
+provider contexts now use `TranscriptContext`, tool loadout changes are transcript
+state, and the provider model catalog and message/result types changed together. The
+reconciliation remains at Apex-owned boundaries (`ModelRuntime`, replay/provider
+adapters, prompt/schema projection, and fixtures); no consumed package was patched,
+and the frozen-package check passed. The full build and typecheck gates passed, and the
+final test run passed 4,894 tests with 52 skipped across the script, agent, and
+coding-agent suites. This is one ceiling breach rather than the three consecutive
+divergence-attributable breaches that open ADR 0003's stop-tracking tripwire. Continue
+sequentially and compare the next release's count before advancing again.
+
+### v0.86.1 reconciliation
+
+The next merge fell back to 19 conflicted hunks across 15 files, including 11 in
+forked paths, below ADR 0003's 159-hunk ceiling. Upstream also resurrected three
+paths Apex had deleted: `packages/evals/package.json` and the SQLite session-backend
+manifest/changelog. They were removed again because those packages still depend on
+the upstream package identities Apex renamed and are outside the roadmap.
+
+The new Meta provider shard imported `src/providers/data/meta.json`, but upstream
+does not commit that generated directory and the Apex snapshot did not yet contain
+Meta. Refreshed the canonical `vendor/model-data` snapshot, which supplied five Meta
+models and changed only the Cerebras and OpenRouter catalogs alongside the manifest.
+`check:model-data` and the offline build pass; the frozen `packages/ai` source itself
+was not edited. The refresh timestamp is recorded in the manifest.
+
+At the Apex-owned boundary, `/bug` remains a local ZIP export with no upload, and the
+interactive hint now describes that behavior. The merge also adopts upstream's
+retryable-error/cancellation filter and multiline prompt support while retaining
+Apex's pending-tool disposal and detailed retry outcome. Package locks were
+regenerated from Apex manifests, preserving Apex package names and build paths.
+
+### v0.87.0 reconciliation
+
+This merge recorded 39 conflicted hunks across 22 files, 18 in forked paths, below
+ADR 0003's 159-hunk ceiling. The merge touched 85 forked paths with +4,949/-608
+lines. The two Apex-deleted package directories resurrected by upstream (`evals` and
+`session-backends/sqlite-node`) were removed again; neither is on the roadmap.
+
+At the agent boundary, Apex keeps its run-budget gate and repeated-tool-error guard,
+retains `shouldStopAfterTurn` as a deprecated compatibility hook, and adopts
+`prepareRequest`, `finishTurn`, explicit continuation, and queue previewing. The
+session layer keeps Apex context projection, trust, and hook lifecycles while adding
+upstream's request and boundary hooks. The `/bug` flow remains a local ZIP export.
+Updated the coding-agent README's copied CLI, state-path, and startup-network guidance
+to match Apex Code and its no-telemetry behavior.
+
+The fresh npm 11 lock initially omitted registry integrity and resolved metadata for
+unchanged packages, which made the agent-core SBOM fail to include dependency hashes.
+Restored that metadata only from the base lock for package keys and versions that were
+identical, regenerated both coding-agent locks, and confirmed both frozen and SBOM
+gates. The extension project-trust test now allows up to 30 seconds for its cold jiti
+load; its default-timeout failure reproduced at about 5.4 seconds on an idle run.
+
+Verification passed: `npm run check`, `npm run build:offline`, the frozen-package
+check against v0.87.0, and `npm test` (script suite 215 passed / 4 skipped, scrubber
+21 passed, agent 975 passed / 1 skipped, coding-agent 4,007 passed / 51 skipped).
+
+### v0.87.1 reconciliation
+
+This merge recorded 165 conflicted hunks across 44 files, including 38 files in
+forked paths, six above ADR 0003's 159-hunk ceiling. The accounting is 153 forked
+non-lock hunks, 11 lock hunks, and one identity-file hunk. The spike is chiefly the
+upstream coding-agent documentation refactor; v0.87.0 recorded 39 hunks, so this is
+not a sustained three-release breach. The review continued sequentially and retained
+the reconciliation details in this log and the session audit.
+
+Upstream resurrected the deleted `packages/evals` and
+`packages/session-backends/sqlite-node` packages; both were removed again because
+they are outside the roadmap and retain upstream package identities. The Apex-owned
+coding-agent development guide was kept after upstream deleted it because the README
+still links to it and it documents Apex-specific setup. The docs refactor was adapted
+to Apex's CLI, paths, package names, and offline/product behavior. Local ZIP bug reports
+and opt-in transcript sharing remain intact.
+
+The release adopts upstream's durable SQLite storage, model-catalog generator and
+provider updates, split-turn compaction framing, and xAI `grok-4.7` default. CLI
+`--mode` validation now reports missing and invalid values while retaining Apex's
+supported `acp` mode. The durable browser smoke explicitly selects the package's
+`source` export condition so a clean checkout can validate its public browser-safe
+entry points without first building `dist`.
+
+Package manifests and all three lock surfaces were reconciled to Apex's package
+identity and v0.87.1 dependency range; lockfile registry metadata was retained for
+unchanged package versions. Verification passed: `npm run check`,
+`npm run build:offline`, the frozen-package check against v0.87.1, and `npm test`
+(script suite 215 passed / 4 skipped, scrubber 21 passed, agent 975 passed / 1
+skipped, coding-agent 4,014 passed / 51 skipped).

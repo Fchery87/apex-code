@@ -1,5 +1,6 @@
 import { constants } from "node:fs";
 import { access as fsAccess } from "node:fs/promises";
+import { constants as osConstants } from "node:os";
 import { type AgentTool, type AgentToolResult, ToolExecutionError } from "apex-code-agent-core";
 import { spawn } from "child_process";
 import { type Static, Type } from "typebox";
@@ -235,7 +236,8 @@ export interface BashOperations {
 	 * @param command The command to execute
 	 * @param cwd Working directory
 	 * @param options Execution options
-	 * @returns Promise resolving to exit code (null if killed)
+	 * @returns Promise resolving to the exit code. Report signal terminations as 128 + signal number;
+	 * a null exit code is treated as a failed command.
 	 */
 	exec: (
 		command: string,
@@ -324,8 +326,11 @@ export function createLocalShellOperations(shellName: string, resolveShellConfig
 				if (timedOut) {
 					throw new Error(`timeout:${timeoutMs / 1000}`);
 				}
+				// A signal-killed shell has no exit code. Use the standard shell convention so
+				// callers do not mistake the termination for a successful command.
+				const signalCode = child.signalCode;
 				return {
-					exitCode,
+					exitCode: exitCode ?? (signalCode ? 128 + (osConstants.signals[signalCode] ?? 0) : 1),
 					executable: shellConfig.shell,
 					argv: commandFromStdin ? [...shellConfig.args] : [...shellConfig.args, command],
 				};
@@ -529,7 +534,7 @@ export function createShellToolDefinition(
 				},
 			},
 		},
-		constrainedSampling: getExperimentalToolSampling(),
+		constrainedSampling: getExperimentalToolSampling() ?? { type: "json_schema", strict: "prefer" },
 		async execute(_toolCallId, input: BashToolInput, signal?: AbortSignal, onUpdate?, ctx?: ExtensionContext) {
 			const parsed = parseShellOperation(input);
 			if (!parsed.ok) throw new ToolExecutionError(parsed.reason, undefined);
@@ -702,7 +707,12 @@ export function createShellToolDefinition(
 				const snapshot = await finishOutput();
 				const { text: outputText, details } = formatOutput(snapshot);
 				const resultDetails: BashToolDetails = { ...details, execution };
-				if (exitCode !== 0 && exitCode !== null) {
+				if (exitCode === null) {
+					throw new ToolExecutionError(appendStatus(outputText, "Command terminated without an exit code"), {
+						execution,
+					});
+				}
+				if (exitCode !== 0) {
 					throw new ToolExecutionError(appendStatus(outputText, `Command exited with code ${exitCode}`), {
 						execution,
 					});

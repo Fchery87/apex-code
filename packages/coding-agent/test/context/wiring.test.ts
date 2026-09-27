@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getCurrentTools } from "@earendil-works/pi-ai";
 import { Agent } from "apex-code-agent-core";
 import { Type } from "typebox";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -158,7 +159,7 @@ describe("context pipeline wiring (task 3.3)", () => {
 
 		// -- Deferred-schema resolution: present from the very first request, since
 		// it projects the (fixed, per-turn) tool list, not the growing message list.
-		const firstTools = faux.contexts[0].tools ?? [];
+		const firstTools = getCurrentTools(faux.contexts[0].messages);
 		const secretToolFirst = firstTools.find((t) => t.name === "secret_tool");
 		expect(secretToolFirst).toBeDefined();
 		expect(JSON.stringify(secretToolFirst?.parameters)).not.toContain(RISKY_PARAM_NAME);
@@ -175,7 +176,7 @@ describe("context pipeline wiring (task 3.3)", () => {
 		expect(secondToolResult?.content).toEqual([{ type: "text", text: DEFAULT_EVICTION_MARKER }]);
 
 		// -- Both effects present simultaneously in the same outbound request.
-		const secondTools = faux.contexts[1].tools ?? [];
+		const secondTools = getCurrentTools(faux.contexts[1].messages);
 		const secretToolSecond = secondTools.find((t) => t.name === "secret_tool");
 		expect(JSON.stringify(secretToolSecond?.parameters)).not.toContain(RISKY_PARAM_NAME);
 

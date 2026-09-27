@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { VirtualTerminal } from "../../tui/test/virtual-terminal.ts";
 import { KeybindingsManager } from "../src/core/keybindings.ts";
 import type { FullscreenExitOutput, TuiMode } from "../src/core/settings-manager.ts";
-import type { StatusIndicatorKind } from "../src/modes/interactive/components/status-indicator.ts";
+import type { StatusIndicator, StatusIndicatorKind } from "../src/modes/interactive/components/status-indicator.ts";
 import {
 	createInteractiveTui,
 	createInteractiveTuiReference,
@@ -346,7 +346,7 @@ describe("InteractiveMode copy confirmation", () => {
 
 type StatusEditor = {
 	embedWorkingStatus: boolean;
-	setWorkingStatusIndicator: (indicator: undefined) => void;
+	setWorkingStatusIndicator: (indicator: StatusIndicator | undefined) => void;
 };
 
 type ClearStatusContext = {

@@ -6,6 +6,7 @@ import {
 	type AssistantMessageEvent,
 	EventStream,
 	isRetryableAssistantError,
+	type JsonObject,
 	type Model,
 } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
@@ -26,7 +27,7 @@ const model: Model<"openai-responses"> = {
 	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 };
 const parameters = Type.Object({ value: Type.String() });
-type Call = { name: string; arguments: Record<string, unknown> };
+type Call = { name: string; arguments: JsonObject };
 
 function fixture(script: Call[][], mode: ToolExecutionMode = "sequential") {
 	let requests = 0;

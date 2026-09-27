@@ -4,7 +4,7 @@
 
 Extensions and custom tools can render custom TUI components for interactive user interfaces. This page covers the component system and available building blocks.
 
-**Source:** [`@earendil-works/pi-tui`](https://github.com/earendil-works/pi-mono/tree/main/packages/tui)
+**Source:** [`@earendil-works/pi-tui`](https://github.com/earendil-works/pi/tree/main/packages/tui)
 
 ## Component Interface
 
@@ -248,31 +248,24 @@ container.addChild(component2);
 container.removeChild(component1);
 ```
 
-### Spacer
+`@earendil-works/pi-tui` provides the terminal component system used by Pi. Extensions use it when built-in dialogs, notifications, status text, and widgets are not enough for the interaction they need.
 
-Empty vertical space.
+Start with `ctx.ui` methods from an [extension](extensions.md#interact-with-the-user). Build a custom component only when the UI needs its own rendering, keyboard or mouse input, focus, layout, or lifecycle.
 
-```typescript
-const spacer = new Spacer(2);  // 2 empty lines
-```
+## Choose an integration point
 
-### Markdown
+| Need | Use |
+|---|---|
+| Select, confirm, input, or multi-line editor | `ctx.ui.select()`, `confirm()`, `input()`, or `editor()` |
+| Non-blocking feedback | `ctx.ui.notify()` or `setStatus()` |
+| Persistent content near the editor | `ctx.ui.setWidget()` |
+| Replace the header, footer, or editor | The corresponding `ctx.ui` component factory |
+| Temporary interactive screen or overlay | `ctx.ui.custom()` |
+| Custom rendering for a tool or session entry | An extension renderer |
 
-Renders markdown with syntax highlighting.
+These APIs receive Pi’s active theme and keybindings where needed. Do not create a second terminal renderer inside an extension.
 
-```typescript
-const md = new Markdown(
-  "# Title\n\nSome **bold** text",
-  1,        // paddingX
-  1,        // paddingY
-  theme     // MarkdownTheme (see below)
-);
-md.setText("Updated markdown");
-```
-
-### Image
-
-Renders images in supported terminals (Kitty, iTerm2, Ghostty, WezTerm, Warp).
+## Understand the component model
 
 ```typescript
 const image = new Image(
@@ -525,107 +518,51 @@ Call `invalidate()` when state changes, then use the injected `tui.requestRender
 
 When the theme changes, the TUI calls `invalidate()` on all components to clear their caches. Components must properly implement `invalidate()` to ensure theme changes take effect.
 
-### The Problem
+Every rendered line must fit within the supplied width. Measure visible terminal columns rather than string length because ANSI escapes, wide characters, emoji, and combining characters change display width.
 
-If a component pre-bakes theme colors into strings (via `theme.fg()`, `theme.bg()`, etc.) and caches them, the cached strings contain ANSI escape codes from the old theme. Simply clearing the render cache isn't enough if the component stores the themed content separately.
+Use `visibleWidth()`, `truncateToWidth()`, `sliceByColumn()`, and `wrapTextWithAnsi()` instead of implementing terminal-width handling yourself. Pi resets styling and hyperlinks after every line, so reapply styles on each rendered line.
 
-**Wrong approach** (theme colors won't update):
+After changing component state, invalidate the affected component and call the injected `tui.requestRender()`. The TUI coalesces render requests and updates the terminal.
 
-```typescript
-class BadComponent extends Container {
-  private content: Text;
+## Compose built-in components
 
-  constructor(message: string, theme: Theme) {
-    super();
-    // Pre-baked theme colors stored in Text component
-    this.content = new Text(theme.fg("accent", message), 1, 0);
-    this.addChild(this.content);
-  }
-  // No invalidate override - parent's invalidate only clears
-  // child render caches, not the pre-baked content
-}
-```
+The package includes components for common layouts and controls:
 
-### The Solution
+- `Text`, `Markdown`, `Image`, and `TruncatedText` render content.
+- `Container`, `VStack`, `HStack`, `Box`, and `Spacer` compose layouts.
+- `Input` and `Editor` accept text.
+- `SelectList` and `SettingsList` implement searchable selection and settings flows.
+- `ScrollView` provides a bounded scrollable viewport.
+- `Loader` and `CancellableLoader` report ongoing work.
+- `MouseRegion` adds pointer behavior around another component.
 
-Components that build content with theme colors must rebuild that content when `invalidate()` is called:
+Prefer these components over rebuilding selection, scrolling, text editing, or width handling. The extension examples show how to combine them with Pi’s borders and themes.
 
-```typescript
-class GoodComponent extends Container {
-  private message: string;
-  private content: Text;
+## Handle keyboard input and focus
 
-  constructor(message: string) {
-    super();
-    this.message = message;
-    this.content = new Text("", 1, 0);
-    this.addChild(this.content);
-    this.updateDisplay();
-  }
+Use `matchesKey()` and `Key` for terminal keyboard input. The parser accounts for supported terminal protocols and key modifiers. Extension components should use the injected `KeybindingsManager` for configurable application actions.
 
-  private updateDisplay(): void {
-    // Rebuild content with current theme
-    this.content.setText(theme.fg("accent", this.message));
-  }
+A component that displays a text cursor should implement `Focusable` and place `CURSOR_MARKER` immediately before its visual cursor. The TUI uses that marker to position the hardware cursor for input method editors.
 
-  override invalidate(): void {
-    super.invalidate();  // Clear child caches
-    this.updateDisplay(); // Rebuild with new theme
-  }
-}
-```
+Containers that wrap an `Input` or `Editor` must propagate their `focused` state to that child. Without propagation, Chinese, Japanese, Korean, and other IME candidate windows can appear at the wrong screen position.
 
-### Pattern: Rebuild on Invalidate
+Extend Pi’s `CustomEditor` when replacing the main editor. It preserves application shortcuts and agent controls.
 
-For components with complex content:
+Forward keys your editor does not own to the base implementation, and restore the default by clearing the custom editor factory.
 
-```typescript
-class ComplexComponent extends Container {
-  private data: SomeData;
+## Handle mouse input
 
-  constructor(data: SomeData) {
-    super();
-    this.data = data;
-    this.rebuild();
-  }
+Fullscreen mode routes normalized mouse events to components. A handler can mark an event handled, capture a drag sequence, request focus, or request a render.
 
-  private rebuild(): void {
-    this.clear();  // Remove all children
+Unhandled wheel events scroll the nearest `ScrollView`. Unhandled primary-button drags remain available for transcript selection. OSC 8 links take precedence over enclosing click regions.
 
-    // Build UI with current theme
-    this.addChild(new Text(theme.fg("accent", theme.bold("Title")), 1, 0));
-    this.addChild(new Spacer(1));
+Regular mode leaves mouse input to the terminal because the terminal owns scrollback. Design every interaction with a keyboard path even when fullscreen mouse input is available.
 
-    for (const item of this.data.items) {
-      const color = item.active ? "success" : "muted";
-      this.addChild(new Text(theme.fg(color, item.label), 1, 0));
-    }
-  }
+## Use custom screens and overlays
 
-  override invalidate(): void {
-    super.invalidate();
-    this.rebuild();
-  }
-}
-```
+`ctx.ui.custom()` temporarily gives one component control of the interactive area and resolves when that component calls the supplied completion callback.
 
-### When This Matters
-
-This pattern is needed when:
-
-1. **Pre-baking theme colors** - Using `theme.fg()` or `theme.bg()` to create styled strings stored in child components
-2. **Syntax highlighting** - Using `highlightCode()` which applies theme-based syntax colors
-3. **Complex layouts** - Building child component trees that embed theme colors
-
-This pattern is NOT needed when:
-
-1. **Using theme callbacks** - Passing functions like `(text) => theme.fg("accent", text)` that are called during render
-2. **Simple containers** - Just grouping other components without adding themed content
-3. **Stateless render** - Computing themed output fresh in every `render()` call (no caching)
-
-## Common Patterns
-
-These patterns cover the most common UI needs in extensions. **Copy these patterns instead of building from scratch.**
+Pass `overlay: true` to draw above existing content. Overlay options control size, anchors, offsets, margins, and responsive visibility. An overlay handle can change focus or temporarily hide and show the overlay with `setHidden()` while the interaction remains active.
 
 ### Pattern 1: Selection Dialog (SelectList)
 
@@ -708,16 +645,9 @@ pi.registerCommand("fetch", {
       return loader;
     });
 
-    if (result === null) {
-      ctx.ui.notify("Cancelled", "info");
-    } else {
-      ctx.ui.setEditorText(result);
-    }
-  },
-});
-```
+Treat each custom component instance as belonging to one interaction. Create a new instance when starting that interaction again.
 
-**Examples:** [qna.ts](../examples/extensions/qna.ts), [handoff.ts](../examples/extensions/handoff.ts)
+Finish the interaction with the completion callback supplied to the component factory. It resolves the `ctx.ui.custom()` promise and disposes the component. Do not call `OverlayHandle.hide()` on an overlay created by `ctx.ui.custom()`.
 
 ### Pattern 3: Settings/Toggles (SettingsList)
 
@@ -763,19 +693,15 @@ pi.registerCommand("settings", {
 
 **Examples:** [tools.ts](../examples/extensions/tools.ts)
 
-### Pattern 4: Persistent Status Indicator
+## Apply themes correctly
 
-Show status in the footer that persists across renders. Good for mode indicators.
+Use the theme passed to the extension or component callback. Theme helpers produce ANSI-styled strings for semantic colors such as accent, muted text, success, warnings, errors, tool output, and Markdown.
 
-```typescript
-// Set status (shown in footer)
-ctx.ui.setStatus("my-ext", ctx.ui.theme.fg("accent", "● active"));
+Do not permanently store strings with theme colors unless `invalidate()` rebuilds them. A theme change clears render caches, but it cannot remove old ANSI colors embedded in application state.
 
-// Clear status
-ctx.ui.setStatus("my-ext", undefined);
-```
+Theme callbacks evaluated during rendering do not need special rebuilding. Stateless components can also calculate themed output on every render.
 
-**Examples:** [status-line.ts](../examples/extensions/status-line.ts), [plan-mode/index.ts](../examples/extensions/plan-mode/index.ts), [preset.ts](../examples/extensions/preset.ts)
+Use [Themes](themes.md) to create terminal palettes. Use Pi’s `getMarkdownTheme()` when rendering Markdown that should match the active application theme.
 
 ### Pattern 4b: Working Indicator Customization
 
@@ -930,7 +856,7 @@ export default function (pi: ExtensionAPI) {
 
 - **Extend `CustomEditor`** (not base `Editor`) to get app keybindings (escape to abort, ctrl+d to exit, model switching, etc.)
 - **Call `super.handleInput(data)`** for keys you don't handle
-- **Working status**: custom editors keep the standalone working row by default. Pass `{ embedWorkingStatus: true }` as the fourth `CustomEditor` constructor argument to use the built-in editor-border spinner instead.
+- **Status spinners**: custom editors keep standalone status rows by default. Pass `{ embedWorkingStatus: true }` as the fourth `CustomEditor` constructor argument to embed working, compaction, branch summarization, and retry spinners in the editor border instead.
 - **Factory pattern**: `setEditorComponent` receives a factory function that gets `tui`, `theme`, and `keybindings`
 - **Pass `undefined`** to restore the default editor: `ctx.ui.setEditorComponent(undefined)`
 

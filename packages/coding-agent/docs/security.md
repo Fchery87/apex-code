@@ -1,10 +1,10 @@
-# Security
+# Run Apex Code safely
 
 Apex Code is a local coding agent. It runs with the permissions of the user account that starts it, and it treats files writable by that user as inside the same local trust boundary.
 
 See also [`SECURITY.md`](https://github.com/Fchery87/apex-code/blob/main/SECURITY.md) at the repository root for the reporting process, maintainer ownership, and what is in and out of scope; this page covers the underlying project-trust and sandboxing mechanics in more detail.
 
-## Project Trust
+Files, comments, instructions, command output, and model responses can steer the model through prompt injection. Project trust controls which project resources load at startup, but it does not make that content or the resulting actions safe.
 
 Project trust controls whether Apex Code loads project-local settings, resources, packages, and extensions. It is not a sandbox and it does not restrict what the model can ask tools to do after you start working in a directory.
 
@@ -28,7 +28,7 @@ Trusting a project allows Apex Code to load project resources that require trust
 
 Declining trust skips protected resources. Context files such as `AGENTS.override.md`, `AGENTS.md`, and `CLAUDE.md` are loaded regardless of project trust unless context loading is disabled. Before trust is resolved, Apex Code only loads context files, user/global extensions, and CLI `-e` extensions. User/global and CLI extensions can handle the `project_trust` event; the first extension that returns a yes/no decision owns the decision.
 
-Non-interactive modes (`-p`, `--mode json`, and `--mode rpc`) do not show a trust prompt. Without an applicable saved trust decision, `defaultProjectTrust: "ask"` and `"never"` ignore such resources, while `"always"` trusts them. Use `--approve`/`-a` or `--no-approve`/`-na` to override project trust for one run.
+### How Apex Code chooses a trust decision
 
 ## Permissions and Isolation
 
@@ -38,11 +38,11 @@ Apex Code ships no built-in sandbox. There is no OS-level boundary between a ses
 
 Project trust is only an input-loading guard, layered alongside the permission gate. It prevents a repository from silently changing Apex Code's settings or extensions before you approve it. It does not make untrusted code, untrusted prompts, or untrusted model output safe by itself. Prompt injection from repository files, comments, documentation, context files, or build output is expected local-agent risk and cannot be reliably prevented by Apex Code.
 
-## Running Untrusted or Unmonitored Work
+Use `/trust` to save a decision for future Apex Code processes.
 
 For untrusted repositories, generated code you do not intend to monitor closely, or unattended automation, run Apex Code in a contained environment. It has no boundary of its own, so this is the containment boundary rather than an extra one. Use a container, VM, micro-VM, remote sandbox, or policy-controlled sandbox with only the files and credentials required for the task.
 
-Common patterns are documented in [Containerization](containerization.md):
+Print, JSON, and RPC modes cannot show the built-in trust prompt. If no command-line override, extension, or saved decision applies:
 
 - run the whole Apex Code process inside a container/sandbox
 - run host Apex Code while routing built-in tool execution into a Gondolin micro-VM
@@ -52,9 +52,9 @@ Common patterns are documented in [Containerization](containerization.md):
 - restrict network access when the task does not need it
 - review diffs and outputs before copying results back to trusted systems
 
-If you bind-mount a host workspace read/write, writes from inside the container or VM can still modify host files. Use read-only mounts or copy files into and out of the sandbox when you need stronger protection from unintended writes.
+Use `--approve` or `--no-approve` when an automated run needs an explicit one-time decision.
 
-## Reporting Security Issues
+## Reduce impact and improve recovery
 
 To report a security issue, follow Apex Code's own [Security Policy](https://github.com/Fchery87/apex-code/blob/main/SECURITY.md) — private disclosure via [GitHub private vulnerability reporting](https://github.com/Fchery87/apex-code/security/advisories/new). Do not open a public issue for security-sensitive reports.
 

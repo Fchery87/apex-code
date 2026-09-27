@@ -1,4 +1,4 @@
-# Compaction & Branch Summarization
+# Compaction Reference
 
 LLMs have limited context windows. When conversations grow too long, Apex Code uses compaction to summarize older content while preserving recent work. This page covers both auto-compaction and branch summarization.
 
@@ -20,7 +20,7 @@ Apex Code has two summarization mechanisms:
 | Compaction | Context exceeds threshold, or `/compact` | Summarize old messages to free up context |
 | Branch summarization | `/tree` navigation | Preserve context when switching branches |
 
-Both use the same structured summary format and track file operations cumulatively. Compaction and branch-summary requests use fresh routing session IDs and, where supported by the provider, disable prompt-cache writes because these one-off prompts are unlikely to be reused.
+Both use closely related structured formats and track file operations cumulatively. Summarization requests disable prompt-cache writes because these one-off prompts are unlikely to be reused.
 
 ## Compaction
 
@@ -36,17 +36,19 @@ By default, `reserveTokens` is 16384 tokens (configurable in `~/.apex-code/agent
 
 Apex Code checks this threshold after every completed tool batch that would otherwise start another provider request. If a long tool run crosses the threshold, it compacts at that safe boundary and resumes the unfinished run.
 
-During a multi-turn agent run, Pi checks this threshold after tools finish and their results are appended, before starting the next assistant response. If the threshold is crossed, Pi compacts inside the same agent run and resumes with the summary and retained messages. It skips this between-turn check when the completed tool batch terminates the run and no queued message requires another response. Pi also checks the threshold before a new user prompt and after a low-level agent run ends.
+During a multi-turn agent run, Apex Code checks the finalized session projection after tools finish and before it starts the next assistant response. If the threshold is crossed, it compacts during `prepareNextTurn` and polls steering before `turn_start`. It skips this check when the tool batch ends the run and no queued message needs a response. Apex Code also checks before a new user prompt and performs overflow recovery after the low-level run ends.
+
+A provider context-overflow error or an early final `stopReason: "length"` can select one compact-and-retry recovery attempt. Length responses with tool calls retain their synthetic failed tool results and follow the ordinary tool/queue scheduler rather than forcing the run to end.
 
 You can also trigger manually with `/compact [instructions]`, where optional instructions focus the summary.
 
 ### How It Works
 
-1. **Find cut point**: Walk backwards from newest message, accumulating token estimates until `keepRecentTokens` (default 20k, configurable in `~/.apex-code/agent/settings.json` or `<project-dir>/.apex-code/settings.json`) is reached
-2. **Extract messages**: Collect messages from the previous kept boundary (or session start) up to the cut point
-3. **Generate summary**: Call LLM to summarize with structured format, passing the previous summary as iterative context when present
-4. **Append entry**: Save `CompactionEntry` with summary and `firstKeptEntryId`
-5. **Rebuilds context**: Session rebuilds the context for the next request, using summary + messages from `firstKeptEntryId` onwards
+1. **Find the cut point**: Walk backward through the finalized session projection and accumulate token estimates until you reach `keepRecentTokens`. The default is 20k tokens. Configure it in `~/.apex-code/agent/settings.json` or `<project-dir>/.apex-code/settings.json`.
+2. **Extract messages**: Collect projected messages from the previous kept boundary, or from the session start, up to the cut point.
+3. **Generate the summary**: Ask the model for a structured summary and include the previous summary when one exists.
+4. **Append the entry**: Save a `CompactionEntry` with the summary and `firstKeptEntryId`.
+5. **Rebuild the context**: Include the summary and projected messages from `firstKeptEntryId` onward.
 
 ```
 Before compaction:
@@ -80,16 +82,33 @@ What the LLM sees:
     prompt   from cmp          messages from firstKeptEntryId
 ```
 
-On repeated compactions, the summarized span starts at the previous compaction's kept boundary (`firstKeptEntryId`), not at the compaction entry itself, falling back to the entry after the previous compaction if that kept entry cannot be found in the path. This preserves messages that survived the earlier compaction by including them in the next summarization pass as well. Apex Code also recalculates `tokensBefore` from the rebuilt session context before writing the new `CompactionEntry`, so the token count reflects the actual pre-compaction context being replaced.
+On repeated compactions, the summarized span starts at the previous compaction's kept boundary (`firstKeptEntryId`). If that entry is missing from the path, compaction starts after the previous compaction. A retain-none compaction records its own ID as `firstKeptEntryId`, so the next pass starts after that entry. These rules preserve messages that survived an earlier compaction.
 
-### Split Turns
+Apex Code recalculates `tokensBefore` from the rebuilt, context-edited session projection before it writes the new `CompactionEntry`. Omitted raw entries remain stored, but they do not affect cut selection, summaries, checkpoints, or token estimates.
 
-A "turn" starts with a user message and includes all assistant responses and tool calls until the next user message. Normally, compaction cuts at turn boundaries.
+### Overflow and length recovery ordering
 
-When a single turn exceeds `keepRecentTokens`, the cut point lands mid-turn at an assistant message. This is a "split turn":
+Recovery preserves the event order. The completed attempt remains visible to `turn_end` and `agent_end`. The session then repairs persisted model context before it retries:
+
+```text
+persist final assistant response
+→ extension/public turn_end
+→ extension/public agent_end
+→ append context_edit omissions for the selected attempt
+→ for overflow/length: run session_before_compact and append compaction on success
+→ start the retry as a fresh run
+```
+
+If recovery compaction fails or is cancelled, Apex Code keeps the omission edits, appends no compaction, and schedules no internal retry. Steering and follow-up queues keep their normal behavior. `agent_before_settle` sees the repaired projection. Raw transcript history, exports, billing totals, and history-search extensions can still inspect the omitted attempt.
+
+### Split user-message spans
+
+A user-message span starts with a user message and includes all turns until the next user message. Normally, compaction cuts at user-message boundaries.
+
+When one user-message span exceeds `keepRecentTokens`, the cut point lands within that span at an assistant message. This is a split user-message span:
 
 ```
-Split turn (one huge turn exceeds budget):
+Split user-message span (one span exceeds budget):
 
   entry:  0     1     2      3     4      5      6     7      8
         ┌─────┬─────┬─────┬──────┬─────┬──────┬──────┬─────┬──────┐
@@ -102,13 +121,13 @@ Split turn (one huge turn exceeds budget):
                                                       └── kept (7-8)
 
   isSplitTurn = true
-  messagesToSummarize = []  (no complete turns before)
+  messagesToSummarize = []  (no earlier user-message spans)
   turnPrefixMessages = [usr, ass, tool, ass, tool, tool]
 ```
 
 For split turns, Apex Code generates two summaries and merges them:
 1. **History summary**: Previous context (if any)
-2. **Turn prefix summary**: The early part of the split turn
+2. **User-message-span prefix summary**: The early part of the split user-message span
 
 ### Cut Point Rules
 
@@ -120,6 +139,8 @@ Valid cut points are:
 
 Never cut at tool results (they must stay with their tool call).
 
+Preparation advances the kept boundary into a context-invisible suffix only when that suffix contains an omitted assistant attempt and no unomitted context-producing entries. Recovery `context_edit` omissions satisfy this rule; intrinsically context-invisible metadata may coexist with them. Metadata alone and newly appended custom messages do not move the cut. A replacement edit affecting the candidate input or summarized prefix also blocks advancement because the omitted assistant answered the pre-edit input; replacements of suffix entries that are ultimately omitted remain safe. This allows an over-budget recovered input to be summarized while retaining the edits that keep the abandoned attempt omitted, without making bookkeeping change whether new model input is preserved verbatim.
+
 ### CompactionEntry Structure
 
 Defined in [`session-manager.ts`](https://github.com/Fchery87/apex-code/blob/main/packages/coding-agent/src/core/session-manager.ts):
@@ -128,8 +149,8 @@ Defined in [`session-manager.ts`](https://github.com/Fchery87/apex-code/blob/mai
 interface CompactionEntry<T = unknown> {
   type: "compaction";
   id: string;
-  parentId: string;
-  timestamp: number;
+  parentId: string | null;
+  timestamp: string;
   summary: string;
   firstKeptEntryId: string;
   tokensBefore: number;
@@ -186,7 +207,7 @@ Both compaction and branch summarization track files cumulatively. When generati
 - Tool calls in the messages being summarized
 - Previous compaction or branch summary `details` (if any)
 
-This means file tracking accumulates across multiple compactions or nested branch summaries, preserving the full history of read and modified files.
+File tracking therefore accumulates across default compactions and nested default branch summaries. Pi does not automatically carry file lists from extension-generated summaries whose `fromHook` field is `true`; extensions manage their own `details` format.
 
 ### BranchSummaryEntry Structure
 
@@ -196,8 +217,8 @@ Defined in [`session-manager.ts`](https://github.com/Fchery87/apex-code/blob/mai
 interface BranchSummaryEntry<T = unknown> {
   type: "branch_summary";
   id: string;
-  parentId: string;
-  timestamp: number;
+  parentId: string | null;
+  timestamp: string;
   summary: string;
   fromId: string;      // Entry we navigated from
   usage?: Usage;       // LLM usage that generated the summary
@@ -218,7 +239,9 @@ See [`collectEntriesForBranchSummary()`](https://github.com/Fchery87/apex-code/b
 
 ## Summary Format
 
-Both compaction and branch summarization use the same structured format:
+Both formats include Goal, Constraints & Preferences, Progress, Key Decisions, and Next Steps. Compaction summaries also include Critical Context. Branch summaries stop after Next Steps. Pi appends file lists to either format when relevant.
+
+Compaction summaries use this format:
 
 ```markdown
 ## Goal
@@ -285,12 +308,12 @@ pi.on("session_before_compact", async (event, ctx) => {
   const { preparation, branchEntries, customInstructions, reason, willRetry, signal } = event;
 
   // preparation.messagesToSummarize - messages to summarize
-  // preparation.turnPrefixMessages - split turn prefix (if isSplitTurn)
+  // preparation.turnPrefixMessages - user-message-span prefix (if isSplitTurn)
   // preparation.previousSummary - previous compaction summary
   // preparation.fileOps - extracted file operations
   // preparation.tokensBefore - context tokens before compaction
   // preparation.firstKeptEntryId - where kept messages start
-  // preparation.settings - compaction settings
+  // preparation.settings - effective settings after applying model overrides
 
   // branchEntries - all entries on current branch (for custom state)
   // reason - "manual" (/compact), "threshold", or "overflow"
@@ -359,7 +382,7 @@ pi.on("session_compact_failed", async (event, ctx) => {
   const { reason, errorMessage, aborted, willRetry, fromExtension } = event;
   // reason - "manual" (/compact), "threshold", or "overflow"
   // errorMessage - present for non-abort failures
-  // aborted - true for cancelled/aborted compactions
+  // aborted - true for canceled/aborted compactions
   // willRetry - whether the aborted turn would have retried after compaction
   // fromExtension - whether extension-provided compaction content was being used
 });
@@ -418,3 +441,29 @@ Configure compaction in `~/.apex-code/agent/settings.json` or `<project-dir>/.ap
 | `keepRecentTokens` | `20000` | Recent tokens to keep (not summarized) |
 
 Disable auto-compaction with `"enabled": false`. You can still compact manually with `/compact`.
+
+### Per-model overrides
+
+Use `compaction.modelOverrides` to tune token budgets for different models:
+
+```json
+{
+  "compaction": {
+    "reserveTokens": 16384,
+    "keepRecentTokens": 20000,
+    "modelOverrides": {
+      "some-provider/big-model": {
+        "reserveTokens": 400000
+      }
+    }
+  }
+}
+```
+
+For a model with a 1M context window, this override triggers compaction above 600K tokens and keeps the ordinary 20000 recent tokens. Other models retain the ordinary 16384-token reserve. `reserveTokens` also influences summarization output limits, capped by the model's maximum output tokens; it is not solely a trigger threshold.
+
+Keys are exact, case-sensitive `provider/modelId` values, including any slashes within the model ID. Each `reserveTokens` and `keepRecentTokens` value falls back independently from the model override to the ordinary setting to the built-in default. Values must be non-negative safe integers. Invalid values in the matching model override produce an error when read; only omitted fields fall back to the ordinary setting. Model override entries must be objects. Invalid ordinary token settings produce an error when read, even if the active model has a valid override. Only omitted ordinary values use built-in defaults. `enabled` remains global, not model-specific.
+
+These resolved values are used for manual compaction, all automatic threshold checks, overflow recovery, and extension-visible `preparation.settings`. Model switches affect subsequent checks and compactions without changing ordinary settings. Compaction already in progress uses the model and settings captured for that operation. Branch summarization settings are unaffected.
+
+Overrides work in both global and project settings. The files merge recursively before lookup, so a global model-specific value beats a project-wide fallback; a project must override that model entry to change it. See [Settings](settings.md#per-model-compaction-overrides) for details.

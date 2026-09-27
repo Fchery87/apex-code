@@ -1,7 +1,20 @@
 import { join, resolve } from "node:path";
-import { setKeybindings, Text, type TUI, type TuiMouseEvent, visibleWidth } from "@earendil-works/pi-tui";
+import {
+	resetCapabilitiesCache,
+	setCapabilities,
+	setKeybindings,
+	Text,
+	type TUI,
+	type TuiMouseEvent,
+	visibleWidth,
+} from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
+
+const imageConvertMocks = vi.hoisted(() => ({ convertToPng: vi.fn() }));
+
+vi.mock("../src/utils/image-convert.ts", () => imageConvertMocks);
+
 import { getReadmePath } from "../src/config.ts";
 import type { ToolDefinition } from "../src/core/extensions/types.ts";
 import { KeybindingsManager } from "../src/core/keybindings.ts";
@@ -40,6 +53,8 @@ describe("ToolExecutionComponent parity", () => {
 
 	afterEach(() => {
 		vi.useRealTimers();
+		resetCapabilitiesCache();
+		imageConvertMocks.convertToPng.mockReset();
 	});
 
 	test("names queued, running, done, and error lifecycle states in text", () => {
@@ -185,6 +200,41 @@ describe("ToolExecutionComponent parity", () => {
 				expect(visibleWidth(line)).toBeLessThanOrEqual(width);
 			}
 		}
+	});
+	// Issue #8577: ignore conversions that finish after the image was replaced.
+	test("keeps the final tool image when a partial image conversion finishes late", async () => {
+		setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+		let finishConversion!: (result: { data: string; mimeType: string }) => void;
+		const conversion = new Promise<{ data: string; mimeType: string }>((resolve) => {
+			finishConversion = resolve;
+		});
+		imageConvertMocks.convertToPng.mockReturnValue(conversion);
+		const component = new ToolExecutionComponent(
+			"custom_tool",
+			"tool-image-race",
+			{},
+			{},
+			undefined,
+			createFakeTui(),
+			process.cwd(),
+		);
+
+		component.updateResult(
+			{ content: [{ type: "image", data: "partial-jpeg", mimeType: "image/jpeg" }], isError: false },
+			true,
+		);
+		component.updateResult({
+			content: [{ type: "image", data: "final-png", mimeType: "image/png" }],
+			isError: false,
+		});
+		expect(component.render(120).join("\n")).toContain("final-png");
+
+		finishConversion({ data: "converted-partial", mimeType: "image/png" });
+		await conversion;
+
+		const rendered = component.render(120).join("\n");
+		expect(rendered).toContain("final-png");
+		expect(rendered).not.toContain("converted-partial");
 	});
 
 	test("stacks custom call and result renderers like the old implementation", () => {
@@ -343,6 +393,47 @@ describe("ToolExecutionComponent parity", () => {
 		expect(rendered).not.toMatch(new RegExp(String.raw`line-4000[^\n]*\n${blank}\n${blank}\n${blank}\[Full output:`));
 		expect(rendered).toContain("Truncated: showing 2000 of 4000 lines");
 		expect(rendered).not.toContain("[Showing lines 2001-4000 of 4000. Full output:");
+	});
+
+	// Preserve the compact duration format used by the upstream status components.
+	test.each([
+		{ ms: 0, display: "0ms" },
+		{ ms: 4_200, display: "4.2s" },
+		{ ms: 59_900, display: "60s" },
+		{ ms: 59_999, display: "60s" },
+		{ ms: 60_000, display: "60s" },
+		{ ms: 90_900, display: "91s" },
+		{ ms: 1_592_200, display: "1592s" },
+		{ ms: 3_599_999, display: "3600s" },
+		{ ms: 3_600_000, display: "3600s" },
+		{ ms: 7_384_900, display: "7385s" },
+	])("bash renderer displays $ms ms as $display while running and after completion", ({ ms, display }) => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const component = new ToolExecutionComponent(
+			"bash",
+			"tool-bash-duration",
+			{ command: "long-running-command" },
+			{},
+			createBashToolDefinition(process.cwd(), { exposeSessionEnvironment: false }),
+			createFakeTui(),
+			process.cwd(),
+		);
+		component.markExecutionStarted();
+		component.updateResult({ content: [], isError: false }, true);
+
+		vi.advanceTimersByTime(ms);
+		component.invalidate();
+		const running = stripAnsi(component.render(120).join("\n"));
+
+		component.updateResult({ content: [], isError: false }, false);
+		const completed = stripAnsi(component.render(120).join("\n"));
+
+		vi.advanceTimersByTime(1_000);
+		component.invalidate();
+		expect(stripAnsi(component.render(120).join("\n"))).toBe(completed);
+		expect(running).toContain(`running ${display}`);
+		expect(completed).toContain(`done ${display}`);
 	});
 
 	test("does not duplicate built-in headers when passed the active built-in definition", () => {

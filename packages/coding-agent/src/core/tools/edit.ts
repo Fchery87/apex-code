@@ -244,7 +244,7 @@ export function createEditToolDefinition(
 				},
 			},
 		},
-		constrainedSampling: getExperimentalToolSampling(),
+		constrainedSampling: getExperimentalToolSampling() ?? { type: "json_schema", strict: "prefer" },
 		renderShell: "self",
 		prepareArguments: prepareEditArguments,
 		async execute(_toolCallId, input: EditToolInput, signal?: AbortSignal, _onUpdate?, ctx?: ExtensionContext) {

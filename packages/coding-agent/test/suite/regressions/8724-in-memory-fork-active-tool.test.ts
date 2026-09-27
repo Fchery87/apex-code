@@ -92,8 +92,13 @@ describe("regression #8724: in-memory fork during an active tool turn", () => {
 		await runtime.session.bindExtensions({});
 
 		expect(forkResult).toEqual({ cancelled: false, selectedText: "first prompt" });
-		expect(runtime.session.messages).toEqual([]);
-		expect(runtime.session.sessionManager.getEntries().filter((entry) => entry.type === "message")).toEqual([]);
+		expect(runtime.session.messages.map((message) => message.role)).toEqual(["system"]);
+		expect(
+			runtime.session.sessionManager
+				.getEntries()
+				.filter((entry) => entry.type === "message")
+				.map((entry) => entry.message.role),
+		).toEqual(["system"]);
 
 		let capturedRoles: string[] = [];
 		harness.setResponses([
@@ -104,6 +109,6 @@ describe("regression #8724: in-memory fork during an active tool turn", () => {
 		]);
 		await runtime.session.prompt("next prompt");
 
-		expect(capturedRoles).toEqual(["user"]);
+		expect(capturedRoles).toEqual(["system", "system", "user"]);
 	});
 });

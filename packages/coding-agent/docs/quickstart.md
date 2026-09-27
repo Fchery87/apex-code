@@ -2,7 +2,7 @@
 
 This page gets you from install to a useful first Apex Code session.
 
-## Install
+For native Windows setup, read [Windows Setup](windows.md). For Android, read [Termux Setup](termux.md).
 
 Apex Code is distributed as an npm package and installs the same way with npm, pnpm,
 Yarn, or Bun — all four resolve it from the same npm registry:
@@ -56,11 +56,11 @@ cd /path/to/project
 apex-code
 ```
 
-## Authenticate
+The working folder helps Apex Code discover relevant files, instructions, and configuration. Apex Code also uses it to group saved sessions.
 
 Apex Code can use subscription providers through `/login`, or API-key providers through environment variables or the auth file.
 
-### Option 1: subscription login
+The interface shows your conversation, an editor for prompts and commands, and a footer with the current folder, model, and session status. See [Use Apex Code in the terminal](usage.md) to learn how to add files, run commands, direct ongoing work, and manage results.
 
 Start Apex Code and run:
 
@@ -68,9 +68,9 @@ Start Apex Code and run:
 /login
 ```
 
-Then select a provider. Built-in subscription logins include Claude Pro/Max, ChatGPT Plus/Pro (Codex), and GitHub Copilot.
+Choose a provider, then follow the prompts to use a subscription or store an API key. Run `/model` afterward if you want to select a different available model.
 
-### Option 2: API key
+See [Choose a model and provider](models.md) for supported providers, environment-variable authentication, local models, and custom endpoints.
 
 Set an API key before launching Apex Code:
 
@@ -88,7 +88,7 @@ See [Providers](providers.md) for all supported providers, environment variables
 Once Apex Code starts, type a request and press Enter:
 
 ```text
-Summarize this repository and tell me how to run its checks.
+Summarize @meeting-notes.md and save the action items to action-items.md.
 ```
 
 By default, Apex Code gives the model four tools:
@@ -139,18 +139,18 @@ Images or text can be pasted with Ctrl+V (Alt+V on Windows); images can also be 
 In interactive mode:
 
 ```text
-!npm run lint
+Explain how this repository is structured and how to run its checks.
 ```
 
-The command output is sent to the model. Use `!!command` to run a command without adding its output to the model context.
+```text
+Compare @previous.csv with @current.csv and summarize the important changes.
+```
 
-### Switch models
+Type `@` in the editor to search for a file instead of entering its full path. When Apex Code finishes, review its response and any changed files. Use version control or backups for important work. For untrusted or unattended work, use a container or another sandbox. See [Security](security.md).
 
-Use `/model` or Ctrl+L to choose a model for the current session. Press Ctrl+S in the model picker to save the highlighted model as the startup default. Use `/thinking` to choose a thinking level for the current session, or Ctrl+S in that picker to save the startup default thinking level. Use Shift+Tab to cycle thinking level. Use Ctrl+P / Shift+Ctrl+P to cycle through scoped models.
+## Continue later
 
-### Continue later
-
-Sessions are saved automatically:
+Apex Code saves sessions automatically. Exit Apex Code, then resume the most recent session for the same working folder with:
 
 ```bash
 apex-code -c                  # Continue most recent session
@@ -181,4 +181,32 @@ Use `--mode json` for JSON event output or `--mode rpc` for process integration.
 - [Keybindings](keybindings.md) - shortcuts and customization.
 - [Apex Code Packages](packages.md) - install shared extensions, skills, prompts, and themes.
 
-Platform notes: [Windows](windows.md), [Termux](termux.md), [tmux](tmux.md), [Terminal setup](terminal-setup.md), [Shell aliases](shell-aliases.md).
+### Choose how to customize Apex Code
+
+Start with the least powerful mechanism that meets your need:
+
+| Need | Start with |
+|---|---|
+| Give Apex Code persistent instructions for a folder | [`AGENTS.md`](configuration.md#context-files) |
+| Reuse a prompt from the `/` menu | [Prompt template](prompt-templates.md) |
+| Add task-specific instructions and supporting files | [Skill](skills.md) |
+| Add executable tools, commands, or event handlers | [Extension](extensions.md) |
+| Build a custom terminal component | [Terminal UI](tui.md) |
+| Connect an unsupported model service | [Custom provider](custom-provider.md) |
+| Install or distribute several resources | [Apex Code package](packages.md) |
+
+## Update or uninstall Apex Code
+
+Update Apex Code with your package manager:
+
+```bash
+npm install --global apex-code
+```
+
+To uninstall an npm installation, run:
+
+```bash
+npm uninstall --global apex-code
+```
+
+Uninstalling leaves configuration, credentials, sessions, and installed packages in `~/.apex-code/agent/`.

@@ -1,6 +1,6 @@
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage, fauxToolCall, type JsonObject } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { evaluateToolCall } from "../../src/core/permissions/gate.ts";
 import type { PermissionMode } from "../../src/core/permissions/store.ts";
@@ -63,7 +63,7 @@ async function session(mode: PermissionMode = "default", seedProjectAllowAll = f
 	return harness;
 }
 
-async function leaks(harness: Harness, tool: string, params: Record<string, unknown>): Promise<boolean> {
+async function leaks(harness: Harness, tool: string, params: JsonObject): Promise<boolean> {
 	harness.setResponses([
 		fauxAssistantMessage([fauxToolCall(tool, params)], { stopReason: "toolUse" }),
 		fauxAssistantMessage("done"),

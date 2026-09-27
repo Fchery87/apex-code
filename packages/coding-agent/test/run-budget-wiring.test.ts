@@ -2,10 +2,11 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AssistantMessage, createAssistantMessageEventStream, type Model } from "@earendil-works/pi-ai";
-import type { AgentEvent, AgentTool } from "apex-code-agent-core";
+import type { AgentEvent } from "apex-code-agent-core";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
+import type { ToolDefinition } from "../src/core/extensions/types.ts";
 import { createAgentSession } from "../src/core/sdk.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
@@ -87,7 +88,7 @@ function doneMessage(): AssistantMessage {
 	};
 }
 
-function countingProbeTool(executed: string[]): AgentTool<any> {
+function countingProbeTool(executed: string[]): ToolDefinition {
 	return {
 		name: "probe",
 		label: "probe",
@@ -160,8 +161,9 @@ describe("run budget session wiring", () => {
 			modelRuntime: getModelRuntime(modelRegistry),
 			settingsManager,
 			sessionManager: SessionManager.inMemory(cwd),
+			customTools: [countingProbeTool(executed)],
+			tools: ["probe"],
 		});
-		session.agent.state.tools = [countingProbeTool(executed)];
 		session.agent.subscribe((event: AgentEvent) => {
 			if (event.type === "agent_end") stopReasons.push(event.stopReason);
 		});
@@ -210,8 +212,9 @@ describe("run budget session wiring", () => {
 			modelRuntime: getModelRuntime(modelRegistry),
 			settingsManager,
 			sessionManager: SessionManager.inMemory(cwd),
+			customTools: [countingProbeTool(executed)],
+			tools: ["probe"],
 		});
-		session.agent.state.tools = [countingProbeTool(executed)];
 		session.agent.subscribe((event: AgentEvent) => {
 			if (event.type === "agent_end") stopReasons.push(event.stopReason);
 		});
