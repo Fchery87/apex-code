@@ -44,13 +44,13 @@ and [`2026-09-23-codex-cli-comparison.md`](2026-09-23-codex-cli-comparison.md).
 
 | Project | Relation to Pi | Stars | Last push | License | Kind |
 | --- | --- | --- | --- | --- | --- |
-| [`earendil-works/pi`](https://github.com/earendil-works/pi) | Upstream | 109,361 | 2026-09-25 | MIT | Base (ADR 0001) |
+| [`earendil-works/pi`](https://github.com/earendil-works/pi/tree/d6af72e1857cfb10b41d8ff8e69f0d72b4cf6d31) | Upstream | 109,361 | 2026-09-25 | MIT | Base (ADR 0001) |
 | [`openclaw/openclaw`](https://github.com/openclaw/openclaw/tree/52c7502c8613d02e5fda0c7d36dd7ed5d544ba71) | Consumes `@earendil-works/pi-tui` 0.85.1; credits Pi | 390,515 | 2026-09-25 | MIT (GitHub reports "Other"; `LICENSE` is MIT text) | Personal assistant over chat channels |
 | [`can1357/oh-my-pi`](https://github.com/can1357/oh-my-pi/tree/7853b4e499936f9dcc13c9b64adb55f6b342aabf) (OMP) | Hard fork of pi-mono | 33,302 | 2026-09-25 | MIT (+ vendored third-party notices) | Coding harness |
 | [`PrimeIntellect-ai/prime-agent`](https://github.com/PrimeIntellect-ai/prime-agent/tree/cd1f215cffd09223316c54dddae5e1b654718c31) | Hard fork; keeps `@earendil-works/pi-*` identifiers | 21,295 | 2026-09-25 | MIT | Coding + research harness (RLM) |
 | [`Companion-Inc/feynman`](https://github.com/Companion-Inc/feynman/tree/87cefb931372cd068dd48ec467ed0500e538c39f) | Stock Pi + a Pi package | 9,788 | 2026-09-25 | MIT | Research agent |
 | [`vastsa/PI-Desktop`](https://github.com/vastsa/PI-Desktop/tree/ccf66728c6924b0be03d7ffa2ded35b717ac8070) | Uses `pi-ai` + `pi-agent-core` | 5,738 | 2026-09-25 | **LGPL-3.0** | Electron desktop workspace |
-| [`huggingface/tau`](https://github.com/huggingface/tau) | Python port, no shared code | 2,858 | 2026-09-23 | MIT | Minimal agent |
+| [`huggingface/tau`](https://github.com/huggingface/tau/tree/c66fb879c1058f7b3d8514fb7f92c919d3c3e3b3) | Python port, no shared code | 2,858 | 2026-09-23 | MIT | Minimal agent |
 | [`Gentleman-Programming/gentle-shell`](https://github.com/Gentleman-Programming/gentle-shell/tree/545681161ad04ee8df94a789669123a3186894d6) | Pi package + launcher over stock Pi | 1,089 | 2026-09-25 | MIT (names trademarked) | Coding workspace |
 
 OpenClaw is the largest Pi-lineage project but is a chat-channel assistant with a
