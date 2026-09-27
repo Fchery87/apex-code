@@ -75,6 +75,22 @@ describe("SettingsSelectorComponent", () => {
 		expect(onChatDetailChange.mock.calls.flat()).toEqual(["details", "all", "overview"]);
 	});
 
+	it("describes thinking visibility according to the saved preference", () => {
+		const config = {
+			chatDetail: "details",
+			hideThinkingBlock: true,
+			warnings: {},
+			availableDefaultModels: [],
+			availableThinkingLevels: [],
+			availableThemes: [],
+		} as unknown as SettingsConfig;
+		const list = new SettingsSelectorComponent(config, {} as unknown as SettingsCallbacks).getSettingsList();
+		for (const character of "Conversation detail") list.handleInput(character);
+		const output = stripAnsi(list.render(120).join("\n")).replace(/\s+/g, " ");
+
+		expect(output).toContain("follows the Hide thinking preference");
+	});
+
 	it("titles the panel and speaks the shared hint grammar", () => {
 		const selector = new SettingsSelectorComponent(
 			{

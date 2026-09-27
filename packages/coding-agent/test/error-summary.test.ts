@@ -21,6 +21,16 @@ describe("summarizeError", () => {
 		expect(summarizeError(traceback)).toBe("ValueError: bad input");
 	});
 
+	it("keeps the raised error when renderers prefix the traceback", () => {
+		const traceback = [
+			"Error: Traceback (most recent call last):",
+			'  File "main.py", line 3, in <module>',
+			"    run()",
+			"ValueError: bad input",
+		].join("\n");
+		expect(summarizeError(traceback)).toBe("Error: ValueError: bad input");
+	});
+
 	it("reads carriage returns as line breaks", () => {
 		expect(summarizeError("first\r\nsecond")).toBe("first");
 	});

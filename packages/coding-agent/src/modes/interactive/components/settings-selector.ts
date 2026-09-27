@@ -687,7 +687,7 @@ export class SettingsSelectorComponent extends Container {
 				id: "chat-detail",
 				label: "Conversation detail",
 				description:
-					"How much of the transcript shows: overview collapses everything, details shows diffs and thinking, all shows full tool output",
+					"Overview collapses everything; details shows diffs and follows the Hide thinking preference; all shows full tool output and thinking",
 				currentValue: config.chatDetail,
 				values: [...CHAT_DETAILS],
 			},

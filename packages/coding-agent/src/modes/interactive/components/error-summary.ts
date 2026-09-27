@@ -17,9 +17,10 @@ function nonEmptyLines(text: string): string[] {
 export function summarizeError(text: string): string | undefined {
 	const lines = nonEmptyLines(text);
 	if (lines.length <= 1) return undefined;
-	if (lines[0].startsWith("Traceback ")) {
+	const prefix = lines[0].startsWith("Error: Traceback ") ? "Error: " : "";
+	if (lines[0].slice(prefix.length).startsWith("Traceback ")) {
 		const raised = lines.filter((line) => !/^\s/.test(line)).at(-1);
-		if (raised && raised !== lines[0]) return raised.trim();
+		if (raised && raised !== lines[0]) return `${prefix}${raised.trim()}`;
 	}
 	return lines[0].trim();
 }
