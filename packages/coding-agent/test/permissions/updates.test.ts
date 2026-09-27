@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -115,6 +115,36 @@ describe("FilePermissionRuleStore", () => {
 		expect(existsSync(join(cwd, ".apex-code"))).toBe(false);
 		expect(existsSync(agentDir)).toBe(false);
 	});
+
+	it.skipIf(process.platform === "win32")(
+		"surfaces inaccessible permission files instead of treating them as missing",
+		async () => {
+			const name = "inaccessible-file";
+			const cwd = join(sharedTempDir, name, "project");
+			const agentDir = join(sharedTempDir, name, "agent");
+			const configDir = join(cwd, ".apex-code");
+			mkdirSync(configDir, { recursive: true });
+			mkdirSync(agentDir, { recursive: true });
+			writeFileSync(join(configDir, "permissions.json"), JSON.stringify({ version: 1, rules: [] }));
+			writeFileSync(join(configDir, "permissions.local.json"), JSON.stringify({ version: 1, rules: [] }));
+			const store = new FilePermissionRuleStore({
+				projectTrusted: true,
+				cwd,
+				agentDir,
+				policyPath: join(sharedTempDir, name, "missing-policy.json"),
+			});
+			chmodSync(configDir, 0);
+			try {
+				const { errors } = await store.snapshot();
+				expect(errors.map((error) => error.source).sort()).toEqual(["local", "project"]);
+				for (const error of errors) {
+					expect(["EACCES", "EPERM"]).toContain((error.error as NodeJS.ErrnoException).code);
+				}
+			} finally {
+				chmodSync(configDir, 0o700);
+			}
+		},
+	);
 
 	it("never writes a session-destination update to disk", async () => {
 		const cwd = join(sharedTempDir, "session-runtime-only", "project");

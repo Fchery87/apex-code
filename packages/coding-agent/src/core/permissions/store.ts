@@ -11,7 +11,6 @@
  * settings domain.
  */
 
-import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getAgentDir } from "../../config.ts";
@@ -180,8 +179,6 @@ export interface CreateFilePermissionRuleStoreOptions {
 /** File-backed store for policy/local/project/user, in-memory for command/session. */
 export class FilePermissionRuleStore implements PermissionRuleStore {
 	private readonly backends: Record<FileBackedSource, AuthStorageBackend>;
-	/** Files behind the default backends; an injected backend has none. */
-	private readonly backendPaths: Partial<Record<FileBackedSource, string>>;
 	private readonly policyPath: string;
 	private readonly initialRules: readonly PermissionRule[];
 	private readonly runtimeRules: Record<RuntimeSource, StoredPermissionRule[]> = { command: [], session: [] };
@@ -206,11 +203,6 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 			local: new FileAuthStorageBackend(paths.local),
 			...options.backends,
 		};
-		this.backendPaths = Object.fromEntries(
-			(Object.keys(paths) as FileBackedSource[])
-				.filter((source) => !options.backends?.[source])
-				.map((source) => [source, paths[source]]),
-		);
 		this.policyPath = options.policyPath ?? defaultPolicyPath();
 		this.initialRules = options.initialRules ?? [];
 		// A JavaScript caller reaches this with no compiler in between, so the type is not
@@ -236,19 +228,11 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 	private async readFileBackedScope(
 		source: FileBackedSource,
 	): Promise<{ scope: StoredPermissionScope; error?: Error }> {
-		// The lock is the write path and creates the file it locks, so a missing file is
-		// read as empty without taking it. An existing one is still read under the lock,
-		// because the writer rewrites in place and an unlocked read could see it half-written.
-		const path = this.backendPaths[source];
-		if (path !== undefined && !existsSync(path)) return { scope: emptyScope() };
 		try {
-			let content: string | undefined;
-			await this.backends[source].withLockAsync(async (current) => {
-				content = current;
-				return { result: undefined };
-			});
+			const content = await this.backends[source].withReadLockAsync(async (current) => current);
 			return { scope: parseScope(content) };
 		} catch (error) {
+			if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return { scope: emptyScope() };
 			return { scope: emptyScope(), error: error instanceof Error ? error : new Error(String(error)) };
 		}
 	}
