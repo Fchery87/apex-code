@@ -754,3 +754,29 @@ interactive hint now describes that behavior. The merge also adopts upstream's
 retryable-error/cancellation filter and multiline prompt support while retaining
 Apex's pending-tool disposal and detailed retry outcome. Package locks were
 regenerated from Apex manifests, preserving Apex package names and build paths.
+
+### v0.87.0 reconciliation
+
+This merge recorded 39 conflicted hunks across 22 files, 18 in forked paths, below
+ADR 0003's 159-hunk ceiling. The merge touched 85 forked paths with +4,949/-608
+lines. The two Apex-deleted package directories resurrected by upstream (`evals` and
+`session-backends/sqlite-node`) were removed again; neither is on the roadmap.
+
+At the agent boundary, Apex keeps its run-budget gate and repeated-tool-error guard,
+retains `shouldStopAfterTurn` as a deprecated compatibility hook, and adopts
+`prepareRequest`, `finishTurn`, explicit continuation, and queue previewing. The
+session layer keeps Apex context projection, trust, and hook lifecycles while adding
+upstream's request and boundary hooks. The `/bug` flow remains a local ZIP export.
+Updated the coding-agent README's copied CLI, state-path, and startup-network guidance
+to match Apex Code and its no-telemetry behavior.
+
+The fresh npm 11 lock initially omitted registry integrity and resolved metadata for
+unchanged packages, which made the agent-core SBOM fail to include dependency hashes.
+Restored that metadata only from the base lock for package keys and versions that were
+identical, regenerated both coding-agent locks, and confirmed both frozen and SBOM
+gates. The extension project-trust test now allows up to 30 seconds for its cold jiti
+load; its default-timeout failure reproduced at about 5.4 seconds on an idle run.
+
+Verification passed: `npm run check`, `npm run build:offline`, the frozen-package
+check against v0.87.0, and `npm test` (script suite 215 passed / 4 skipped, scrubber
+21 passed, agent 975 passed / 1 skipped, coding-agent 4,007 passed / 51 skipped).

@@ -174,6 +174,7 @@ async function runLoop(
 	let config = initialConfig;
 	let lastCompletedTurn: PrepareNextTurnContext | undefined;
 	const repeatedToolErrors = new RepeatedToolErrors();
+	let explicitContinuation = false;
 	// Check for steering messages at start (user may have typed while waiting)
 	let pendingMessages: AgentMessage[] = (await config.getSteeringMessages?.()) || [];
 
@@ -232,6 +233,28 @@ async function runLoop(
 				return;
 			}
 
+			const requestUpdate = await config.prepareRequest?.(
+				{
+					context: currentContext,
+					model: config.model,
+					thinkingLevel: config.reasoning ?? "off",
+				},
+				signal,
+			);
+			if (requestUpdate) {
+				currentContext = requestUpdate.context ?? currentContext;
+				config = {
+					...config,
+					model: requestUpdate.model ?? config.model,
+					reasoning:
+						requestUpdate.thinkingLevel === undefined
+							? config.reasoning
+							: requestUpdate.thinkingLevel === "off"
+								? undefined
+								: requestUpdate.thinkingLevel,
+				};
+			}
+
 			// Stream assistant response
 			const message = await streamAssistantResponse(currentContext, config, signal, emit, streamFunction);
 			newMessages.push(message);
@@ -239,6 +262,14 @@ async function runLoop(
 			if (message.stopReason === "error" || message.stopReason === "aborted") {
 				const stopReason: AgentStopReason =
 					signal?.aborted || message.stopReason === "aborted" ? { kind: "aborted" } : { kind: "error" };
+				lastCompletedTurn = {
+					message,
+					toolResults: [],
+					context: currentContext,
+					newMessages,
+					hasMoreToolCalls: false,
+				};
+				await config.finishTurn?.(lastCompletedTurn, signal);
 				await emit({ type: "turn_end", message, toolResults: [] });
 				await emit({ type: "agent_end", messages: newMessages, stopReason });
 				return;
@@ -266,8 +297,6 @@ async function runLoop(
 				}
 			}
 
-			await emit({ type: "turn_end", message, toolResults });
-
 			lastCompletedTurn = {
 				message,
 				toolResults,
@@ -275,12 +304,15 @@ async function runLoop(
 				newMessages,
 				hasMoreToolCalls,
 			};
+			const decision = await config.finishTurn?.(lastCompletedTurn, signal);
+			await emit({ type: "turn_end", message, toolResults });
 
-			if (await config.shouldStopAfterTurn?.(lastCompletedTurn)) {
+			if (decision?.action === "end" || (await config.shouldStopAfterTurn?.(lastCompletedTurn))) {
 				await emit({ type: "agent_end", messages: newMessages, stopReason: { kind: "completed" } });
 				return;
 			}
 
+			explicitContinuation = decision?.action === "continue";
 			pendingMessages = (await config.getSteeringMessages?.()) || [];
 			if (repeatedToolErrors.record(toolCalls, toolResults) && pendingMessages.length === 0 && !signal?.aborted) {
 				const failureMessage: AssistantMessage = {
@@ -311,13 +343,23 @@ async function runLoop(
 				await emit({ type: "agent_end", messages: newMessages, stopReason: { kind: "error" } });
 				return;
 			}
+			if (hasMoreToolCalls || pendingMessages.length > 0) {
+				explicitContinuation = false;
+			}
 		}
 
 		// Agent would stop here. Check for follow-up messages.
 		const followUpMessages = (await config.getFollowUpMessages?.()) || [];
 		if (followUpMessages.length > 0) {
 			// Set as pending so inner loop processes them
+			explicitContinuation = false;
 			pendingMessages = followUpMessages;
+			continue;
+		}
+
+		// No natural request was selected, so fulfill the continuation decision with one context-only turn.
+		if (explicitContinuation) {
+			explicitContinuation = false;
 			continue;
 		}
 

@@ -456,8 +456,6 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		options.tools ?? (options.noTools ? [] : (configuredDefaultToolNames ?? defaultActiveToolNames))
 	).filter((name) => !excludedToolNameSet?.has(name));
 
-	let agent: Agent;
-
 	// Create convertToLlm wrapper that filters images if blockImages is enabled (defense-in-depth)
 	const convertToLlmWithBlockImages = (messages: AgentMessage[]): Message[] => {
 		const converted = convertToLlm(messages);
@@ -557,12 +555,13 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		});
 	};
 
-	agent = new Agent({
+	const agent = new Agent({
 		initialState: {
 			systemPrompt: "",
 			model,
 			thinkingLevel,
 			tools: [],
+			messages: existingSession.messages,
 		},
 		// The resolved budget policy from above (override or settings); every
 		// execution mode (interactive, print, JSON, RPC, ACP, SDK) runs through
@@ -602,9 +601,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		maxRetryDelayMs: settingsManager.getProviderRetrySettings().maxRetryDelayMs,
 	});
 
-	// Restore messages if session has existing data
+	// Restore missing settings metadata for older sessions.
 	if (hasExistingSession) {
-		agent.state.messages = existingSession.messages;
 		if (!hasThinkingEntry) {
 			sessionManager.appendThinkingLevelChange(thinkingLevel);
 		}

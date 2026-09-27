@@ -48,7 +48,6 @@ export async function reportBug(context: BugReportContext, initialHint?: string)
 		context.showStatus("Bug report cancelled");
 		return;
 	}
-
 	let summary: string | undefined;
 	if (options.includeSummary) {
 		const loader = showLoader(

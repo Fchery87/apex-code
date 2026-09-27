@@ -19,7 +19,7 @@
 | Pass v0.86.0 build, package locks, frozen-package check, and full test gates | Verified | `npm run build:offline`; `npm run check` exit 0; `npm test`: scripts 21 passed, agent 950 passed / 1 skipped, coding-agent 3,923 passed / 51 skipped |
 | Record v0.86.0 hunk/churn and decisions; commit the verified release unit | Verified | `docs/upstream-log.md`; `bd8117cd5` (`git cat-file -t` confirms commit) |
 | Repeat merge, reconcile, verify, and record for v0.86.1 | Verified | `80d57edc1` (`git cat-file -t` confirms commit); `npm run check`; `npm run build:offline`; frozen-package check; `npm test`: scripts 215 passed / 4 skipped, scrubber 21 passed, agent 950 passed / 1 skipped, coding-agent 3,934 passed / 51 skipped; see `docs/upstream-log.md` |
-| Repeat merge, reconcile, verify, and record for v0.87.0 | Not started | Same per-release gates |
+| Repeat merge, reconcile, verify, and record for v0.87.0 | Verified | `npm run check`; `npm run build:offline`; frozen-package check; `npm test`: scripts 215 passed / 4 skipped, scrubber 21 passed, agent 975 passed / 1 skipped, coding-agent 4,007 passed / 51 skipped; see `docs/upstream-log.md` |
 | Repeat merge, reconcile, verify, and record for v0.87.1 | Not started | Same per-release gates |
 | Rebase the authorized local work onto the final tag and verify | Not started | PR #148/#149 local state and final checks |
 
