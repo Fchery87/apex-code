@@ -17,7 +17,7 @@
 | Adapt replay/provider and agent test fixtures to upstream message/result types | Verified | `npx tsgo --noEmit`; included in 10-file / 198-test focused run |
 | Resolve bug-report behavior without restoring an unowned upload or session-share default | Verified | 3 focused bug-report tests; local archive and Apex identity retained |
 | Pass v0.86.0 build, package locks, frozen-package check, and full test gates | Verified | `npm run build:offline`; `npm run check` exit 0; `npm test`: scripts 21 passed, agent 950 passed / 1 skipped, coding-agent 3,923 passed / 51 skipped |
-| Record v0.86.0 hunk/churn and decisions; commit the verified release unit | Not started | `docs/upstream-log.md`, verified commit SHA |
+| Record v0.86.0 hunk/churn and decisions; commit the verified release unit | Verified | `docs/upstream-log.md`; `bd8117cd5` (`git cat-file -t` confirms commit) |
 | Repeat merge, reconcile, verify, and record for v0.86.1 | Not started | Same per-release gates |
 | Repeat merge, reconcile, verify, and record for v0.87.0 | Not started | Same per-release gates |
 | Repeat merge, reconcile, verify, and record for v0.87.1 | Not started | Same per-release gates |
