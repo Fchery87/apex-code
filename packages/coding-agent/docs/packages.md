@@ -4,7 +4,7 @@
 
 Apex Code packages bundle extensions, skills, prompt templates, and themes so you can share them through npm or git. A package can declare resources in `package.json` under the `pi` key (Apex Code's retained package-manifest key), or use conventional directories.
 
-## Table of Contents
+A package is an ordinary directory or npm package. It can expose conventional resource directories, declare explicit paths under the `pi` key in `package.json`, and carry its own runtime dependencies.
 
 - [Install and Manage](#install-and-manage)
 - [Package Sources](#package-sources)
@@ -42,22 +42,34 @@ These commands manage Apex Code packages and `apex-code update` can update the A
 
 By default, `install` and `remove` write to user settings (`~/.apex-code/agent/settings.json`). Use `-l` to write to project settings (`.apex-code/settings.json`) instead. Project settings can be shared with your team, and apex-code installs any missing packages automatically on startup after the project is trusted.
 
-To try a package without installing it, use `--extension` or `-e`. This installs to a temporary directory for the current run only:
+Project packages are installed and loaded only after project trust is resolved. Packages can execute extension code and can include skills that instruct the model to run programs. Review third-party package source before installing it. Review project package declarations before granting project trust.
+
+Use `--extension` or `-e` to try a package for one invocation without adding it to settings:
 
 ```bash
 apex-code -e npm:@foo/bar
 apex-code -e git:github.com/user/repo
 ```
 
-## Package Sources
+## Choose a source
 
 Apex Code accepts three source types in settings and `apex-code install`.
 
-### npm
+Versioned npm specifications are pinned. Git tags and commits are also pinned; package updates reconcile the checkout but do not move a configured ref.
 
-```
-npm:@scope/pkg@1.2.3
-npm:pkg
+Relative local paths resolve from the settings file that contains them. A file path loads one extension. A directory follows normal package discovery rules.
+
+## Create a package
+
+The simplest package uses conventional directories:
+
+```text
+my-pi-package/
+├── package.json
+├── extensions/
+├── skills/
+├── prompts/
+└── themes/
 ```
 
 - Versioned specs are pinned and skipped by package updates (`apex-code update --extensions`, `apex-code update --all`).
@@ -65,7 +77,7 @@ npm:pkg
 - Project installs go under `.apex-code/npm/`.
 - Set `npmCommand` in `settings.json` to pin npm package lookup and install operations to a specific wrapper command such as `mise` or `asdf`.
 
-Example:
+Use an explicit manifest when resources live elsewhere or need filtering:
 
 ```json
 {
@@ -122,44 +134,37 @@ Add a `pi` manifest to `package.json` or use conventional directories. `pi` is A
   "name": "my-package",
   "keywords": ["pi-package"],
   "pi": {
-    "extensions": ["./extensions"],
-    "skills": ["./skills"],
-    "prompts": ["./prompts"],
-    "themes": ["./themes"]
+    "extensions": ["./src/extension.ts"],
+    "skills": ["./resources/skills"],
+    "prompts": ["./resources/prompts/*.md"],
+    "themes": ["./resources/themes/*.json"]
   }
 }
 ```
 
-Paths are relative to the package root. Arrays support glob patterns and `!exclusions`. Positive manifest globs discover visible paths in lexical order. List dot-prefixed paths directly. If a glob would need to continue through a symlink, list the symlinked resource root directly.
+Paths are relative to the package root. Arrays accept glob patterns and exclusions. List dot-prefixed or symlinked resource roots directly when traversal through a glob would not discover them.
 
-### Gallery Metadata
+The `pi-package` keyword is retained package metadata. Apex Code does not operate a hosted package gallery. Optional `pi.image` and `pi.video` fields have no effect within Apex Code.
 
 Apex Code does not operate or depend on a hosted package gallery (see ADR 0013). The
-`video`/`image` fields below are retained upstream vocabulary from Pi's own package
+`video`/`image` fields below are retained upstream vocabulary from upstream Pi's package
 gallery, kept for cross-compatibility if you publish the same package to both
 ecosystems — they have no effect within Apex Code itself. Add them to show a preview
 there:
 
-```json
-{
-  "name": "my-package",
-  "keywords": ["pi-package"],
-  "pi": {
-    "extensions": ["./extensions"],
-    "video": "https://example.com/demo.mp4",
-    "image": "https://example.com/screenshot.png"
-  }
-}
-```
+Put runtime packages imported by extensions in `dependencies`. Apex Code installs package dependencies when it installs an npm or git source.
 
-- **video**: MP4 only. On desktop, autoplays on hover. Clicking opens a fullscreen player.
-- **image**: PNG, JPEG, GIF, or WebP. Displayed as a static preview.
+Apex Code supplies these packages to extensions and skills:
 
-If both are set, video takes precedence.
+- `@earendil-works/pi-ai`
+- `@earendil-works/pi-agent-core`
+- `@earendil-works/pi-coding-agent`
+- `@earendil-works/pi-tui`
+- `typebox`
 
-## Package Structure
+Declare imported Apex Code packages in `peerDependencies` with a `"*"` range and do not bundle them. Other Apex Code packages used as dependencies must be included in the published tarball and referenced through their `node_modules` resource paths.
 
-### Convention Directories
+Installed packages load with separate module roots. Do not rely on two packages sharing one dependency instance or one package resolving another package’s undeclared dependency.
 
 If no `pi` manifest is present, Apex Code auto-discovers resources from these directories:
 
@@ -198,35 +203,32 @@ Filter what a package loads using the object form in settings:
 ```json
 {
   "packages": [
-    "npm:simple-pkg",
     {
-      "source": "npm:my-package",
+      "source": "npm:@example/pi-tools",
       "extensions": ["extensions/*.ts", "!extensions/legacy.ts"],
       "skills": [],
-      "prompts": ["prompts/review.md"],
-      "themes": ["+themes/legacy.json"]
+      "prompts": ["prompts/review.md"]
     }
   ]
 }
 ```
 
-`+path` and `-path` are exact paths relative to the package root.
+For each resource type:
 
-- Omit a key to load all of that type.
+- Omit the property to load everything allowed by the package.
 - Use `[]` to load none of that type.
-- `!pattern` excludes matches.
-- `+path` force-includes an exact path.
-- `-path` force-excludes an exact path.
-- Filters layer on top of the manifest. They narrow down what is already allowed.
+- Use `!pattern` to exclude glob matches.
+- Use `+path` to include one exact allowed path.
+- Use `-path` to exclude one exact path.
 
-## Enable and Disable Resources
+Filters narrow the package manifest. They do not expose resources that the package itself did not declare.
 
 Use `apex-code config` to enable or disable extensions, skills, prompt templates, and themes from installed packages and local directories. `apex-code config` starts in global settings (`~/.apex-code/agent/settings.json`); press Tab to switch between global and project-local modes. Use `apex-code config -l` to start in project overrides (`.apex-code/settings.json`) with inherited global resources dimmed.
 
-## Scope and Deduplication
+## Understand scope and identity
 
-Packages can appear in both global and project settings. If the same package appears in both, the project entry wins unless the project entry has `autoload: false`, in which case it is applied as a delta over the global entry. Identity is determined by:
+The same package can appear in personal and project settings. A project entry normally replaces the personal entry. With `autoload: false`, the project entry instead acts as a filtering delta over the personal package.
 
-- npm: package name
-- git: repository URL without ref
-- local: resolved absolute path
+Apex Code identifies npm packages by package name, git packages by repository URL without the ref, and local packages by resolved absolute path. This prevents the same package from loading twice through equivalent declarations.
+
+Use [Extensions](extensions.md), [Skills](skills.md), [Prompt Templates](prompt-templates.md), and [Themes](themes.md) to design each resource before packaging it.

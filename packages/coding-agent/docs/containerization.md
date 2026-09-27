@@ -1,4 +1,4 @@
-# Containerization
+# Run Apex Code in an isolated environment
 
 Apex Code ships no built-in sandbox. A session runs with the permissions of the account
 that started it, on every platform, so containment is something you provide rather than
@@ -13,7 +13,7 @@ There are two general options. You can either
 1. run the whole `apex-code` process inside an isolated environment, or
 2. run `apex-code` on the host and route tool execution into an isolated environment.
 
-## Choose a pattern
+## Choose an isolation method
 
 | Pattern | What is isolated | Best for | Notes |
 | --- | --- | --- | --- |
@@ -23,12 +23,16 @@ There are two general options. You can either
 
 Extensions run wherever the `apex-code` process runs. If you run host `apex-code` with a tool-routing extension, other custom extension tools still run on the host unless they also delegate their operations.
 
-## Gondolin
+## Decide what Apex Code can access
 
 [Gondolin](https://github.com/earendil-works/gondolin) is a local Linux micro-VM.
 Use the [example extension](../examples/extensions/gondolin) when you want `apex-code` on the host but all built-in tools routed into the VM.
 
-Setup:
+- A read-write host mount lets Apex Code modify those host files.
+- Mounting `~/.apex-code/agent` exposes your Apex Code credentials, settings, extensions, and sessions.
+- Environment variables passed into a container are available to processes inside it.
+- Network access may allow code or tool output to leave the environment.
+- Tool-only isolation does not constrain the host Apex Code process or extension tools that do not use the isolated backend.
 
 ```bash
 cp -R packages/coding-agent/examples/extensions/gondolin ~/.apex-code/agent/extensions/gondolin
@@ -36,16 +40,14 @@ cd ~/.apex-code/agent/extensions/gondolin
 npm install --ignore-scripts
 ```
 
-Run from the project you want mounted:
+## Run Apex Code in plain Docker
 
 ```bash
 cd /path/to/project
 apex-code -e ~/.apex-code/agent/extensions/gondolin
 ```
 
-The extension mounts the host cwd at `/workspace` in the VM and overrides `read`, `write`, `edit`, `bash`, `grep`, `find`, and `ls`.
-User `!` commands are routed into the VM, as well.
-File changes under `/workspace` write through to the host.
+### Build the image
 
 Requirements: Node.js >= 23.6.0 for `@earendil-works/gondolin`, plus QEMU (requires installation through your package manager).
 
@@ -67,11 +69,16 @@ WORKDIR /workspace
 ENTRYPOINT ["apex-code"]
 ```
 
-Build and run:
+Build it from the directory containing the file:
 
 ```bash
 docker build -t apex-code-sandbox -f Dockerfile.apex-code .
 
+### Start Apex Code
+
+From the working folder you want Apex Code to access, run:
+
+```bash
 docker run --rm -it \
   -e ANTHROPIC_API_KEY \
   -v "$PWD:/workspace" \
@@ -79,21 +86,16 @@ docker run --rm -it \
   apex-code-sandbox
 ```
 
-The `-v "$PWD:/workspace"` mounts your current directory into the container at /workspace such that reads and writes in `/workspace` inside Docker directly affect your host files, like in the Gondolin example.
+Replace `ANTHROPIC_API_KEY` with the credential required by your provider. The named `apex-code-agent-home` volume keeps container-local settings, credentials, and sessions between runs.
 
 Use a named volume for `/root/.apex-code/agent` if you want container-local settings and sessions. Mounting your host `~/.apex-code/agent` exposes host auth and session files to the container.
 
-## OpenShell
+### Verify the workspace
 
-Use [NVIDIA OpenShell](https://docs.nvidia.com/openshell/about/overview) when you want a policy-controlled sandbox with filesystem, process, network, credential, and inference controls.
-OpenShell can run sandboxes through a local gateway backed by Docker, Podman, or a VM runtime, or through a remote Kubernetes gateway.
+Inside Apex Code, run:
 
-Every sandbox requires an active gateway.
-Register and select one before creating a sandbox:
-
-```bash
-openshell gateway add <gateway-url> --name <name>
-openshell gateway select <name>
+```text
+!pwd
 ```
 
 Launch `apex-code` inside an OpenShell sandbox:
@@ -105,8 +107,7 @@ openshell sandbox create --name apex-code-sandbox --from apex-code -- apex-code
 In this pattern, the whole `apex-code` process runs inside the sandbox.
 Built-in tools, `!` commands, and extension tools execute inside the OpenShell boundary.
 
-If the gateway is remote, project files are not bind-mounted from the host, meaning writes in the sandbox are not reflected on your machine.
-Clone the repository inside the sandbox or use OpenShell file transfer commands:
+Configure credentials before creating the sandbox. Do not run `/login` inside the sandbox because that writes a real credential into it.
 
 ```bash
 openshell sandbox upload apex-code-sandbox ./repo /workspace

@@ -2,6 +2,9 @@
 
 Sessions are stored as JSONL (JSON Lines) files. Each line is a JSON object with a `type` field. Session entries form a tree structure via `id`/`parentId` fields, enabling in-place branching without creating new files.
 
+For programmatic creation, persistence, and tree navigation, see the [`SessionManager` API](sdk.md#sessionmanager-api).
+
+
 ## File Location
 
 ```
@@ -36,9 +39,9 @@ Forked source on GitHub ([apex-code](https://github.com/Fchery87/apex-code)); ba
 
 For TypeScript definitions in your project, inspect `node_modules/apex-code/dist/` and `node_modules/@earendil-works/pi-ai/dist/`.
 
-## Message Types
+## Messages
 
-Session entries contain `AgentMessage` objects. Understanding these types is essential for parsing sessions and writing extensions.
+A `message` entry stores an [`AgentMessage`](message-types.md). Message content blocks, roles, usage, and message timestamps are defined in [Message Types](message-types.md).
 
 ### Content Blocks
 
@@ -436,59 +439,3 @@ for (const line of lines) {
   }
 }
 ```
-
-## SessionManager API
-
-Key methods for working with sessions programmatically.
-
-### Static Creation Methods
-- `SessionManager.create(cwd, sessionDir?, options?)` - New session; `options` can set `id` and `parentSession`
-- `SessionManager.open(path, sessionDir?, cwdOverride?)` - Open existing session file
-- `SessionManager.continueRecent(cwd, sessionDir?)` - Continue most recent or create new
-- `SessionManager.inMemory(cwd?, options?, entries?)` - No file persistence, optionally initialized from entries
-- `SessionManager.forkFrom(sourcePath, targetCwd, sessionDir?, options?)` - Fork session from another project
-
-### Static Listing Methods
-- `SessionManager.list(cwd, sessionDir?, onProgress?)` - List sessions for a directory
-- `SessionManager.listAll(onProgress?)` - List all sessions across all projects
-- `SessionManager.listAll(sessionDir?, onProgress?)` - List sessions from a custom session root
-
-### Instance Methods - Session Management
-- `newSession(options?)` - Start a new session (options: `{ id?: string, parentSession?: string }`)
-- `setSessionFile(path)` - Switch to a different session file
-- `createBranchedSession(leafId)` - Extract branch to new session file
-
-### Instance Methods - Appending (all return entry ID)
-- `appendMessage(message)` - Add message
-- `appendThinkingLevelChange(level)` - Record thinking change
-- `appendModelChange(provider, modelId)` - Record model change
-- `appendUsage(kind, provider, model, usage)` - Record model-attributed usage outside the conversation
-- `appendCompaction(summary, firstKeptEntryId, tokensBefore, details?, fromHook?, usage?)` - Add compaction
-- `appendCustomEntry(customType, data?)` - Extension state (not in context)
-- `appendSessionInfo(name)` - Set session display name
-- `appendCustomMessageEntry(customType, content, display, details?)` - Extension message (in context)
-- `appendLabelChange(targetId, label)` - Set/clear label
-
-### Instance Methods - Tree Navigation
-- `getLeafId()` - Current position
-- `getLeafEntry()` - Get current leaf entry
-- `getEntry(id)` - Get entry by ID
-- `getBranch(fromId?)` - Walk from entry to root
-- `getTree()` - Get full tree structure
-- `getChildren(parentId)` - Get direct children
-- `getLabel(id)` - Get label for entry
-- `branch(entryId)` - Move leaf to earlier entry
-- `resetLeaf()` - Reset leaf to null (before any entries)
-- `branchWithSummary(entryId, summary, details?, fromHook?, usage?)` - Branch with context summary; `entryId` may be `null` to branch from the root
-
-### Instance Methods - Context & Info
-- `buildContextEntries()` - Get active branch entries with compaction applied
-- `buildSessionContext()` - Get messages, thinkingLevel, and model for LLM
-- `getEntries()` - All entries (excluding header)
-- `getHeader()` - Session header metadata
-- `getSessionName()` - Get display name from latest session_info entry
-- `getCwd()` - Working directory
-- `getSessionDir()` - Session storage directory
-- `getSessionId()` - Session UUID
-- `getSessionFile()` - Session file path (undefined for in-memory)
-- `isPersisted()` - Whether session is saved to disk

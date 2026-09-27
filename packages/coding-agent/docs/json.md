@@ -1,4 +1,6 @@
-# JSON Event Stream Mode
+# JSON Event Stream
+
+JSON mode emits structured progress for one invocation:
 
 ```bash
 apex-code --mode json "Your prompt"
@@ -6,7 +8,7 @@ apex-code --mode json "Your prompt"
 
 Outputs all session events as JSON lines to stdout. Useful for integrating Apex Code into other tools or custom UIs.
 
-## Event Types
+This page is the canonical reference for events shared by JSON and RPC mode. Message values use the [shared message types](message-types.md).
 
 Wire events use `JsonAgentSessionEvent`. It matches
 [`AgentSessionEvent`](https://github.com/Fchery87/apex-code/blob/main/packages/coding-agent/src/core/agent-session.ts)
@@ -92,6 +94,8 @@ arguments if needed. A `toolcall_start` event also includes the constant-sized `
 fields. `message_end` contains the final authoritative message.
 
 ## Example
+
+Print completed messages from a one-shot run:
 
 ```bash
 apex-code --mode json "List files" 2>/dev/null | jq -c 'select(.type == "message_end")'

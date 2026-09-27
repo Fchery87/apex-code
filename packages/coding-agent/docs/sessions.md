@@ -1,8 +1,8 @@
-# Sessions
+# Sessions and Context
 
 Apex Code saves conversations as sessions so you can continue work, branch from earlier turns, and revisit previous paths.
 
-## Session Storage
+## Continue or switch sessions
 
 Sessions auto-save to `~/.apex-code/agent/sessions/`, organized by working directory. Each session is a JSONL file with a tree structure.
 
@@ -15,50 +15,31 @@ apex-code --session <path|id> # Use a specific session file or partial session I
 apex-code --fork <path|id>    # Fork a session file or partial session ID into a new session
 ```
 
-Use `/session` in interactive mode to see the current session file, session ID, message count, tokens, and cost.
+`--continue` opens the most recent session for the current working directory. `--resume` opens the session picker. In interactive mode, `/resume` opens the same picker and `/new` starts a new session.
 
-For the JSONL file format and SessionManager API, see [Session Format](session-format.md).
+Use `/name` or `--name` to assign a recognizable session name. Run `/session` to verify the current session file, ID, message count, token usage, and cost.
 
-## Session Commands
+The session picker lets you search, rename, and delete sessions. It can also show paths, change sorting, and limit results to named sessions. See [Keybindings](keybindings.md#sessions) for its shortcuts.
 
-| Command | Description |
-|---------|-------------|
-| `/resume` | Browse and select previous sessions |
-| `/new` | Start a new session |
-| `/name <name>` | Set the current session display name |
-| `/session` | Show session info |
-| `/tree` | Navigate the current session tree |
-| `/fork` | Create a new session from a previous user message |
-| `/clone` | Duplicate the current active branch into a new session |
-| `/compact [prompt]` | Summarize older context; see [Compaction](compaction.md) |
-| `/export [file]` | Export session to HTML |
-| `/share` | Upload as private GitHub gist with shareable HTML link |
-| `/bug [description]` | Report a bug to the Pi developers; see [Reporting Bugs](#reporting-bugs) |
+## Choose how to branch
 
-## Resuming and Deleting Sessions
+Apex Code stores entries as a tree, so returning to an earlier point does not erase the branch you leave.
 
 `/resume` opens an interactive session picker for the current project. `apex-code -r` opens the same picker at startup.
 
-In the picker you can:
+In `/tree`, select a user message to put its text back in the editor. Edit and submit it to create another branch. Selecting an assistant response or another entry continues after that entry with an empty editor.
 
-- search by typing
-- toggle path display with Ctrl+P
-- toggle sort mode with Ctrl+S
-- filter to named sessions with Ctrl+N
-- rename with Ctrl+R
-- delete with Ctrl+D, then confirm
+When you leave a branch, Apex Code can summarize it and attach that summary to the branch you enter. This preserves relevant work from the abandoned path without including every message from it.
 
 When available, Apex Code uses the `trash` CLI for deletion instead of permanently removing files.
 
-## Naming Sessions
+## Manage conversation context
 
-Use `/name <name>` to set a human-readable session name:
+The model receives the active branch, not every branch in the session file. Apex Code combines that history with the system prompt, discovered context files, available tools, and loaded skill descriptions. [How Apex Code Works](how-pi-works.md#context) describes how those inputs are assembled.
 
-```text
-/name Refactor auth module
-```
+The footer shows current context usage. When the active context approaches the model's limit, Apex Code normally compacts older history automatically. Compaction adds a summary and keeps recent messages. It does not delete the original session entries.
 
-Set the name at startup with `--name` or `-n`:
+Run `/compact` to compact manually. You can add instructions when the summary should preserve a particular topic or decision. Configure automatic compaction and retained history through [Settings](settings.md#compaction).
 
 ```bash
 apex-code --name "Refactor auth module"
@@ -67,40 +48,23 @@ apex-code --name "CI audit" -p "Review this build failure"
 
 Named sessions are easier to find in `/resume` and `apex-code -r`.
 
-## Branching with `/tree`
+## Control session storage
 
-Sessions are stored as trees. Every entry has an `id` and `parentId`, and the current position is the active leaf. `/tree` lets you jump to any previous point and continue from there without creating a new file.
+By default, Apex Code stores sessions under `~/.apex-code/agent/sessions/`, grouped by working directory. Use `--session-dir`, `APEX_CODE_CODING_AGENT_SESSION_DIR`, or the `sessionDir` setting to choose another location. The CLI option has highest precedence.
 
-<p align="center"><img src="images/tree-view.png" alt="Tree View" width="600"></p>
+Use `--no-session` for an ephemeral run. An ephemeral session cannot be resumed after Apex Code exits.
 
-Example shape:
+Use `--session` when you already know the session path or ID. Use `--fork` to create a new session from an existing session before interactive mode starts.
 
-```text
-├─ user: "Hello, can you help..."
-│  └─ assistant: "Of course! I can..."
-│     ├─ user: "Let's try approach A..."
-│     │  └─ assistant: "For approach A..."
-│     │     └─ user: "That worked..."  ← active
-│     └─ user: "Actually, approach B..."
-│        └─ assistant: "For approach B..."
-```
+## Export or share a session
 
-### Tree Controls
+Use `/export` to write the current session as HTML or JSONL. `/share` asks before uploading the complete HTML session to an unlisted GitHub Gist. It returns the Gist URL and adds a preview link only when `APEX_CODE_SHARE_VIEWER_URL` names a viewer.
 
-| Key | Action |
-|-----|--------|
-| ↑/↓ | Navigate visible entries |
-| ←/→ | Page up/down |
-| Ctrl+←/Ctrl+→ or Alt+←/Alt+→ | Fold/unfold or jump between branch segments |
-| Shift+L | Set or clear a label on the selected entry |
-| Shift+T | Toggle label timestamps |
-| Enter | Select entry |
-| Escape/Ctrl+C | Cancel |
-| Ctrl+O | Cycle filter mode |
+Review exported or shared sessions first. They can contain prompts, model responses, tool arguments, command output, file contents, and extension messages.
 
-Filter modes are: default, no-tools, user-only, labeled-only, and all. Configure the default with `treeFilterMode` in [Settings](settings.md).
+## Report a bug
 
-### Selection Behavior
+Run `/bug [description]` to prepare a local ZIP report. Apex Code does not upload bug reports. You can include the session transcript, omit it, or ask the current model to summarize the problem. Review any transcript or generated summary because it can contain sensitive conversation data.
 
 Selecting a user or custom message:
 
@@ -141,29 +105,22 @@ See [Compaction](compaction.md) for branch summarization internals and extension
 
 ## Reporting Bugs
 
-`/bug [description]` collects a bug report for the Pi developers. The report is not shared publicly. The dialog asks for an optional description and whether to include the session transcript. If you decline the transcript, pi offers to have the current model write a summary of what went wrong instead; the transcript is sent to your provider with your credentials, and only the summary is attached.
-
-The last step chooses where the report goes:
-
-- **Upload Report** sends it to the Pi developers through `radius.pi.dev`. No login is required; if you are logged into Radius, the report is attributed to your account so the developers can follow up. If the upload fails, pi offers to export the zip instead.
-- **Export as Zip** writes a zip archive to the current directory. Attach it to an issue or send it to the developers yourself.
+`/bug [description]` writes a ZIP archive in the current directory. The dialog asks whether to include the session transcript. If you decline, Apex Code can ask the current model to summarize the problem; that sends the conversation to your configured provider, and only the summary is attached to the archive.
 
 Both contain the same files:
 
 | File | Content |
 |------|---------|
-| `report.json` | pi version, runtime, OS, terminal, current model and provider configuration, loaded extensions, and settings. API keys, header values, URL credentials, and the analytics tracking id are never included. |
+| `report.json` | Apex Code version, runtime, OS, terminal, current model and provider configuration, loaded extensions, and settings. API keys, header values, URL credentials, and the analytics tracking id are never included. |
 | `diagnostics.json` | Provider and runtime error diagnostics attached to assistant messages across the whole session (failed or aborted turns, retries, error messages), plus any recorded crashes. Always included; message content is not. |
 | `session.jsonl` | The current branch of the session, only when you chose to include it. It contains file contents and command output read during the session. |
 | `summary.md` | The model-written summary, only when you chose to generate one. |
 
-Each report has a UUID. pi shows it after upload or export and records it in the session as a `pi.bug-report` entry so you can refer to it later.
-
-Set `PI_RADIUS_GATEWAY` to upload to a different Radius deployment.
+Each report has a UUID. Apex Code shows it after export and records it in the session as an `apex-code.bug-report` entry.
 
 ### Crashes
 
-When pi exits because of an uncaught exception or a fatal runtime error, it stores the error message and stack trace in `~/.pi/agent/crashes.json` (the newest five). The next interactive start shows a warning once; running `/bug` attaches the stored crashes to `diagnostics.json` and removes the file after the report is uploaded or exported. Resume the crashed session with `pi -r` first if you want the transcript in the report.
+When Apex Code exits because of an uncaught exception or fatal runtime error, it stores the error message and stack trace in `~/.apex-code/agent/crashes.json` (the newest five). The next interactive start shows a warning once; running `/bug` can include stored crashes in the local ZIP export. Resume the crashed session with `apex-code -r` first if you want the transcript in the report.
 
 ## Session Format
 

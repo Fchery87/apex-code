@@ -2,7 +2,7 @@
 
 Apex Code is a minimal terminal coding harness. It is designed to stay small at the core while being extended through TypeScript extensions, skills, prompt templates, themes, and Apex Code packages.
 
-## Quick start
+Use Apex Code for software development, research notes, writing projects, data files, or hobby work. You can use Apex Code as is, prompt it to adapt itself to your workflow, or build other applications powered by Apex Code using the SDK.
 
 Install Apex Code with npm, pnpm, Yarn, or Bun — all resolve it from the same npm registry:
 
@@ -14,7 +14,7 @@ npm install -g --ignore-scripts apex-code
 
 To uninstall, use the package manager that installed it: `npm uninstall -g apex-code`, `pnpm remove -g apex-code`, `yarn global remove apex-code`, or `bun uninstall -g apex-code`.
 
-Then run it in a project directory:
+## Find reference and setup information
 
 ```bash
 apex-code
@@ -22,7 +22,7 @@ apex-code
 
 Authenticate with `/login` for subscription providers, or set an API key such as `ANTHROPIC_API_KEY` before starting Apex Code.
 
-For the full first-run flow, see [Quickstart](quickstart.md).
+## Work safely
 
 ## Start here
 

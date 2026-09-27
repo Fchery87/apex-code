@@ -440,7 +440,7 @@ If no model is provided:
 2. Uses default from settings
 3. Falls back to first available model
 
-Remote catalogs are persisted locally so later runtimes can restore them without a network request. The default file is `~/.pi/agent/models-store.json`; set `modelsStorePath` to choose another location, or inject `modelsStore` to control persistence. Network refreshes are throttled to once per provider every four hours unless forced. To force an immediate refresh, call `await modelRuntime.refresh({ allowNetwork: true, force: true, signal })`. Setting `PI_OFFLINE` disables model network access.
+Remote catalogs are persisted locally so later runtimes can restore them without a network request. The default file is `~/.apex-code/agent/models-store.json`; set `modelsStorePath` to choose another location, or inject `modelsStore` to control persistence. Network refreshes are throttled to once per provider every four hours unless forced. To force an immediate refresh, call `await modelRuntime.refresh({ allowNetwork: true, force: true, signal })`. Setting `APEX_CODE_OFFLINE=1` disables model network access; `PI_OFFLINE=1` remains a compatibility alias.
 
 To match CLI model parsing, use the exported resolver helpers:
 
@@ -561,30 +561,39 @@ The `edit` tool returns `details.diff` for Apex Code's TUI display and `details.
 ```typescript
 import { createAgentSession } from "apex-code";
 
-// Read-only mode
-const { session } = await createAgentSession({
-  tools: ["read", "grep", "find", "ls"],
-});
+const { session } = await createAgentSession();
 
-// Pick specific tools
-const { session } = await createAgentSession({
-  tools: ["read", "bash", "grep"],
-});
-
-// Use PowerShell instead of Bash on Windows
-const { session } = await createAgentSession({
-  tools: ["read", "powershell", "edit", "write"],
-});
-
-// Disable one tool while keeping the rest available
-const { session } = await createAgentSession({
-  excludeTools: ["ask_question"],
-});
+try {
+  await session.prompt("What files are in the current directory?");
+  console.log(session.getLastAssistantText());
+} finally {
+  session.dispose();
+}
 ```
 
-#### Tools with Custom cwd
+This uses the working directory, discovered resources, stored settings, and configured credentials. `prompt()` resolves when the run finishes.
 
-When you pass a custom `cwd`, `createAgentSession()` builds selected built-in tools for that cwd.
+The [complete minimal example](../examples/sdk/01-minimal.ts) also streams text events. All [SDK examples](../examples/sdk/) are typechecked with the repository.
+
+<a id="session-management"></a>
+
+## Session lifecycle
+
+`createAgentSession()` creates an `AgentSession`. The session owns one conversation, its model and tools, queued messages, compaction state, and extension runtime.
+
+Read current state through `session.messages`, `session.model`, `session.thinkingLevel`, `session.systemPrompt`, and `session.getActiveToolNames()`.
+
+`session.systemPrompt` is read-only and returns the current effective system prompt, including changes that have not yet been sent to the model. Tool changes are declared to the model before the next request.
+
+<a id="sessionmanager-api"></a>
+
+### Session storage
+
+Sessions are persistent by default. `SessionManager` owns the persisted or in-memory entry tree and tracks its active leaf. Branching changes that leaf without deleting abandoned branches. When Pi reconstructs model context, the manager selects the active branch and applies compaction.
+
+`SessionManager` is authoritative for finalized model context. Restore external history by constructing the session with a manager containing those entries. Assigning `session.agent.state.messages` does not replace persisted context.
+
+Use an in-memory manager when the host does not want session files:
 
 ```typescript
 import { createAgentSession, SessionManager } from "apex-code";
@@ -800,68 +809,31 @@ import {
 const { session } = await createAgentSession({
   sessionManager: SessionManager.inMemory(),
 });
-
-// New persistent session
-const { session: persisted } = await createAgentSession({
-  sessionManager: SessionManager.create(process.cwd()),
-});
-
-// Continue most recent
-const { session: continued, modelFallbackMessage } = await createAgentSession({
-  sessionManager: SessionManager.continueRecent(process.cwd()),
-});
-if (modelFallbackMessage) {
-  console.log("Note:", modelFallbackMessage);
-}
-
-// Open specific file
-const { session: opened } = await createAgentSession({
-  sessionManager: SessionManager.open("/path/to/session.jsonl"),
-});
-
-// Resume a session kept outside the filesystem, e.g. in a database
-const { session: restored } = await createAgentSession({
-  sessionManager: SessionManager.inMemory(process.cwd(), { id: sessionId }, entries),
-});
-
-// List sessions
-const currentProjectSessions = await SessionManager.list(process.cwd());
-const allSessions = await SessionManager.listAll(process.cwd());
-
-// Session replacement API for /new, /resume, /fork, /clone, and import flows.
-const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionManager, sessionStartEvent }) => {
-  const services = await createAgentSessionServices({ cwd });
-  return {
-    ...(await createAgentSessionFromServices({
-      services,
-      sessionManager,
-      sessionStartEvent,
-    })),
-    services,
-    diagnostics: services.diagnostics,
-  };
-};
-
-const runtime = await createAgentSessionRuntime(createRuntime, {
-  cwd: process.cwd(),
-  agentDir: getAgentDir(),
-  sessionManager: SessionManager.create(process.cwd()),
-});
-
-// Replace the active session with a fresh one
-await runtime.newSession();
-
-// Replace the active session with another saved session
-await runtime.switchSession("/path/to/session.jsonl");
-
-// Replace the active session with a fork from a specific user entry
-await runtime.fork("entry-id");
-
-// Clone the active path through a specific entry
-await runtime.fork("entry-id", { position: "at" });
 ```
 
-**SessionManager tree API:**
+See the checked [sessions example](../examples/sdk/11-sessions.ts) for creating, opening, continuing, listing, and forking sessions. [Session File Format](session-format.md) defines the persisted JSONL contract, and [Message Types](message-types.md) defines transcript values. For exact methods and signatures, use the exported TypeScript declarations or [`session-manager.ts`](../src/core/session-manager.ts).
+
+`cwd` selects the workspace used for project resource discovery, context files, session grouping, and built-in tool paths. Pass it explicitly when the target differs from `process.cwd()`.
+
+`session.dispose()` aborts active work, invalidates extension contexts, disconnects from the agent, and removes event listeners. Call it when the session is no longer needed.
+
+`AgentSessionRuntime` adds `newSession()`, `switchSession()`, `fork()`, and `importFromJsonl()`. Each operation replaces the active `AgentSession` and recreates services for the target working directory.
+
+After a runtime replacement, subscriptions belong to the old `AgentSession` and must be rebound. See the [session runtime example](../examples/sdk/13-session-runtime.ts).
+
+## Prompting
+
+`prompt()` handles extension commands and expands file-based prompt templates before ordinary user messages enter the agent. For an accepted agent run, it resolves after the run finishes, including automatic retries.
+
+A prompt sent while the session is already streaming must specify whether it should steer the current run or follow it. Calling `prompt()` without that choice rejects rather than guessing.
+
+A steering message enters after the current assistant turn and its tool calls. A follow-up enters after the current run finishes its pending work. `steer()` and `followUp()` expose those behaviors directly.
+
+`abort()` stops the active operation and waits for the session to become idle. `waitForIdle()` waits without aborting it.
+
+## Subscribing to events
+
+Subscribe before prompting when the host needs streamed output:
 
 ```typescript
 const sm = SessionManager.open("/path/to/session.jsonl");
@@ -1060,16 +1032,20 @@ session.subscribe((event) => {
   }
 });
 
-await session.prompt("Get status and list files.");
+try {
+  await session.prompt("Explain this repository");
+} finally {
+  unsubscribe();
+}
 ```
 
-## Run Modes
+Session events report message updates, tool execution, queues, compaction, retries, and run lifecycle changes.
 
-The SDK exports run mode utilities for building custom interfaces on top of `createAgentSession()`:
+`message_end` contains the authoritative completed message. `agent_end` marks the end of one low-level agent run, but automatic recovery or queued work can still follow.
 
-### InteractiveMode
+Use `agent_settled` when the host needs to know that Pi will not continue automatically.
 
-Full TUI interactive mode with editor, chat history, and all built-in commands:
+## Configuring a session
 
 ```typescript
 import {
@@ -1082,34 +1058,19 @@ import {
   SessionManager,
 } from "apex-code";
 
-const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionManager, sessionStartEvent }) => {
-  const services = await createAgentSessionServices({ cwd });
-  return {
-    ...(await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent })),
-    services,
-    diagnostics: services.diagnostics,
-  };
-};
-const runtime = await createAgentSessionRuntime(createRuntime, {
-  cwd: process.cwd(),
-  agentDir: getAgentDir(),
-  sessionManager: SessionManager.create(process.cwd()),
-});
+Each boundary can be supplied explicitly:
 
-const mode = new InteractiveMode(runtime, {
-  migratedProviders: [],
-  modelFallbackMessage: undefined,
-  initialMessage: "Hello",
-  initialImages: [],
-  initialMessages: [],
-});
+- `modelRuntime`, `model`, `thinkingLevel`, and `scopedModels` control model access and selection.
+- `settingsManager` supplies merged settings or an in-memory configuration.
+- `sessionManager` supplies persistent or in-memory conversation history.
+- `resourceLoader` supplies extensions, skills, prompt templates, themes, and context files.
+- `tools`, `noTools`, `excludeTools`, and `customTools` control the active tool set.
 
-await mode.run();
-```
+Use `DefaultResourceLoader` when you want standard discovery with selected overrides. Supply a custom `ResourceLoader` when the host owns resource storage and discovery completely.
 
-### runPrintMode
+<a id="inlineextension"></a>
 
-Single-shot mode: send prompts, output result, exit:
+Inline extension factories can be supplied through `DefaultResourceLoader`. Give one an `InlineExtension` name only when it needs a stable name in diagnostics and startup output.
 
 ```typescript
 import {
@@ -1122,31 +1083,27 @@ import {
   SessionManager,
 } from "apex-code";
 
-const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionManager, sessionStartEvent }) => {
-  const services = await createAgentSessionServices({ cwd });
-  return {
-    ...(await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent })),
-    services,
-    diagnostics: services.diagnostics,
-  };
-};
-const runtime = await createAgentSessionRuntime(createRuntime, {
-  cwd: process.cwd(),
-  agentDir: getAgentDir(),
-  sessionManager: SessionManager.create(process.cwd()),
-});
+## Examples
 
-await runPrintMode(runtime, {
-  mode: "text",
-  initialMessage: "Hello",
-  initialImages: [],
-  messages: ["Follow up"],
-});
-```
+| Example | Purpose |
+|---|---|
+| [Minimal](../examples/sdk/01-minimal.ts) | Create, prompt, observe, and dispose a session |
+| [Custom model](../examples/sdk/02-custom-model.ts) | Select a model and thinking level |
+| [System prompt](../examples/sdk/03-custom-prompt.ts) | Replace or append to the system prompt |
+| [Skills](../examples/sdk/04-skills.ts) | Discover, filter, and add skills |
+| [Tools](../examples/sdk/05-tools.ts) | Select built-in tools and their working directory |
+| [Extensions](../examples/sdk/06-extensions.ts) | Load file-based and inline extensions |
+| [Context files](../examples/sdk/07-context-files.ts) | Add or replace project instructions |
+| [Prompt templates](../examples/sdk/08-prompt-templates.ts) | Add file-style prompt templates |
+| [Credentials](../examples/sdk/09-api-keys-and-oauth.ts) | Configure credential and model storage |
+| [Settings](../examples/sdk/10-settings.ts) | Supply file-backed or in-memory settings |
+| [Sessions](../examples/sdk/11-sessions.ts) | Control session persistence and restoration |
+| [Full control](../examples/sdk/12-full-control.ts) | Replace default discovery and state services |
+| [Session runtime](../examples/sdk/13-session-runtime.ts) | Replace the active session safely |
 
-### runRpcMode
+<a id="exports"></a>
 
-JSON-RPC mode for subprocess integration:
+## Resources
 
 ```typescript
 import {

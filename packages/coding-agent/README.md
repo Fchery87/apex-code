@@ -301,7 +301,7 @@ Non-interactive modes (`-p`, `--mode json`, and `--mode rpc`) do not show a trus
 
 If no extension or saved decision applies, `defaultProjectTrust` controls the fallback behavior. Set it to `"ask"`, `"always"`, or `"never"` in `~/.apex-code/agent/settings.json`, or change it with `/settings`.
 
-`pi config` and package commands use the same project trust flow, except `pi update` never prompts. Pass `--approve` to trust project-local settings for one command or `--no-approve` to ignore them.
+`apex-code config` and package commands use the same project trust flow, except `apex-code update` never prompts. Pass `--approve` to trust project-local settings for one command or `--no-approve` to ignore them.
 
 Use `/trust` in interactive mode to save a project trust decision for future sessions, including trust for the immediate parent folder. It writes `~/.apex-code/agent/trust.json` only; the current session is not reloaded, so restart pi for changes to take effect.
 
@@ -458,7 +458,7 @@ apex-code update npm:@foo/pi-tools             # update one package
 apex-code config                               # enable/disable extensions, skills, prompts, themes
 ```
 
-Packages install to `~/.apex-code/agent/git/` (git) or `~/.apex-code/agent/npm/` (npm). Use `-l` for project-local installs (`.apex-code/git/`, `.apex-code/npm/`). Git `@ref` values are pinned tags or commits; pinned packages are skipped by `pi update --extensions` and `pi update --all`, so use `pi install git:host/user/repo@new-ref` to move an existing package to a new ref. Git packages install dependencies with `npm install --omit=dev` by default, so runtime deps must be listed under `dependencies`; when `npmCommand` is configured, git packages use plain `install` for compatibility with wrappers. If you use a Node version manager and want package installs to reuse a stable npm context, set `npmCommand` in `settings.json`, for example `["mise", "exec", "node@20", "--", "npm"]`.
+Packages install to `~/.apex-code/agent/git/` (git) or `~/.apex-code/agent/npm/` (npm). Use `-l` for project-local installs (`.apex-code/git/`, `.apex-code/npm/`). Git `@ref` values are pinned tags or commits; pinned packages are skipped by `apex-code update --extensions` and `apex-code update --all`, so use `apex-code install git:host/user/repo@new-ref` to move an existing package to a new ref. Git packages install dependencies with `npm install --omit=dev` by default, so runtime deps must be listed under `dependencies`; when `npmCommand` is configured, git packages use plain `install` for compatibility with wrappers. If you use a Node version manager and want package installs to reuse a stable npm context, set `npmCommand` in `settings.json`, for example `["mise", "exec", "node@20", "--", "npm"]`.
 
 Create a package by adding a `pi` key to `package.json`:
 
@@ -558,7 +558,7 @@ apex-code list                      # List installed packages
 apex-code config                    # Enable/disable package resources
 ```
 
-`pi config` and project package commands accept `--approve`/`--no-approve` to trust or ignore project-local settings for one command. `pi update` never prompts for project trust.
+`apex-code config` and project package commands accept `--approve`/`--no-approve` to trust or ignore project-local settings for one command. `apex-code update` never prompts for project trust.
 
 ### Modes
 
@@ -573,7 +573,7 @@ apex-code config                    # Enable/disable package resources
 In print mode, pi also reads piped stdin and merges it into the initial prompt:
 
 ```bash
-cat README.md | pi -p "Summarize this text"
+cat README.md | apex-code -p "Summarize this text"
 ```
 
 ### Model Options
@@ -664,7 +664,7 @@ apex-code -p "Summarize this codebase"
 apex-code -p -- "- Summarize these points"
 
 # Non-interactive with piped stdin
-cat README.md | pi -p "Summarize this text"
+cat README.md | apex-code -p "Summarize this text"
 
 # Named one-shot session
 apex-code --name "release audit" -p "Audit this repository"

@@ -780,3 +780,34 @@ load; its default-timeout failure reproduced at about 5.4 seconds on an idle run
 Verification passed: `npm run check`, `npm run build:offline`, the frozen-package
 check against v0.87.0, and `npm test` (script suite 215 passed / 4 skipped, scrubber
 21 passed, agent 975 passed / 1 skipped, coding-agent 4,007 passed / 51 skipped).
+
+### v0.87.1 reconciliation
+
+This merge recorded 165 conflicted hunks across 44 files, including 38 files in
+forked paths, six above ADR 0003's 159-hunk ceiling. The accounting is 153 forked
+non-lock hunks, 11 lock hunks, and one identity-file hunk. The spike is chiefly the
+upstream coding-agent documentation refactor; v0.87.0 recorded 39 hunks, so this is
+not a sustained three-release breach. The review continued sequentially and retained
+the reconciliation details in this log and the session audit.
+
+Upstream resurrected the deleted `packages/evals` and
+`packages/session-backends/sqlite-node` packages; both were removed again because
+they are outside the roadmap and retain upstream package identities. The Apex-owned
+coding-agent development guide was kept after upstream deleted it because the README
+still links to it and it documents Apex-specific setup. The docs refactor was adapted
+to Apex's CLI, paths, package names, and offline/product behavior. Local ZIP bug reports
+and opt-in transcript sharing remain intact.
+
+The release adopts upstream's durable SQLite storage, model-catalog generator and
+provider updates, split-turn compaction framing, and xAI `grok-4.7` default. CLI
+`--mode` validation now reports missing and invalid values while retaining Apex's
+supported `acp` mode. The durable browser smoke explicitly selects the package's
+`source` export condition so a clean checkout can validate its public browser-safe
+entry points without first building `dist`.
+
+Package manifests and all three lock surfaces were reconciled to Apex's package
+identity and v0.87.1 dependency range; lockfile registry metadata was retained for
+unchanged package versions. Verification passed: `npm run check`,
+`npm run build:offline`, the frozen-package check against v0.87.1, and `npm test`
+(script suite 215 passed / 4 skipped, scrubber 21 passed, agent 975 passed / 1
+skipped, coding-agent 4,014 passed / 51 skipped).
