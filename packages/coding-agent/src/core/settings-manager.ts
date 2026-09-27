@@ -1419,7 +1419,7 @@ export class SettingsManager {
 
 	/** The saved detail level, or undefined when none is saved or the saved value is unknown. */
 	getChatDetail(): ChatDetail | undefined {
-		const detail = this.settings.chatDetail;
+		const detail = this.globalSettings.chatDetail;
 		return CHAT_DETAILS.find((known) => known === detail);
 	}
 

@@ -4813,10 +4813,15 @@ export class InteractiveMode {
 
 	private toggleThinkingBlockVisibility(): void {
 		this.offerFirstUseHint("thinking");
-		this.hideThinkingBlock = !this.hideThinkingBlock;
-		this.settingsManager.setHideThinkingBlock(this.hideThinkingBlock);
-		// Overview collapses thinking regardless of the preference, so asking to see it has to leave overview.
-		if (!this.hideThinkingBlock && this.chatDetail === "overview") this.chooseChatDetail("details");
+		if (this.chatDetail === "overview") {
+			// Overview hides thinking regardless of the preference. Treat the toggle as a request to show it.
+			this.hideThinkingBlock = false;
+			this.settingsManager.setHideThinkingBlock(false);
+			this.chooseChatDetail("details");
+		} else {
+			this.hideThinkingBlock = !this.hideThinkingBlock;
+			this.settingsManager.setHideThinkingBlock(this.hideThinkingBlock);
+		}
 		this.updateThinkingBlockVisibility();
 		this.showStatus(`Thinking blocks: ${this.hideThinkingBlock ? "hidden" : "visible"}`);
 	}

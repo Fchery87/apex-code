@@ -301,6 +301,19 @@ describe("InteractiveMode conversation detail", () => {
 		expect(settings.setChatDetail).toHaveBeenCalledWith("details");
 		expect(mode.isThinkingHidden()).toBe(false);
 	});
+
+	test("the first thinking toggle from overview reveals thinking when its preference is already visible", () => {
+		const { mode, settings } = createMode();
+		mode.hideThinkingBlock = false;
+		mode.offerFirstUseHint = vi.fn();
+		mode.setChatDetail("overview");
+
+		mode.toggleThinkingBlockVisibility();
+
+		expect(mode.chatDetail).toBe("details");
+		expect(settings.setHideThinkingBlock).toHaveBeenCalledWith(false);
+		expect(mode.isThinkingHidden()).toBe(false);
+	});
 });
 
 describe("InteractiveMode.createExtensionUIContext setTheme", () => {

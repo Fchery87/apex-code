@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
-import { homedir } from "os";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { homedir, tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DEFAULT_HTTP_IDLE_TIMEOUT_MS } from "../src/core/http-dispatcher.ts";
@@ -51,6 +51,24 @@ describe("SettingsManager", () => {
 		expect(
 			SettingsManager.inMemory({ chatDetail: "verbose" } as unknown as Settings).getChatDetail(),
 		).toBeUndefined();
+	});
+
+	it("loads the remembered conversation detail from global settings, not trusted project settings", () => {
+		const scratch = mkdtempSync(join(tmpdir(), "apex-chat-detail-settings-"));
+		const isolatedProjectDir = join(scratch, "project");
+		const isolatedAgentDir = join(scratch, "agent");
+		const projectConfigDir = join(isolatedProjectDir, ".apex-code");
+		mkdirSync(projectConfigDir, { recursive: true });
+		mkdirSync(isolatedAgentDir, { recursive: true });
+		writeFileSync(join(isolatedAgentDir, "settings.json"), JSON.stringify({ chatDetail: "all" }));
+		writeFileSync(join(projectConfigDir, "settings.json"), JSON.stringify({ chatDetail: "overview" }));
+		try {
+			expect(
+				SettingsManager.create(isolatedProjectDir, isolatedAgentDir, { projectTrusted: true }).getChatDetail(),
+			).toBe("all");
+		} finally {
+			rmSync(scratch, { recursive: true, force: true });
+		}
 	});
 
 	it("shows one line of release notes after an update unless asked for all of them", async () => {
