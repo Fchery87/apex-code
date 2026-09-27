@@ -34,6 +34,7 @@ function createFakeInteractiveModeThis() {
 		showStatusIndicator: (indicator: { dispose(): void }) => indicator.dispose(),
 		clearStatusIndicator: vi.fn(),
 		showError: prototype.showError,
+		suggestBugReport: vi.fn(),
 	};
 }
 

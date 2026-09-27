@@ -81,6 +81,7 @@ three merges that follow Phase 2, not from a Phase 0 rehearsal.
 | 2026-08-27 | `v0.84.3` | — | — | — | Taken at `89424bcb7`; see the v0.84.3 section below. This row was missing until 2026-08-30, which made the table read one release behind `.upstream-tag`. |
 | 2026-08-30 | `v0.84.4` | **15** | 16 (11 in forked paths) | 69 (+1,683 / −232) | Total: 112 files, +2,786 / −378. Zero conflicts in frozen packages. |
 | 2026-09-25 | `v0.85.1` | **138** | 79 (58 in forked paths) | 438 (+72,131 / −14,925) | Takes `v0.85.0` and `v0.85.1`. Under the 159 ceiling. Total: 708 files, +96,348 / −25,254. Zero conflicts in frozen packages; new frozen package `chord`. |
+| 2026-09-27 | `v0.86.0` | **163** | 58 total; 7 markerless resurrected paths | 308 (+45,932 / −4,998) | Total: 566 files, +63,405 / −10,737. Four hunks over the 159 ceiling; ≈2h39 wall-clock. Review: the spike coincides with upstream's TranscriptContext/tool-state API transition and model-catalog refresh; Apex adaptations stayed at public boundaries, consumed packages remain frozen, and build/check/full-test gates pass. One breach only; continue and measure v0.86.1 separately. |
 | 2026-08-09 | Apex Code identity rename | — (fork divergence, not a merge) | — | 218 files (+736 / −744), 602 diff hunks | Renamed the two forked package identities, active imports/docs/examples, binary, and global config root. Recorded separately from upstream merge conflicts. |
 
 ### Two kinds of merge cost, tracked separately
@@ -717,3 +718,17 @@ The general lesson for this merge: a clean three-way diff and a passing typechec
 isolation are not the same claim as "nothing broke" — only a full-tree build, typecheck,
 and test run catches code whose only fault is depending on something a neighboring,
 unconflicted diff quietly removed.
+
+### v0.86.0 ceiling review
+
+This merge recorded 163 conflicted hunks across 58 files, four above ADR 0003's
+159-hunk ceiling. The review attributes the spike to a one-release upstream API wave:
+provider contexts now use `TranscriptContext`, tool loadout changes are transcript
+state, and the provider model catalog and message/result types changed together. The
+reconciliation remains at Apex-owned boundaries (`ModelRuntime`, replay/provider
+adapters, prompt/schema projection, and fixtures); no consumed package was patched,
+and the frozen-package check passed. The full build and typecheck gates passed, and the
+final test run passed 4,894 tests with 52 skipped across the script, agent, and
+coding-agent suites. This is one ceiling breach rather than the three consecutive
+divergence-attributable breaches that open ADR 0003's stop-tracking tripwire. Continue
+sequentially and compare the next release's count before advancing again.

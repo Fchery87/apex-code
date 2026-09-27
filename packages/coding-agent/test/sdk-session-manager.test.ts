@@ -79,7 +79,7 @@ describe("createAgentSession session manager defaults", () => {
 
 		expect(session.sessionManager).toBe(sessionManager);
 		expect(session.systemPrompt.replaceAll("\\", "/")).toContain(
-			`Current working directory: ${normalize(sessionCwd).replaceAll("\\", "/")}`,
+			`<cwd>\n${normalize(sessionCwd).replaceAll("\\", "/")}\n</cwd>`,
 		);
 
 		const bashTool = session.agent.state.tools.find((tool) => tool.name === "bash");

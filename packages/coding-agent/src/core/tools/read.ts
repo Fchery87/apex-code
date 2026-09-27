@@ -89,7 +89,7 @@ export function createReadToolDefinition(
 			context: { resultRecoverable: true, deferSchema: false },
 			evidence: { emits: new Set(), capture: () => [] },
 		},
-		constrainedSampling: getExperimentalToolSampling(),
+		constrainedSampling: getExperimentalToolSampling() ?? { type: "json_schema", strict: "prefer" },
 		async execute(
 			_toolCallId,
 			input: { path: string; offset?: number; limit?: number },

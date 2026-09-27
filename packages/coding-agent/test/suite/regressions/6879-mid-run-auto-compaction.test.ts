@@ -34,7 +34,7 @@ describe("issue #6879: mid-run threshold auto-compaction", () => {
 		const harness = await createHarness({
 			models: [{ id: "faux-1", contextWindow: 4_000, maxTokens: 100 }],
 			settings: { compaction: { enabled: true, reserveTokens: 3_400, keepRecentTokens: 120 } },
-			tools: [createLargeResultTool(() => timeline.push("tool-complete"))],
+			tools: [createLargeResultTool(() => timeline.push("tool-complete"), 500)],
 			extensionFactories: [
 				(pi) => {
 					pi.on("session_before_compact", (event) => ({
@@ -77,11 +77,16 @@ describe("issue #6879: mid-run threshold auto-compaction", () => {
 		expect(harness.session.getLastAssistantText()).toBe("finished after compaction");
 	});
 
-	it("does not send another provider request when mid-run compaction cannot start", async () => {
+	it("does not send another provider request when mid-run compaction is cancelled", async () => {
 		const harness = await createHarness({
 			models: [{ id: "faux-1", contextWindow: 4_000, maxTokens: 100 }],
 			settings: { compaction: { enabled: true, reserveTokens: 3_400, keepRecentTokens: 1 } },
 			tools: [createLargeResultTool(undefined, 4_000)],
+			extensionFactories: [
+				(pi) => {
+					pi.on("session_before_compact", () => ({ cancel: true }));
+				},
+			],
 		});
 		harnesses.push(harness);
 		harness.setResponses([
@@ -92,7 +97,8 @@ describe("issue #6879: mid-run threshold auto-compaction", () => {
 		await harness.session.prompt("run the large tool");
 
 		expect(harness.faux.state.callCount).toBe(1);
-		expect(harness.eventsOfType("compaction_start")).toHaveLength(0);
+		expect(harness.eventsOfType("compaction_start")).toHaveLength(1);
+		expect(harness.eventsOfType("compaction_end")).toMatchObject([{ result: undefined, willRetry: false }]);
 		expect(harness.session.messages.at(-1)?.role).toBe("toolResult");
 	});
 

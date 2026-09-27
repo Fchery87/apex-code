@@ -9,7 +9,7 @@ import {
 } from "@earendil-works/pi-tui";
 import type { AppKeybinding, KeybindingsManager } from "../../../core/keybindings.ts";
 import { stripAnsi } from "../../../utils/ansi.ts";
-import type { WorkingStatusIndicator } from "./status-indicator.ts";
+import type { StatusIndicator } from "./status-indicator.ts";
 
 /** Which marker the dock draws. The set is closed so a mode cannot arrive without a marker. */
 export type PromptMode = "agent" | "bash";
@@ -179,7 +179,7 @@ export class CustomEditor extends Editor {
 	private readonly placeholder: string | undefined;
 	private readonly autocompleteRule: ((width: number) => string) | undefined;
 	private readonly autocompleteFooter: (() => string) | undefined;
-	private workingStatusIndicator: WorkingStatusIndicator | undefined;
+	private workingStatusIndicator: StatusIndicator | undefined;
 	public readonly embedWorkingStatus: boolean;
 	public actionHandlers: Map<AppKeybinding, () => void> = new Map();
 
@@ -434,7 +434,7 @@ export class CustomEditor extends Editor {
 		return match?.[0] ?? "";
 	}
 
-	setWorkingStatusIndicator(indicator: WorkingStatusIndicator | undefined): void {
+	setWorkingStatusIndicator(indicator: StatusIndicator | undefined): void {
 		this.workingStatusIndicator = indicator;
 	}
 

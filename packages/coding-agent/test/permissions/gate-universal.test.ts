@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage, fauxProvider, fauxToolCall, type JsonObject } from "@earendil-works/pi-ai";
 import { Agent, type BeforeToolCallContext, type BeforeToolCallResult } from "apex-code-agent-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AuthStorage } from "../../src/core/auth-storage.ts";
@@ -24,7 +24,7 @@ const lspToolsOptions: ToolsOptions = { lsp: { operations: { request: async () =
 const LSP_PARAMS = { operation: "definition", path: "file.txt", line: 1, character: 1 };
 
 /** Schema-valid representative params per tool, so a call reaches the gate rather than failing argument validation first. */
-const REPRESENTATIVE_PARAMS: Record<ToolName, unknown> = {
+const REPRESENTATIVE_PARAMS: Record<ToolName, JsonObject> = {
 	read: { path: "file.txt" },
 	write: { path: "file.txt", content: "hello" },
 	edit: { path: "file.txt", edits: [{ oldText: "a", newText: "b" }] },
@@ -82,7 +82,7 @@ async function driveOneToolCallTurn(
 		},
 	}));
 
-	const toolCall = fauxToolCall(toolName, params as Record<string, unknown>);
+	const toolCall = fauxToolCall(toolName, params as JsonObject);
 	faux.setResponses([
 		fauxAssistantMessage([toolCall], { stopReason: "toolUse" }),
 		fauxAssistantMessage("done", { stopReason: "stop" }),

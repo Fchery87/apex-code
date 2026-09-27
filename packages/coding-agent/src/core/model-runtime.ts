@@ -32,11 +32,13 @@ import {
 	type ModelsSimpleStreamOptions,
 	type ModelsStore,
 	type MutableModels,
+	normalizeContext,
 	type Provider,
 	type ProviderHeaders,
 	type ProviderRequestOptions,
 	type SimpleStreamOptions,
 	type StreamOptions,
+	type TranscriptContext,
 } from "@earendil-works/pi-ai";
 import * as builtinProviderCatalog from "@earendil-works/pi-ai/providers/all";
 import { getAgentDir } from "../config.ts";
@@ -683,6 +685,7 @@ export class ModelRuntime implements Models {
 		context: Context,
 		options?: ModelsApiStreamOptions<TApi>,
 	): AssistantMessageEventStream {
+		const transcript = normalizeContext(context);
 		return lazyStream(model, async () => {
 			const prepared = await this.prepareRequest(
 				model,
@@ -690,7 +693,7 @@ export class ModelRuntime implements Models {
 			);
 			return prepared.provider.stream(
 				prepared.model as Model<TApi>,
-				context,
+				transcript,
 				prepared.options as ApiStreamOptions<TApi>,
 			);
 		});
@@ -705,13 +708,14 @@ export class ModelRuntime implements Models {
 	}
 
 	streamSimple(model: Model<Api>, context: Context, options?: ModelsSimpleStreamOptions): AssistantMessageEventStream {
-		return lazyStream(model, () => this.attemptModel(model, context, options, undefined));
+		const transcript = normalizeContext(context);
+		return lazyStream(model, () => this.attemptModel(model, transcript, options, undefined));
 	}
 
 	/** One model attempt: pool-based credential failover when configured, single-credential resolution otherwise. */
 	private async attemptModel(
 		model: Model<Api>,
-		context: Context,
+		context: TranscriptContext,
 		options: ModelsSimpleStreamOptions | undefined,
 		role: string | undefined,
 	): Promise<ResultStream> {
@@ -871,6 +875,7 @@ export class ModelRuntime implements Models {
 		context: Context,
 		options: ModelsSimpleStreamOptions | undefined,
 	): Promise<{ events: readonly AssistantMessageEvent[]; message: AssistantMessage }> {
+		const transcript = normalizeContext(context);
 		const { roles } = this.resolveModelRoles();
 		const candidates = roles.get(roleName);
 		if (!candidates || candidates.length === 0) {
@@ -880,7 +885,7 @@ export class ModelRuntime implements Models {
 		let originalFailure: DrainedAttempt | undefined;
 		for (const candidate of candidates) {
 			options?.signal?.throwIfAborted();
-			const attemptStream = await this.attemptModel(candidate, context, options, roleName);
+			const attemptStream = await this.attemptModel(candidate, transcript, options, roleName);
 			const drained = await drainAttempt(attemptStream);
 			if (drained.message.stopReason !== "error") return drained;
 			if (!originalFailure) originalFailure = drained;
@@ -903,7 +908,7 @@ export class ModelRuntime implements Models {
 	private async streamSimpleWithCredentialFailover(
 		pool: CredentialPool,
 		model: Model<Api>,
-		context: Context,
+		context: TranscriptContext,
 		options: ModelsSimpleStreamOptions | undefined,
 		role: string | undefined,
 	): Promise<ResultStream> {

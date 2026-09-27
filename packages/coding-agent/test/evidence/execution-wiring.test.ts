@@ -93,7 +93,7 @@ describe("AgentSession evidence wiring", () => {
 			args: { value: "source" },
 			result: { content: [{ type: "text", text: "presented" }], details: { observed: "raw" } },
 			isError: false,
-			context: { systemPrompt: "", messages: [], tools: [] },
+			context: { messages: [], tools: [] },
 		});
 		expect(recorded).toEqual([
 			{ toolName: "fixture", records: [{ kind: "manual", value: "source", observed: "raw" }] },
@@ -139,7 +139,7 @@ describe("AgentSession evidence wiring", () => {
 			args: { value: "source" },
 			result: { content: [{ type: "text", text: "fixture" }], details: {} },
 			isError: false,
-			context: { systemPrompt: "", messages: [], tools: [] },
+			context: { messages: [], tools: [] },
 		});
 		expect(after).toBeUndefined();
 		expect(diagnostics).toEqual([{ toolName: "sink_failure_fixture", reason: "sink unavailable" }]);
@@ -172,7 +172,7 @@ describe("AgentSession evidence wiring", () => {
 				details: sourceError instanceof Error && "details" in sourceError ? sourceError.details : {},
 			},
 			isError: true,
-			context: { systemPrompt: "", messages: [], tools: [] },
+			context: { messages: [], tools: [] },
 		});
 		expect(recorded).toEqual([
 			{

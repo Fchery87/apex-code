@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { SessionEntry } from "../src/core/session-manager.ts";
+import { SettingsManager } from "../src/core/settings-manager.ts";
 import type { UsagePerformanceSample } from "../src/core/usage-performance-store.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
@@ -11,6 +12,7 @@ beforeAll(() => {
 type Renderable = { render(width: number): string[] };
 
 type SessionCommandContext = {
+	settingsManager: SettingsManager;
 	session: {
 		getSessionStats(): {
 			sessionFile: string | undefined;
@@ -76,6 +78,7 @@ describe("InteractiveMode /session role and latency (task 8.4)", () => {
 		const requestRender = vi.fn();
 
 		const context: SessionCommandContext = {
+			settingsManager: SettingsManager.inMemory(),
 			session: {
 				getSessionStats: () => baseStats(),
 				modelRuntime: {
@@ -125,6 +128,7 @@ describe("InteractiveMode /session role and latency (task 8.4)", () => {
 	it("omits Latency/Roles sections entirely when the ledger has no samples for this session", async () => {
 		const addChild = vi.fn();
 		const context: SessionCommandContext = {
+			settingsManager: SettingsManager.inMemory(),
 			session: {
 				getSessionStats: () => baseStats({ cost: 0 }),
 				modelRuntime: {

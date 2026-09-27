@@ -377,6 +377,22 @@ describe("SettingsManager", () => {
 		});
 	});
 
+	describe("retry settings", () => {
+		it("defaults and overrides agent retry delay cap", () => {
+			expect(SettingsManager.inMemory().getRetrySettings()).toEqual({
+				enabled: true,
+				maxRetries: 3,
+				baseDelayMs: 2000,
+				maxAgentDelayMs: 60000,
+			});
+			expect(
+				SettingsManager.inMemory({
+					retry: { enabled: true, maxRetries: 10, baseDelayMs: 500, maxAgentDelayMs: 5000 },
+				}).getRetrySettings(),
+			).toEqual({ enabled: true, maxRetries: 10, baseDelayMs: 500, maxAgentDelayMs: 5000 });
+		});
+	});
+
 	describe("httpIdleTimeoutMs", () => {
 		it("should default to 5 minutes", () => {
 			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
@@ -429,6 +445,40 @@ describe("SettingsManager", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ delegationMaxDepth: 0 }));
 			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
 			expect(manager.getDelegationMaxDepth()).toBe(2);
+		});
+	});
+
+	describe("cacheWarming", () => {
+		it("defaults to streaming and ignores project settings", () => {
+			expect(SettingsManager.create(projectDir, agentDir, { projectTrusted: true }).getCacheWarmingMode()).toBe(
+				"streaming",
+			);
+
+			writeFileSync(join(projectDir, ".apex-code", "settings.json"), JSON.stringify({ cacheWarming: "idle" }));
+			expect(SettingsManager.create(projectDir, agentDir, { projectTrusted: true }).getCacheWarmingMode()).toBe(
+				"streaming",
+			);
+
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ cacheWarming: "idle" }));
+			expect(SettingsManager.create(projectDir, agentDir, { projectTrusted: true }).getCacheWarmingMode()).toBe(
+				"idle",
+			);
+
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ cacheWarming: "bogus" }));
+			expect(SettingsManager.create(projectDir, agentDir, { projectTrusted: true }).getCacheWarmingMode()).toBe(
+				"streaming",
+			);
+		});
+
+		it("persists the mode globally", async () => {
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
+			manager.setCacheWarmingMode("off");
+			await manager.flush();
+
+			expect(SettingsManager.create(projectDir, agentDir, { projectTrusted: true }).getCacheWarmingMode()).toBe(
+				"off",
+			);
+			expect(JSON.parse(readFileSync(join(agentDir, "settings.json"), "utf8"))).toEqual({ cacheWarming: "off" });
 		});
 	});
 

@@ -24,6 +24,8 @@ export interface ExtensionSelectorOptions {
 	timeout?: number;
 	onToggleToolsExpanded?: () => void;
 	enableSearch?: boolean;
+	/** Short explanation displayed above the choices. */
+	description?: string;
 	/**
 	 * Drawn under the title and above the rows, for a prompt whose choices only
 	 * make sense beside the thing they act on. The caller owns its colouring, so
@@ -66,6 +68,10 @@ export class ExtensionSelectorComponent extends Container {
 
 		this.titleText = new Text(theme.fg("accent", theme.bold(title)), 0, 0);
 		this.addChild(this.titleText);
+		if (opts?.description) {
+			this.addChild(new Spacer(1));
+			this.addChild(new Text(theme.fg("text", opts.description), 1, 0));
+		}
 		this.addChild(new Spacer(1));
 		if (opts?.preamble) {
 			this.addChild(opts.preamble);

@@ -3,6 +3,8 @@ import {
 	type AssistantMessageEventStream,
 	createAssistantMessageEventStream,
 	type Model,
+	normalizeContext,
+	type TranscriptContext,
 } from "@earendil-works/pi-ai";
 import type { ModelRuntime } from "../../core/model-runtime.ts";
 
@@ -12,7 +14,7 @@ const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
 export interface RecordedProvider {
 	readonly requestCount: number;
-	readonly contexts: readonly import("@earendil-works/pi-ai").Context[];
+	readonly contexts: readonly TranscriptContext[];
 	getModel(modelId: string): Model<string>;
 	assertExhausted(): void;
 }
@@ -85,7 +87,7 @@ export function registerRecordedProvider(
 	const modelIds = [...new Set(pending.map((message) => message.model))];
 	const models = new Map(modelIds.map((modelId) => [modelId, recordedModel(modelId)]));
 	let requestCount = 0;
-	const contexts: import("@earendil-works/pi-ai").Context[] = [];
+	const contexts: TranscriptContext[] = [];
 
 	runtime.registerProvider(RECORDED_PROVIDER_ID, {
 		name: "Recorded replay provider",
@@ -94,10 +96,7 @@ export function registerRecordedProvider(
 		models: [...models.values()],
 		streamSimple: (model, context) => {
 			requestCount++;
-			contexts.push({
-				systemPrompt: context.systemPrompt,
-				messages: structuredClone(context.messages),
-			});
+			contexts.push(normalizeContext({ messages: structuredClone(context.messages) }));
 			const response = pending.shift();
 			if (!response) return failedStream(`Recorded replay exhausted before request ${requestCount}`, model.id);
 			if (response.model !== model.id) {

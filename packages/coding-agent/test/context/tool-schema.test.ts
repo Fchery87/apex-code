@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getCurrentTools } from "@earendil-works/pi-ai";
 import { Agent } from "apex-code-agent-core";
 import { Type } from "typebox";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -99,14 +100,19 @@ describe("deferred schema load path (task 4.1)", () => {
 		expect(executedValue).toBe("approved-value");
 		expect(faux.callCount).toBe(3);
 
-		const firstSecret = faux.contexts[0]?.tools?.find((tool) => tool.name === "secret_tool");
+		const firstTools = getCurrentTools(faux.contexts[0]?.messages ?? []);
+		const firstSecret = firstTools.find((tool) => tool.name === "secret_tool");
 		expect(JSON.stringify(firstSecret?.parameters)).not.toContain(SECRET_ARGUMENT);
 
-		const firstSchemaTool = faux.contexts[0]?.tools?.find((tool) => tool.name === "tool_schema");
-		expect(firstSchemaTool, JSON.stringify(faux.contexts[0]?.tools?.map((tool) => tool.name))).toBeDefined();
+		const firstSchemaTool = firstTools.find((tool) => tool.name === "tool_schema");
+		expect(firstSchemaTool, JSON.stringify(firstTools.map((tool) => tool.name))).toBeDefined();
 
-		const secondSecret = faux.contexts[1]?.tools?.find((tool) => tool.name === "secret_tool");
+		const secondSecret = getCurrentTools(faux.contexts[1]?.messages ?? []).find(
+			(tool) => tool.name === "secret_tool",
+		);
 		expect(JSON.stringify(secondSecret?.parameters)).toContain(SECRET_ARGUMENT);
+		const storedSecret = getCurrentTools(session.agent.state.messages).find((tool) => tool.name === "secret_tool");
+		expect(JSON.stringify(storedSecret?.parameters)).toContain(SECRET_ARGUMENT);
 
 		const schemaResult = session.messages.find(
 			(message) => message.role === "toolResult" && message.toolName === "tool_schema",

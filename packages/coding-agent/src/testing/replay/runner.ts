@@ -188,7 +188,6 @@ function createRecordedTools(
 					content: structuredClone(result.content),
 					details: structuredClone(result.details),
 					usage: structuredClone(result.usage),
-					addedToolNames: structuredClone(result.addedToolNames),
 				};
 			},
 		}),
