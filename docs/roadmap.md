@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0 through 12 landed · **Created:** 2026-08-08 · **Last updated:** 2026-09-06
+**Status:** Active — Phases 0 through 12 landed · **Created:** 2026-08-08 · **Last updated:** 2026-09-27
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -112,7 +112,7 @@ capable and measurably worse.
 | MCP OAuth, host-owned | **landed** — OAUTH.1 through OAUTH.8 · `4a63d0615` (three-OS CI run 33567719304) | [spec](specs/2026-09-01-mcp-oauth.md) | — |
 | Git-backed session checkpoints | **landed** — 8 of 8 tasks · `075fac684` | [spec](specs/2026-08-28-git-checkpoints.md) | — |
 | Dependency updates that can merge | **landed** — `262d673cb` | [spec](specs/2026-08-29-dependency-updates-that-can-merge.md) | — |
-| Upstream catch-up v0.86.0–v0.87.1 | **active** — reconciling one tag at a time under the upstream merge ceiling | [ADR 0003](adr/0003-upstream-merge-cadence.md) | [plan](plans/2026-09-27-upstream-catchup.md) |
+| Upstream catch-up v0.86.0 through v0.87.1 | **landed** — sequential reconciliation recorded in `docs/upstream-log.md`; v0.87.1's 165 conflicted hunks exceeded the 159 ceiling by six. PR #152 merged at `f279f2c7f`; PR #148 merged at `786a3bb49` after CI run 36348108639 passed; PR #149 merged at `5a249505c` after CI run 36349272406 passed on Ubuntu, macOS, and Windows | [ADR 0003](adr/0003-upstream-merge-cadence.md) | — |
 | Documented surfaces that do not exist | **landed** — 4 of 4 tasks · `d2cb6ea0f` | [spec](specs/2026-08-29-documented-surfaces-that-do-not-exist.md) | — |
 | Release tags and the spec status gate | **landed** — pull request #63 | [spec](specs/2026-08-29-claims-the-repository-cannot-check.md) | — |
 | Mid-run auto-compaction | **landed** — `61be67e27` | [spec](specs/2026-08-29-mid-run-auto-compaction.md) | — |
@@ -138,7 +138,7 @@ capable and measurably worse.
 | Non-interactive exit contract | **active** — implemented locally, not merged and no CI run yet. `--mode json` returned the initial `exitCode` of `0` on every failure that did not throw, because both assignments of `1` sat inside `if (mode === "text")`, so a provider error, an aborted turn, and an exhausted run budget all reported success to the caller the README sends to this mode. The outcome now resolves once for every mode from `agent_end`'s `AgentStopReason`, with the settled assistant message as the fallback, and a `result` envelope ends a JSON run. Reproduced on the real CLI at exit 0 and re-run at exit 1 after the fix; `test/print-mode.test.ts` is 12 of 12, with three exit-code assertions and one envelope assertion watched red before the fix. Three-OS CI green at `adaefe83c`, and an independent verifier returned PASS+NOTES on pull request #142, which is what found the text-mode edge cases the spec's second amendment records | [spec](specs/2026-09-22-print-mode-exit-codes.md) | — |
 | Transcript polish | **landed** — one look per role (user spine with a gap, no assistant rail), a failed retry run collapsed to one error line, and every counted tool hint routed through `formatHiddenLines` with bash duration left to the header · `b3646c5e0`, `021f7f9e3`, `02b7e6d61` · `npm test` green; the render bench fails at startup on `main` too, recorded in the spec | [spec](specs/2026-09-22-transcript-polish.md) | — |
 | Chrome consistency | **landed** — one hint-row grammar, one composer-dock edge with the `›` prompt, sentence-case titles, no palette scope letters, `cache N%` and `<0.1%` in the footer, and a one-line update notice by default · `bec01911c`, `4e945ae48`, `56b402a50`, `b7184d84f`, `6043344a4` · `npm test` green | [spec](specs/2026-09-22-chrome-consistency.md) | — |
-| Collapsed-by-default transcript | **active** — PR #148 is rebased onto the merged v0.87.1 catch-up and carries fixes for the review findings. `npm run check` and 8 focused files / 156 tests pass. A full local `npm test` on the earlier head had four remote-runtime timeouts; the isolated runtime file passed all 26 tests. Fresh PR CI is pending · `f87559945`, `b7e610c37`, `fc63422b8`, `ca37f5db6`, `f450b70d6` | [spec](specs/2026-09-25-collapsed-by-default-transcript.md) | — |
+| Collapsed-by-default transcript | **landed** — PR #148 merged at `786a3bb49` after CI run 36348108639 passed on Ubuntu, macOS, and Windows | [spec](specs/2026-09-25-collapsed-by-default-transcript.md) | — |
 
 ---
 
