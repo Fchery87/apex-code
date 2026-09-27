@@ -114,7 +114,7 @@ import {
 	type UsageEntry,
 } from "../../core/session-manager.ts";
 import { formatShareUnavailableMessage, publishSessionShare } from "../../core/session-share.ts";
-import type { FullscreenExitOutput, TuiMode } from "../../core/settings-manager.ts";
+import { CHAT_DETAILS, type ChatDetail, type FullscreenExitOutput, type TuiMode } from "../../core/settings-manager.ts";
 import { slugifySkillCommandName } from "../../core/skills.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
@@ -148,6 +148,7 @@ import { CustomMessageComponent } from "./components/custom-message.ts";
 import { DaxnutsComponent } from "./components/daxnuts.ts";
 import { DynamicBorder } from "./components/dynamic-border.ts";
 import { EarendilAnnouncementComponent } from "./components/earendil-announcement.ts";
+import { collapsedErrorLine, summarizeError } from "./components/error-summary.ts";
 import { ExtensionEditorComponent } from "./components/extension-editor.ts";
 import { ExtensionInputComponent } from "./components/extension-input.ts";
 import { ExtensionSelectorComponent } from "./components/extension-selector.ts";
@@ -208,17 +209,15 @@ export { createInteractiveTui, createInteractiveTuiReference } from "./tui-rende
  *
  * One cycled value rather than a set of independent booleans, because the
  * readings are ordered and only three of the eight combinations are coherent.
- * `details` is the default and reproduces the pre-cycle behaviour exactly, so
- * the rung exists in both directions and an upgrade changes nothing until the
- * key is pressed.
  */
-export type ChatDetail = "overview" | "details" | "all";
+export type { ChatDetail };
 
-const CHAT_DETAIL_ORDER: readonly ChatDetail[] = ["overview", "details", "all"];
+/** A session opens with everything collapsed; the expand key opens it rung by rung. */
+export const INITIAL_CHAT_DETAIL: ChatDetail = "overview";
 
 /** The next rung, wrapping from `all` back to `overview`. */
 export function nextChatDetail(detail: ChatDetail): ChatDetail {
-	return CHAT_DETAIL_ORDER[(CHAT_DETAIL_ORDER.indexOf(detail) + 1) % CHAT_DETAIL_ORDER.length] ?? "details";
+	return CHAT_DETAILS[(CHAT_DETAILS.indexOf(detail) + 1) % CHAT_DETAILS.length] ?? INITIAL_CHAT_DETAIL;
 }
 
 export interface ChatDetailView {
@@ -227,11 +226,11 @@ export interface ChatDetailView {
 	/** Inline diffs are shown rather than reduced to their line counts. */
 	editDiffsExpanded: boolean;
 	/**
-	 * Thinking blocks are shown even when the user's persisted setting hides them.
-	 * Only `all` does this, because only `all` is an unambiguous request for
-	 * everything; the override is never written back to settings.
+	 * Whether thinking blocks show. `preference` defers to the persisted
+	 * hide-thinking setting; the other two override it for presentation only
+	 * and are never written back to settings.
 	 */
-	revealThinking: boolean;
+	thinking: "collapsed" | "preference" | "revealed";
 }
 
 /** The single place the three rungs turn into rendering flags. */
@@ -239,7 +238,7 @@ export function chatDetailView(detail: ChatDetail): ChatDetailView {
 	return {
 		toolOutputExpanded: detail === "all",
 		editDiffsExpanded: detail !== "overview",
-		revealThinking: detail === "all",
+		thinking: detail === "overview" ? "collapsed" : detail === "details" ? "preference" : "revealed",
 	};
 }
 
@@ -299,6 +298,24 @@ class ExpandableText extends Text implements Expandable {
 	setExpanded(expanded: boolean): void {
 		this.setText(expanded ? this.getExpandedText() : this.getCollapsedText());
 	}
+}
+
+/**
+ * An error line that joins the detail cycle: a multi-line error folds to its
+ * summary until the transcript is fully expanded. `outcome` trails both forms,
+ * so what happened to the request stays visible while the detail is folded.
+ */
+function errorText(message: string, expanded: boolean, paddingX: number, outcome = ""): Text {
+	const summary = summarizeError(message);
+	const full = () => theme.fg("error", `${message}${outcome}`);
+	if (summary === undefined) return new Text(full(), paddingX, 0);
+	return new ExpandableText(
+		() => collapsedErrorLine(theme.fg("error", `${summary}${outcome}`)),
+		full,
+		expanded,
+		paddingX,
+		0,
+	);
 }
 
 type CompactionQueuedMessage = {
@@ -565,9 +582,9 @@ export class InteractiveMode {
 	private pendingTools = new Map<string, ToolExecutionComponent>();
 
 	// Tool output expansion state
-	private chatDetail: ChatDetail = "details";
-	private toolOutputExpanded = false;
-	private editDiffsExpanded = true;
+	private chatDetail: ChatDetail = INITIAL_CHAT_DETAIL;
+	private toolOutputExpanded = chatDetailView(INITIAL_CHAT_DETAIL).toolOutputExpanded;
+	private editDiffsExpanded = chatDetailView(INITIAL_CHAT_DETAIL).editDiffsExpanded;
 
 	// Thinking block visibility state
 	private hideThinkingBlock = false;
@@ -748,8 +765,8 @@ export class InteractiveMode {
 		this.footerContainer = new Container();
 		this.footerContainer.addChild(this.footer);
 
-		// Load hide thinking block setting
 		this.hideThinkingBlock = this.settingsManager.getHideThinkingBlock();
+		this.loadChatDetail(this.settingsManager.getChatDetail());
 		this.outputPad = this.settingsManager.getOutputPad();
 
 		// Register themes from resource loader and initialize
@@ -3670,6 +3687,7 @@ export class InteractiveMode {
 						this.outputPad,
 						this.getMarkdownTransformers(),
 					);
+					this.adoptChatDetail(this.streamingComponent);
 					this.streamingMessage = event.message;
 					this.chatContainer.addChild(this.streamingComponent);
 					this.streamingComponent.updateContent(this.streamingMessage, true);
@@ -3883,7 +3901,7 @@ export class InteractiveMode {
 						this.showError(event.errorMessage);
 					} else {
 						this.chatContainer.addChild(new Spacer(1));
-						this.chatContainer.addChild(new Text(theme.fg("error", event.errorMessage), 1, 0));
+						this.chatContainer.addChild(errorText(event.errorMessage, this.toolOutputExpanded, 1));
 					}
 				}
 				void this.flushCompactionQueue({ willRetry: event.willRetry });
@@ -3925,7 +3943,7 @@ export class InteractiveMode {
 					const outcome = this.retryCancelled
 						? "retry cancelled"
 						: `gave up after ${event.attempt} ${event.attempt === 1 ? "retry" : "retries"}`;
-					this.showError(`${lastAttempt?.error ?? event.finalError ?? "Unknown error"} (${outcome})`);
+					this.showError(lastAttempt?.error ?? event.finalError ?? "Unknown error", ` (${outcome})`);
 				}
 				this.retriedAttempt = undefined;
 				this.retryCancelled = false;
@@ -4129,6 +4147,7 @@ export class InteractiveMode {
 					this.outputPad,
 					this.getMarkdownTransformers(),
 				);
+				this.adoptChatDetail(assistantComponent);
 				this.chatContainer.addChild(assistantComponent);
 				break;
 			}
@@ -4709,28 +4728,44 @@ export class InteractiveMode {
 		if (hasEditDiffsExpansion(component)) component.setEditDiffsExpanded(this.editDiffsExpanded);
 	}
 
+	/** The expand key. A level the user picks is saved, so the next session opens at it. */
 	private cycleChatDetail(): void {
-		this.setChatDetail(nextChatDetail(this.chatDetail));
+		this.chooseChatDetail(nextChatDetail(this.chatDetail));
+	}
+
+	private chooseChatDetail(detail: ChatDetail): void {
+		this.settingsManager.setChatDetail(detail);
+		this.setChatDetail(detail);
+	}
+
+	/** Adopt a saved level before the transcript renders; unset opens collapsed. */
+	private loadChatDetail(saved: ChatDetail | undefined): void {
+		this.assignChatDetail(saved ?? INITIAL_CHAT_DETAIL);
+	}
+
+	private assignChatDetail(detail: ChatDetail): void {
+		const view = chatDetailView(detail);
+		this.chatDetail = detail;
+		this.toolOutputExpanded = view.toolOutputExpanded;
+		this.editDiffsExpanded = view.editDiffsExpanded;
 	}
 
 	/**
-	 * Presentation only. This never rewrites messages, settings, or the session
-	 * transcript, which is why it may override the persisted thinking preference
-	 * at `all` without saving that override.
+	 * Presentation only. This never rewrites messages or the session transcript,
+	 * and never the hide-thinking preference, which `all` overrides unsaved.
+	 * Saving the level itself is `chooseChatDetail`'s job, for user choices only.
 	 */
 	private setChatDetail(detail: ChatDetail): void {
 		if (detail === this.chatDetail) return;
-		this.chatDetail = detail;
-		const view = chatDetailView(detail);
-		this.toolOutputExpanded = view.toolOutputExpanded;
-		this.editDiffsExpanded = view.editDiffsExpanded;
+		this.assignChatDetail(detail);
 		this.applyChatDetail();
 		this.showStatus(`Conversation detail: ${detail}`);
 	}
 
 	/** True when thinking blocks are hidden right now, setting and detail level combined. */
 	private isThinkingHidden(): boolean {
-		return this.hideThinkingBlock && !chatDetailView(this.chatDetail).revealThinking;
+		const { thinking } = chatDetailView(this.chatDetail);
+		return thinking === "preference" ? this.hideThinkingBlock : thinking === "collapsed";
 	}
 
 	private applyChatDetail(): void {
@@ -4759,7 +4794,8 @@ export class InteractiveMode {
 	 *
 	 * Collapsing maps to `details` rather than `overview`, because an extension
 	 * asking to collapse tool output has not asked to hide edit diffs, and
-	 * `details` is the level where only tool output is collapsed.
+	 * `details` is the level where only tool output is collapsed. Not saved: an
+	 * extension's request should not decide how the next session opens.
 	 */
 	private setToolsExpanded(expanded: boolean): void {
 		this.setChatDetail(expanded ? "all" : "details");
@@ -4777,8 +4813,15 @@ export class InteractiveMode {
 
 	private toggleThinkingBlockVisibility(): void {
 		this.offerFirstUseHint("thinking");
-		this.hideThinkingBlock = !this.hideThinkingBlock;
-		this.settingsManager.setHideThinkingBlock(this.hideThinkingBlock);
+		if (this.chatDetail === "overview") {
+			// Overview hides thinking regardless of the preference. Treat the toggle as a request to show it.
+			this.hideThinkingBlock = false;
+			this.settingsManager.setHideThinkingBlock(false);
+			this.chooseChatDetail("details");
+		} else {
+			this.hideThinkingBlock = !this.hideThinkingBlock;
+			this.settingsManager.setHideThinkingBlock(this.hideThinkingBlock);
+		}
 		this.updateThinkingBlockVisibility();
 		this.showStatus(`Thinking blocks: ${this.hideThinkingBlock ? "hidden" : "visible"}`);
 	}
@@ -4810,9 +4853,11 @@ export class InteractiveMode {
 		this.ui.requestRender();
 	}
 
-	showError(errorMessage: string): void {
+	showError(errorMessage: string, outcome?: string): void {
 		this.chatContainer.addChild(new Spacer(1));
-		this.chatContainer.addChild(new Text(theme.fg("error", `Error: ${errorMessage}`), this.outputPad, 0));
+		this.chatContainer.addChild(
+			errorText(`Error: ${errorMessage}`, this.toolOutputExpanded, this.outputPad, outcome),
+		);
 		this.ui.requestRender();
 	}
 
@@ -5183,6 +5228,7 @@ export class InteractiveMode {
 					permissionMode,
 					editorPaddingX: this.settingsManager.getEditorPaddingX(),
 					outputPad: this.settingsManager.getOutputPad(),
+					chatDetail: this.chatDetail,
 					autocompleteMaxVisible: this.settingsManager.getAutocompleteMaxVisible(),
 					quietStartup: this.settingsManager.getQuietStartup(),
 					clearOnShrink: this.settingsManager.getClearOnShrink(),
@@ -5269,6 +5315,7 @@ export class InteractiveMode {
 						void this.themeController.setThemeSetting(themeSetting);
 					},
 					onThemePreview: (themeName) => this.themeController.preview(themeName),
+					onChatDetailChange: (detail) => this.chooseChatDetail(detail),
 					onHideThinkingBlockChange: (hidden) => {
 						this.hideThinkingBlock = hidden;
 						this.settingsManager.setHideThinkingBlock(hidden);
@@ -6645,6 +6692,7 @@ export class InteractiveMode {
 				return;
 			}
 			this.hideThinkingBlock = this.settingsManager.getHideThinkingBlock();
+			this.loadChatDetail(this.settingsManager.getChatDetail());
 			this.outputPad = this.settingsManager.getOutputPad();
 			this.rebuildChatFromMessages();
 			chatRestoredBeforeSessionStart = true;
