@@ -314,6 +314,7 @@ describe("permission gate — decision plumbing (evaluateToolCall)", () => {
 				if (next !== undefined) value = next;
 				return result;
 			},
+			withReadLockAsync: async <T>(fn: (current: string | undefined) => Promise<T>) => fn(value),
 			withLockAsync: async <T>(fn: (current: string | undefined) => Promise<{ result: T; next?: string }>) => {
 				const { result, next } = await fn(value);
 				if (next !== undefined) value = next;

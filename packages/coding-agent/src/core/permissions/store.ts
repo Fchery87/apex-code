@@ -192,10 +192,15 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 	constructor(options: CreateFilePermissionRuleStoreOptions) {
 		const agentDir = options.agentDir ?? getAgentDir();
 		const cwd = resolvePath(options.cwd);
+		const paths: Record<FileBackedSource, string> = {
+			user: join(agentDir, "permissions.json"),
+			project: projectResourcePathByName(cwd, PROJECT_PERMISSIONS_FILE),
+			local: projectResourcePathByName(cwd, PROJECT_LOCAL_PERMISSIONS_FILE),
+		};
 		this.backends = {
-			user: new FileAuthStorageBackend(join(agentDir, "permissions.json")),
-			project: new FileAuthStorageBackend(projectResourcePathByName(cwd, PROJECT_PERMISSIONS_FILE)),
-			local: new FileAuthStorageBackend(projectResourcePathByName(cwd, PROJECT_LOCAL_PERMISSIONS_FILE)),
+			user: new FileAuthStorageBackend(paths.user),
+			project: new FileAuthStorageBackend(paths.project),
+			local: new FileAuthStorageBackend(paths.local),
 			...options.backends,
 		};
 		this.policyPath = options.policyPath ?? defaultPolicyPath();
@@ -224,13 +229,10 @@ export class FilePermissionRuleStore implements PermissionRuleStore {
 		source: FileBackedSource,
 	): Promise<{ scope: StoredPermissionScope; error?: Error }> {
 		try {
-			let content: string | undefined;
-			await this.backends[source].withLockAsync(async (current) => {
-				content = current;
-				return { result: undefined };
-			});
+			const content = await this.backends[source].withReadLockAsync(async (current) => current);
 			return { scope: parseScope(content) };
 		} catch (error) {
+			if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return { scope: emptyScope() };
 			return { scope: emptyScope(), error: error instanceof Error ? error : new Error(String(error)) };
 		}
 	}

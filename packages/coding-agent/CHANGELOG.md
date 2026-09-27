@@ -6,6 +6,10 @@
 
 - **A session opens with everything collapsed.** Tool output shows a counted preview, edit diffs show their line counts, thinking shows one `Thinking... ctrl+o to expand` line, and a multi-line error shows its first line (or, for a Python traceback, the raised error) with the same hint. Press `ctrl+o` to step through overview, details, and all. The level you pick is saved as `chatDetail` in `~/.apex-code/settings.json`, so the next session opens at it; `/settings` also has a Conversation detail row. Turning thinking on with `ctrl+t` opens the transcript far enough to show it.
 
+### Fixed
+
+- **Starting Apex in a trusted project left untracked files behind.** Reading permission rules went through the write lock, which creates the file it locks, so the first run in any trusted repository created `.apex-code/permissions.json` and `.apex-code/permissions.local.json`, and `~/.apex-code/permissions.json`. Missing rules files are read as empty without creating anything; other filesystem errors are surfaced in the permission snapshot instead of being mistaken for missing files. Files are still created the first time you save a rule.
+
 ## [0.5.0] - 2026-09-23
 
 ### Changed
