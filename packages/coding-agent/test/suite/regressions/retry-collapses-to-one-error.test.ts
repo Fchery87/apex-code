@@ -26,6 +26,7 @@ function createFakeInteractiveModeThis() {
 		session: { retryAttempt: 0, abortRetry: vi.fn() },
 		defaultEditor: { onEscape: undefined as (() => void) | undefined },
 		clearPendingTools: vi.fn(),
+		maybeSuggestBugReport: vi.fn(),
 		updateEditorBorderColor: vi.fn(),
 		maybeShowCacheMissNotice: vi.fn(),
 		isThinkingHidden: () => false,

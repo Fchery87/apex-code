@@ -76,6 +76,42 @@ Canonical runtime controls use the `APEX_CODE_*` prefix, including
 remain for compatibility through the pre-1.0 line and will be removed no earlier than
 Apex Code 1.0.0 and 2027-02-16. Canonical values win when both forms are set.
 
+### Supported providers
+
+**API keys:**
+- Anthropic
+- Ant Ling
+- OpenAI
+- Azure OpenAI
+- DeepSeek
+- NVIDIA NIM
+- Google Gemini
+- Google Vertex
+- Amazon Bedrock
+- Mistral
+- Groq
+- Cerebras
+- Cloudflare AI Gateway
+- Cloudflare Workers AI
+- xAI
+- OpenRouter
+- Vercel AI Gateway
+- ZAI Coding Plan (Global)
+- ZAI Coding Plan (China)
+- OpenCode Zen
+- OpenCode Go
+- Hugging Face
+- Fireworks
+- Together AI
+- Baseten
+- Kimi For Coding
+- Meta
+- MiniMax
+- Xiaomi MiMo
+- Xiaomi MiMo Token Plan (China)
+- Xiaomi MiMo Token Plan (Amsterdam)
+- Xiaomi MiMo Token Plan (Singapore)
+
 Extension callback variable names, the package manifest `pi` key, and imports from
 `@earendil-works/pi-ai` / `@earendil-works/pi-tui` are retained compatibility and
 upstream vocabulary, not executable or product branding.

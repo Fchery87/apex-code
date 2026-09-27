@@ -8,7 +8,14 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { AuthEvent, AuthPrompt, ModelThinkingLevel } from "@earendil-works/pi-ai";
-import type { AssistantMessage, ImageContent, Message, Model, Usage } from "@earendil-works/pi-ai/compat";
+import {
+	type AssistantMessage,
+	type ImageContent,
+	isRetryableAssistantError,
+	type Message,
+	type Model,
+	type Usage,
+} from "@earendil-works/pi-ai/compat";
 import type {
 	AutocompleteItem,
 	AutocompleteProvider,
@@ -2209,12 +2216,21 @@ export class InteractiveMode {
 		this.bugReportHintShown = true;
 		this.chatContainer.addChild(
 			new Text(
-				theme.fg("muted", `If this looks like a ${APP_NAME} bug, /bug sends a report to the developers.`),
+				theme.fg(
+					"muted",
+					`If this looks like a ${APP_NAME} bug, /bug exports a report locally without uploading it.`,
+				),
 				this.outputPad,
 				0,
 			),
 		);
 		this.ui.requestRender();
+	}
+
+	private maybeSuggestBugReport(message: AssistantMessage): void {
+		if (message.stopReason !== "error" || isRetryableAssistantError(message)) return;
+		if (/\b(?:abort(?:ed)?|cancel(?:l?ed)?)\b/i.test(message.errorMessage ?? "")) return;
+		this.suggestBugReport();
 	}
 
 	private renderCurrentSessionState(): void {
@@ -3657,7 +3673,7 @@ export class InteractiveMode {
 							});
 						}
 						this.clearPendingTools();
-						if (this.streamingMessage.stopReason === "error") this.suggestBugReport();
+						this.maybeSuggestBugReport(this.streamingMessage);
 					} else {
 						// Args are now complete - trigger diff computation for edit tools
 						for (const [, component] of this.pendingTools.entries()) {
@@ -3840,7 +3856,6 @@ export class InteractiveMode {
 						? "retry cancelled"
 						: `gave up after ${event.attempt} ${event.attempt === 1 ? "retry" : "retries"}`;
 					this.showError(`${lastAttempt?.error ?? event.finalError ?? "Unknown error"} (${outcome})`);
-					this.suggestBugReport();
 				}
 				this.retriedAttempt = undefined;
 				this.retryCancelled = false;
@@ -6776,6 +6791,7 @@ export class InteractiveMode {
 				ui: this.ui,
 				editorContainer: this.editorContainer,
 				editor: this.editor,
+				keybindings: this.keybindings,
 				showStatus: (message) => this.showStatus(message),
 				showError: (message) => this.showError(message),
 			},

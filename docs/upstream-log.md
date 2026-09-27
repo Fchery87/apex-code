@@ -82,6 +82,7 @@ three merges that follow Phase 2, not from a Phase 0 rehearsal.
 | 2026-08-30 | `v0.84.4` | **15** | 16 (11 in forked paths) | 69 (+1,683 / −232) | Total: 112 files, +2,786 / −378. Zero conflicts in frozen packages. |
 | 2026-09-25 | `v0.85.1` | **138** | 79 (58 in forked paths) | 438 (+72,131 / −14,925) | Takes `v0.85.0` and `v0.85.1`. Under the 159 ceiling. Total: 708 files, +96,348 / −25,254. Zero conflicts in frozen packages; new frozen package `chord`. |
 | 2026-09-27 | `v0.86.0` | **163** | 58 total; 7 markerless resurrected paths | 308 (+45,932 / −4,998) | Total: 566 files, +63,405 / −10,737. Four hunks over the 159 ceiling; ≈2h39 wall-clock. Review: the spike coincides with upstream's TranscriptContext/tool-state API transition and model-catalog refresh; Apex adaptations stayed at public boundaries, consumed packages remain frozen, and build/check/full-test gates pass. One breach only; continue and measure v0.86.1 separately. |
+| 2026-09-27 | `v0.86.1` | **19** | 15 total (11 in forked paths); 3 markerless resurrected paths | 29 (+667 / −295) | Total: 72 files, +1,327 / −360. Under the 159 ceiling. Removed the three previously deleted package paths again; refreshed the vendor model snapshot to supply Meta's five models; frozen packages remained byte-identical and all release gates passed. |
 | 2026-08-09 | Apex Code identity rename | — (fork divergence, not a merge) | — | 218 files (+736 / −744), 602 diff hunks | Renamed the two forked package identities, active imports/docs/examples, binary, and global config root. Recorded separately from upstream merge conflicts. |
 
 ### Two kinds of merge cost, tracked separately
@@ -732,3 +733,24 @@ final test run passed 4,894 tests with 52 skipped across the script, agent, and
 coding-agent suites. This is one ceiling breach rather than the three consecutive
 divergence-attributable breaches that open ADR 0003's stop-tracking tripwire. Continue
 sequentially and compare the next release's count before advancing again.
+
+### v0.86.1 reconciliation
+
+The next merge fell back to 19 conflicted hunks across 15 files, including 11 in
+forked paths, below ADR 0003's 159-hunk ceiling. Upstream also resurrected three
+paths Apex had deleted: `packages/evals/package.json` and the SQLite session-backend
+manifest/changelog. They were removed again because those packages still depend on
+the upstream package identities Apex renamed and are outside the roadmap.
+
+The new Meta provider shard imported `src/providers/data/meta.json`, but upstream
+does not commit that generated directory and the Apex snapshot did not yet contain
+Meta. Refreshed the canonical `vendor/model-data` snapshot, which supplied five Meta
+models and changed only the Cerebras and OpenRouter catalogs alongside the manifest.
+`check:model-data` and the offline build pass; the frozen `packages/ai` source itself
+was not edited. The refresh timestamp is recorded in the manifest.
+
+At the Apex-owned boundary, `/bug` remains a local ZIP export with no upload, and the
+interactive hint now describes that behavior. The merge also adopts upstream's
+retryable-error/cancellation filter and multiline prompt support while retaining
+Apex's pending-tool disposal and detailed retry outcome. Package locks were
+regenerated from Apex manifests, preserving Apex package names and build paths.
