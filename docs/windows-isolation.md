@@ -40,8 +40,20 @@ available on supported Pro, Enterprise, Education, and Pro Education editions; i
 not available on Windows Home. See Microsoft's [Windows Sandbox overview](https://learn.microsoft.com/en-us/windows/security/threat-protection/windows-sandbox/windows-sandbox-overview)
 and [configuration guide](https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/windows-sandbox-configure-using-wsb-file).
 
-1. Start Windows Sandbox and copy or clone the project into the sandbox. Avoid
-   mapping a host folder with write access.
+1. Create a `.wsb` configuration file that disables clipboard redirection, then
+   start Windows Sandbox with that file. For offline inspection, disable networking
+   too:
+
+   ```xml
+   <Configuration>
+     <Networking>Disable</Networking>
+     <ClipboardRedirection>Disable</ClipboardRedirection>
+   </Configuration>
+   ```
+
+   If Apex Code needs to contact a model provider, enable networking in the
+   configuration only after reviewing the access it permits. Copy or clone the
+   project into the sandbox; avoid mapping a host folder with write access.
 2. Install Apex Code and any tools the project needs inside the sandbox.
 3. Keep networking disabled for offline inspection. Windows Sandbox enables
    networking by default. If Apex Code needs to contact a model provider, review
