@@ -1,8 +1,9 @@
 # Run Apex Code in an isolated Windows environment
 
-Apex Code has no built-in OS sandbox. Its tools run with the permissions of the
-account that starts the CLI. For untrusted code, run Apex Code inside an environment
-that exposes only the files, credentials, and network access the task needs.
+Apex Code's tools run with the permissions of the account that starts the CLI. It
+provides no operating-system containment. For untrusted code, run Apex Code inside
+an environment that exposes only the files, credentials, and network access the
+task needs.
 
 For ongoing development, use a WSL 2 based container. For a short, disposable
 inspection, use Windows Sandbox when your Windows edition supports it.
