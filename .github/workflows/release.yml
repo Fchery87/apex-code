@@ -266,11 +266,11 @@ jobs:
           # above for why every upload from it needs this set.
           include-hidden-files: true
 
-  # ADR 0005: Linux and macOS are the supported platforms (Windows is a standing
-  # exclusion, not reopened here). The Ubuntu job above builds, tests, and
-  # publishes; this job only verifies the already-published artifact installs
-  # and runs on the other supported platform -- it must never re-run the
-  # publish steps, or the release would be published twice.
+  # Apex Code supports Linux, macOS, and Windows. The Ubuntu job above builds,
+  # tests, and publishes. This job adds a packed-artifact install/run smoke test
+  # on macOS. Windows build, test, and PowerShell installer parsing run in
+  # .github/workflows/ci.yml. Keep publication in the Ubuntu job to avoid
+  # publishing the same release twice.
   verify-macos-packed:
     name: Verify packed artifact smoke on macOS before publication (Node ${{ matrix.node }})
     runs-on: macos-latest
