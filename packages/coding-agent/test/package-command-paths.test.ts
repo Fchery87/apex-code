@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import lockfile from "proper-lockfile";
 import semver from "semver";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,6 +26,7 @@ import { handlePackageCommand } from "../src/package-manager-cli.ts";
 import { allowNetwork } from "./test-network-env.ts";
 
 describe("package commands", () => {
+	const commandEntrypoint = process.argv[1];
 	let tempDir: string;
 	let agentDir: string;
 	let projectDir: string;
@@ -36,6 +38,7 @@ describe("package commands", () => {
 	let originalPath: string | undefined;
 	let originalExitCode: typeof process.exitCode;
 	let originalExecPath: string;
+	let originalArgv: string[];
 
 	function getNewerPatchVersion(): string {
 		// Naive `X.Y.Z` string math breaks on Apex's prerelease VERSION
@@ -163,6 +166,7 @@ if (process.platform !== "win32") fs.chmodSync(piPath, 0o755);
 		originalPath = process.env.PATH;
 		originalExitCode = process.exitCode;
 		originalExecPath = process.execPath;
+		originalArgv = [...process.argv];
 		process.exitCode = undefined;
 		vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
 			if (code === undefined || code === null || Number(code) === 0) {
@@ -203,6 +207,7 @@ if (process.platform !== "win32") fs.chmodSync(piPath, 0o755);
 			process.env.PATH = originalPath;
 		}
 		Object.defineProperty(process, "execPath", { value: originalExecPath, configurable: true });
+		process.argv = originalArgv;
 		rmSync(tempDir, { recursive: true, force: true });
 	});
 
@@ -624,9 +629,13 @@ if (process.platform !== "win32") fs.chmodSync(piPath, 0o755);
 			await expect(runPackageCommandDirectly(["update", "--self"])).resolves.toBeUndefined();
 
 			expect(fetchMock).toHaveBeenCalledOnce();
-			expect(logSpy.mock.calls.map(([message]) => String(message)).join("\n")).toContain(
+			expect(logSpy.mock.calls.map(([message = ""]) => stripVTControlCharacters(String(message)))).toEqual([
+				"Apex Code Update",
+				`Current version: ${VERSION}`,
+				"",
+				"Checking for updates...",
 				`apex-code is already up to date (v${VERSION})`,
-			);
+			]);
 			expect(errorSpy).not.toHaveBeenCalled();
 			expect(process.exitCode).toBeUndefined();
 		} finally {
@@ -662,6 +671,28 @@ if (process.platform !== "win32") fs.chmodSync(piPath, 0o755);
 		}
 	});
 
+	it("stops after checking when the registry returns no release version", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => Response.json({})),
+		);
+		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		await runPackageCommandDirectly(["update", "--self"]);
+
+		expect(logSpy.mock.calls.map(([message = ""]) => stripVTControlCharacters(String(message)))).toEqual([
+			"Apex Code Update",
+			`Current version: ${VERSION}`,
+			"",
+			"Checking for updates...",
+		]);
+		expect(errorSpy.mock.calls.map(([message]) => stripVTControlCharacters(String(message)))).toEqual([
+			"Error: Could not determine latest apex-code version.",
+		]);
+		expect(process.exitCode).toBe(1);
+	});
+
 	it("updates installer-managed Pi through a staged immutable release", async () => {
 		const targetVersion = getNewerPatchVersion();
 		const { managedRoot, npmRecordPath } = prepareManagedInstall(targetVersion);
@@ -684,9 +715,15 @@ if (process.platform !== "win32") fs.chmodSync(piPath, 0o755);
 		expect(JSON.parse(readFileSync(npmRecordPath, "utf8")) as string[]).toEqual(
 			expect.arrayContaining(["ci", "--ignore-scripts"]),
 		);
-		expect(logSpy.mock.calls.map(([message]) => String(message)).join("\n")).toContain(
-			`Updated apex-code from ${VERSION} to ${targetVersion}`,
-		);
+		expect(logSpy.mock.calls.map(([message = ""]) => stripVTControlCharacters(String(message)))).toEqual([
+			"Apex Code Update",
+			`Current version: ${VERSION}`,
+			"",
+			"Checking for updates...",
+			`Updating: ${VERSION} → ${targetVersion}`,
+			"  [1/1] Installing update...",
+			`✓ Successfully updated to version ${targetVersion}!`,
+		]);
 		expect(errorSpy).not.toHaveBeenCalled();
 		expect(process.exitCode).toBeUndefined();
 	});
@@ -707,7 +744,9 @@ if (process.platform !== "win32") fs.chmodSync(piPath, 0o755);
 
 		expect(readFileSync(join(managedRoot, "current-version"), "utf8")).toBe(`${VERSION}\n`);
 		expect(existsSync(npmRecordPath)).toBe(false);
-		expect(logSpy.mock.calls.map(([message]) => String(message)).join("\n")).not.toContain("Updated apex-code from");
+		expect(logSpy.mock.calls.map(([message]) => String(message)).join("\n")).not.toContain(
+			"Successfully updated to version",
+		);
 		expect(errorSpy.mock.calls.map(([message]) => String(message)).join("\n")).toContain(
 			"Another managed Apex Code update is already running.",
 		);
@@ -720,10 +759,12 @@ if (process.platform !== "win32") fs.chmodSync(piPath, 0o755);
 		const fetchMock = vi.fn();
 		vi.stubGlobal("fetch", fetchMock);
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
 		await expect(runPackageCommandDirectly(["update", "--self", "--force"])).resolves.toBeUndefined();
 
 		expect(fetchMock).not.toHaveBeenCalled();
+		expect(logSpy).not.toHaveBeenCalled();
 		expect(existsSync(npmRecordPath)).toBe(false);
 		expect(errorSpy.mock.calls.map(([message]) => String(message)).join("\n")).toContain(
 			"Managed apex-code installations do not support --force",
@@ -743,7 +784,9 @@ if (process.platform !== "win32") fs.chmodSync(piPath, 0o755);
 		expect(readFileSync(join(managedRoot, "current-version"), "utf8")).toBe(`${VERSION}\n`);
 		expect(existsSync(join(managedRoot, "releases", targetVersion))).toBe(false);
 		expect(readdirSync(join(managedRoot, "staging"))).toEqual([]);
-		expect(logSpy.mock.calls.map(([message]) => String(message)).join("\n")).not.toContain("Updated apex-code from");
+		expect(logSpy.mock.calls.map(([message]) => String(message)).join("\n")).not.toContain(
+			"Successfully updated to version",
+		);
 		expect(errorSpy.mock.calls.map(([message]) => String(message)).join("\n")).toContain("exited with code 23");
 		expect(process.exitCode).toBe(1);
 	});
@@ -801,7 +844,7 @@ else fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
 			expect(recordedArgs).toContain(`${PACKAGE_NAME}@${VERSION}`);
 			expect(recordedArgs).not.toContain(PACKAGE_NAME);
 			expect(recordedArgs).not.toContain(projectPrefix);
-			expect(stdout).toContain(`Updated apex-code from ${VERSION} to ${VERSION}`);
+			expect(stdout).toContain(`✓ Successfully updated to version ${VERSION}!`);
 		} finally {
 			logSpy.mockRestore();
 			errorSpy.mockRestore();
@@ -843,11 +886,19 @@ else fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
 			expect(process.exitCode).toBeUndefined();
 			expect(errorSpy).not.toHaveBeenCalled();
 			expect(fetchMock).toHaveBeenCalledOnce();
-			const stdout = logSpy.mock.calls.map(([message]) => String(message)).join("\n");
 			const recordedArgs = JSON.parse(readFileSync(recordPath, "utf-8")) as string[];
 			expect(recordedArgs).toContain(`${PACKAGE_NAME}@${targetVersion}`);
 			expect(recordedArgs).not.toContain(PACKAGE_NAME);
-			expect(stdout).toContain(`Updated apex-code from ${VERSION} to ${targetVersion}`);
+			expect(logSpy.mock.calls.map(([message = ""]) => stripVTControlCharacters(String(message)))).toEqual([
+				"Apex Code Update",
+				`Current version: ${VERSION}`,
+				"",
+				"Checking for updates...",
+				`Updating: ${VERSION} → ${targetVersion}`,
+				"  [1/1] Installing update...",
+				expect.stringMatching(/^Updating apex-code with .+\.\.\.$/),
+				`✓ Successfully updated to version ${targetVersion}!`,
+			]);
 		} finally {
 			logSpy.mockRestore();
 			errorSpy.mockRestore();
@@ -946,7 +997,7 @@ else {
 			expect(process.exitCode).toBe(1);
 			const stdout = logSpy.mock.calls.map(([message]) => String(message)).join("\n");
 			const stderr = errorSpy.mock.calls.map(([message]) => String(message)).join("\n");
-			expect(stdout).not.toContain("Updated pi");
+			expect(stdout).not.toContain("Successfully updated to version");
 			expect(stderr).toContain("exited with code 23");
 			expect(stderr).toContain("If pnpm reports missing package versions");
 			expect(stderr).toContain("Run `pnpm store prune` and retry `apex-code update --self`.");
@@ -999,7 +1050,7 @@ if(args.includes("install")) process.exit(23);
 			expect(process.exitCode).toBe(1);
 			const stdout = logSpy.mock.calls.map(([message]) => String(message)).join("\n");
 			const stderr = errorSpy.mock.calls.map(([message]) => String(message)).join("\n");
-			expect(stdout).not.toContain(`Updated pi`);
+			expect(stdout).not.toContain("Successfully updated to version");
 			expect(stderr).toContain("exited with code 23");
 			const recordedCalls = JSON.parse(readFileSync(recordPath, "utf-8")) as string[][];
 			expect(recordedCalls).toEqual([
@@ -1010,6 +1061,33 @@ if(args.includes("install")) process.exit(23);
 			logSpy.mockRestore();
 			errorSpy.mockRestore();
 		}
+	});
+
+	it("reports the original executable for an unavailable self-update after other package commands", async () => {
+		Object.defineProperty(process, "execPath", { value: join(tempDir, "node"), configurable: true });
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => Response.json({ version: getNewerPatchVersion() })),
+		);
+		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		await runPackageCommandDirectly(["update", "--self"]);
+
+		expect(errorSpy.mock.calls.map(([message]) => stripVTControlCharacters(String(message)))).toEqual([
+			"error: apex-code cannot self-update this installation.",
+			`Update ${PACKAGE_NAME}@${getNewerPatchVersion()} using the package manager, wrapper, or source checkout that provides this installation.`,
+			"",
+			`Location of Apex Code executable: ${commandEntrypoint}`,
+		]);
+		expect(logSpy.mock.calls.map(([message = ""]) => stripVTControlCharacters(String(message)))).toEqual([
+			"Apex Code Update",
+			`Current version: ${VERSION}`,
+			"",
+			"Checking for updates...",
+			`Updating: ${VERSION} → ${getNewerPatchVersion()}`,
+		]);
+		expect(process.exitCode).toBe(1);
 	});
 
 	it("suggests the configured source when update input omits the npm prefix", async () => {

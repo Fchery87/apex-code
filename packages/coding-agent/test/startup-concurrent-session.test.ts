@@ -2,11 +2,13 @@ import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { ENV_AGENT_DIR } from "../src/config.ts";
 import type { SessionLease } from "../src/core/session-lease.ts";
 
 const cliPath = resolve(__dirname, "../src/cli.ts");
+const sourceResolverPath = resolve(__dirname, "../src/experimental/source-resolver.ts");
 const tempDirs: string[] = [];
 const children: ChildProcess[] = [];
 const stderrByChild = new Map<ChildProcess, string>();
@@ -164,13 +166,12 @@ async function waitForLeases(dirs: CliDirs, predicate: (records: LeaseRecord[]) 
 }
 
 function startCli(args: string[], dirs: CliDirs): ChildProcess {
-	const child = spawn(process.execPath, [cliPath, ...args], {
+	const child = spawn(process.execPath, ["--import", pathToFileURL(sourceResolverPath).href, cliPath, ...args], {
 		cwd: dirs.projectDir,
 		env: {
 			...process.env,
 			[ENV_AGENT_DIR]: dirs.agentDir,
 			APEX_CODE_OFFLINE: "1",
-			TSX_TSCONFIG_PATH: resolve(__dirname, "../../../tsconfig.json"),
 		},
 		stdio: ["pipe", "ignore", "pipe"],
 	});
