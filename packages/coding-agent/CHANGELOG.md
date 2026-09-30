@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Self-update shows its progress.** `apex-code update --self` reports the current version, checks for updates, names the target version, and confirms success after installation finishes. Managed and package-manager failures retain their diagnostics and never report success.
+
 ## [0.5.1] - 2026-09-27
 
 ### Changed

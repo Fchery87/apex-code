@@ -1,6 +1,6 @@
 # Self-update quality audit
 
-**Status:** Active
+**Status:** Landed
 
 ## Scope and contract
 
