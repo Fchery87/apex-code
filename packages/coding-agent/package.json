@@ -94,7 +94,7 @@
 		"shx": "0.4.0",
 		"typescript": "5.9.3",
 		"vitest": "4.1.9",
-		"marked": "18.0.11"
+		"marked": "18.0.14"
 	},
 	"keywords": [
 		"coding-agent",
