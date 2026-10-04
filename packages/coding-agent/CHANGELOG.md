@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Overview renders each tool and user shell operation as one row with its label, lifecycle, and available-output count or failure diagnostic. Details and all retain previews, diffs, and full output. Click an operation or press configurable Alt+O to expand it individually; Ctrl+O cycles the whole transcript and resets individual expansion. The footer shows the current detail mode.
+
 ## [0.6.0] - 2026-10-04
 
 ### Added

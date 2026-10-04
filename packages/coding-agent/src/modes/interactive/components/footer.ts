@@ -5,6 +5,7 @@ import { areExperimentalFeaturesEnabled } from "../../../core/experimental.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
 import type { PermissionModeOrigin } from "../../../core/permissions/startup.ts";
 import type { PermissionMode } from "../../../core/permissions/store.ts";
+import type { ChatDetail } from "../../../core/settings-manager.ts";
 import { addUsageToTotals, createUsageTotals } from "../../../core/usage-totals.ts";
 import { theme } from "../theme/theme.ts";
 import { keyDisplayText } from "./keybinding-hints.ts";
@@ -107,6 +108,12 @@ export class FooterComponent implements Component {
 		this.session = session;
 		this.footerData = footerData;
 		this.accessibilitySettings = accessibilitySettings;
+	}
+
+	private chatDetail?: ChatDetail;
+
+	setChatDetail(detail: ChatDetail): void {
+		this.chatDetail = detail;
 	}
 
 	setSession(session: AgentSession): void {
@@ -409,8 +416,13 @@ export class FooterComponent implements Component {
 			}
 
 			const optional: string[] = [];
+
 			if (cycleHint) optional.push(cycleHint);
 			optional.push(theme.fg("dim", state.model?.id || "no-model"));
+			const detailHint = this.chatDetail
+				? theme.fg("dim", `${this.chatDetail} ${keyDisplayText("app.tools.expand")}`)
+				: undefined;
+			if (detailHint) optional.push(detailHint);
 			if (state.model?.reasoning && state.thinkingLevel && state.thinkingLevel !== "off") {
 				optional.push(theme.fg("dim", state.thinkingLevel));
 			}
@@ -440,6 +452,8 @@ export class FooterComponent implements Component {
 
 			for (const segment of optional) {
 				if (fits([...left, segment, right])) left.push(segment);
+				else if (segment === detailHint && this.chatDetail && fits([...left, this.chatDetail, right]))
+					left.push(theme.fg("dim", this.chatDetail));
 			}
 
 			const leftText = joinSegments(left);
@@ -456,6 +470,7 @@ export class FooterComponent implements Component {
 			return lines;
 		}
 
+		if (this.chatDetail) statsParts.push(theme.fg("dim", `${this.chatDetail} ${keyDisplayText("app.tools.expand")}`));
 		let statsLeft = statsParts.join(" ");
 
 		// Add model name on the right side, plus thinking level if model supports it

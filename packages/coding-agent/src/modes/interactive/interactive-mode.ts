@@ -3298,6 +3298,7 @@ export class InteractiveMode {
 		this.ui.onDebug = () => this.handleDebugCommand();
 		this.defaultEditor.onAction("app.model.select", () => this.showModelSelector());
 		this.defaultEditor.onAction("app.tools.expand", () => this.cycleChatDetail());
+		this.defaultEditor.onAction("app.tools.expandLatest", () => this.toggleLatestOperation());
 		this.defaultEditor.onAction("app.tasks.toggle", () => this.toggleTaskPanel());
 		this.defaultEditor.onAction("app.thinking.toggle", () => this.toggleThinkingBlockVisibility());
 		this.defaultEditor.onAction("app.editor.external", () => void this.handleOpenExternalEditor());
@@ -4121,7 +4122,13 @@ export class InteractiveMode {
 	private addMessageToChat(message: AgentMessage, options?: { populateHistory?: boolean }): void {
 		switch (message.role) {
 			case "bashExecution": {
-				const component = new BashExecutionComponent(message.command, this.ui, message.excludeFromContext);
+				const component = new BashExecutionComponent(
+					message.command,
+					this.ui,
+					message.excludeFromContext,
+					this.settingsManager.getSymbolPreset(),
+				);
+				this.adoptChatDetail(component);
 				if (message.output) {
 					component.appendOutput(message.output);
 				}
@@ -4791,8 +4798,24 @@ export class InteractiveMode {
 	 * remembering to set every axis.
 	 */
 	private adoptChatDetail(component: unknown): void {
+		if (component instanceof ToolExecutionComponent || component instanceof BashExecutionComponent) {
+			component.setChatDetail(this.chatDetail);
+			return;
+		}
 		if (isExpandable(component)) component.setExpanded(this.toolOutputExpanded);
 		if (hasEditDiffsExpansion(component)) component.setEditDiffsExpanded(this.editDiffsExpanded);
+	}
+
+	private toggleLatestOperation(): void {
+		const pending = this.pendingMessagesContainer?.children ?? [];
+		const operations = [...this.chatContainer.children, ...pending];
+		const latest = operations
+			.reverse()
+			.find((child) => child instanceof ToolExecutionComponent || child instanceof BashExecutionComponent);
+		if (latest instanceof ToolExecutionComponent || latest instanceof BashExecutionComponent) {
+			latest.toggleExpanded();
+			this.ui.requestRender();
+		}
 	}
 
 	/** The expand key. A level the user picks is saved, so the next session opens at it. */
@@ -4815,6 +4838,7 @@ export class InteractiveMode {
 		this.chatDetail = detail;
 		this.toolOutputExpanded = view.toolOutputExpanded;
 		this.editDiffsExpanded = view.editDiffsExpanded;
+		this.footer?.setChatDetail(detail);
 	}
 
 	/**
@@ -4826,7 +4850,6 @@ export class InteractiveMode {
 		if (detail === this.chatDetail) return;
 		this.assignChatDetail(detail);
 		this.applyChatDetail();
-		this.showStatus(`Conversation detail: ${detail}`);
 	}
 
 	/** True when thinking blocks are hidden right now, setting and detail level combined. */
@@ -4840,17 +4863,13 @@ export class InteractiveMode {
 		if (isExpandable(activeHeader)) {
 			activeHeader.setExpanded(this.toolOutputExpanded);
 		}
-		for (const container of [this.loadedResourcesContainer, this.chatContainer]) {
+		for (const container of [this.loadedResourcesContainer, this.chatContainer, this.pendingMessagesContainer]) {
+			if (!container) continue;
 			for (const child of container.children) {
 				if (child instanceof AssistantMessageComponent) {
 					child.setHideThinkingBlock(this.isThinkingHidden());
 				}
-				if (isExpandable(child)) {
-					child.setExpanded(this.toolOutputExpanded);
-				}
-				if (hasEditDiffsExpansion(child)) {
-					child.setEditDiffsExpanded(this.editDiffsExpanded);
-				}
+				this.adoptChatDetail(child);
 			}
 		}
 		this.ui.requestRender();
@@ -7313,6 +7332,7 @@ export class InteractiveMode {
 		const cycleModelForward = this.getAppKeyDisplay("app.model.cycleForward");
 		const selectModel = this.getAppKeyDisplay("app.model.select");
 		const expandTools = this.getAppKeyDisplay("app.tools.expand");
+		const expandLatest = this.getAppKeyDisplay("app.tools.expandLatest");
 		const toggleThinking = this.getAppKeyDisplay("app.thinking.toggle");
 		const externalEditor = this.getAppKeyDisplay("app.editor.external");
 		const cycleModelBackward = this.getAppKeyDisplay("app.model.cycleBackward");
@@ -7359,6 +7379,7 @@ export class InteractiveMode {
 | \`${cycleModelForward}\` / \`${cycleModelBackward}\` | Cycle models |
 | \`${selectModel}\` | Open model selector |
 | \`${expandTools}\` | Cycle conversation detail (overview / details / all) |
+| \`${expandLatest}\` | Toggle latest operation details |
 | \`${toggleThinking}\` | Toggle thinking block visibility |
 | \`${externalEditor}\` | Edit message in external editor |
 | \`${copyMessage}\` | Copy selection or last assistant message |
@@ -7526,7 +7547,13 @@ export class InteractiveMode {
 			const result = eventResult.result;
 
 			// Create UI component for display
-			this.bashComponent = new BashExecutionComponent(command, this.ui, excludeFromContext);
+			this.bashComponent = new BashExecutionComponent(
+				command,
+				this.ui,
+				excludeFromContext,
+				this.settingsManager.getSymbolPreset(),
+			);
+			this.adoptChatDetail(this.bashComponent);
 			if (this.session.isStreaming) {
 				this.pendingMessagesContainer.addChild(this.bashComponent);
 				this.pendingBashComponents.push(this.bashComponent);
@@ -7554,7 +7581,13 @@ export class InteractiveMode {
 
 		// Normal execution path (possibly with custom operations)
 		const isDeferred = this.session.isStreaming;
-		this.bashComponent = new BashExecutionComponent(command, this.ui, excludeFromContext);
+		this.bashComponent = new BashExecutionComponent(
+			command,
+			this.ui,
+			excludeFromContext,
+			this.settingsManager.getSymbolPreset(),
+		);
+		this.adoptChatDetail(this.bashComponent);
 
 		if (isDeferred) {
 			// Show in pending area when agent is streaming

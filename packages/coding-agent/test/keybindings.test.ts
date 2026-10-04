@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KEYBINDINGS, useWindowsKeybindings } from "../src/core/keybindings.ts";
+import { KEYBINDINGS, KeybindingsManager, useWindowsKeybindings } from "../src/core/keybindings.ts";
 
 describe("Windows keybinding defaults", () => {
 	it("uses Windows keybindings on native Windows", () => {
@@ -38,5 +38,15 @@ describe("Windows keybinding defaults", () => {
 			windowsKeybindings ? "ctrl+down" : ["ctrl+shift+down", "ctrl+down"],
 		);
 		expect(KEYBINDINGS["app.message.dequeue"].defaultKeys).toBe(windowsKeybindings ? "alt+q" : "alt+up");
+	});
+});
+
+describe("individual operation shortcut", () => {
+	it("defaults to Alt+O and can be remapped independently of Ctrl+O", () => {
+		expect(KEYBINDINGS["app.tools.expandLatest"].defaultKeys).toBe("alt+o");
+		const keys = new KeybindingsManager({ "app.tools.expandLatest": "alt+u" });
+		expect(keys.matches("\x1bu", "app.tools.expandLatest")).toBe(true);
+		expect(keys.matches("\x1bo", "app.tools.expandLatest")).toBe(false);
+		expect(keys.matches("\x0f", "app.tools.expand")).toBe(true);
 	});
 });

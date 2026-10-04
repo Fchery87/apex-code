@@ -155,13 +155,14 @@ On native Windows, `app.suspend` has no default because Windows terminals do not
 | `app.permissionMode.cycle` | `shift+tab` | Cycle permission mode for this session |
 | `app.thinking.cycle` | `alt+t` | Cycle thinking level |
 | `app.thinking.save` | `ctrl+s` | Save current thinking level to settings |
+| `app.tools.expandLatest` | `alt+o` | Toggle the latest tool or user shell operation without expanding the rest of the transcript |
 | `app.thinking.toggle` | `ctrl+t` | Collapse or expand thinking blocks |
 
 ### Display and Message Queue
 
 | Keybinding id | Default | Description |
 |--------|---------|-------------|
-| `app.tools.expand` | `ctrl+o` | Cycle conversation detail: overview (everything collapsed), details (diffs and thinking if enabled in settings), all (full tool output and thinking) |
+| `app.tools.expand` | `ctrl+o` | Cycle conversation detail: overview (one row per operation), details (diffs and thinking if enabled in settings), all (full tool output and thinking) |
 | `app.tasks.toggle` | `alt+j` | Expand or collapse the pinned task panel; save the choice globally |
 | `app.message.copy` | `ctrl+x` | Copy the selected message in `/tree`; in fullscreen mode, copy the active selection when `fullscreenCopyOnSelect` is `false`; otherwise copy the last assistant message |
 | `app.message.followUp` | `alt+enter` (`ctrl+q` on Windows and WSL) | Queue follow-up message |

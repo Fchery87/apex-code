@@ -12,6 +12,7 @@ import {
 } from "@earendil-works/pi-tui";
 import type { AgentToolResult } from "apex-code-agent-core";
 import type { ToolDefinition, ToolRenderContext, ToolRenderResultOptions } from "../../../core/extensions/types.ts";
+import type { ChatDetail } from "../../../core/settings-manager.ts";
 import type { Theme } from "../theme/theme.ts";
 
 /**
@@ -33,10 +34,14 @@ export interface ToolRenderers {
 }
 
 import { getTextOutput as getRenderedTextOutput } from "../../../core/tools/render-utils.ts";
+import { stripAnsi } from "../../../utils/ansi.ts";
 import { convertToPng } from "../../../utils/image-convert.ts";
 import { theme } from "../theme/theme.ts";
-import { formatHiddenLines, previewLineCount } from "./keybinding-hints.ts";
+import { summarizeOperationError } from "./error-summary.ts";
+import { formatHiddenLines, keyText, previewLineCount } from "./keybinding-hints.ts";
 import {
+	countOutputLines,
+	renderCompactOperationRow,
 	type ToolLifecycle,
 	ToolPanelComponent,
 	ToolStatusLineComponent,
@@ -69,6 +74,8 @@ export class ToolExecutionComponent extends Container {
 	private toolCallId: string;
 	private args: any;
 	private expanded = false;
+	private collapsedOverride = false;
+	private chatDetail: ChatDetail = "details";
 	private editDiffsExpanded = true;
 	private showImages: boolean;
 	private imageWidthCells: number;
@@ -87,6 +94,7 @@ export class ToolExecutionComponent extends Container {
 	// per-frame cost grow with the number of tools on screen; see
 	// test/tool-execution-render-cache.test.ts.
 	private displayVersion = 0;
+	private compactContent?: { version: number; label: string; summary?: string; hidden: boolean };
 	private cachedRender?: { key: string; width: number; lines: string[] };
 	private result?: {
 		content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
@@ -169,7 +177,7 @@ export class ToolExecutionComponent extends Container {
 			argsComplete: this.argsComplete,
 			isPartial: this.isPartial,
 			expanded: this.expanded,
-			editDiffsExpanded: this.editDiffsExpanded,
+			editDiffsExpanded: this.expanded || this.editDiffsExpanded,
 			showImages: this.showImages,
 			isError: this.result?.isError ?? false,
 		};
@@ -198,7 +206,7 @@ export class ToolExecutionComponent extends Container {
 	private createResultRegion(component: Component): MouseRegion {
 		return new MouseRegion(component, (event) => {
 			if (!this.result || event.type !== "click" || event.button !== "left") return undefined;
-			this.setExpanded(!this.expanded);
+			this.toggleExpanded();
 			return { handled: true };
 		});
 	}
@@ -292,7 +300,24 @@ export class ToolExecutionComponent extends Container {
 		this.updateDisplay();
 	}
 
+	setChatDetail(detail: ChatDetail): void {
+		this.chatDetail = detail;
+		this.collapsedOverride = false;
+		this.expanded = detail === "all";
+		this.editDiffsExpanded = detail !== "overview";
+		this.updateDisplay();
+	}
+
+	toggleExpanded(): void {
+		this.expanded = !this.expanded;
+		this.collapsedOverride = !this.expanded;
+		this.editDiffsExpanded = this.expanded;
+		this.updateDisplay();
+		this.ui.requestRender();
+	}
+
 	setExpanded(expanded: boolean): void {
+		this.collapsedOverride = false;
 		this.expanded = expanded;
 		this.updateDisplay();
 	}
@@ -371,7 +396,65 @@ export class ToolExecutionComponent extends Container {
 		return `${this.displayVersion}:${lifecycle}:${durationKey}`;
 	}
 
+	private isCompact(): boolean {
+		return this.collapsedOverride || (this.chatDetail === "overview" && !this.expanded);
+	}
+
+	private composeCompact(width: number): string[] {
+		let content = this.compactContent;
+		if (!content || content.version !== this.displayVersion) {
+			// Inspect each renderer once per display update, not on every elapsed-time tick.
+			const callLines = this.callRendererComponent?.render(400);
+			const visibleCall = callLines?.find((line) => stripAnsi(line).trim().length > 0);
+			const resultLines = this.resultRendererComponent?.render(400);
+			const resultHidden = !!this.resultRendererComponent && resultLines?.length === 0;
+			const args = this.args as Record<string, unknown> | undefined;
+			const target = args?.path ?? args?.file_path ?? args?.command ?? args?.pattern;
+			const fallbackLabel = `${this.toolName}${typeof target === "string" ? ` ${target}` : ""}`;
+			const output = resultHidden
+				? ""
+				: (this.result?.content
+						.filter((block) => block.type === "text")
+						.map((block) => block.text ?? "")
+						.join("\n") ?? "");
+			const outputLines = countOutputLines(output);
+			const images = resultHidden ? 0 : (this.result?.content.filter((block) => block.type === "image").length ?? 0);
+			const summary =
+				this.result?.isError && output
+					? summarizeOperationError(output)
+					: [
+							outputLines ? `${outputLines} output line${outputLines === 1 ? "" : "s"}` : "",
+							images ? `${images} image${images === 1 ? "" : "s"}` : "",
+						]
+							.filter(Boolean)
+							.join(", ");
+			const label = stripAnsi(visibleCall ?? fallbackLabel).replace(
+				` (${keyText("app.tools.expand")} to expand)`,
+				"",
+			);
+			content = {
+				version: this.displayVersion,
+				label,
+				summary,
+				hidden: callLines?.length === 0 && (!this.result || resultHidden) && !images,
+			};
+			this.compactContent = content;
+		}
+		if (content.hidden) return [];
+		return renderCompactOperationRow(
+			{
+				label: content.label,
+				summary: content.summary,
+				lifecycle: this.getLifecycle(),
+				symbolPreset: this.symbolPreset,
+				durationMs: this.getDurationMs(),
+			},
+			width,
+		);
+	}
+
 	private compose(width: number): string[] {
+		if (this.isCompact()) return this.composeCompact(width);
 		const shell = this.hasRendererDefinition()
 			? this.getRenderShell() === "self"
 				? this.selfRenderContainer
@@ -413,12 +496,18 @@ export class ToolExecutionComponent extends Container {
 	 * handlers do. Apex composes the panel itself (lifecycle header, spine,
 	 * padding, the separator row it inserts), so rendered rows do not line up
 	 * with the children's rows and the inherited child-by-child dispatch would
-	 * resolve the wrong region. Row 0 is the leading spacer and is inert.
+	 * resolve the wrong region. Row 0 is clickable in a compact row and otherwise a spacer.
 	 */
 	override handleMouse(event: TuiMouseEvent): ReturnType<Container["handleMouse"]> {
-		if (this.hideComponent || event.y <= 0 || event.y >= event.height) return undefined;
-		if (!this.result || event.type !== "click" || event.button !== "left") return undefined;
-		this.setExpanded(!this.expanded);
+		if (this.hideComponent || event.y < 0 || event.y >= event.height) return undefined;
+		if (event.y === 0 && !this.isCompact()) return undefined;
+		if (
+			(!this.result && this.chatDetail !== "overview" && !this.isCompact()) ||
+			event.type !== "click" ||
+			event.button !== "left"
+		)
+			return undefined;
+		this.toggleExpanded();
 		return {
 			handled: true,
 			target: {

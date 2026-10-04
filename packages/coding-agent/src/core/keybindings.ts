@@ -23,6 +23,7 @@ export interface AppKeybindings {
 	"app.model.cycleBackward": true;
 	"app.model.select": true;
 	"app.tools.expand": true;
+	"app.tools.expandLatest": true;
 	"app.thinking.toggle": true;
 	"app.tasks.toggle": true;
 	"app.session.toggleNamedFilter": true;
@@ -121,6 +122,7 @@ export const KEYBINDINGS = {
 	},
 	"app.model.select": { defaultKeys: "ctrl+l", description: "Open model selector" },
 	"app.tools.expand": { defaultKeys: "ctrl+o", description: "Cycle conversation detail" },
+	"app.tools.expandLatest": { defaultKeys: "alt+o", description: "Toggle latest operation details" },
 	"app.tasks.toggle": { defaultKeys: "alt+j", description: "Expand or collapse task panel" },
 	"app.thinking.toggle": {
 		defaultKeys: "ctrl+t",

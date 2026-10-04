@@ -1,8 +1,9 @@
+import type { ChatDetail } from "../../../core/settings-manager.ts";
 /**
  * Component for displaying bash command execution with streaming output.
  */
 
-import { Container, Loader, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
+import { Container, Loader, Spacer, Text, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
 import {
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
@@ -12,7 +13,9 @@ import {
 import { stripAnsi } from "../../../utils/ansi.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
+import { summarizeOperationError } from "./error-summary.ts";
 import { formatHiddenLines, keyHint, keyText, previewLineCount } from "./keybinding-hints.ts";
+import { countOutputLines, renderCompactOperationRow, type ToolSymbolPreset } from "./tool-panel.ts";
 import { truncateToVisualLines } from "./visual-truncate.ts";
 
 // Preview line limit when not expanded (matches tool execution behavior)
@@ -27,14 +30,19 @@ export class BashExecutionComponent extends Container {
 	private truncationResult?: TruncationResult;
 	private fullOutputPath?: string;
 	private expanded = false;
+	private collapsedOverride = false;
+	private chatDetail: ChatDetail = "details";
+	private symbolPreset: ToolSymbolPreset;
 	private contentContainer: Container;
 	// Display rebuild cache: appendOutput and invalidate() fire far more often
 	// than the displayed state changes, and the rebuild is allocation-heavy.
 	private displayState?: { key: string };
+	private compactSummary = "0 output lines";
 
-	constructor(command: string, ui: TUI, excludeFromContext = false) {
+	constructor(command: string, ui: TUI, excludeFromContext = false, symbolPreset: ToolSymbolPreset = "unicode") {
 		super();
 		this.command = command;
+		this.symbolPreset = symbolPreset;
 
 		// Use dim border for excluded-from-context commands (!! prefix)
 		const colorKey = excludeFromContext ? "dim" : "bashMode";
@@ -71,8 +79,48 @@ export class BashExecutionComponent extends Container {
 	 * Set whether the output is expanded (shows full output) or collapsed (preview only).
 	 */
 	setExpanded(expanded: boolean): void {
+		this.collapsedOverride = false;
 		this.expanded = expanded;
 		this.updateDisplay();
+	}
+
+	setChatDetail(detail: ChatDetail): void {
+		this.chatDetail = detail;
+		this.setExpanded(detail === "all");
+	}
+
+	toggleExpanded(): void {
+		this.expanded = !this.expanded;
+		this.collapsedOverride = !this.expanded;
+		this.updateDisplay();
+	}
+
+	override handleMouse(event: TuiMouseEvent): ReturnType<Container["handleMouse"]> {
+		if (event.type !== "click" || event.button !== "left" || event.y < 0 || event.y >= event.height) return undefined;
+		this.toggleExpanded();
+		return {
+			handled: true,
+			target: {
+				component: this,
+				originX: event.screenX - event.x,
+				originY: event.screenY - event.y,
+				width: event.width,
+				height: event.height,
+			},
+		};
+	}
+
+	override render(width: number): string[] {
+		if (!this.collapsedOverride && (this.chatDetail !== "overview" || this.expanded)) return super.render(width);
+		return renderCompactOperationRow(
+			{
+				label: `$ ${this.command}`,
+				lifecycle: this.status === "running" ? "running" : this.status === "complete" ? "done" : "error",
+				symbolPreset: this.symbolPreset,
+				summary: this.compactSummary,
+			},
+			width,
+		);
 	}
 
 	override invalidate(): void {
@@ -131,6 +179,14 @@ export class BashExecutionComponent extends Container {
 
 		// Apply truncation for LLM context limits (same limits as bash tool)
 		const fullOutput = this.outputLines.join("\n");
+		const outputLineCount = countOutputLines(fullOutput);
+		const diagnostic = this.status === "error" ? summarizeOperationError(fullOutput) : undefined;
+		this.compactSummary =
+			this.status === "cancelled"
+				? "cancelled"
+				: this.status === "error"
+					? `exit ${this.exitCode}${diagnostic ? `: ${diagnostic}` : ""}`
+					: `${outputLineCount} output line${outputLineCount === 1 ? "" : "s"}`;
 		const contextTruncation = truncateTail(fullOutput, {
 			maxLines: DEFAULT_MAX_LINES,
 			maxBytes: DEFAULT_MAX_BYTES,
