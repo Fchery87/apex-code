@@ -7,9 +7,12 @@ import { TuiMainScreen } from "../../tui/src/tui-main-screen.ts";
 import { VirtualTerminal } from "../../tui/test/virtual-terminal.ts";
 import type { AutocompleteProviderFactory } from "../src/core/extensions/types.ts";
 import type { SourceInfo } from "../src/core/source-info.ts";
+import { BashExecutionComponent } from "../src/modes/interactive/components/bash-execution.ts";
 import type { AuthSelectorProvider } from "../src/modes/interactive/components/oauth-selector.ts";
+import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { stripAnsi } from "../src/utils/ansi.ts";
 
 function renderLastLine(container: Container, width = 120): string {
 	const last = container.children[container.children.length - 1];
@@ -192,6 +195,36 @@ describe("InteractiveMode conversation detail", () => {
 		return { mode, header, loadedResourcesChild, chatChild, settings };
 	}
 
+	test("adopts explicit overview and cycles pending shells with the transcript", () => {
+		const { mode } = createMode();
+		const shell = new BashExecutionComponent("echo pending", mode.ui);
+		shell.appendOutput("pending output");
+		shell.setComplete(0, false);
+		mode.chatDetail = "overview";
+		mode.adoptChatDetail(shell);
+		expect(shell.render(100)).toHaveLength(1);
+		mode.pendingMessagesContainer = { children: [shell] };
+		mode.cycleChatDetail();
+		expect(shell.render(100).length).toBeGreaterThan(1);
+	});
+	test("toggles the latest operation only and resets its override on a detail cycle", () => {
+		const { mode } = createMode();
+		const first = new ToolExecutionComponent("first", "first", {}, {}, undefined, mode.ui, process.cwd());
+		const latest = new BashExecutionComponent("echo latest", mode.ui);
+		first.updateResult({ content: [{ type: "text", text: "first detail" }], isError: false });
+		latest.appendOutput("latest detail");
+		latest.setComplete(0, false);
+		mode.chatContainer = { children: [first, latest] };
+		mode.setChatDetail("overview");
+		mode.toggleLatestOperation();
+		expect(first.render(100)).toHaveLength(1);
+		expect(stripAnsi(latest.render(100).join("\n"))).toContain("latest detail");
+		mode.cycleChatDetail();
+		mode.cycleChatDetail();
+		mode.cycleChatDetail();
+		expect(latest.render(100)).toHaveLength(1);
+	});
+
 	test("applies expansion state to the active header and chat entries", () => {
 		const { mode, header, loadedResourcesChild, chatChild } = createMode();
 
@@ -201,7 +234,7 @@ describe("InteractiveMode conversation detail", () => {
 		expect(header.setExpanded).toHaveBeenCalledWith(true);
 		expect(loadedResourcesChild.setExpanded).toHaveBeenCalledWith(true);
 		expect(chatChild.setExpanded).toHaveBeenCalledWith(true);
-		expect(mode.showStatus).toHaveBeenCalledWith("Conversation detail: all");
+		expect(mode.showStatus).not.toHaveBeenCalled();
 	});
 
 	test("collapsing through the boolean API stops at details, keeping diffs", () => {

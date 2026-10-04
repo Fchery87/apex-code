@@ -29,3 +29,14 @@ export function summarizeError(text: string): string | undefined {
 export function collapsedErrorLine(styledSummary: string): string {
 	return `${styledSummary} ${keyHint("app.tools.expand", "to expand")}`;
 }
+
+/** A command may print successful progress before the diagnostic that stops it. */
+export function summarizeOperationError(text: string): string | undefined {
+	const lines = nonEmptyLines(text);
+	const traceback = lines.findIndex((line) => line.startsWith("Traceback ") || line.startsWith("Error: Traceback "));
+	if (traceback >= 0) return summarizeError(lines.slice(traceback).join("\n"));
+	const diagnostic =
+		lines.find((line) => /(?:^|\s)(?:[\w.]*Error|Exception|fatal):/i.test(line)) ??
+		lines.find((line) => /\b(?:error|failed|failure|fail|denied|exception|fatal)\b/i.test(line));
+	return diagnostic?.trim() ?? lines.find((line) => !/^\s*(?:PASS|passed|ok|✓)\b/i.test(line))?.trim();
+}
