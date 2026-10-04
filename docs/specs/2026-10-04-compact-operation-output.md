@@ -58,6 +58,10 @@ long-label diagnostics, queued clicks, individual collapse, and blank output lin
 
 - Focused nine-file run: 178 tests passed. The final compact component run passed
   all 21 tests after the output-line counting correction.
+- Release review identified shell output-selection and expanded queued-argument
+  click issues. Both new tests failed before fixes, then the compact suite passed
+  all 23 tests. An independent reviewer confirmed the mouse targets against the
+  real expanded layout and reran the 23 passing tests.
 - `npx tsgo --noEmit`: exit 0, no diagnostics.
 - `npm run check`: exit 0; `Checked 1196 files in 15s. No fixes applied.`
 - `npm test`: exit 0. Script tests passed with no failures; scrubber tests passed

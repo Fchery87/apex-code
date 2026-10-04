@@ -97,6 +97,7 @@ export class BashExecutionComponent extends Container {
 
 	override handleMouse(event: TuiMouseEvent): ReturnType<Container["handleMouse"]> {
 		if (event.type !== "click" || event.button !== "left" || event.y < 0 || event.y >= event.height) return undefined;
+		if (event.y !== (this.isCompact() ? 0 : 2)) return undefined;
 		this.toggleExpanded();
 		return {
 			handled: true,
@@ -110,8 +111,12 @@ export class BashExecutionComponent extends Container {
 		};
 	}
 
+	private isCompact(): boolean {
+		return this.collapsedOverride || (this.chatDetail === "overview" && !this.expanded);
+	}
+
 	override render(width: number): string[] {
-		if (!this.collapsedOverride && (this.chatDetail !== "overview" || this.expanded)) return super.render(width);
+		if (!this.isCompact()) return super.render(width);
 		return renderCompactOperationRow(
 			{
 				label: `$ ${this.command}`,

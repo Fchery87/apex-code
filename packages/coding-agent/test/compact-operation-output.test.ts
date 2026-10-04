@@ -31,13 +31,13 @@ function tool(name = "write", definition?: ToolRenderers) {
 	component.setChatDetail("overview");
 	return component;
 }
-function click(component: ToolExecutionComponent | BashExecutionComponent) {
+function click(component: ToolExecutionComponent | BashExecutionComponent, y = 0) {
 	const height = component.render(100).length;
-	component.handleMouse({
+	return component.handleMouse({
 		type: "click",
 		button: "left",
 		x: 0,
-		y: 0,
+		y,
 		screenX: 0,
 		screenY: 0,
 		width: 100,
@@ -211,6 +211,33 @@ it("allows inspection of queued arguments by clicking the overview row", () => {
 	const component = tool("unknown");
 	click(component);
 	expect(stripAnsi(component.render(100).join("\n"))).toContain("private payload");
+});
+
+it("leaves expanded queued arguments available for selection", () => {
+	const component = tool("unknown");
+	click(component);
+	const expanded = component.render(100);
+	const argumentRow = expanded.findIndex((line) => stripAnsi(line).includes("private payload"));
+	expect(argumentRow).toBeGreaterThan(0);
+	expect(click(component, argumentRow)).toBeUndefined();
+	expect(component.render(100)).toEqual(expanded);
+});
+
+it("toggles an expanded user shell only from its command header", () => {
+	const shell = new BashExecutionComponent("echo full", ui);
+	shell.setChatDetail("overview");
+	shell.appendOutput("complete shell output");
+	shell.setComplete(0, false);
+	expect(click(shell)?.handled).toBe(true);
+	const expanded = shell.render(100);
+	const headerRow = expanded.findIndex((line) => stripAnsi(line).includes("$ echo full"));
+	const outputRow = expanded.findIndex((line) => stripAnsi(line).includes("complete shell output"));
+	for (const row of [0, 1, outputRow, expanded.length - 1]) {
+		expect(click(shell, row)).toBeUndefined();
+		expect(shell.render(100)).toEqual(expanded);
+	}
+	expect(click(shell, headerRow)?.handled).toBe(true);
+	expect(shell.render(100)).toHaveLength(1);
 });
 
 it("retains failure state and diagnostic when a long command consumes the label width", () => {

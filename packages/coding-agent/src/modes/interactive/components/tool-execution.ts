@@ -501,12 +501,7 @@ export class ToolExecutionComponent extends Container {
 	override handleMouse(event: TuiMouseEvent): ReturnType<Container["handleMouse"]> {
 		if (this.hideComponent || event.y < 0 || event.y >= event.height) return undefined;
 		if (event.y === 0 && !this.isCompact()) return undefined;
-		if (
-			(!this.result && this.chatDetail !== "overview" && !this.isCompact()) ||
-			event.type !== "click" ||
-			event.button !== "left"
-		)
-			return undefined;
+		if ((!this.result && !this.isCompact()) || event.type !== "click" || event.button !== "left") return undefined;
 		this.toggleExpanded();
 		return {
 			handled: true,
