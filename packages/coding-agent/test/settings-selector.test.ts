@@ -129,6 +129,26 @@ describe("SettingsSelectorComponent", () => {
 
 	const DOWN = "\x1b[B";
 
+	it("explains that the saved default is shadowed by this session's mode", () => {
+		const selector = new SettingsSelectorComponent(
+			{
+				permissionMode: { mode: "plan", origin: "interactive" },
+				warnings: {},
+				availableDefaultModels: [],
+				availableThinkingLevels: [],
+				availableThemes: [],
+			} as unknown as SettingsConfig,
+			{ onPermissionModeChange: vi.fn() } as unknown as SettingsCallbacks,
+		);
+		const list = selector.getSettingsList();
+		for (const character of "Permission mode") list.handleInput(character);
+		expect(stripAnsi(list.render(140).join("\n"))).toContain("shadowed");
+		list.handleInput("\r");
+		const submenu = stripAnsi(list.render(140).join("\n"));
+		expect(submenu).toContain("shadowed");
+		expect(submenu).not.toContain("undefined");
+	});
+
 	it("omits the permission mode row when the session has no permission gate", () => {
 		const selector = new SettingsSelectorComponent(
 			{

@@ -247,6 +247,17 @@ What shipped, as a reference for the names and bounds other surfaces read.
 - `keep` never touches files. `restore` looks up the checkpoint pinned at the target entry, refuses nothing silently: missing checkpoint → `missing-checkpoint` (files unchanged), workspace drifted → files still restored through `GitCheckpoints.restore`, which pins a pre-restore checkpoint first. `fail-if-drifted` and `cancel` refuse the whole navigation (conversation untouched) when `matchesWorktree` reports drift.
 - `GitCheckpoints.matchesWorktree(checkpoint)` compares a temp-index `read-tree`/`add -A`/`write-tree` against the checkpoint's commit tree; returns `undefined` when the comparison cannot run, which reports as `failed` with a warning, never as a guessed match.
 
+### Amendment (2026-10-03)
+
+WS.6 delivered the `AgentSession.navigateTree({ workspacePolicy })` contract and
+its workspace outcomes. It did not wire the policy into the mode adapters.
+The deleted plan's claim that the modes pass the policy through was incorrect.
+That record is recoverable with
+`git show b0f599b4a^:docs/plans/2026-09-01-harness-correctness-and-workspace-state.md`.
+
+The interactive restore prompt and the extension policy forwarding are delivered
+by RS.3 under the [reachable harness surfaces spec](2026-10-03-reachable-harness-surfaces.md).
+
 ## Deletion inventory
 
 | Item | Type | Disposition |

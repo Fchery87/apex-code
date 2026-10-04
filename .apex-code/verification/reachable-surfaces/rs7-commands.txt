@@ -1,0 +1,163 @@
+RS.7 verification performed by implementation owner on 2026-10-03
+
+RED
+
+npm test --workspace packages/coding-agent -- test/tools/plan-present.test.ts --maxWorkers=1
+Test Files 1 failed (1)
+Tests 6 failed | 5 passed (11)
+Log rs7-tool-red.log
+Failure reasons missing presenter injection, selector/nextMode, and abort behavior.
+
+npm test --workspace packages/coding-agent -- test/plan-approval.test.ts --maxWorkers=1
+Test Files 1 failed (1)
+Tests 13 failed | 5 passed (18)
+Log rs7-session-red-corrected.log
+Initial rs7-session-red.log had one additional fixture error, corrected using actual saved settings before this run.
+
+npm test --workspace packages/coding-agent -- test/plan-approval.test.ts --maxWorkers=1
+Test Files 1 failed (1)
+Tests 1 failed | 24 passed (25)
+Log rs7-interactive-red-corrected.log
+Failure expected acceptEdits/interactive footer callback, received zero calls. Prior rs7-interactive-red.log used a misspelled test utility export; corrected before this meaningful run.
+
+npm test --workspace packages/coding-agent -- test/plan-approval.test.ts -t 'copied through|historical tools' --maxWorkers=1
+Test Files 1 failed (1)
+Tests 2 failed | 25 skipped (27)
+Log rs7-projection-red.log
+Failure copied automatic plan_present survived in continuation, and historical session prompt omitted projected tool. Earlier rs7-hook-red.log asserted inside provider callback, which became an assistant error; assertions moved outside before this meaningful run.
+
+npm test --workspace packages/coding-agent -- test/plan-approval.test.ts -t 'recorded implicit|known explicit' --maxWorkers=1
+Test Files 1 failed (1)
+Tests 2 failed | 27 skipped (29)
+Log rs7-transcript-red.log
+The recorded implicit tool was incorrectly pinned. The explicit fixture was corrected from a registry allowlist that excluded plan_present to configured defaults retaining its registry eligibility; the next run verifies that corrected case.
+
+npm test --workspace packages/coding-agent -- test/plan-approval.test.ts -t 'known explicit' --maxWorkers=1
+Test Files 1 failed (1)
+Tests 1 failed | 28 skipped (29)
+Log rs7-explicit-tree-red.log
+Failure known explicit plan tool was lost across tree restoration.
+
+GREEN
+
+npm test --workspace packages/coding-agent -- test/plan-approval.test.ts test/tools/plan-present.test.ts --maxWorkers=1
+Test Files 2 passed (2)
+Tests 48 passed (48)
+Duration 68.54s
+Log rs7-final-focused.log
+Final source and 37 scratch SDK/TUI public-boundary cases, plus 11 tool boundary cases.
+
+npm test --workspace packages/coding-agent -- test/plan-approval.test.ts test/tools/plan-present.test.ts test/permissions/interactive-mode-override.test.ts test/default-tools-setting.test.ts test/system-prompt-updates.test.ts test/evidence/execution-wiring.test.ts test/agent-session-tree-workspace-policy.test.ts test/extensions-runner.test.ts test/delegation/end-to-end.test.ts test/interactive-permission-cycle.test.ts test/suite/regressions/5943-session-start-notify.test.ts --maxWorkers=1
+Test Files 1 failed | 10 passed (11)
+Tests 14 failed | 194 passed (208)
+Duration 59.50s
+Log rs7-related.log
+All 14 failures were existing Git workspace policy cases denied Git init by the sandbox, not assertion regressions. The 10 other suites passed. The final two footer tests were added after this run and pass in rs7-final-focused.log.
+
+npm test --workspace packages/coding-agent -- test/agent-session-tree-workspace-policy.test.ts --maxWorkers=1
+Escalated only to allow existing tests to create Git repos in scratch directories.
+Test Files 1 passed (1)
+Tests 14 passed (14)
+Duration 92.73s
+Log rs7-tree-green.log
+
+npx tsgo --noEmit
+exit 0, empty output
+Log rs7-types-complete.log
+Earlier rs7-types-initial.log exposed one missing ExtensionContext import, corrected; rs7-types-second.log exposed the misspelled utility export, corrected.
+
+npx biome check --write packages/coding-agent/src/core/agent-session.ts packages/coding-agent/src/core/tools/plan-present.ts packages/coding-agent/test/plan-approval.test.ts
+Checked 3 files in 1245ms. Fixed 2 files. Formatting applies only the owned code.
+
+git diff --check
+exit 0, empty output
+
+No full npm test, npm run check, commits, PR, or manual terminal approval run was performed by this agent. Root owns those checks. See rs7-implementation-notes.md for the nonblocking startup and transcript intent decisions.
+
+FINAL INDEPENDENT REVIEW RACE
+
+npm test --workspace packages/coding-agent -- test/plan-approval.test.ts -t 'latest pending mode read' --maxWorkers=1
+Test Files 1 failed (1)
+Tests 1 failed | 38 skipped (39)
+Log rs7-sync-race-red-corrected.log
+Expected zero provider calls while newer authority unresolved, received one. Initial rs7-sync-race-red.log passed because a single setImmediate observed too early; strengthened to wait for an actual premature provider call before this correct red.
+
+npm test --workspace packages/coding-agent -- test/plan-approval.test.ts -t 'latest getter failure' --maxWorkers=1
+Test Files 1 failed (1)
+Tests 1 failed | 38 skipped (39)
+Log rs7-sync-error-red.log
+Expected latest getter error, got undefined because request incorrectly succeeded.
+
+npm test --workspace packages/coding-agent -- test/plan-approval.test.ts test/tools/plan-present.test.ts test/permissions/interactive-mode-override.test.ts --maxWorkers=1
+Test Files 3 passed (3)
+Tests 72 passed (72)
+Duration 20.08s
+Log rs7-sync-green.log
+Final source. Includes 40 new session/TUI cases, 11 plan tool cases, and all 21 existing RS.5 override cases.
+
+npx tsgo --noEmit
+exit 0, empty output
+Log rs7-sync-types.log
+
+git diff --check
+exit 0, empty output
+
+FINAL KNOWN-OVERRIDE WAKEUP
+
+npm test --workspace packages/coding-agent -- test/plan-approval.test.ts -t 'known override after' --maxWorkers=1
+Test Files 1 failed (1)
+Tests 1 failed | 40 skipped (41)
+Log rs7-wakeup-red.log
+Expected provider advancement after committing known mode with stale read B still unresolved, got false.
+
+npm test --workspace packages/coding-agent -- test/plan-approval.test.ts test/tools/plan-present.test.ts test/permissions/interactive-mode-override.test.ts --maxWorkers=1
+Test Files 3 passed (3)
+Tests 73 passed (73)
+Duration 19.86s
+Log rs7-wakeup-green.log
+Final source. 41 session/TUI cases, 11 plan tool cases, 21 unchanged RS.5 override cases. Both before and after waiter-order cases pass without releasing the obsolete getter to make progress.
+
+npx tsgo --noEmit
+exit 0, empty output
+Log rs7-wakeup-types.log
+
+git diff --check
+exit 0, empty output
+
+FULL-SUITE STARTUP FIXTURE FAILURE
+
+Root full npm test failed one existing regression #5943 while coding-agent otherwise reported 4,164 tests passed. Root observed the same narrow red.
+
+npm test --workspace packages/coding-agent -- test/suite/regressions/5943-session-start-notify.test.ts --maxWorkers=1
+Test Files 1 failed (1)
+Tests 1 failed | 6 passed (7)
+Duration 12.43s
+Log rs7-startup-regression-red.log (root-owned run)
+Failure expected user message_start after binding, but saw only render/subscribe/bind. The low-level agent.waitForIdle returned before session async preflight had started the agent. Session.waitForIdle also uses an idle predicate excluding that preflight, so it was not substituted.
+
+Test-only fix awaits the public agent_settled event in the subscriber installed before binding. Existing ordering and message assertions are unchanged. The file now changes cwd to scratch in beforeEach and restores it before scratch removal in afterEach, preserving cross-platform cleanup and the AGENTS state-isolation rule. No production or shared-harness edits.
+
+npm test --workspace packages/coding-agent -- test/suite/regressions/5943-session-start-notify.test.ts --maxWorkers=1
+Test Files 1 passed (1)
+Tests 7 passed (7)
+Duration 31.26s
+Log rs7-startup-scratch-green.log
+Final scratch-version fixture. The earlier event-only fix also passed 7 tests in rs7-startup-regression-green.log, but the final isolation hooks are verified here.
+
+npm test --workspace packages/coding-agent -- test/suite/regressions/5943-session-start-notify.test.ts test/plan-approval.test.ts --maxWorkers=1
+Test Files 2 passed (2)
+Tests 48 passed (48)
+Duration 18.72s
+Log rs7-startup-scratch-related.log
+
+npx tsgo --noEmit
+exit 0, empty output
+Log rs7-startup-scratch-types.log
+
+npx biome check packages/coding-agent/test/suite/regressions/5943-session-start-notify.test.ts
+Checked 1 file in 27ms. No fixes applied.
+
+git diff --check
+exit 0, empty output
+
+Root owns the final full-suite rerun. No production behavior changed for this correction.

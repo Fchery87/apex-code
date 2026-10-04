@@ -1,7 +1,10 @@
 import type { AgentToolResult } from "apex-code-agent-core";
 import { type Static, Type } from "typebox";
+import type { ExtensionContext } from "../extensions/types.ts";
 import type { ApexToolDefinition, EvidenceRecord } from "./contract.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
+
+const planPresentDescription = "Present a plan to the user for approval before acting on it.";
 
 const planPresentSchema = Type.Object({
 	plan: Type.String({ description: "The plan to present to the user, in markdown." }),
@@ -9,27 +12,44 @@ const planPresentSchema = Type.Object({
 
 export type PlanPresentInput = Static<typeof planPresentSchema>;
 
+export type PlanDecision = { approved: true; nextMode: "acceptEdits" | "default" } | { approved: false };
+
+export interface PlanPresenter {
+	present(plan: string, ctx: ExtensionContext, signal?: AbortSignal): Promise<PlanDecision>;
+}
+
+export const defaultPlanPresenter: PlanPresenter = {
+	async present(plan, ctx, signal) {
+		if (!ctx.hasUI)
+			throw new Error(
+				"plan_present requires interactive UI, which is not available in this session (headless mode).",
+			);
+		ctx.ui.notify(plan, "info");
+		const choice = await ctx.ui.select(
+			"Approve this plan?",
+			["Yes, and accept edits", "Yes, and ask before each edit", "No, keep planning"],
+			{ signal },
+		);
+		if (choice === "Yes, and accept edits") return { approved: true, nextMode: "acceptEdits" };
+		if (choice === "Yes, and ask before each edit") return { approved: true, nextMode: "default" };
+		return { approved: false };
+	},
+};
+
 export interface PlanPresentDetails {
 	plan: string;
 	approved: boolean;
+	nextMode?: "acceptEdits" | "default";
 }
 
-/**
- * The tool by which an agent presents its plan for approval, closing the gap the
- * spec names: plan mode can deny mutation but had no tool to leave it through.
- * `deferSchema: false` matches the default four tools' exclusion reasoning -- this
- * is called on nearly every plan-mode turn, so deferring would trade a one-time
- * prefix saving for a recurring round trip.
- *
- * Deliberately does not itself change the permission mode: no such seam exists for
- * tools or extensions today (only the CLI/TUI can), so this tool's job ends at
- * reporting the user's approve/reject decision for the harness to act on.
- */
-export function createPlanPresentToolDefinition(): ApexToolDefinition<typeof planPresentSchema, PlanPresentDetails> {
+export function createPlanPresentToolDefinition(
+	presenter: PlanPresenter = defaultPlanPresenter,
+): ApexToolDefinition<typeof planPresentSchema, PlanPresentDetails> {
 	return {
 		name: "plan_present",
 		label: "plan_present",
-		description: "Present a plan to the user for approval before acting on it.",
+		description: planPresentDescription,
+		promptSnippet: planPresentDescription,
 		parameters: planPresentSchema,
 		contract: {
 			capabilities: new Set(["ui"]),
@@ -44,26 +64,35 @@ export function createPlanPresentToolDefinition(): ApexToolDefinition<typeof pla
 				emits: new Set(["workflow"]),
 				capture: (params, result): EvidenceRecord[] => {
 					const details = result.details as PlanPresentDetails | undefined;
-					return [{ kind: "workflow", plan: params.plan, approved: details?.approved ?? false }];
+					return [
+						{
+							kind: "workflow",
+							plan: params.plan,
+							approved: details?.approved ?? false,
+							...(details?.nextMode ? { nextMode: details.nextMode } : {}),
+						},
+					];
 				},
 			},
 		},
 		async execute(
 			_toolCallId,
 			{ plan }: PlanPresentInput,
-			_signal,
+			signal,
 			_onUpdate,
 			ctx,
 		): Promise<AgentToolResult<PlanPresentDetails>> {
-			if (!ctx?.hasUI) {
+			if (!ctx)
 				throw new Error(
 					"plan_present requires interactive UI, which is not available in this session (headless mode).",
 				);
-			}
-			const approved = await ctx.ui.confirm("Approve this plan?", plan);
+			signal?.throwIfAborted();
+			const decision = await presenter.present(plan, ctx, signal);
+			signal?.throwIfAborted();
+			const { approved } = decision;
 			return {
 				content: [{ type: "text", text: approved ? "Plan approved." : "Plan not approved." }],
-				details: { plan, approved },
+				details: { plan, ...decision },
 			};
 		},
 	};

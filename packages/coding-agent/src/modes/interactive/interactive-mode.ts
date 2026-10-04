@@ -63,7 +63,12 @@ import {
 	getShareViewerUrl,
 	VERSION,
 } from "../../config.ts";
-import { type AgentSession, type AgentSessionEvent, parseSkillBlock } from "../../core/agent-session.ts";
+import {
+	type AgentSession,
+	type AgentSessionEvent,
+	parseSkillBlock,
+	type TreeWorkspacePolicy,
+} from "../../core/agent-session.ts";
 import { type AgentSessionRuntime, SessionImportFileNotFoundError } from "../../core/agent-session-runtime.ts";
 import type { AgentSessionRuntimeDiagnostic } from "../../core/agent-session-services.ts";
 import {
@@ -177,10 +182,12 @@ import {
 	type StatusIndicator,
 	WorkingStatusIndicator,
 } from "./components/status-indicator.ts";
+import { TaskPanelComponent } from "./components/task-panel.ts";
 import { ThinkingSelectorComponent } from "./components/thinking-selector.ts";
 import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
 import { TrustSelectorComponent } from "./components/trust-selector.ts";
+import { TurnSummaryComponent, type TurnSummaryOutcome } from "./components/turn-summary.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.ts";
 import { editInExternalEditor } from "./external-editor.ts";
@@ -516,6 +523,8 @@ export class InteractiveMode {
 	private runtimeHost: AgentSessionRuntime;
 	/** Settled once the most recent /settings permission-mode write has hit disk. */
 	private pendingPermissionModeWrite: Promise<void> | undefined;
+	private pendingPermissionModeCycle: Promise<void> | undefined;
+	private permissionModeCycleGeneration = 0;
 	private renderer: TuiMainScreen | TuiAltScreen;
 	private ui: TUI;
 	private mainScreenRenderState: TuiMainScreenRenderState | undefined;
@@ -628,6 +637,7 @@ export class InteractiveMode {
 	private retriedAttempt?: { error: string; component?: AssistantMessageComponent };
 	/** Set when the user presses Escape during a retry wait, which is the only way to cancel one. */
 	private retryCancelled = false;
+	private turnStartedAt?: number;
 
 	// Messages queued while compaction is running
 	private compactionQueuedMessages: CompactionQueuedMessage[] = [];
@@ -651,6 +661,8 @@ export class InteractiveMode {
 	private extensionWidgetsAbove = new Map<string, Component & { dispose?(): void }>();
 	private extensionWidgetsBelow = new Map<string, Component & { dispose?(): void }>();
 	private widgetContainerAbove!: Container;
+	private extensionWidgetContainerAbove!: Container;
+	private taskPanel!: TaskPanelComponent;
 	private widgetContainerBelow!: Container;
 
 	// Custom footer from extension (undefined = use built-in footer)
@@ -686,12 +698,12 @@ export class InteractiveMode {
 		return this.session.settingsManager;
 	}
 
-	private offerFirstUseHint(id: FirstUseHintId): void {
+	private offerFirstUseHint(id: FirstUseHintId, text?: string): void {
 		this.firstUseHints ??= new FirstUseHints(this.settingsManager.getFirstUseHints());
 		const hint = this.firstUseHints.offer(id);
 		if (!hint) return;
 		this.settingsManager.setFirstUseHints(this.firstUseHints.getSeen());
-		this.chatContainer.addChild(new Text(theme.fg("dim", hint), this.outputPad, 0));
+		this.chatContainer.addChild(new Text(theme.fg("dim", text ?? hint), this.outputPad, 0));
 	}
 
 	constructor(runtimeHost: AgentSessionRuntime, options: InteractiveModeOptions = {}) {
@@ -728,6 +740,13 @@ export class InteractiveMode {
 		this.pendingMessagesContainer = new Container();
 		this.statusContainer = new Container();
 		this.widgetContainerAbove = new Container();
+		this.extensionWidgetContainerAbove = new Container();
+		this.taskPanel = new TaskPanelComponent({
+			getSession: () => this.session,
+			getSettings: () => this.settingsManager,
+		});
+		this.widgetContainerAbove.addChild(this.taskPanel);
+		this.widgetContainerAbove.addChild(this.extensionWidgetContainerAbove);
 		this.widgetContainerBelow = new Container();
 		this.keybindings = KeybindingsManager.create();
 		setKeybindings(this.keybindings);
@@ -2113,6 +2132,7 @@ export class InteractiveMode {
 						customInstructions: options?.customInstructions,
 						replaceInstructions: options?.replaceInstructions,
 						label: options?.label,
+						workspacePolicy: options?.workspacePolicy,
 					});
 					if (result.cancelled) {
 						return { cancelled: true };
@@ -2188,11 +2208,14 @@ export class InteractiveMode {
 	}
 
 	private async rebindCurrentSession(options: { renderBeforeBind?: boolean } = {}): Promise<void> {
+		this.permissionModeCycleGeneration = (this.permissionModeCycleGeneration ?? 0) + 1;
+		this.pendingPermissionModeCycle = undefined;
 		const session = this.session;
 
 		this.unsubscribe?.();
 		this.unsubscribe = undefined;
 		this.applyRuntimeSettings();
+		this.taskPanel?.rebind();
 
 		if (options.renderBeforeBind) {
 			this.renderCurrentSessionState();
@@ -2583,12 +2606,22 @@ export class InteractiveMode {
 	// Maximum total widget lines to prevent viewport overflow
 	private static readonly MAX_WIDGET_LINES = 10;
 
+	private toggleTaskPanel(): void {
+		this.taskPanel.toggle();
+		this.ui.requestRender();
+	}
+
 	/**
 	 * Render all extension widgets to the widget container.
 	 */
 	private renderWidgets(): void {
 		if (!this.widgetContainerAbove || !this.widgetContainerBelow) return;
-		this.renderWidgetContainer(this.widgetContainerAbove, this.extensionWidgetsAbove, true, true);
+		this.renderWidgetContainer(
+			this.extensionWidgetContainerAbove ?? this.widgetContainerAbove,
+			this.extensionWidgetsAbove,
+			true,
+			true,
+		);
 		this.renderWidgetContainer(this.widgetContainerBelow, this.extensionWidgetsBelow, false, false);
 		this.ui.requestRender();
 	}
@@ -3257,6 +3290,7 @@ export class InteractiveMode {
 		this.defaultEditor.onCtrlD = () => this.handleCtrlD();
 		this.defaultEditor.onAction("app.suspend", () => this.handleCtrlZ());
 		this.defaultEditor.onAction("app.thinking.cycle", () => this.cycleThinkingLevel());
+		this.defaultEditor.onAction("app.permissionMode.cycle", () => this.cyclePermissionMode());
 		this.defaultEditor.onAction("app.model.cycleForward", () => this.cycleModel("forward"));
 		this.defaultEditor.onAction("app.model.cycleBackward", () => this.cycleModel("backward"));
 
@@ -3264,6 +3298,7 @@ export class InteractiveMode {
 		this.ui.onDebug = () => this.handleDebugCommand();
 		this.defaultEditor.onAction("app.model.select", () => this.showModelSelector());
 		this.defaultEditor.onAction("app.tools.expand", () => this.cycleChatDetail());
+		this.defaultEditor.onAction("app.tasks.toggle", () => this.toggleTaskPanel());
 		this.defaultEditor.onAction("app.thinking.toggle", () => this.toggleThinkingBlockVisibility());
 		this.defaultEditor.onAction("app.editor.external", () => void this.handleOpenExternalEditor());
 		this.defaultEditor.onAction(
@@ -3354,6 +3389,11 @@ export class InteractiveMode {
 			if (text === "/config") {
 				this.editor.setText("");
 				await this.showConfigurationIndex();
+				return;
+			}
+			if (text === "/tasks") {
+				this.editor.setText("");
+				this.toggleTaskPanel();
 				return;
 			}
 			if (text === "/settings") {
@@ -3579,6 +3619,7 @@ export class InteractiveMode {
 		}
 
 		this.footer.invalidate();
+		this.taskPanel?.handleEvent(event);
 
 		switch (event.type) {
 			case "agent_start":
@@ -3595,6 +3636,7 @@ export class InteractiveMode {
 				break;
 
 			case "turn_start":
+				this.turnStartedAt ??= Date.now();
 				if (this.settingsManager.getShowTerminalProgress()) {
 					this.ui.terminal.setProgress(true);
 				}
@@ -3816,6 +3858,7 @@ export class InteractiveMode {
 			}
 
 			case "tool_execution_end": {
+				if (event.toolName === "plan_present" && !event.isError) await this.refreshFooterPermissionMode();
 				const component = this.pendingTools.get(event.toolCallId);
 				if (component) {
 					component.updateResult({ ...event.result, isError: event.isError });
@@ -3836,11 +3879,25 @@ export class InteractiveMode {
 					this.streamingMessage = undefined;
 				}
 				this.clearPendingTools();
+				if (!event.willRetry) {
+					const kind =
+						event.stopReason?.kind ??
+						[...event.messages].reverse().find((message) => message.role === "assistant")?.stopReason;
+					this.finishTurnSummary(
+						kind === "aborted"
+							? "aborted"
+							: kind === "completed" || kind === "stop" || kind === undefined
+								? "completed"
+								: undefined,
+					);
+				}
 
 				this.ui.requestRender();
 				break;
 
 			case "agent_settled":
+				this.turnStartedAt = undefined;
+				this.ui.requestRender();
 				await this.checkShutdownRequested();
 				break;
 
@@ -3947,6 +4004,7 @@ export class InteractiveMode {
 				}
 				this.retriedAttempt = undefined;
 				this.retryCancelled = false;
+				if (event.aborted) this.finishTurnSummary("aborted");
 				this.ui.requestRender();
 				break;
 			}
@@ -3977,6 +4035,15 @@ export class InteractiveMode {
 				break;
 			}
 		}
+	}
+
+	private finishTurnSummary(outcome: TurnSummaryOutcome | undefined): void {
+		const startedAt = this.turnStartedAt;
+		this.turnStartedAt = undefined;
+		if (startedAt === undefined || outcome === undefined) return;
+		const elapsedMs = Date.now() - startedAt;
+		if (elapsedMs < 1000) return;
+		this.chatContainer.addChild(new TurnSummaryComponent(elapsedMs, outcome));
 	}
 
 	/** Extract text content from a user message */
@@ -5144,11 +5211,44 @@ export class InteractiveMode {
 	 * would under-report bypassPermissions, which is the one direction that matters.
 	 */
 	private async refreshFooterPermissionMode(): Promise<void> {
-		const resolution = await this.session.getPermissionMode();
-		this.footer.setPermissionMode(resolution?.mode ?? "default");
+		const session = this.session;
+		const resolution = await session.getPermissionMode();
+		if (this.session !== session) return;
+		this.footer.setPermissionMode(resolution?.mode ?? "default", resolution?.origin);
 		if (this.isInitialized) {
 			this.ui.requestRender();
 		}
+	}
+
+	private cyclePermissionMode(): Promise<void> {
+		const session = this.session;
+		const generation = this.permissionModeCycleGeneration ?? 0;
+		const isCurrent = () => this.session === session && (this.permissionModeCycleGeneration ?? 0) === generation;
+		const cycle = (this.pendingPermissionModeCycle ?? Promise.resolve())
+			.then(async () => {
+				if (!isCurrent()) return;
+				const modes = await session.getInteractivePermissionModeCycle();
+				if (!isCurrent() || modes.length === 0) return;
+				const current = await session.getPermissionMode();
+				if (!isCurrent()) return;
+				const index = modes.indexOf(current?.mode ?? "default");
+				const resolution = await session.setInteractivePermissionMode(modes[(index + 1) % modes.length]);
+				if (!isCurrent() || !resolution) return;
+				this.footer.setPermissionMode(resolution.mode, resolution.origin);
+				this.offerFirstUseHint(
+					"permission-mode-cycle",
+					`${keyDisplayText("app.permissionMode.cycle")} now cycles permission modes for this session; ${keyDisplayText("app.thinking.cycle")} cycles thinking level.`,
+				);
+				this.ui.requestRender();
+			})
+			.catch((error) => {
+				if (!isCurrent()) return;
+				this.showError(
+					`Permission mode could not be changed: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			});
+		this.pendingPermissionModeCycle = cycle;
+		return cycle;
 	}
 
 	/**
@@ -5157,15 +5257,17 @@ export class InteractiveMode {
 	 * settings row that silently does nothing is worse than no row at all.
 	 */
 	private async applyPermissionMode(mode: PermissionMode): Promise<void> {
+		const session = this.session;
 		let resolution: Awaited<ReturnType<AgentSession["setPermissionMode"]>>;
 		try {
-			const write = this.session.setPermissionMode(mode);
+			const write = session.setPermissionMode(mode);
 			this.pendingPermissionModeWrite = write.then(
 				() => {},
 				() => {},
 			);
 			resolution = await write;
 		} catch (error) {
+			if (this.session !== session) return;
 			// Never swallow this. A permission mode the user believes they set, and
 			// did not, is the one outcome worse than the prompt they were escaping.
 			const detail = error instanceof Error ? error.message : String(error);
@@ -5175,16 +5277,28 @@ export class InteractiveMode {
 			this.ui.requestRender();
 			return;
 		}
-		if (!resolution) return;
+		if (this.session !== session || !resolution) return;
 
-		const outranked = resolution.mode !== mode;
+		const outranked = resolution.mode !== mode || resolution.origin === "interactive";
 		const source = PERMISSION_MODE_OVERRIDE_HINTS[resolution.origin] ?? resolution.origin;
 		const line = outranked
 			? `Permission mode saved as ${mode}, but ${source} sets ${resolution.mode} for this session.`
 			: `Permission mode set to ${mode}.`;
 		this.chatContainer.addChild(new Text(theme.fg(outranked ? "warning" : "muted", line), 1, 0));
-		this.footer.setPermissionMode(resolution.mode);
+		this.footer.setPermissionMode(resolution.mode, resolution.origin);
 		this.ui.requestRender();
+	}
+
+	private setTaskListToolDefault(enabled: boolean): void {
+		if (this.settingsManager.getProjectSettings().defaultTools !== undefined) return;
+		const names = this.settingsManager.getDefaultTools() ?? this.session.getImplicitDefaultToolNames();
+		this.settingsManager.setDefaultTools(
+			enabled
+				? names.includes("todo_write")
+					? names
+					: [...names, "todo_write"]
+				: names.filter((name) => name !== "todo_write"),
+		);
 	}
 
 	private async showSettingsSelector(): Promise<void> {
@@ -5197,6 +5311,12 @@ export class InteractiveMode {
 			selector = new SettingsSelectorComponent(
 				{
 					autoCompact: this.session.autoCompactionEnabled,
+					taskListTool: {
+						enabled: (
+							this.settingsManager.getDefaultTools() ?? this.session.getImplicitDefaultToolNames()
+						).includes("todo_write"),
+						projectControlled: this.settingsManager.getProjectSettings().defaultTools !== undefined,
+					},
 					defaultModel,
 					currentModel: this.session.model,
 					availableDefaultModels: this.session.modelRuntime.getAvailableSnapshot(),
@@ -5240,6 +5360,7 @@ export class InteractiveMode {
 					warnings: this.settingsManager.getWarnings(),
 				},
 				{
+					onTaskListToolChange: (enabled) => this.setTaskListToolDefault(enabled),
 					onAutoCompactChange: (enabled) => {
 						this.session.setAutoCompactionEnabled(enabled);
 						this.footer.setAutoCompactEnabled(enabled);
@@ -5933,6 +6054,33 @@ export class InteractiveMode {
 						return;
 					}
 
+					const workspacePreview = await this.session.previewTreeWorkspace(entryId);
+					if (this.session.isCompacting) {
+						this.showError(
+							"Wait for the current compaction or tree navigation to finish before navigating the session tree.",
+						);
+						return;
+					}
+					let workspacePolicy: TreeWorkspacePolicy = "keep";
+					if (workspacePreview.state === "differs") {
+						const choice = await this.showExtensionSelector("Restore workspace files?", [
+							"Keep current files",
+							"Restore files to this point",
+							"Cancel",
+						]);
+						if (choice === undefined || choice === "Cancel") {
+							this.showStatus("Navigation cancelled");
+							return;
+						}
+						if (choice === "Restore files to this point") workspacePolicy = "restore";
+					}
+					if (this.session.isCompacting) {
+						this.showError(
+							"Wait for the current compaction or tree navigation to finish before navigating the session tree.",
+						);
+						return;
+					}
+
 					// Set up escape handler and status indicator if summarizing
 					let showingSummaryIndicator = false;
 					const originalOnEscape = this.defaultEditor.onEscape;
@@ -5951,6 +6099,7 @@ export class InteractiveMode {
 						const result = await this.session.navigateTree(entryId, {
 							summarize: wantsSummary,
 							customInstructions,
+							workspacePolicy,
 						});
 
 						if (result.aborted) {
@@ -5970,7 +6119,23 @@ export class InteractiveMode {
 						if (result.editorText && !this.editor.getText().trim()) {
 							this.editor.setText(result.editorText);
 						}
-						this.showStatus("Navigated to selected point");
+						const workspace = result.workspace;
+						if (workspace?.outcome === "restored") {
+							this.showStatus(
+								workspace.preRestoreCheckpoint
+									? "Restored files · pre-restore checkpoint saved"
+									: "Restored files",
+							);
+						} else if (workspace?.outcome === "failed") {
+							this.showStatus(workspace.warnings.join(" · ") || "Workspace restore failed");
+						} else if (
+							workspace?.outcome === "missing-checkpoint" ||
+							workspacePreview.state === "no-checkpoint"
+						) {
+							this.showStatus("Files unchanged · no checkpoint for this point");
+						} else {
+							this.showStatus("Files unchanged");
+						}
 						void this.flushCompactionQueue({ willRetry: false });
 					} catch (error) {
 						this.showError(error instanceof Error ? error.message : String(error));
@@ -6656,6 +6821,8 @@ export class InteractiveMode {
 			return;
 		}
 
+		this.permissionModeCycleGeneration = (this.permissionModeCycleGeneration ?? 0) + 1;
+		this.pendingPermissionModeCycle = undefined;
 		this.resetExtensionUI();
 
 		const reloadBox = new Container();
@@ -6733,6 +6900,7 @@ export class InteractiveMode {
 				dismissReloadBox(previousEditor as Component);
 			}
 			this.showError(`Reload failed: ${error instanceof Error ? error.message : String(error)}`);
+			await this.refreshFooterPermissionMode();
 		}
 	}
 
@@ -7141,6 +7309,7 @@ export class InteractiveMode {
 		const exit = this.getAppKeyDisplay("app.exit");
 		const suspend = this.getAppKeyDisplay("app.suspend");
 		const cycleThinkingLevel = this.getAppKeyDisplay("app.thinking.cycle");
+		const cyclePermissionMode = this.getAppKeyDisplay("app.permissionMode.cycle");
 		const cycleModelForward = this.getAppKeyDisplay("app.model.cycleForward");
 		const selectModel = this.getAppKeyDisplay("app.model.select");
 		const expandTools = this.getAppKeyDisplay("app.tools.expand");
@@ -7186,6 +7355,7 @@ export class InteractiveMode {
 | \`${exit}\` | Exit (when editor is empty) |
 | \`${suspend}\` | Suspend to background |
 | \`${cycleThinkingLevel}\` | Cycle thinking level |
+| \`${cyclePermissionMode}\` | Cycle permission mode for this session |
 | \`${cycleModelForward}\` / \`${cycleModelBackward}\` | Cycle models |
 | \`${selectModel}\` | Open model selector |
 | \`${expandTools}\` | Cycle conversation detail (overview / details / all) |

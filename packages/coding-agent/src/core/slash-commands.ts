@@ -19,6 +19,7 @@ export interface BuiltinSlashCommand {
 export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "help", description: "Show every command available in this session" },
 	{ name: "config", description: "Open the configuration index" },
+	{ name: "tasks", description: "Expand or collapse the task panel" },
 	{ name: "settings", description: "Open settings menu" },
 	{ name: "model", description: "Pick a provider, then a model", argumentHint: "<provider/model>" },
 	{ name: "tree", description: "Navigate session tree (switch branches)" },

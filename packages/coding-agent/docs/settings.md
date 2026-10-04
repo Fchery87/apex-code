@@ -35,6 +35,7 @@ Use `/trust` in interactive mode to save a project trust decision for future ses
 | `enabledModels` | `string[]` | All available models | Model patterns used for startup selection and model cycling. Uses the same format as `--models`. |
 | `hideThinkingBlock` | boolean | `false` | Hide thinking blocks in the transcript. |
 | `chatDetail` | `"overview" \| "details" \| "all"` | unset | Transcript detail level for new sessions. `unset` opens at overview; the saved value changes when you cycle detail with `ctrl+o` or select it in `/settings`. |
+| `taskPanelExpanded` | boolean | `false` | Global task-panel expansion preference, saved by Alt+J or `/tasks`. |
 | `showCacheMissNotices` | boolean | `false` | Show notices for significant cache misses, successful cache warming, compaction usage, and provider recovery. |
 | `cacheWarming` | `"off" \| "streaming" \| "idle"` | `"streaming"` | Keep eligible provider prompt caches warm during active runs or, with `"idle"`, between runs. Global setting only. |
 
@@ -270,6 +271,13 @@ On Windows, select `powershell` instead of `bash`, or include both:
   "defaultTools": ["read", "powershell", "edit", "write"]
 }
 ```
+
+The task-list tool `todo_write` is opt-in. Its `/settings` row adds or removes
+it from saved user `defaultTools` for new sessions. Enabling it with unset
+defaults retains the core tools and configured LSP, search, and MCP defaults.
+Explicit lists retain their other names. The row is read-only when project
+`defaultTools` overrides user defaults. The current session and `/reload`
+retain their tool selection.
 
 An empty array starts with no built-in tools while preserving extension and SDK custom tools. `--tools` replaces this behavior with a strict allowlist for all tools, `--no-tools` disables all tools, and `--no-builtin-tools` disables the built-in defaults. `--exclude-tools` filters the resulting list. A project `defaultTools` array replaces the global array.
 

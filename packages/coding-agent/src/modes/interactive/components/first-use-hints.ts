@@ -1,10 +1,11 @@
-export type FirstUseHintId = "queue" | "tool-expand" | "thinking" | "bash";
+export type FirstUseHintId = "queue" | "tool-expand" | "thinking" | "bash" | "permission-mode-cycle";
 
 const HINTS: Record<FirstUseHintId, string> = {
 	queue: "Queued messages run after the current turn.",
 	"tool-expand": "Use the tool expansion shortcut to see full output.",
 	thinking: "Use the thinking shortcut to show or hide reasoning blocks.",
 	bash: "Press Escape to leave bash input mode.",
+	"permission-mode-cycle": "Permission mode cycling now has its own shortcut.",
 };
 
 export class FirstUseHints {

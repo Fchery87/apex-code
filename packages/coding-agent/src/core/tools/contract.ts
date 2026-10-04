@@ -203,6 +203,7 @@ export interface WorkflowEvidenceRecord {
 	kind: "workflow";
 	plan?: string;
 	approved?: boolean;
+	nextMode?: "acceptEdits" | "default";
 	agentType?: string;
 	task?: string;
 	handle?: string;
