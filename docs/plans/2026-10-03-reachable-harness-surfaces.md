@@ -1,6 +1,6 @@
 # Plan: Make built features reachable from the terminal
 
-**Status:** Not started
+**Status:** In progress. RS.1 through RS.7 are implemented and passed full local gates. RS.7 also passed focused tests, TypeScript, terminal checks, and independent correctness review. Completion commits are pending. RS.8 and RS.9 are implemented and passed focused checks. Terminal checks passed. Independent review found no blocking findings. Mounted scan and geometry checks passed. Full local gates passed. Idle-host timing verification and completion commits remain pending.
 
 **Spec:** [Make built features reachable from the terminal](../specs/2026-10-03-reachable-harness-surfaces.md)
 
@@ -8,16 +8,16 @@
 
 | # | Task | State | SHA | Verified by |
 | --- | --- | --- | --- | --- |
-| RS.1 | Correct the WS.6 and Phase 6 records (G6) | Not started | — | `node scripts/validate-docs-lifecycle.mjs .` passes; the workspace-state spec carries the 2026-10-03 amendment and the roadmap Phase 6 row says the daemon is test-verified and not started by the CLI |
-| RS.2 | Add `AgentSession.previewTreeWorkspace()` (G1) | Not started | — | `test/agent-session-tree-workspace-policy.test.ts` gains preview cases in a scratch Git repo: `no-checkpoint`, `matches`, `differs`, `unavailable` (checkpoints off, and a comparison that cannot run); preview never changes files or the session leaf |
-| RS.3 | Ask before restoring files in `/tree`; pass `workspacePolicy` through the extension `navigateTree` (G1) | Not started | — | New `tree-workspace-prompt.test.ts` drives the tree selection handler: no prompt unless `differs`; `Keep current files`, `Restore files to this point`, and `Cancel` map to `keep`, `restore`, and no navigation; the status line matches each outcome; a scratch repo proves real restore and real keep. An extension API test proves the policy passes through |
-| RS.4 | Show `Worked for` / `Interrupted after` after each turn (G5) | Not started | — | Component test renders both lines, nothing under one second, one line for a multi-step turn, and asserts no session entry is written |
-| RS.5 | Implement the interactive mode layer in the permission core (ADR 0037) | Not started | — | New `interactive-mode-override.test.ts` under `test/permissions/`: the layer beats `flag`, `local`, `project`, `user`; rule resolution is unchanged; nothing is written to disk; resolution origin is `"interactive"`; `bypassPermissions` is selectable only when in force at startup; clearing the layer restores ADR 0004 resolution |
-| RS.6 | Bind Shift+Tab to `app.permissionMode.cycle`, move `app.thinking.cycle` to `alt+t`, show the session marker in the footer (G2) | Not started | — | Keybinding tests assert both defaults and no collision; an interactive test cycles `default → acceptEdits → plan → default`, with `bypassPermissions` only when allowed; footer render test shows the session marker; one-time hint test; `README.md` and `docs/keybindings.md` updated |
-| RS.7 | Inject a `PlanPresenter` into `plan_present`; switch mode on approval; activate `plan_present` with plan mode (G3) | Not started | — | `test/tools/plan-present.test.ts` covers the three choices, `nextMode`, the headless throw, and the additive evidence field; an interactive test proves approval leaves plan mode through the RS.5 layer and that `plan_present` joins and leaves the active set with plan mode unless listed explicitly |
-| RS.8 | Render the pinned task panel, `/tasks`, `app.tasks.toggle`, and the compact `todo_write` cell (G4) | Not started | — | New `task-panel.test.ts` renders collapsed, expanded, overflow (`+N more`), and all-complete states; an `AgentSession` test proves the panel follows tree navigation and resume; the toggle state round-trips through global settings; the chosen default key has no collision |
-| RS.9 | Add a `/settings` row that adds or removes `todo_write` from `defaultTools` (G4) | Not started | — | `test/settings-selector.test.ts` toggles the row and asserts `defaultTools` before and after; `todo_write` stays out of the default active set when the row is untouched |
-| RS.10 | Phase verification and close | Not started | — | `npx tsgo --noEmit`, `npm test`, and `npm run check` pass; `test/streaming-render-bench.ts` measured trunk against head back to back on an idle host; three-OS CI green; `CHANGELOG.md` `[Unreleased]` names every user-visible change, including the rebinding path for the thinking cycle; spec status set to Landed; plan closed |
+| RS.1 | Correct the WS.6 and Phase 6 records (G6) | Done, unverified | — | `node scripts/validate-docs-lifecycle.mjs .` passed on 2026-10-03. The workspace-state amendment and Phase 6 qualification are in place. Missing completion commit and verified SHA. |
+| RS.2 | Add `AgentSession.previewTreeWorkspace()` (G1) | Done, unverified | — | Preview cases cover all four states, disabled checkpoints, and unavailable or throwing comparison. Files, checkpoint refs, session entries, session file, and leaf stay unchanged. The final three-file tree run passed 37 tests on 2026-10-03; `npx tsgo --noEmit` exited 0. Missing completion commit and verified SHA. |
+| RS.3 | Ask before restoring files in `/tree`; pass `workspacePolicy` through the extension `navigateTree` (G1) | Done, unverified | — | The final three-file tree run passed 37 tests; the extension suite passed 55 tests on 2026-10-03. The real selector handler covers preview states, all choices, outcome text, and compaction races. Scratch Git tests prove restore, keep, and cancel. A manual source CLI run confirmed these choices, no prompt on a matching or missing checkpoint, and a pre-restore ref containing the original edits. Full `npm test` and `npm run check` exited 0. Missing completion commit and verified SHA. |
+| RS.4 | Show `Worked for` / `Interrupted after` after each turn (G5) | Done, unverified | — | The duration, compaction, and retry suites passed 23 tests on 2026-10-03; `npx tsgo --noEmit` exited 0. Tests cover both labels, the one-second threshold, multi-step and retry timing, typed retry cancellation, and unchanged session entries and model context. A scratch source CLI displayed `Worked for 1s` and `Interrupted after 7s`; neither appeared in its session JSONL. Full `npm test` and `npm run check` exited 0. Missing completion commit and verified SHA. |
+| RS.5 | Implement the interactive mode layer in the permission core (ADR 0037) | Done, unverified | — | All permission tests plus policy authorization and delegation end-to-end passed 329 tests across 18 files on 2026-10-03; `npx tsgo --noEmit` exited 0. New boundary tests prove source precedence, tool and command enforcement, live delegated-child changes, unchanged persisted state and rules, startup bypass ceiling, custom SDK fallback, clear/reload races, and fresh/resumed reset. Full `npm test` and `npm run check` exited 0. Missing completion commit and verified SHA. |
+| RS.6 | Bind Shift+Tab to `app.permissionMode.cycle`, move `app.thinking.cycle` to `alt+t`, show the session marker in the footer (G2) | Done, unverified | — | Nine focused files passed 146 tests on 2026-10-03; TypeScript and `npm run check` exited 0. Tests cover defaults without collisions, extension reservation, normal and startup-bypass cycles, rapid presses, reload/replacement races, failed-reload footer recovery, narrow footer markers, custom binding hints, and shadowed settings. The source CLI confirmed both keys, mode origins, reload reset, and one-time hint persistence without mode persistence. Package README and keybinding docs include the rebinding path. Full `npm test` exited 0. Missing completion commit and verified SHA. Independent RS.6 review could not finish because of the agent usage limit; root review is complete. |
+| RS.7 | Inject a `PlanPresenter` into `plan_present`; switch mode on approval; activate `plan_present` with plan mode (G3) | Done, unverified | — | Three focused files passed 73 tests on 2026-10-03; TypeScript exited 0. Tests cover all choices, evidence, actual edit authorization and provider continuation, explicit and automatic loadouts, restrictive registries, hook scope, resume/tree restoration, stale approvals, and asynchronous mode reads. The startup regression plus plan approval passed 48 tests after the startup fixture began awaiting the public settled event in scratch cwd. The source CLI confirmed both approval modes, rejection, Escape, footer updates, and reload reset without mode persistence. Independent RS.7 correctness review found no remaining blocking findings. Full `npm test` and `npm run check` exited 0. Missing completion commit and verified SHA. |
+| RS.8 | Render the pinned task panel, `/tasks`, `app.tasks.toggle`, and the compact `todo_write` cell (G4) | Done, unverified | — | Final feature checks passed 25 tests across four files; the earlier related run passed 153 tests across eight files before the final mounted settlement case. TypeScript exited 0. Component/mode/SDK tests cover bounded rows, cached snapshots, actual loadouts and hooks, tree/resume/compaction, persistence, command/key routing and reservation, extension widgets, completion/retry settlement, and compact tool result/error/disclosure. The source CLI confirmed Alt+J, /tasks, compact results, Ctrl+O disclosure, completion and clearing, and resumed expansion. Independent review found no blocking findings. A 24-case mounted benchmark proved zero unchanged-frame branch reads and bounded panel rows; timings were contaminated by host activity. Full `npm test` and `npm run check` exited 0 on the final source snapshot. Missing idle-host timing verification, completion commit, and verified SHA. |
+| RS.9 | Add a `/settings` row that adds or removes `todo_write` from `defaultTools` (G4) | Done, unverified | — | `test/task-tool-defaults.test.ts` drives the mounted row across eight scenarios. Final feature checks passed 25 tests across four files; TypeScript exited 0. The source CLI preserved the four core defaults on enable, activated the task tool in a new session, restored expanded rows on resume, and retained the current panel when disabled. Independent review found no blocking findings. Full `npm test` and `npm run check` exited 0 on the final source snapshot. Missing completion commit and verified SHA. |
+| RS.10 | Phase verification and close | In progress | — | Final `npm run check` exited 0, including TypeScript, after checking 1195 files with no fixes. Full `npm test` exited 0 on 2026-10-04. Coding-agent reported 455 passed files and 4192 passed tests, with six skipped files and 51 skipped tests. Agent-core passed 975 tests and scrubber passed 21 tests; root scripts passed 216 with no failures. Actual terminal checks and independent review passed. Paired transcript and mounted panel benchmarks exited 0, but host contention prevents idle-host timing evidence. Missing idle-host timing verification, verified completion commits, and three-OS CI. `[Unreleased]` documents the user-visible behavior and thinking-key rebinding. Spec and plan remain open until closure requirements pass. |
 
 States: `Not started`, `In progress`, `Done, unverified`, `Done`.
 
@@ -115,9 +115,7 @@ plan mode on approval.
 Add a component in the widget area above the composer that reads `getLatestTodos()`
 over the current branch. Refresh it on session load, after each `todo_write` result,
 and after tree navigation. Collapsed by default to one counted line naming the
-in-progress item; expanded shows up to five items and `+N more`. Hide it at turn end
-when every item is complete. Add `/tasks` and `app.tasks.toggle`; Ctrl+T is taken by
-`app.thinking.toggle`, so choose a free default and record it in the spec. Save the
+in-progress item; expanded shows up to five items and `+N more`. Hide a newly completed list after the whole run settles, including retries. Add `/tasks` and `app.tasks.toggle`; Use the reserved `app.tasks.toggle` action with Alt+J, as recorded in the spec. Save the
 expanded state as a global setting. Render the `todo_write` tool cell as
 `Task list updated · N/M complete`.
 
@@ -127,8 +125,10 @@ contamination, measured as AGENTS.md describes.
 ### RS.9: Settings row
 
 Add a row to `/settings` that adds or removes `todo_write` from `defaultTools`. When
-`defaultTools` is unset, the row writes the current default set plus `todo_write`, so
-enabling one tool does not silently drop the others.
+`defaultTools` is unset, seed it from the session construction defaults plus
+`todo_write`. Preserve configured services and explicit arrays. Project-controlled
+defaults are read-only. The row affects new sessions; current tools and reload
+retain their selection. CLI restrictions keep precedence.
 
 **Done when:** the settings test passes.
 
@@ -146,6 +146,33 @@ systems, and the spec and roadmap carry the landed state in the closing commit.
 None.
 
 ## Notes
+
+The first batch passed `npm test` on 2026-10-03. Agent-core reported 81 files and
+975 tests passed, with one test skipped. Coding-agent reported 447 files and
+4,065 tests passed, with six files and 51 tests skipped. `npm run check` exited 0,
+including TypeScript and documentation validation. The implementation remains
+uncommitted because poteto-mode's required pre-commit `deslop` plugin is unavailable.
+RS.1 through RS.3 retain `Done, unverified` until completion commits provide real SHAs.
+
+The second batch passed full `npm test` on 2026-10-03. Agent-core reported 81 files
+and 975 tests passed, with one test skipped. Coding-agent reported 450 files and
+4,120 tests passed, with six files and 51 tests skipped. `npm run check` exited 0,
+reporting `Checked 1187 files in 12s. No fixes applied.` Documentation lifecycle
+validation passed. RS.4 through RS.6 retain `Done, unverified` until completion
+commits provide real SHAs. The final command output and earlier failing runs are
+recorded under `.apex-code/verification/reachable-surfaces/`.
+
+The third batch passed full `npm test` on 2026-10-03. Agent-core reported 81 files
+and 975 tests passed, with one test skipped. Coding-agent reported 451 files and
+4,165 tests passed, with six files and 51 tests skipped. `npm run check` exited 0,
+reporting `Checked 1188 files in 18s. No fixes applied.` Documentation lifecycle
+validation passed. The preceding full run exposed a startup test that awaited
+core-agent idle before session preparation had finished. The test now awaits the
+public `agent_settled` event and uses scratch cwd; its ordering and message assertions
+remain intact. Production code did not change for that repair. RS.7 retains
+`Done, unverified` until a completion commit provides a real SHA. Final outputs,
+the failing run, terminal transcripts, and review artifacts are recorded under
+`.apex-code/verification/reachable-surfaces/`.
 
 RS.1, RS.2 to RS.3, and RS.4 have no dependencies and can land in any order. RS.6 and
 RS.7 both depend on RS.5. RS.8 and RS.9 are independent of the mode work.

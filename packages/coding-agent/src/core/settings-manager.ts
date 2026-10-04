@@ -260,6 +260,7 @@ export interface Settings {
 	terminal?: TerminalSettings;
 	images?: ImageSettings;
 	enabledModels?: string[]; // Model patterns for cycling (same format as --models CLI flag)
+	taskPanelExpanded?: boolean;
 	defaultTools?: string[]; // Initial built-in tool selection
 	doubleEscapeAction?: "fork" | "tree" | "none"; // Action for double-escape with empty editor (default: "tree")
 	treeFilterMode?: "default" | "no-tools" | "user-only" | "labeled-only" | "all"; // Default filter when opening /tree
@@ -1429,6 +1430,15 @@ export class SettingsManager {
 		this.save();
 	}
 
+	getTaskPanelExpanded(): boolean {
+		return this.globalSettings.taskPanelExpanded ?? false;
+	}
+	setTaskPanelExpanded(expanded: boolean): void {
+		this.globalSettings.taskPanelExpanded = expanded;
+		this.markModified("taskPanelExpanded");
+		this.save();
+	}
+
 	getCollapseChangelog(): boolean {
 		return this.settings.collapseChangelog ?? true;
 	}
@@ -1694,6 +1704,12 @@ export class SettingsManager {
 
 	getEnabledModels(): string[] | undefined {
 		return this.settings.enabledModels;
+	}
+
+	setDefaultTools(names: string[]): void {
+		this.globalSettings.defaultTools = [...names];
+		this.markModified("defaultTools");
+		this.save();
 	}
 
 	getDefaultTools(): string[] | undefined {

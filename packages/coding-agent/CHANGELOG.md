@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- `/tree` asks whether to keep current files, restore files to the selected checkpoint, or cancel when the workspace differs. Keeping files is the default. Navigation reports the workspace outcome, and a restore saves a pre-restore checkpoint.
+- Extensions can pass `workspacePolicy` to `navigateTree`. SDK callers can inspect checkpoint drift without changing files or the conversation through `AgentSession.previewTreeWorkspace()`.
+- Completed interactive runs show a dim `Worked for` duration. Aborted runs show `Interrupted after`, including cancellation during retry backoff. Runs under one second show no duration. The line is never saved to the session or sent to the model.
+- Interactive permission modes have an in-memory session override. It governs tool calls, configured commands, and delegated children above configured mode sources. Bypass is available only when it was in force at startup. Reload, resume, and a new session clear the override; `/settings` still writes the saved user default.
+
+- Plan mode activates `plan_present` when the tool registry admits it. Its selector offers approval with automatic edit acceptance, approval with edit prompts, or continued planning. Approval changes only the session mode and refreshes the footer. Explicitly selected tools remain active; tool allowlists and exclusions still apply.
+
+- Active task lists appear in a pinned panel above the composer. Alt+J and `/tasks` toggle a globally saved expansion preference. The panel follows branch navigation and resume, retains tasks through compaction, and hides a completed list when the run settles. On macOS, Alt+J needs Option configured as Meta.
+- The task-list tool remains opt-in. A `/settings` row adds or removes `todo_write` from saved defaults for new sessions while preserving other tools. Project defaults make the row read-only. Task results show a compact completion count with expandable details.
+
+### Changed
+
+- Shift+Tab now cycles permission modes for this session. Alt+T cycles thinking levels. The footer marks session overrides and shows the bound cycle key; the first cycle explains the new bindings. To restore the old thinking key, set `"app.thinking.cycle": "shift+tab"` and `"app.permissionMode.cycle": "alt+t"` in `~/.apex-code/agent/keybindings.json`, then run `/reload`. On macOS, Alt+T needs Option configured as Meta.
+
 ## [0.5.2] - 2026-09-30
 
 ### Changed

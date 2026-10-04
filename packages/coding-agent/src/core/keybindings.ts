@@ -17,12 +17,14 @@ export interface AppKeybindings {
 	"app.exit": true;
 	"app.suspend": true;
 	"app.thinking.cycle": true;
+	"app.permissionMode.cycle": true;
 	"app.thinking.save": true;
 	"app.model.cycleForward": true;
 	"app.model.cycleBackward": true;
 	"app.model.select": true;
 	"app.tools.expand": true;
 	"app.thinking.toggle": true;
+	"app.tasks.toggle": true;
 	"app.session.toggleNamedFilter": true;
 	"app.editor.external": true;
 	"app.message.copy": true;
@@ -98,8 +100,12 @@ export const KEYBINDINGS = {
 		description: "Suspend to background",
 	},
 	"app.thinking.cycle": {
-		defaultKeys: "shift+tab",
+		defaultKeys: "alt+t",
 		description: "Cycle thinking level",
+	},
+	"app.permissionMode.cycle": {
+		defaultKeys: "shift+tab",
+		description: "Cycle permission mode for this session",
 	},
 	"app.thinking.save": {
 		defaultKeys: "ctrl+s",
@@ -115,6 +121,7 @@ export const KEYBINDINGS = {
 	},
 	"app.model.select": { defaultKeys: "ctrl+l", description: "Open model selector" },
 	"app.tools.expand": { defaultKeys: "ctrl+o", description: "Cycle conversation detail" },
+	"app.tasks.toggle": { defaultKeys: "alt+j", description: "Expand or collapse task panel" },
 	"app.thinking.toggle": {
 		defaultKeys: "ctrl+t",
 		description: "Toggle thinking blocks",

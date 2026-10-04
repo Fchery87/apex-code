@@ -1,0 +1,36 @@
+Initial full npm test and npm run check were interrupted with Ctrl+C, both exit 130, after independent review found a superseded permission-mode-read request race. Neither run is a verification pass. Logs rs7-full-test-interrupted.log and rs7-full-check-interrupted.log.
+
+Full gates before startup regression test correction.
+npm run check
+Exit 0. Checked 1188 files in 47s. No fixes applied. Documentation lifecycle validation passed. Log rs7-full-check-before-startup-test.log.
+npm test
+Exit 1. Root scrubber 21 passed; agent-core 975 passed and 1 skipped. Coding-agent 1 failed | 4164 passed | 51 skipped across 1 failed | 450 passed | 6 skipped files. Duration 1137.79s. The only failure was test/suite/regressions/5943-session-start-notify.test.ts, whose agent.waitForIdle returned before session prompt preparation completed. Log rs7-full-test-startup-red.log.
+npm test --workspace packages/coding-agent -- test/suite/regressions/5943-session-start-notify.test.ts --maxWorkers=1
+Exit 1. Test Files 1 failed (1). Tests 1 failed | 6 passed (7). Duration 12.43s. Log rs7-startup-regression-red.log.
+
+Actual source CLI checks used an offline registered provider in /tmp/apex-rs7-terminal-hlgok6zj/workspace with a separate scratch agent directory. All three selector choices and Escape were exercised. Approvals changed the footer to acceptEdits (session) and default (session); reload restored flag plan. Keep planning and Escape left plan mode unchanged. Session JSONL recorded two approved nextMode details, two rejected decisions, and two system plan_present removals. No permission-mode settings or permission files were written. The final source CLI approval also showed acceptEdits (session), then exited 0 with Ctrl+D. Logs rs7-terminal.log and rs7-final-terminal.log. The final dialog waited during the usage-limit interruption, which is included in its wall-clock duration.
+Automatic approval review temporarily failed to review Enter input due to usage limit; input was not executed then. User resume allowed retry through the same approval path, which succeeded.
+
+Resume final verification
+Final test-only startup fix inspected. Subscriber awaits public agent_settled; file-level scratch hooks isolate writes. No production edits.
+npm run check > .apex-code/verification/reachable-surfaces/rs7-final-full-check.log 2>&1
+exit 0
+Checked 1188 files in 18s. No fixes applied.
+Documentation lifecycle validation passed.
+npm test > .apex-code/verification/reachable-surfaces/rs7-final-full-test.log 2>&1
+Running; final exit and results pending.
+
+Final npm test exit 0.
+Root scrubber: 2 files / 21 tests passed.
+Agent-core: 81 files passed; 975 tests passed | 1 skipped.
+Coding-agent: 451 files passed | 6 skipped; 4165 tests passed | 51 skipped.
+Coding-agent duration 1198.58s.
+Final full log: rs7-final-full-test.log.
+Plan and roadmap updated to RS.1 through RS.7 locally verified, completion commits pending, RS.8 next.
+
+After plan/roadmap update:
+node scripts/validate-docs-lifecycle.mjs .
+exit 0
+Documentation lifecycle validation passed.
+git diff --check
+exit 0, no output.

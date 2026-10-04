@@ -16,6 +16,7 @@ import { AgentSession, type AgentSessionConfig, type AggregateBudgetUsageSnapsho
 import { formatNoModelsAvailableMessage } from "./auth-guidance.ts";
 import { AuthStorage } from "./auth-storage.ts";
 import { CacheWarmer } from "./cache-warmer.ts";
+import { configuredDefaultToolNames } from "./default-tool-names.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { createAgentDefinitionResolver } from "./delegation/agents.ts";
 import {
@@ -442,18 +443,17 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// registered either way, so an explicit `--tools` selection still reaches them and an
 	// unconfigured call still explains itself. Activating an unconfigured tool would put a
 	// name in the prompt that can only ever fail.
-	const defaultActiveToolNames: string[] = [
-		...(["read", "bash", "edit", "write"] satisfies ToolName[]),
-		...(options.lspOperations ? ["lsp"] : []),
-		...(options.webSearchOperations ? (["web_search"] satisfies ToolName[]) : []),
-		...(mcpRuntime ? ["mcp"] : []),
-	];
-	const configuredDefaultToolNames = settingsManager.getDefaultTools();
+	const defaultActiveToolNames = configuredDefaultToolNames({
+		lsp: Boolean(options.lspOperations),
+		webSearch: Boolean(options.webSearchOperations),
+		mcp: Boolean(mcpRuntime),
+	});
+	const savedDefaultToolNames = settingsManager.getDefaultTools();
 	const allowedToolNames = options.tools ?? (options.noTools === "all" ? [] : undefined);
 	const excludedToolNames = options.excludeTools;
 	const excludedToolNameSet = excludedToolNames ? new Set(excludedToolNames) : undefined;
 	const initialActiveToolNames = (
-		options.tools ?? (options.noTools ? [] : (configuredDefaultToolNames ?? defaultActiveToolNames))
+		options.tools ?? (options.noTools ? [] : (savedDefaultToolNames ?? defaultActiveToolNames))
 	).filter((name) => !excludedToolNameSet?.has(name));
 
 	// Create convertToLlm wrapper that filters images if blockImages is enabled (defense-in-depth)
@@ -788,7 +788,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					// No responder: a child's `ask` fails closed rather than prompting the
 					// human for a call the human did not make (ADR 0008, "Who answers a
 					// child's ask").
-					permissionGate: { store: derivedStore, getMode: parentPermissionGate.getMode },
+					permissionGate: {
+						store: derivedStore,
+						getMode: () =>
+							parentSessionRef.current?.getInteractivePermissionMode() ?? parentPermissionGate.getMode(),
+					},
 					// A delegated child shares the parent's cwd-bound LSP pool (spec, "no
 					// multi-root LSP connection and no sharing across cwd-bound service
 					// lifetimes" -- delegated children are the one sharing exception).
@@ -996,6 +1000,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		modelRuntime,
 		cacheWarmer,
 		initialActiveToolNames,
+		implicitDefaultToolNames: defaultActiveToolNames,
 		allowedToolNames,
 		excludedToolNames,
 		extensionRunnerRef,

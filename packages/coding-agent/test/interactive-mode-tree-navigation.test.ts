@@ -26,6 +26,7 @@ function createTreeUI() {
 				ui.session.isStreaming = false;
 			}),
 			abortBranchSummary: vi.fn(),
+			previewTreeWorkspace: vi.fn(async () => ({ state: "matches" as const })),
 			navigateTree: vi.fn(async () => {
 				if (ui.session.isCompacting) throw new Error(busyMessage);
 				return { cancelled: false };
@@ -103,6 +104,7 @@ describe("InteractiveMode tree navigation availability", () => {
 		expect(ui.session.navigateTree).toHaveBeenCalledWith(targetId, {
 			summarize: false,
 			customInstructions: undefined,
+			workspacePolicy: "keep",
 		});
 		expect(ui.showError).not.toHaveBeenCalled();
 	});

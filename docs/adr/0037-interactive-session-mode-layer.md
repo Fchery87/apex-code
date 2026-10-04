@@ -38,8 +38,10 @@ a default.
    session, with the footer showing the result. Ranking it below `flag` would make the
    cycle key inert in every session started with `--permission-mode`, including the
    common `--permission-mode plan`.
-3. **Mode only.** Rules keep ADR 0004's order. A `deny` rule still denies in every mode,
-   and the deny rule written by "Reject always" keeps its meaning.
+3. **Mode only.** Rules keep ADR 0004's order and the existing mode overlays. Explicit
+   denies remain authoritative in `default` and `acceptEdits`; `bypassPermissions`
+   retains its existing override of non-policy denies. A managed-policy deny still
+   denies in bypass mode. The interactive layer changes none of these semantics.
 4. **Never persisted.** The value is not written to `permissions.json`, the session
    file, or settings. Resume, reload, and a new session start without it. `/settings`
    remains the way to change the saved default.

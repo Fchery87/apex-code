@@ -1,7 +1,8 @@
-import { visibleWidth } from "@earendil-works/pi-tui";
+import { setKeybindings, visibleWidth } from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { AgentSession } from "../src/core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../src/core/footer-data-provider.ts";
+import { KeybindingsManager } from "../src/core/keybindings.ts";
 import { FooterComponent, formatCwdForFooter } from "../src/modes/interactive/components/footer.ts";
 import { WorkingStatusIndicator } from "../src/modes/interactive/components/status-indicator.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
@@ -28,6 +29,7 @@ function createSession(options: {
 	usingSubscription?: boolean;
 	percent?: number;
 	cwd?: string;
+	permissionGate?: boolean;
 }): AgentSession {
 	const usage = options.usage;
 	const entries: Array<Record<string, unknown>> = [];
@@ -67,6 +69,7 @@ function createSession(options: {
 	}
 
 	const session = {
+		hasPermissionGate: options.permissionGate ?? true,
 		state: {
 			model: {
 				id: options.modelId ?? "test-model",
@@ -104,6 +107,50 @@ function createFooterData(providerCount: number): ReadonlyFooterDataProvider {
 
 	return provider;
 }
+
+describe("FooterComponent session permission mode", () => {
+	beforeAll(() => initTheme("dark"));
+	it.each(["compact", "full", "off"] as const)(
+		"keeps the session origin visible as the %s tray narrows",
+		(display) => {
+			const footer = new FooterComponent(createSession({ sessionName: "" }), createFooterData(1), {
+				getSymbolPreset: () => "unicode",
+				getColorBlindMode: () => false,
+				getTokenUsageDisplay: () => display,
+			});
+			for (const mode of ["default", "acceptEdits", "plan", "bypassPermissions"] as const) {
+				footer.setPermissionMode(mode, "interactive");
+				for (const width of [120, 40, 30, 20]) {
+					const rendered = footer.render(width);
+					expect(stripAnsi(rendered.join("\n"))).toContain("(session)");
+					for (const line of rendered) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+				}
+			}
+			footer.setPermissionMode("default", "user");
+			expect(stripAnsi(footer.render(100).join("\n"))).not.toContain("(session)");
+		},
+	);
+	it("uses the live cycle key and drops its hint before the mode", () => {
+		setKeybindings(new KeybindingsManager({ "app.permissionMode.cycle": "ctrl+x" }));
+		try {
+			const footer = new FooterComponent(createSession({ sessionName: "" }), createFooterData(1));
+			footer.setPermissionMode("plan", "interactive");
+			expect(stripAnsi(footer.render(120).join("\n"))).toContain("Ctrl+X");
+			const narrow = stripAnsi(footer.render(20).join("\n"));
+			expect(narrow).toContain("plan (session)");
+			expect(narrow).not.toContain("Ctrl+X");
+		} finally {
+			setKeybindings(new KeybindingsManager());
+		}
+	});
+	it("omits an inert cycle hint without a permission gate", () => {
+		const footer = new FooterComponent(
+			createSession({ sessionName: "", permissionGate: false }),
+			createFooterData(1),
+		);
+		expect(stripAnsi(footer.render(120).join("\n"))).not.toContain("Shift+Tab");
+	});
+});
 
 describe("formatCwdForFooter", () => {
 	it("does not abbreviate sibling paths that share the home prefix", () => {

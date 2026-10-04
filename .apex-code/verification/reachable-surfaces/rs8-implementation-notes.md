@@ -1,0 +1,17 @@
+# RS.8 / RS.9 implementation notes
+
+RS.8 uses an internal TaskPanelSession port and an owned normalized snapshot cached by live session object, session ID and leaf ID. Unchanged frames do not scan history. Actual active names gate every rendered frame, including idle SDK changes and temporary hook selections. Todo custom entries remain append-only full replacement snapshots; in-place mutations of old entry payloads are not task updates.
+
+Core panel ownership is separate from the disposable extension container. Existing event forwarding updates whole-run completion retention and requests a frame at agent_settled. Intermediate agent_end does not clear completion. Rebind uses existing isStreaming authority and resets state for new session identity/session ID. Cached normalized copies prevent later raw payload mutations from changing presented rows.
+
+Task rows strip terminal sequences and controls, flatten line breaks and truncate by terminal columns. Truncation's generated ANSI reset is stripped as well. Expanded height is five items and one overflow line. Empty or malformed snapshots render no invalid rows.
+
+The renderer-only registry supplies todo_write presentation without executable-tool imports. Pending call content disappears through shared render context when the result arrives. Success renders one count summary; expanded state discloses all items. ToolExecutionComponent controls per-call and Ctrl+O expansion and real errors preserve their text. Custom renderers retain precedence.
+
+RS.9 uses one configured-default helper. SDK records its original core plus configured LSP/search/MCP names before saved settings, CLI selections and restrictions. Low-level session construction keeps its existing custom-base or core-plus-LSP activation policy. The getter returns defensive copies. The settings row changes future-session defaults only; project-controlled arrays are read-only. Existing arrays retain order and unrelated names; disabling removes every todo occurrence.
+
+Initial panel import failure did not prove behavior. Root required correction; the initial body was deleted and five tests failed against a compileable no-op scaffold before fresh implementation. Subsequent integration and same-session rebind failures were actual public-boundary assertions. Commands and real outcomes are in rs8-commands.txt and referenced log files. Root owns final full gates, CLI driving and performance measurements. This owner has not run them.
+
+Final local feature snapshot passed four files and 25 tests. Related eight-file run passed 153 tests before adding one mounted settlement case; the mounted five-case session run and final four-file run include that added case. Final TypeScript and diff whitespace checks exited 0. All implementation owner processes have exited. Root can now run independent review, full gates and idle-host benchmarks.
+
+Modified feature source files are `core/default-tool-names.ts`, `core/tools/renderers/todo-write.ts`, `modes/interactive/components/task-panel.ts`, `core/tools/renderers/index.ts`, `core/sdk.ts`, `core/agent-session.ts`, `core/settings-manager.ts`, `core/keybindings.ts`, `core/extensions/runner.ts`, `core/slash-commands.ts`, `modes/interactive/components/settings-selector.ts`, and `modes/interactive/interactive-mode.ts`. Feature tests are `task-panel.test.ts`, `task-panel-integration.test.ts`, `task-panel-session.test.ts`, `task-tool-defaults.test.ts`, plus new reserved-key coverage in `extensions-runner.test.ts`. Existing RS.1–RS.7 work is preserved.

@@ -201,7 +201,7 @@ uses for its store:
 
 ```ts
 type PlanDecision = { approved: true; nextMode: "acceptEdits" | "default" } | { approved: false };
-interface PlanPresenter { present(plan: string, ctx: ExtensionContext): Promise<PlanDecision> }
+interface PlanPresenter { present(plan: string, ctx: ExtensionContext, signal?: AbortSignal): Promise<PlanDecision> }
 ```
 
 `AgentSession` supplies the presenter. It renders the plan and asks through
@@ -211,7 +211,11 @@ interface PlanPresenter { present(plan: string, ctx: ExtensionContext): Promise<
 2. `Yes, and ask before each edit`
 3. `No, keep planning`
 
-On approval it sets `interactiveMode` (G2) to `nextMode`. The default presenter,
+On approval it sets `interactiveMode` (G2) to `nextMode`. Tool cancellation closes
+the selector. An approval from a dialog made obsolete by reload, UI rebinding,
+disposal, abort, or a newer session mode change cannot overwrite the current mode.
+A session without a permission gate reports that it cannot apply the selected mode
+instead of reporting a transition that did not happen. The default presenter,
 used when no session supplies one, keeps today's headless failure: it throws when
 `ctx.hasUI` is false.
 
@@ -219,34 +223,61 @@ used when no session supplies one, keeps today's headless failure: it throws whe
 evidence record gains the same optional field, so existing readers are unaffected.
 
 **Activation.** While the effective mode is `plan`, `plan_present` is in the active
-tool set. When the session leaves plan mode it is removed again, unless the user
-listed it explicitly in `--tools` or `defaultTools`.
+tool set when the registry admits it. Explicit tool allowlists and exclusions stay
+authoritative. CLI `--no-tools` excludes it, and `--tools` must include it to admit
+it. When the session leaves plan mode, the automatic addition is removed, while a
+tool explicitly selected through `--tools`, `defaultTools`, or the session tool
+setter remains active. Run-scoped extension tool selections keep their existing
+lifetime. Activation reads the same live gate mode as authorization, including
+custom SDK getters and delegated parent mode changes. Tree navigation preserves
+known explicit plan-tool selection and does not infer it from transcript tool
+names, which also record automatic additions. A low-level resumed session must
+select `plan_present` explicitly or enter plan mode to activate it. Session
+construction remains nonblocking for asynchronous permission getters; the first
+provider request waits for the live mode before choosing tools.
 
 ### G4 — Task panel
 
-**Data.** No new storage. The panel reads `getLatestTodos()` over the current branch,
-on session load, after each `todo_write` result, and after tree navigation. So branch
-and resume are correct for free.
+**Data.** No new task storage. The panel reads `getLatestTodos(sessionManager.getBranch())`
+over the unabridged current branch. It caches a normalized snapshot by live session
+identity, session ID, and leaf ID. Appended full replacements, resume, compaction,
+and tree navigation refresh that cache; unchanged streaming frames do not scan the
+branch. In-place mutation of an existing task entry is not a task update.
 
-**Rendering.** A component in the existing widget area above the composer, shown
-only when the list is non-empty and at least one item is not `completed`.
+**Rendering.** A core-owned component in the existing widget area above the
+composer, separate from extension widget maps. It checks the actual active tool
+selection on each render. When `todo_write` is inactive, empty, or already complete
+at idle, the panel is hidden. Idle SDK tool or branch changes take effect on the
+next requested frame; this feature adds no observer API or polling timer. Rows
+normalize imported data and control text, then truncate by terminal column width.
 
 - Collapsed (default): one line, for example `Tasks 1/4 · Harden client retries`,
   naming the `in_progress` item.
 - Expanded: up to five items with distinct glyphs for completed, in progress, and
   pending, and `+N more` beyond five.
-- When every item is completed, the panel hides at the end of the turn.
+- A newly completed list remains visible through the current run and retry backoff.
+  It hides at `agent_settled`. Starting a later run does not reveal an old completed list.
 
-The toggle is a `/tasks` command and a keybinding `app.tasks.toggle`. Ctrl+T is
-already `app.thinking.toggle`, so the default key is chosen at implementation from the
-free set and recorded. The expanded or collapsed choice is saved as a global setting,
-as `chatDetail` is.
+The toggle is `/tasks` and `app.tasks.toggle`, with `alt+j` as the default.
+Ctrl+T remains the thinking-block toggle. Effective keybinding tests check the new
+default and extension reservation. Terminals must send Alt/Option as Meta for this
+shortcut. The expanded or collapsed choice is saved as the global
+`taskPanelExpanded` setting, collapsed when unset.
 
-The `todo_write` tool cell renders as a compact `Task list updated · 1/4 complete`
-instead of the generic tool display.
+The `todo_write` tool cell renders as a compact `Task list updated · 1/4 complete`.
+Existing per-cell and Ctrl+O expansion disclose the full list. Errors preserve
+their actual text, and custom extension renderers retain precedence.
 
 **Opt-in.** The tool stays out of the default active set. A `/settings` row adds or
-removes `todo_write` from `defaultTools`, so enabling it no longer means editing JSON.
+removes `todo_write` from saved user `defaultTools` for new sessions. It preserves
+the other selected tools. If defaults are unset, the first enable seeds the
+construction defaults, including configured LSP, search, and MCP in SDK sessions.
+One internal helper supplies default selection, and SDK construction records its
+original computed defaults before saved settings or CLI restrictions apply.
+Low-level constructor activation retains its existing policy. The control does
+not change the current session. Project `defaultTools` makes this row read-only
+with an explanation. Explicit CLI selection, exclusions, and no-tools retain
+their precedence.
 
 ### G5 — Turn summary
 
@@ -255,6 +286,11 @@ An aborted turn shows `Interrupted after 12s`. The duration is wall-clock time f
 the turn's first `turn_start` to `agent_end`, so multi-step turns are counted once.
 Turns under one second show nothing. The line is chrome, not a session entry, so it
 does not reach the model or the session file.
+
+Automatic retries retain the first start time and produce one line after the final
+attempt. Cancelling retry backoff also shows `Interrupted after`, even though that
+path ends through `auto_retry_end` rather than another `agent_end`. Errors and budget
+exhaustion keep their existing outcome messages without a completion-duration line.
 
 ### G6 — Records
 
@@ -293,6 +329,7 @@ does not reach the model or the session file.
 | "Landed" wording for Phase 6 in `docs/roadmap.md` | doc | Replaced by an accurate statement (G6). |
 | The WS.6 claim that modes pass the policy through | record | Corrected by amendment in the workspace-state spec. The plan holding it was already deleted. |
 | `getLatestTodos()` as test-only code | status | Gains its first production caller; nothing removed. |
+| Duplicate core default-tool name lists in SDK and low-level session construction | code | Replaced by one helper while retaining their existing configured-service policies. |
 | `shift+tab` as the default for `app.thinking.cycle` (`core/keybindings.ts`) | binding | Replaced by `alt+t`. Shift+Tab moves to `app.permissionMode.cycle`. |
 | "Shift+Tab — Cycle thinking level" in `README.md` and the `app.thinking.cycle` row in `docs/keybindings.md` | doc | Rewritten for the new bindings. |
 
@@ -312,6 +349,11 @@ No source file, session format, or setting is removed.
   as its main cost. An operator who needs a locked mode runs non-interactively.
 - **Restore overwrites external edits.** Mitigated by the default `Keep`, the existing
   pre-restore checkpoint, and showing the prompt only on `differs`.
+- **Cancellation after an approved restore.** The existing `navigateTree()` core
+  resolves workspace policy before extension cancellation and branch summarization.
+  If an extension cancels or the user aborts summarization after approving a restore,
+  files can already be restored while the conversation stays put. The pre-restore
+  checkpoint remains available. Changing that transaction order is outside this spec.
 - **Preview cost on large repositories.** `matchesWorktree` builds a temporary index.
   It is bounded by the engine timeout, and a timeout becomes `unavailable` with no
   prompt, never a guessed restore.
@@ -333,7 +375,7 @@ turn or write a session `chdir` to a scratch directory.
 | G1 | The extension `navigateTree` passes `workspacePolicy` through (extension API test). |
 | G2 | `test/permissions/interactive-mode-override.test.ts`: override beats `flag`, `local`, `project`, `user`; rules are unchanged; nothing is written to disk; `bypassPermissions` appears in the cycle only when allowed at startup. A footer render test shows the session marker. |
 | G3 | `test/tools/plan-present.test.ts` covers the three decisions, `nextMode`, the headless throw, and the evidence field. An interactive test proves approval leaves plan mode and that `plan_present` joins and leaves the active set with plan mode. |
-| G4 | `test/task-panel.test.ts` renders collapsed, expanded, overflow, and all-complete states; an `AgentSession` test proves the panel follows tree navigation and resume. `test/settings-selector.test.ts` covers the task-list tool row. |
+| G4 | `test/task-panel.test.ts` renders collapsed, expanded, overflow, and all-complete states; an `AgentSession` test proves the panel follows tree navigation and resume. `test/task-tool-defaults.test.ts` drives the mounted task-list tool row, future sessions, project-controlled defaults, configured services, and CLI restrictions. The mounted benchmark proves bounded rows and cached branch reads; latency requires an idle-host measurement. |
 | G5 | A component test renders `Worked for`, `Interrupted after`, and nothing under one second, and asserts no session entry is written. |
 | G6 | `node scripts/validate-docs-lifecycle.mjs .` passes, and the two edited records read as described. |
 

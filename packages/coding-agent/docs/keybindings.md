@@ -152,7 +152,8 @@ On native Windows, `app.suspend` has no default because Windows terminals do not
 | `app.model.cycleForward` | `ctrl+p` | Cycle to next model |
 | `app.model.cycleBackward` | `shift+ctrl+p` (`alt+p` on Windows and WSL) | Cycle to previous model |
 | `app.models.save` | `ctrl+s` | Save the selected default model or scoped model configuration to settings |
-| `app.thinking.cycle` | `shift+tab` | Cycle thinking level |
+| `app.permissionMode.cycle` | `shift+tab` | Cycle permission mode for this session |
+| `app.thinking.cycle` | `alt+t` | Cycle thinking level |
 | `app.thinking.save` | `ctrl+s` | Save current thinking level to settings |
 | `app.thinking.toggle` | `ctrl+t` | Collapse or expand thinking blocks |
 
@@ -161,9 +162,13 @@ On native Windows, `app.suspend` has no default because Windows terminals do not
 | Keybinding id | Default | Description |
 |--------|---------|-------------|
 | `app.tools.expand` | `ctrl+o` | Cycle conversation detail: overview (everything collapsed), details (diffs and thinking if enabled in settings), all (full tool output and thinking) |
+| `app.tasks.toggle` | `alt+j` | Expand or collapse the pinned task panel; save the choice globally |
 | `app.message.copy` | `ctrl+x` | Copy the selected message in `/tree`; in fullscreen mode, copy the active selection when `fullscreenCopyOnSelect` is `false`; otherwise copy the last assistant message |
 | `app.message.followUp` | `alt+enter` (`ctrl+q` on Windows and WSL) | Queue follow-up message |
 | `app.message.dequeue` | `alt+up` (`alt+q` on Windows and WSL) | Restore queued messages to editor |
+
+Alt+J requires your terminal to send Alt/Option as Meta. The `/tasks`
+command performs the same toggle.
 
 ### Tree Navigation
 
@@ -206,6 +211,19 @@ Create `~/.apex-code/agent/keybindings.json`:
 ```
 
 Each action can have a single key or an array of keys. User config overrides defaults.
+
+Shift+Tab cycles permission modes for the current session. It does not change the
+saved default. Alt+T cycles thinking levels. To restore the old thinking shortcut
+without assigning both actions to the same key, swap them:
+
+```json
+{
+  "app.thinking.cycle": "shift+tab",
+  "app.permissionMode.cycle": "alt+t"
+}
+```
+
+On macOS, configure Option as Meta to use Alt+T, as with the other Alt shortcuts.
 
 On native Windows, `app.suspend` has no default binding because Windows terminals do not support Unix job control. If you bind it manually, Apex Code shows a status message instead of suspending. In WSL, the normal Linux `ctrl+z`/`fg` behavior still applies.
 

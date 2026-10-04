@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0 through 12 landed · **Created:** 2026-08-08 · **Last updated:** 2026-09-29
+**Status:** Active — Phases 0 through 12 landed · **Created:** 2026-08-08 · **Last updated:** 2026-10-03
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -88,7 +88,7 @@ capable and measurably worse.
 | 3 | Context engineering | **landed** — eviction + deferred schemas verified against the replay corpus · `72a2fefe4` | [spec](specs/2026-08-13-context-engineering.md) | — |
 | 4 | Tool surface | **landed** — all 7 tasks (4.1–4.7) done, budget fixed at 2,150/2,300 tokens · `faffaa79e` | [spec](specs/2026-08-13-tool-surface.md) | — |
 | 5 | Delegation & multi-agent | **landed** — 7 of 7 tasks · `be00e1ab0` | [spec](specs/2026-08-14-delegation-and-multi-agent.md) | — |
-| 6 | Durable state & daemon | **landed** — 6 of 6 tasks · `baf5e5302` (full-suite audit recorded) | [spec](specs/2026-08-15-durable-state-and-daemon.md) | — |
+| 6 | Durable state & daemon | **landed** · `baf5e5302`. The daemon, journal, and leases are test-verified by `packages/coding-agent/test/durable-state/` and are not started by the CLI. `apex-code cost` and the usage store use the SQLite sidecar. | [spec](specs/2026-08-15-durable-state-and-daemon.md) | — |
 | 7 | Evidence & verification | **landed** — 7 of 7 tasks · `c82584312` (clean Node 22 verification) | [spec](specs/2026-08-16-evidence-and-verification.md) | — |
 | 8 | Observability & cost | **landed** — 7 of 7 tasks, exit criterion amended before implementation · `9c7c9e9aa` | [spec](specs/2026-08-15-observability-and-cost.md) | — |
 | 9 | Release hardening | **landed** — 6 of 6 tasks · `a0be145d7` | [spec](specs/2026-08-16-release-hardening.md) | — |
@@ -140,7 +140,7 @@ capable and measurably worse.
 | Chrome consistency | **landed** — one hint-row grammar, one composer-dock edge with the `›` prompt, sentence-case titles, no palette scope letters, `cache N%` and `<0.1%` in the footer, and a one-line update notice by default · `bec01911c`, `4e945ae48`, `56b402a50`, `b7184d84f`, `6043344a4` · `npm test` green | [spec](specs/2026-09-22-chrome-consistency.md) | — |
 | Collapsed-by-default transcript | **landed** — PR #148 merged at `786a3bb49` after CI run 36348108639 passed on Ubuntu, macOS, and Windows | [spec](specs/2026-09-25-collapsed-by-default-transcript.md) | — |
 | Self-update quality audit | **landed**. PR #166 merged at `adeb7b942` after Ubuntu, macOS, Windows, and upstream-integrity checks passed. Ordered CLI output and failure diagnostics are pinned; unreachable note rendering and duplicate success reporting are removed. | [spec](specs/2026-09-29-self-update-quality.md) | — |
-| Reachable harness surfaces | **planned** — RS.1 through RS.10, none started. Wires the checkpoint restore prompt into `/tree`, a session-scoped permission mode, plan approval that leaves plan mode, a pinned task panel, and an end-of-turn summary; corrects the WS.6 and Phase 6 records. [ADR 0037](adr/0037-interactive-session-mode-layer.md) settles the session mode layer; Shift+Tab cycles permission modes and the thinking cycle moves to `alt+t` · research in [`2026-10-03-harness-display-survey.md`](research/2026-10-03-harness-display-survey.md) | [spec](specs/2026-10-03-reachable-harness-surfaces.md) | [plan](plans/2026-10-03-reachable-harness-surfaces.md) |
+| Reachable harness surfaces | **in progress**. RS.1 through RS.7 passed full local gates; completion commits are pending. The records are corrected, `/tree` asks before restoring changed files, turn durations appear as transient chrome, and the session permission layer governs tools, configured commands, and delegated children. Shift+Tab cycles permission modes, the footer marks session overrides, and the thinking cycle moves to `alt+t`. Plan approval offers three choices and switches the session mode on acceptance. RS.8 and RS.9 are implemented with a pinned task panel, compact task results, and a settings row for future-session task defaults. Focused checks, actual terminal checks, independent review, and final full local gates passed. Idle-host performance verification, completion commits, and three-OS CI remain pending. [ADR 0037](adr/0037-interactive-session-mode-layer.md) settles the session mode layer · research in [`2026-10-03-harness-display-survey.md`](research/2026-10-03-harness-display-survey.md) | [spec](specs/2026-10-03-reachable-harness-surfaces.md) | [plan](plans/2026-10-03-reachable-harness-surfaces.md) |
 
 ---
 

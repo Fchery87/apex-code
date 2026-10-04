@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { type AssistantMessage, createAssistantMessageEventStream, fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { getModel, streamSimple } from "@earendil-works/pi-ai/compat";
 import { Agent } from "apex-code-agent-core";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentSession } from "../src/core/agent-session.ts";
 import {
 	type AgentSessionRuntime,
@@ -36,10 +36,13 @@ describe("session tree navigation workspace policies", () => {
 	let session: AgentSession;
 	let sessionManager: SessionManager;
 	let settingsManager: SettingsManager;
+	let originalCwd: string;
 	let engine: NonNullable<Awaited<ReturnType<typeof createGitCheckpoints>>>;
 
 	beforeEach(() => {
+		originalCwd = process.cwd();
 		tempDir = mkdtempSync(join(tmpdir(), "apex-ws-tree-"));
+		process.chdir(tempDir);
 		sessionsDir = join(tempDir, "sessions");
 		mkdirSync(sessionsDir, { recursive: true });
 		execFileSync("git", ["init", "-b", "main", tempDir]);
@@ -56,6 +59,7 @@ describe("session tree navigation workspace policies", () => {
 
 	afterEach(() => {
 		session?.dispose();
+		process.chdir(originalCwd);
 		rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
@@ -63,7 +67,7 @@ describe("session tree navigation workspace policies", () => {
 		return execFileSync("git", args, { cwd, encoding: "utf-8" });
 	}
 
-	async function createSession(): Promise<AgentSession> {
+	async function createSession(checkpointSettings?: { enabled: boolean }): Promise<AgentSession> {
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "sk-test-unused" }));
 		const modelRegistry = await createModelRegistry(authStorage);
@@ -78,6 +82,7 @@ describe("session tree navigation workspace policies", () => {
 			}),
 			sessionManager,
 			settingsManager,
+			checkpointSettings,
 			cwd: tempDir,
 			modelRuntime: getModelRuntime(modelRegistry),
 			resourceLoader: createTestResourceLoader(),
@@ -172,6 +177,78 @@ describe("session tree navigation workspace policies", () => {
 		const checkpoint = await engine.capture(entryId);
 		expect(checkpoint).toBeDefined();
 	}
+
+	it.each(["no-checkpoint", "matches", "differs"] as const)(
+		"previews %s without changing files or the leaf",
+		async (state) => {
+			await createSession();
+			const { firstAssistant } = await seedTwoTurns();
+			if (state !== "no-checkpoint") await checkpointAt(firstAssistant);
+			if (state === "differs") {
+				writeFileSync(join(tempDir, "tracked.txt"), "edited\n");
+				writeFileSync(join(tempDir, "extra.txt"), "external edit\n");
+			}
+			const leaf = sessionManager.getLeafId();
+			const before = git(tempDir, "status", "--porcelain", "--untracked-files=all");
+			const refs = git(tempDir, "for-each-ref", "refs/apex-code");
+			const entries = sessionManager.getEntries();
+			const sessionFile = sessionManager.getSessionFile()!;
+			const contents = readFileSync(sessionFile, "utf-8");
+			expect(await session.previewTreeWorkspace(firstAssistant)).toEqual({ state });
+			expect(sessionManager.getLeafId()).toBe(leaf);
+			expect(sessionManager.getEntries()).toEqual(entries);
+			expect(readFileSync(sessionFile, "utf-8")).toBe(contents);
+			if (state === "differs") expect(readFileSync(join(tempDir, "extra.txt"), "utf-8")).toBe("external edit\n");
+			expect(git(tempDir, "status", "--porcelain", "--untracked-files=all")).toBe(before);
+			expect(git(tempDir, "for-each-ref", "refs/apex-code")).toBe(refs);
+			expect(readFileSync(join(tempDir, "tracked.txt"), "utf-8")).toBe(
+				state === "differs" ? "edited\n" : "checkpointed\n",
+			);
+		},
+	);
+
+	it("previews unavailable when checkpoints are disabled", async () => {
+		await createSession({ enabled: false });
+		const { firstAssistant } = await seedTwoTurns();
+		expect(await session.previewTreeWorkspace(firstAssistant)).toEqual({
+			state: "unavailable",
+			reason: "checkpoints are unavailable; workspace left unchanged",
+		});
+		expect((await session.navigateTree(firstAssistant, { workspacePolicy: "restore" })).workspace).toEqual({
+			policy: "restore",
+			outcome: "missing-checkpoint",
+			warnings: ["checkpoints are unavailable; workspace left unchanged"],
+		});
+	});
+
+	it.each(["undefined", "throw"])("previews unavailable when comparison returns %s", async (failure) => {
+		await createSession();
+		const { firstAssistant } = await seedTwoTurns();
+		await checkpointAt(firstAssistant);
+		const resolved = (await session.checkpoints.engine())!;
+		const compare = vi.spyOn(resolved, "matchesWorktree");
+		if (failure === "throw") compare.mockRejectedValue(new Error("comparison broke"));
+		else compare.mockResolvedValue(undefined);
+		const leaf = sessionManager.getLeafId();
+		expect(await session.previewTreeWorkspace(firstAssistant)).toEqual({
+			state: "unavailable",
+			reason:
+				failure === "throw"
+					? "workspace policy check failed: comparison broke"
+					: "could not compare the workspace against the checkpoint",
+		});
+		expect(sessionManager.getLeafId()).toBe(leaf);
+		expect(readFileSync(join(tempDir, "tracked.txt"), "utf-8")).toBe("checkpointed\n");
+		const result = await session.navigateTree(firstAssistant, { workspacePolicy: "restore" });
+		expect(result.cancelled).toBe(false);
+		expect(result.workspace?.outcome).toBe("failed");
+		expect(result.workspace?.warnings).toEqual([
+			failure === "throw"
+				? "workspace policy check failed: comparison broke"
+				: "could not compare the workspace against the checkpoint",
+		]);
+		expect(readFileSync(join(tempDir, "tracked.txt"), "utf-8")).toBe("checkpointed\n");
+	});
 
 	it("keep policy (the default) never changes files", async () => {
 		await createSession();
@@ -272,9 +349,11 @@ describe("session tree navigation workspace policies", () => {
 describe("session fork keeps the workspace untouched", () => {
 	let tempDir: string;
 	let runtimeHost: AgentSessionRuntime;
+	let originalCwd: string;
 
 	afterEach(async () => {
 		if (runtimeHost) await runtimeHost.dispose();
+		if (originalCwd) process.chdir(originalCwd);
 		if (tempDir) rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
@@ -283,7 +362,9 @@ describe("session fork keeps the workspace untouched", () => {
 	}
 
 	it("fork is purely conversational and changes no files", async () => {
+		originalCwd = process.cwd();
 		tempDir = mkdtempSync(join(tmpdir(), "apex-ws-fork-"));
+		process.chdir(tempDir);
 		mkdirSync(join(tempDir, "sessions"), { recursive: true });
 		execFileSync("git", ["init", "-b", "main", tempDir]);
 		git(tempDir, "config", "user.email", "ws@example.com");
