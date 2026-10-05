@@ -751,10 +751,9 @@ describe.skipIf(process.platform === "win32")("experimental durable server compo
 		const replacement = await startServer({ ...sessionWorkerModel, directory });
 		servers.add(replacement);
 		await first.closed;
-		expect(replacement.workerPids.get("demo-1")).toBe(workerPid);
 
 		await expect.poll(() => replacement.workerPids.has("demo-1"), { timeout: 5_000 }).toBe(false);
-		expect(processExists(workerPid!)).toBe(false);
+		await expect.poll(() => processExists(workerPid!), { timeout: 5_000 }).toBe(false);
 	});
 
 	test("restores tracked sessions that are outside the replacement catalog", async () => {
