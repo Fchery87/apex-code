@@ -1,6 +1,11 @@
 # Spec: Compact operation output
 
-**Status:** Active
+**Status:** Landed
+
+Integrated through [PR #168](https://github.com/Fchery87/apex-code/pull/168) at
+`3031cd7c8ef9e908ae9f0b1c6bc532ae5594b9cf`. Independent reviews passed the original
+implementation and mouse-fix delta. Required Linux, macOS, Windows, and upstream
+boundary checks passed before merge.
 
 ## Outcome
 
@@ -52,7 +57,7 @@ with deterministic fixtures and capture the results under `.apex-code/`.
 
 ### Local verification, October 4, 2026
 
-The implementation is verified locally and awaits integration. Public rendering
+The implementation was verified locally before integration. Public rendering
 tests failed before the corresponding fixes and now pass, including error selection,
 long-label diagnostics, queued clicks, individual collapse, and blank output lines.
 
