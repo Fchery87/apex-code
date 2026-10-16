@@ -86,6 +86,7 @@ export function createReadToolDefinition(
 			permission: createPathPermissionSpec({
 				cwd,
 				defaultBehavior: "allow",
+				outsideWorkspace: "parent",
 				verb: "Read",
 				getPath: (params) => params.path,
 			}),

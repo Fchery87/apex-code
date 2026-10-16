@@ -72,6 +72,7 @@ export function createLsToolDefinition(
 			permission: createPathPermissionSpec({
 				cwd,
 				defaultBehavior: "allow",
+				outsideWorkspace: "target",
 				verb: "List",
 				getPath: (params) => params.path,
 			}),

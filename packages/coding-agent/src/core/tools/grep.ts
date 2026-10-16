@@ -88,6 +88,7 @@ export function createGrepToolDefinition(
 			permission: createPathPermissionSpec({
 				cwd,
 				defaultBehavior: "allow",
+				outsideWorkspace: "target",
 				verb: "Search",
 				getPath: (params) => params.path,
 			}),
