@@ -278,15 +278,17 @@ Upstream Pi defined the read-tool defaults, compaction, the system prompt skelet
 
 Two parts of HR.4 are deliberately narrower than first written.
 
-- **No DNS pinning.** HR.4 proposed a dedicated undici agent that connects to the address
-  it checked. That would bypass the proxy-aware global dispatcher that `web_fetch` must keep
-  using (see `tools/web-fetch.ts`). When `HTTP_PROXY` or `HTTPS_PROXY` is set, the proxy
-  resolves the target, so the client cannot pin it. The check resolves the host first and
-  refuses if any address is private, loopback, or link-local. A rebinding window between the
-  check and the connection remains. Pinning returns in a follow-up that covers the proxy case.
-- **User settings only, for now.** `webFetch.allowPrivateNetwork` is read from user
-  settings. Reading it from `policies` is not wired yet, because the policy file's shape
-  for this key needs its own decision. Project settings cannot enable it.
+- **DNS pinning, resolved.** Without a proxy, each `web_fetch` hop connects through an agent
+  whose lookup returns only the addresses the check passed. A later DNS answer cannot move
+  the connection. With `HTTP_PROXY`, `HTTPS_PROXY`, or `ALL_PROXY` set, the proxy resolves
+  the target, so the request uses the global proxy-aware fetch, and the check still runs
+  first. A test pins the connection by resolving a name that does not exist in DNS. The
+  proxy case cannot be pinned, and this is its stated limit.
+- **User settings only.** `webFetch.allowPrivateNetwork` is read from user settings and
+  nothing else. The `policies` key was considered and rejected. It holds verification and
+  formatter configuration, and it merges project settings, so a checked-in project file could
+  turn the setting on, which is the outcome HR.4 exists to prevent. This resolves the policy
+  question this amendment previously left open.
 
 ### Stage 1. Security
 
@@ -295,7 +297,7 @@ Two parts of HR.4 are deliberately narrower than first written.
 | HR.1 | `createPathPermissionSpec` gains an option that makes `defaultBehaviorFor` return `ask` when `withinWorkspace` is false. `read`, `grep`, `find`, and `ls` set it. `write` and `edit` already ask. For a target outside the workspace, `ruleForCall` returns `<directory>/**`, where the directory is the target itself for `grep`, `find`, and `ls`, and the file's parent for `read`. Inside the workspace it keeps returning the exact path. | `tools/path-permission.ts`, the four tools |
 | HR.2 | Two tiers. `describeProtectedTarget` gains a fixed table of home-relative credential locations (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gcloud`, `~/.kube`, `~/.docker/config.json`, `~/.netrc`, `~/.npmrc`), matched with ancestors as `auth.json` already is. A new sensitive-path check covers `.env*` basenames minus the three template names. It makes the default `ask` wherever the file sits. An allow rule grants a sensitive path only when the rule's pattern names the file's basename (for example `**/.env` or `~/repo/.env`). A directory or wildcard rule that merely covers it does not. | `permissions/protected-paths.ts`, `tools/path-permission.ts` |
 | HR.3 | `fetch` with `redirect: "manual"`. A same-host redirect is followed, up to 5 hops. A cross-host redirect ends the call, with the target URL in the result text, so the model's next call goes through the gate. | `tools/web-fetch.ts` |
-| HR.4 | A dedicated undici `Agent` whose `connect.lookup` resolves the hostname, rejects blocked ranges, and connects to the checked address, which closes DNS rebinding. Blocked ranges are loopback, 0.0.0.0/8, RFC 1918, 100.64.0.0/10, 169.254.0.0/16, fc00::/7, fe80::/10, and IPv4-mapped forms of all of them. The `webFetch.allowPrivateNetwork` setting re-enables private ranges. Reading it is limited to user and policy settings, so a project cannot turn it on. | `tools/web-fetch.ts`, `settings-manager.ts` |
+| HR.4 | A dedicated undici `Agent` whose `connect.lookup` resolves the hostname, rejects blocked ranges, and connects to the checked address, which closes DNS rebinding. Blocked ranges are loopback, 0.0.0.0/8, RFC 1918, 100.64.0.0/10, 169.254.0.0/16, fc00::/7, fe80::/10, and IPv4-mapped forms of all of them. The `webFetch.allowPrivateNetwork` setting re-enables private ranges. Reading it is limited to user settings, so a project cannot turn it on. | `tools/web-fetch.ts`, `settings-manager.ts` |
 | HR.5 | Stdio env becomes `getDefaultEnvironment()` from `@modelcontextprotocol/client/stdio`, then the entry's `env` with each value passed through `resolveConfigValue`, the syntax provider keys and web search already use. `!command` stays allowed in a project `.mcp.json`, because that file can already run any command as a stdio server. A server that exits during connect gets a hint showing `"NAME": "$NAME"`. | `mcp/connector.ts`, `mcp/config.ts` |
 | HR.6 | Session writes pass `mode: 0o600`. Directory creation passes `0o700`. Opening an existing session file `chmod`s it to `0600` when it is looser. On Windows these calls are no-ops. | `session-manager.ts` |
 | HR.7 | A transcript redactor replaces credential-shaped substrings before upload. The patterns are provider key prefixes (`sk-`, `sk-ant-`, `ghp_`, `gho_`, `github_pat_`, `xox[bp]-`, `AKIA`, `AIza`) and PEM private-key blocks, plus the existing URL and JSON-key redaction. A confirmation names the gist's visibility and the redaction count. | `core/session-share.ts`, `core/bug-report.ts` helpers |

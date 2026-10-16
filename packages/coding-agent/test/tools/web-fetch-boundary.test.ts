@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createWebFetchTool } from "../../src/core/tools/web-fetch.ts";
 
 interface LocalServer {
@@ -112,5 +112,38 @@ describe("web_fetch private-network guard (HR.4)", () => {
 	it("allows loopback when the setting is enabled", async () => {
 		const server = await serve(() => ({ status: 200, body: "local ok" }));
 		expect(await run(fetchTool(true), `${server.url}/`)).toBe("local ok");
+	});
+});
+
+describe("web_fetch connects to the address it checked (HR.4 pinning)", () => {
+	const proxyVars = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"];
+	const savedProxy: Record<string, string | undefined> = {};
+	beforeEach(() => {
+		for (const name of proxyVars) {
+			savedProxy[name] = process.env[name];
+			delete process.env[name];
+		}
+	});
+	afterEach(() => {
+		for (const name of proxyVars) {
+			if (savedProxy[name] === undefined) delete process.env[name];
+			else process.env[name] = savedProxy[name];
+		}
+	});
+
+	it("resolves the host once and connects to that address, never resolving again", async () => {
+		const server = await serve(() => ({ status: 200, body: "pinned ok" }));
+		const port = new URL(server.url).port;
+		const calls: string[] = [];
+		const tool = createWebFetchTool({
+			allowPrivateNetwork: true,
+			resolveHost: async (host) => {
+				calls.push(host);
+				return [{ address: "127.0.0.1", family: 4 }];
+			},
+		});
+		const result = await tool.execute("call", { url: `http://pinned.example.invalid:${port}/` });
+		expect((result.content[0] as { text: string }).text).toBe("pinned ok");
+		expect(calls).toEqual(["pinned.example.invalid"]);
 	});
 });

@@ -1,7 +1,8 @@
-import { lookup } from "node:dns/promises";
+import { lookup as systemLookup } from "node:dns/promises";
 import type { AgentToolResult } from "apex-code-agent-core";
 import { minimatch } from "minimatch";
 import { type Static, Type } from "typebox";
+import { Agent, fetch as undiciFetch } from "undici";
 import type { ApexToolDefinition } from "./contract.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 import { DEFAULT_MAX_BYTES, formatSize, truncateHead } from "./truncate.ts";
@@ -80,58 +81,112 @@ export function isBlockedAddress(address: string): boolean {
 	return allZero || loopback || uniqueLocal || linkLocal;
 }
 
-/**
- * Refuses a URL before any request is sent: only http and https, and every address its
- * host resolves to must be public. An IP literal resolves to itself. This check runs on
- * each redirect hop too, so a public host cannot bounce the request to a private one.
- */
-async function assertPublicDestination(url: URL, allowPrivateNetwork: boolean): Promise<void> {
-	if (url.protocol !== "http:" && url.protocol !== "https:") {
-		throw new Error(`web_fetch refused: unsupported URL scheme ${url.protocol}, only http and https are supported.`);
-	}
-	if (allowPrivateNetwork) return;
-	const host = url.hostname.replace(/^\[|\]$/g, "");
-	const addresses = await lookup(host, { all: true, verbatim: true });
-	const blocked = addresses.find((entry) => isBlockedAddress(entry.address));
-	if (blocked) {
-		throw new Error(
-			`web_fetch refused ${url.hostname}: it resolves to ${blocked.address}, a private, loopback, or link-local address. Set webFetch.allowPrivateNetwork to allow it.`,
-		);
-	}
+export interface ResolvedAddress {
+	address: string;
+	family: number;
+}
+
+/** Resolves a host to every address it currently maps to. Injected in tests. */
+export type ResolveHost = (host: string) => Promise<ResolvedAddress[]>;
+
+const systemResolveHost: ResolveHost = (host) => systemLookup(host, { all: true, verbatim: true });
+
+const PROXY_VARIABLES = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"];
+
+/** A configured proxy resolves the target itself, so the client cannot pin the address it checked. */
+function proxyConfigured(): boolean {
+	return PROXY_VARIABLES.some((name) => Boolean(process.env[name]));
 }
 
 /**
- * Runs in the same process as every other tool. `globalThis.fetch` is undici's global
- * fetch, made proxy-aware by `configureHttpDispatcher` (an `EnvHttpProxyAgent` reading
- * HTTP_PROXY/HTTPS_PROXY) at CLI startup. The tool deliberately never opens a raw
- * socket, so any transport policy the environment imposes still applies to it.
- *
- * Redirects are followed by hand. A hop to a different host is not followed: the target
- * is returned as text, and the model's next call to it goes through the permission gate.
+ * Refuses a URL before any request is sent: only http and https, and every address its
+ * host resolves to must be public (unless the setting allows private destinations). Returns
+ * the resolved addresses, so the connection can be pinned to the very addresses checked.
+ * An IP literal resolves to itself.
  */
-function createDefaultWebFetchOperations(allowPrivateNetwork: boolean): WebFetchOperations {
+async function checkDestination(
+	url: URL,
+	allowPrivateNetwork: boolean,
+	resolveHost: ResolveHost,
+): Promise<ResolvedAddress[]> {
+	if (url.protocol !== "http:" && url.protocol !== "https:") {
+		throw new Error(`web_fetch refused: unsupported URL scheme ${url.protocol}, only http and https are supported.`);
+	}
+	const host = url.hostname.replace(/^\[|\]$/g, "");
+	const addresses = await resolveHost(host);
+	if (addresses.length === 0) throw new Error(`web_fetch could not resolve ${url.hostname}.`);
+	if (!allowPrivateNetwork) {
+		const blocked = addresses.find((entry) => isBlockedAddress(entry.address));
+		if (blocked) {
+			throw new Error(
+				`web_fetch refused ${url.hostname}: it resolves to ${blocked.address}, a private, loopback, or link-local address. Set webFetch.allowPrivateNetwork to allow it.`,
+			);
+		}
+	}
+	return addresses;
+}
+
+/**
+ * A DNS lookup that answers only with the addresses already checked. The connection
+ * therefore reaches the address the check passed, even if the name would now resolve
+ * somewhere else (DNS rebinding).
+ */
+function pinnedLookup(addresses: readonly ResolvedAddress[]) {
+	return (
+		_hostname: string,
+		options: { all?: boolean } | number | undefined,
+		callback: (error: Error | null, address: unknown, family?: number) => void,
+	) => {
+		if (typeof options === "object" && options?.all) {
+			callback(null, addresses);
+			return;
+		}
+		callback(null, addresses[0].address, addresses[0].family);
+	};
+}
+
+/**
+ * Runs in the same process as every other tool. Redirects are followed by hand. A hop to a
+ * different host is not followed: the target is returned as text, and the model's next call
+ * to it goes through the permission gate.
+ *
+ * Without a proxy, each hop connects through an agent pinned to the addresses it checked.
+ * With a proxy configured, the global proxy-aware fetch is used, and the check still runs
+ * first, but the proxy resolves the target, so the address is not pinned.
+ */
+function createDefaultWebFetchOperations(allowPrivateNetwork: boolean, resolveHost: ResolveHost): WebFetchOperations {
 	return {
 		async fetch(url, signal) {
 			let current = new URL(url);
 			for (let hop = 0; ; hop++) {
-				await assertPublicDestination(current, allowPrivateNetwork);
-				const response = await globalThis.fetch(current.href, { signal, redirect: "manual" });
-				if (!REDIRECT_STATUSES.has(response.status)) {
-					return { status: response.status, text: await response.text() };
+				const addresses = await checkDestination(current, allowPrivateNetwork, resolveHost);
+				const agent = proxyConfigured()
+					? undefined
+					: new Agent({ connect: { lookup: pinnedLookup(addresses) as never } });
+				try {
+					const response = (agent
+						? await undiciFetch(current.href, { signal, redirect: "manual", dispatcher: agent })
+						: await globalThis.fetch(current.href, { signal, redirect: "manual" })) as unknown as Response;
+					if (!REDIRECT_STATUSES.has(response.status)) {
+						return { status: response.status, text: await response.text() };
+					}
+					const location = response.headers.get("location");
+					await response.body?.cancel();
+					if (!location)
+						return { status: response.status, text: "The server redirected without a Location header." };
+					const next = new URL(location, current);
+					if (next.host !== current.host) {
+						return {
+							status: response.status,
+							text: `The server redirected to ${next.href}, a different host. Fetch that URL separately to continue.`,
+						};
+					}
+					if (hop >= MAX_REDIRECTS)
+						throw new Error(`web_fetch stopped: too many redirects (limit ${MAX_REDIRECTS}).`);
+					current = next;
+				} finally {
+					await agent?.close();
 				}
-				const location = response.headers.get("location");
-				await response.body?.cancel();
-				if (!location) return { status: response.status, text: "The server redirected without a Location header." };
-				const next = new URL(location, current);
-				if (next.host !== current.host) {
-					return {
-						status: response.status,
-						text: `The server redirected to ${next.href}, a different host. Fetch that URL separately to continue.`,
-					};
-				}
-				if (hop >= MAX_REDIRECTS)
-					throw new Error(`web_fetch stopped: too many redirects (limit ${MAX_REDIRECTS}).`);
-				current = next;
 			}
 		},
 	};
@@ -139,8 +194,10 @@ function createDefaultWebFetchOperations(allowPrivateNetwork: boolean): WebFetch
 
 export interface WebFetchToolOptions {
 	operations?: WebFetchOperations;
-	/** Allow loopback, private, and link-local destinations. Set from user or policy settings only. */
+	/** Allow loopback, private, and link-local destinations. Set from user settings only. */
 	allowPrivateNetwork?: boolean;
+	/** How hosts are resolved for the check and the pinned connection. The system resolver by default. */
+	resolveHost?: ResolveHost;
 }
 
 function hostAndPath(url: string): string {
@@ -151,7 +208,9 @@ function hostAndPath(url: string): string {
 export function createWebFetchToolDefinition(
 	options?: WebFetchToolOptions,
 ): ApexToolDefinition<typeof webFetchSchema, WebFetchDetails> {
-	const ops = options?.operations ?? createDefaultWebFetchOperations(options?.allowPrivateNetwork === true);
+	const ops =
+		options?.operations ??
+		createDefaultWebFetchOperations(options?.allowPrivateNetwork === true, options?.resolveHost ?? systemResolveHost);
 	return {
 		name: "web_fetch",
 		label: "web_fetch",

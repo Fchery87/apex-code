@@ -1,6 +1,6 @@
 # Plan: Fix the 2026-10-16 harness review findings
 
-**Status:** In progress. The spec is Active. Stage 1 starts with HR.1.
+**Status:** In progress. The spec is Active. Stage 1 verified; Stage 2 next.
 
 **Spec:** [Harness review remediation](../specs/2026-10-16-harness-review-remediation.md)
 
@@ -59,6 +59,8 @@ States: `Not started`, `In progress`, `Done, unverified`, `Done`.
 
 `Done` requires a real SHA that passes `git cat-file -t`, and a verification that
 actually ran. `Done, unverified` is honest and must say what is missing.
+
+Stage 1 gap fixes (2026-10-16): `grep` skips `.env` and `.env.<suffix>` contents during recursive search, keeping template names (test/tools/grep-sensitive.test.ts). `find` and `ls` return names only, which the gap did not cover. Pinning: HR.4 connections use an agent pinned to the checked addresses, with the proxy case documented in the spec amendment. Full `npm test` passed: 4,275 coding-agent tests.
 
 ## Order changes
 

@@ -90,15 +90,22 @@ describe("web_fetch default operations use the global, proxy-aware fetch (task 4
 		vi.restoreAllMocks();
 	});
 
-	it("delegates to globalThis.fetch when no operations are injected -- these tools never bypass the sandbox's proxy-aware dispatcher", async () => {
-		const fetchSpy = vi
-			.spyOn(globalThis, "fetch")
-			.mockResolvedValue(new Response("real fetch content", { status: 200 }));
+	it("delegates to globalThis.fetch when a proxy is configured -- the proxy resolves the target, so the tool uses the proxy-aware dispatcher", async () => {
+		const saved = process.env.HTTPS_PROXY;
+		process.env.HTTPS_PROXY = "http://proxy.invalid:3128";
+		try {
+			const fetchSpy = vi
+				.spyOn(globalThis, "fetch")
+				.mockResolvedValue(new Response("real fetch content", { status: 200 }));
 
-		const tool = createWebFetchTool();
-		const result = await tool.execute("call-1", { url: "https://example.com/real" });
+			const tool = createWebFetchTool();
+			const result = await tool.execute("call-1", { url: "https://example.com/real" });
 
-		expect(fetchSpy).toHaveBeenCalledWith("https://example.com/real", expect.anything());
-		expect(result.content[0]).toMatchObject({ type: "text", text: "real fetch content" });
+			expect(fetchSpy).toHaveBeenCalledWith("https://example.com/real", expect.anything());
+			expect(result.content[0]).toMatchObject({ type: "text", text: "real fetch content" });
+		} finally {
+			if (saved === undefined) delete process.env.HTTPS_PROXY;
+			else process.env.HTTPS_PROXY = saved;
+		}
 	});
 });
