@@ -228,6 +228,11 @@ export function parseArgs(args: readonly string[]): Args {
 			result.model = args[++i];
 		} else if (arg === "--api-key" && i + 1 < args.length) {
 			result.apiKey = args[++i];
+			result.diagnostics.push({
+				type: "warning",
+				message:
+					"--api-key puts the key in your shell history and in process listings. Use /login, or an environment variable, instead.",
+			});
 		} else if (arg === "--system-prompt" && i + 1 < args.length) {
 			result.systemPrompt = args[++i];
 		} else if (arg === "--append-system-prompt" && i + 1 < args.length) {
