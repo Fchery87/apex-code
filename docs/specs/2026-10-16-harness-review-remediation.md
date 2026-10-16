@@ -244,7 +244,7 @@ Upstream Pi defined the read-tool defaults, compaction, the system prompt skelet
 - **Larger gaps the same review found get their own spec after this one lands:** MCP
   resources, prompts, elicitation, progress, cancellation, rich content, and reconnection;
   hook events, input rewriting, and context injection; `--max-turns`, `--max-budget-usd`,
-  `--mcp-config`, and `--add-dir`; persistent memory and `/init`; loading both `AGENTS.md`
+  `--mcp-config`, and a directory-allowlist flag; persistent memory and `/init`; loading both `AGENTS.md`
   and `CLAUDE.md`, `@import`, and nested files; the missing slash commands; PDF and notebook
   reading. Each is a feature with its own design questions, not a fix. Folding them in would
   delay the security work behind them.
