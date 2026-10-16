@@ -25,29 +25,56 @@ export interface CreateAgentDefinitionResolverOptions {
 	isProjectTrusted: () => boolean;
 }
 
-function parseDefinition(content: string): AgentDefinition | undefined {
+/** `tools` is a YAML list or a comma-separated string (`tools: read, grep`). */
+function parseToolNames(value: unknown): string[] | undefined {
+	if (typeof value === "string") {
+		const names = value
+			.split(",")
+			.map((name) => name.trim())
+			.filter(Boolean);
+		return names.length > 0 ? names : undefined;
+	}
+	if (Array.isArray(value) && value.every((tool): tool is string => typeof tool === "string" && tool.length > 0)) {
+		return value.length > 0 ? [...value] : undefined;
+	}
+	return undefined;
+}
+
+/**
+ * Parses one definition, or says why it is unusable. The reason names the field, so a user
+ * who wrote a definition that does not load can see what to fix in `/resources`.
+ */
+function parseDefinitionResult(content: string): { definition: AgentDefinition } | { reason: string } {
+	let parsed: { frontmatter: AgentFrontmatter; body: string };
 	try {
-		const { frontmatter, body } = parseFrontmatter<AgentFrontmatter>(content);
-		if (
-			typeof frontmatter.name !== "string" ||
-			!frontmatter.name ||
-			typeof frontmatter.description !== "string" ||
-			!frontmatter.description ||
-			!Array.isArray(frontmatter.tools) ||
-			!frontmatter.tools.every((tool): tool is string => typeof tool === "string" && tool.length > 0) ||
-			(frontmatter.model !== undefined && (typeof frontmatter.model !== "string" || !frontmatter.model))
-		)
-			return undefined;
-		return {
+		parsed = parseFrontmatter<AgentFrontmatter>(content);
+	} catch (error) {
+		return { reason: `frontmatter could not be parsed: ${error instanceof Error ? error.message : String(error)}` };
+	}
+	const { frontmatter, body } = parsed;
+	if (typeof frontmatter.name !== "string" || !frontmatter.name) return { reason: "missing name" };
+	if (typeof frontmatter.description !== "string" || !frontmatter.description) {
+		return { reason: "missing description" };
+	}
+	const tools = parseToolNames(frontmatter.tools);
+	if (!tools) return { reason: "tools must be a list of tool names or a comma-separated string" };
+	if (frontmatter.model !== undefined && (typeof frontmatter.model !== "string" || !frontmatter.model)) {
+		return { reason: "model must be a non-empty string" };
+	}
+	return {
+		definition: {
 			name: frontmatter.name,
 			description: frontmatter.description,
-			tools: [...frontmatter.tools],
+			tools,
 			model: frontmatter.model,
 			systemPrompt: body,
-		};
-	} catch {
-		return undefined;
-	}
+		},
+	};
+}
+
+function parseDefinition(content: string): AgentDefinition | undefined {
+	const result = parseDefinitionResult(content);
+	return "definition" in result ? result.definition : undefined;
 }
 
 function discover(dir: string, agentType: string): AgentDefinition | undefined {
@@ -91,6 +118,11 @@ export const BUILT_IN_AGENT_DEFINITIONS: readonly AgentDefinition[] = [
 	},
 ];
 
+export interface AgentDefinitionProblem {
+	path: string;
+	reason: string;
+}
+
 export interface AgentDefinitionSummary {
 	name: string;
 	description: string;
@@ -100,6 +132,8 @@ export interface AgentDefinitionSummary {
 /** A resolver that can also list what it would resolve, so the model can be told which types exist. */
 export type AgentDefinitionCatalogResolver = AgentDefinitionResolver & {
 	list(): AgentDefinitionSummary[];
+	/** Definition files that exist but cannot be used, each with the reason. */
+	problems(): AgentDefinitionProblem[];
 };
 
 function discoverAll(dir: string): AgentDefinition[] {
@@ -115,6 +149,22 @@ function discoverAll(dir: string): AgentDefinition[] {
 	}
 }
 
+/**
+ * The resolver's unusable definitions, as resource diagnostics for `/resources`. A resolver
+ * that does not expose problems (a test double) contributes none.
+ */
+export function agentDefinitionDiagnostics(
+	resolver: AgentDefinitionResolver | undefined,
+): Array<{ type: "warning"; message: string; path: string }> {
+	const problems = (resolver as Partial<AgentDefinitionCatalogResolver> | undefined)?.problems;
+	if (typeof problems !== "function") return [];
+	return problems().map((problem) => ({
+		type: "warning" as const,
+		message: `Agent definition not loaded: ${problem.reason}`,
+		path: problem.path,
+	}));
+}
+
 export function createAgentDefinitionResolver(
 	options: CreateAgentDefinitionResolverOptions,
 ): AgentDefinitionCatalogResolver {
@@ -125,6 +175,28 @@ export function createAgentDefinitionResolver(
 		discover(userDir, agentType) ??
 		(projectTrusted() ? discover(projectDir, agentType) : undefined) ??
 		BUILT_IN_AGENT_DEFINITIONS.find((definition) => definition.name === agentType)) as AgentDefinitionCatalogResolver;
+	resolve.problems = () => {
+		const found: AgentDefinitionProblem[] = [];
+		const scan = (dir: string) => {
+			if (!existsSync(dir)) return;
+			for (const filename of readdirSync(dir).sort()) {
+				if (!filename.endsWith(".md")) continue;
+				const path = join(dir, filename);
+				let content: string;
+				try {
+					content = readFileSync(path, "utf8");
+				} catch {
+					found.push({ path, reason: "file could not be read" });
+					continue;
+				}
+				const result = parseDefinitionResult(content);
+				if ("reason" in result) found.push({ path, reason: result.reason });
+			}
+		};
+		scan(userDir);
+		if (projectTrusted()) scan(projectDir);
+		return found;
+	};
 	resolve.list = () => {
 		const seen = new Map<string, AgentDefinitionSummary>();
 		const add = (definitions: readonly AgentDefinition[], source: AgentDefinitionSummary["source"]) => {

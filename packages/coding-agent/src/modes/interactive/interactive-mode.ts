@@ -2031,6 +2031,7 @@ export class InteractiveMode {
 			{ label: "Prompt conflicts", diagnostics: this.session.resourceLoader.getPrompts().diagnostics },
 			{ label: "Extension issues", diagnostics: extensionDiagnostics },
 			{ label: "Theme conflicts", diagnostics: this.session.resourceLoader.getThemes().diagnostics },
+			{ label: "Agent definitions", diagnostics: this.session.getAgentDefinitionDiagnostics() },
 		].filter((group) => group.diagnostics.length > 0);
 	}
 

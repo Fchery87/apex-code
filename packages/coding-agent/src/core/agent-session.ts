@@ -78,6 +78,7 @@ import {
 import { evictionBudget, installContextPipeline, isDefaultStreamFunction } from "./context/pipeline.ts";
 import { configuredDefaultToolNames } from "./default-tool-names.ts";
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVEL_OPTIONS } from "./defaults.ts";
+import { agentDefinitionDiagnostics } from "./delegation/agents.ts";
 import type {
 	ChildRunPolicySnapshot,
 	ChildRunRecord,
@@ -630,6 +631,11 @@ export class AgentSession {
 	private readonly _permissionResponderFactory: (() => PermissionResponder | undefined) | undefined;
 
 	/** Worktree checkpoints for this session. Inert unless `checkpoints.enabled` is set. */
+	/** Agent definition files that exist but cannot be used, as `/resources` diagnostics. */
+	getAgentDefinitionDiagnostics(): Array<{ type: "warning"; message: string; path: string }> {
+		return agentDefinitionDiagnostics(this._delegationRuntime?.resolveAgent);
+	}
+
 	get checkpoints(): SessionCheckpoints {
 		return this._checkpoints;
 	}
