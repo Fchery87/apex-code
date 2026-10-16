@@ -157,14 +157,22 @@ export function createDelegateToolDefinition(
 						: [{ kind: "workflow", agentType: params.agentType, handle: params.handle }],
 			},
 		},
-		async execute(_toolCallId, input: DelegateInput): Promise<AgentToolResult<DelegateDetails>> {
+		async execute(
+			_toolCallId,
+			input: DelegateInput,
+			signal?: AbortSignal,
+		): Promise<AgentToolResult<DelegateDetails>> {
 			const workspace =
 				"task" in input && input.workspace
 					? { isolation: input.workspace.isolation, ownedPaths: input.workspace.ownedPaths ?? [] }
 					: undefined;
 			const result =
 				"task" in input
-					? await runDelegation(runtime, input.agentType, input.task, { background: input.background, workspace })
+					? await runDelegation(runtime, input.agentType, input.task, {
+							background: input.background,
+							workspace,
+							signal,
+						})
 					: await retrieveDelegationResult(runtime, input.handle, input.agentType);
 			return {
 				content: [{ type: "text", text: result.output }],

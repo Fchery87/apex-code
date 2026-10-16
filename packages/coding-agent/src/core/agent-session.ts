@@ -2941,6 +2941,7 @@ export class AgentSession {
 		this.abortCompaction();
 		this.abortBranchSummary();
 		if (this._isBeforeSettle) this._abortDuringBeforeSettle = true;
+		this._childRunRegistry?.interruptForeground("parent aborted");
 		this.agent.abort();
 		await this.waitForIdle();
 	}
