@@ -18,7 +18,7 @@ import { AuthStorage } from "./auth-storage.ts";
 import { CacheWarmer } from "./cache-warmer.ts";
 import { configuredDefaultToolNames } from "./default-tool-names.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
-import { createAgentDefinitionResolver } from "./delegation/agents.ts";
+import { type AgentDefinitionCatalogResolver, createAgentDefinitionResolver } from "./delegation/agents.ts";
 import {
 	type AgentDefinitionResolver,
 	type ChildRunPolicySnapshot,
@@ -978,7 +978,13 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				};
 			},
 		};
-		customTools.push(createDelegateToolDefinition(delegationRuntime) as ToolDefinition<any, any>);
+		// The catalog is read once, at session start, so the model is told which types exist.
+		// A resolver supplied without a catalog (tests) leaves the description unchanged.
+		const agentCatalog =
+			typeof (resolveAgent as Partial<AgentDefinitionCatalogResolver>).list === "function"
+				? (resolveAgent as AgentDefinitionCatalogResolver).list()
+				: [];
+		customTools.push(createDelegateToolDefinition(delegationRuntime, agentCatalog) as ToolDefinition<any, any>);
 		// Historical resume (restart reconstruction) reattaches a persisted child
 		// through THIS runtime's buildChildSession seam. Wiring it here -- not only
 		// at the first delegation -- is what makes resume work on a freshly

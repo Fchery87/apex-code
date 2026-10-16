@@ -4,6 +4,7 @@ import { minimatch } from "minimatch";
 import { type Static, Type } from "typebox";
 import { formatHiddenLines } from "../../modes/interactive/components/keybinding-hints.ts";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
+import type { AgentDefinitionSummary } from "../delegation/agents.ts";
 import type { DelegationRuntimeOptions } from "../delegation/runtime.ts";
 import { retrieveDelegationResult, runDelegation } from "../delegation/runtime.ts";
 import { type ApexToolDefinition, type EvidenceRecord, toolUnion } from "./contract.ts";
@@ -90,13 +91,40 @@ function formatDelegateResult(details: DelegateDetails, expanded: boolean, theme
  * directories, and `../delegation/agents.ts` supplies production markdown
  * discovery through the injected resolver.
  */
+const CATALOG_CHARACTER_BUDGET = 1500;
+
+/**
+ * One line per agent type, so the model knows which `agentType` values exist. Bounded: once
+ * the budget is spent, the rest are counted rather than listed, so a large library cannot
+ * grow the static prompt without limit.
+ */
+export function describeAgentCatalog(agents: readonly AgentDefinitionSummary[]): string {
+	const lines: string[] = [];
+	let used = 0;
+	for (let index = 0; index < agents.length; index++) {
+		const agent = agents[index];
+		const line = `${agent.name}: ${agent.description}`;
+		const remaining = agents.length - index - 1;
+		const reserve = remaining > 0 ? `\n... and ${remaining} more`.length : 0;
+		if (used + line.length + reserve > CATALOG_CHARACTER_BUDGET) {
+			lines.push(`... and ${agents.length - index} more`);
+			break;
+		}
+		lines.push(line);
+		used += line.length + 1;
+	}
+	return lines.join("\n");
+}
+
 export function createDelegateToolDefinition(
 	runtime: DelegationRuntimeOptions,
+	agents: readonly AgentDefinitionSummary[] = [],
 ): ApexToolDefinition<typeof delegateSchema, DelegateDetails> {
+	const catalog = agents.length > 0 ? `\n\nAvailable agent types:\n${describeAgentCatalog(agents)}` : "";
 	return {
 		name: "delegate",
 		label: "delegate",
-		description: "Delegate a task to a subagent.",
+		description: `Delegate a task to a subagent.${catalog}`,
 		parameters: delegateSchema,
 		contract: {
 			capabilities: new Set(["delegate"]),
@@ -161,6 +189,6 @@ export function createDelegateToolDefinition(
 	};
 }
 
-export function createDelegateTool(runtime: DelegationRuntimeOptions) {
-	return wrapToolDefinition(createDelegateToolDefinition(runtime));
+export function createDelegateTool(runtime: DelegationRuntimeOptions, agents?: readonly AgentDefinitionSummary[]) {
+	return wrapToolDefinition(createDelegateToolDefinition(runtime, agents));
 }
