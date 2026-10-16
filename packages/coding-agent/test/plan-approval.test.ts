@@ -155,8 +155,9 @@ describe("session plan approval", () => {
 	});
 	it("public setters retain explicit inclusion and project excluded inclusion", async () => {
 		const { session } = await setup({ mode: "plan" });
+		// Plan mode shapes the active set to read-only tools plus the search tools (HR.13).
 		session.setActiveToolsByName(["read"]);
-		expect(session.getActiveToolNames()).toEqual(["read", "plan_present"]);
+		expect(session.getActiveToolNames()).toEqual(["read", "grep", "find", "ls", "plan_present"]);
 		await session.setInteractivePermissionMode("default");
 		expect(session.getActiveToolNames()).toEqual(["read"]);
 		await session.setInteractivePermissionMode("plan");
@@ -363,7 +364,9 @@ describe("session plan approval", () => {
 		]);
 		await session.prompt("Plan a change");
 		expect(continuationTools).not.toContain("plan_present");
-		expect(continuationTools).not.toContain("bash");
+		// Plan mode removes bash from the offered set itself, so the hook's removal is no longer a
+		// change it can detect. After approval bash returns as the user requested it (HR.13's restore rule).
+		expect(continuationTools).toContain("bash");
 		const update = requests[1]!.messages.filter((m) => m.role === "system").at(-1);
 		expect(update?.toolsRemoved).toContainEqual({ name: "plan_present" });
 	});

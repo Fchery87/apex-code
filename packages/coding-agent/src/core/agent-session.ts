@@ -133,6 +133,7 @@ import { type BashExecutionMessage, type CustomMessage, convertToLlm } from "./m
 import { ModelRegistry } from "./model-registry.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
 import { evaluateToolCall, type PermissionGateOptions } from "./permissions/gate.ts";
+import { isPlanModeDenied } from "./permissions/modes.ts";
 import { type AuthorizeConfiguredCommand, authorizeConfiguredCommand } from "./permissions/policy-command.ts";
 import type { PermissionResponder } from "./permissions/responder.ts";
 import { createInteractiveResponder } from "./permissions/responder.ts";
@@ -519,6 +520,9 @@ export interface TreeNavigationResult {
 	summaryEntry?: BranchSummaryEntry;
 	workspace?: TreeWorkspaceOutcome;
 }
+
+/** Read-only search tools that plan mode adds to the active set. */
+const PLAN_MODE_SEARCH_TOOLS = ["grep", "find", "ls"] as const;
 
 export class AgentSession {
 	private _lifecycle: AgentSessionLifecycle = "created";
@@ -2012,12 +2016,26 @@ export class AgentSession {
 	}
 
 	private _projectToolNames(names: readonly string[]): string[] {
-		const projected = [...new Set(names)].filter((name) => this._toolRegistry.has(name));
-		if (
-			this._planToolMode === "plan" &&
-			this._toolRegistry.has("plan_present") &&
-			!projected.includes("plan_present")
-		)
+		const planMode = this._planToolMode === "plan";
+		// In plan mode the active set is the read-only part of the requested set, not the whole
+		// set minus refusals at call time. A tool with no contract is refused, because plan mode
+		// is a safety floor and an unknown capability cannot be shown to be read-only.
+		const projected = [...new Set(names)].filter((name) => {
+			if (!this._toolRegistry.has(name)) return false;
+			if (!planMode) return true;
+			const definition = this._toolDefinitions.get(name)?.definition as
+				| { contract?: { capabilities?: Parameters<typeof isPlanModeDenied>[0] } }
+				| undefined;
+			const capabilities = definition?.contract?.capabilities;
+			return capabilities !== undefined && !isPlanModeDenied(capabilities);
+		});
+		if (planMode) {
+			// Search tools join the set so a planning model can still look at the workspace.
+			for (const name of PLAN_MODE_SEARCH_TOOLS) {
+				if (this._toolRegistry.has(name) && !projected.includes(name)) projected.push(name);
+			}
+		}
+		if (planMode && this._toolRegistry.has("plan_present") && !projected.includes("plan_present"))
 			projected.push("plan_present");
 		return projected;
 	}
