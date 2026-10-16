@@ -535,7 +535,10 @@ describe("AgentSession actionable boundaries", () => {
 		await harness.session.prompt("small prompt");
 
 		expect(harness.eventsOfType("compaction_start")).toEqual([]);
-		expect(harness.session.getContextUsage()?.tokens).toBeLessThan(2_000);
+		// The default tool set grew by five tools (HR.15), which adds about 800 estimated tokens
+		// to every session's system prompt. The bound still catches stale usage: a boundary-omitted
+		// usage figure is near the 9,800-token value the test injects.
+		expect(harness.session.getContextUsage()?.tokens).toBeLessThan(4_000);
 	});
 
 	it("does not trigger successful-response overflow from usage captured before a boundary edit", async () => {
@@ -572,7 +575,10 @@ describe("AgentSession actionable boundaries", () => {
 		await harness.session.prompt("large input that is later omitted");
 
 		expect(harness.eventsOfType("compaction_start")).toEqual([]);
-		expect(harness.session.getContextUsage()?.tokens).toBeLessThan(2_000);
+		// The default tool set grew by five tools (HR.15), which adds about 800 estimated tokens
+		// to every session's system prompt. The bound still catches stale usage: a boundary-omitted
+		// usage figure is near the 9,800-token value the test injects.
+		expect(harness.session.getContextUsage()?.tokens).toBeLessThan(4_000);
 	});
 
 	it("does not trigger threshold compaction from post-edit usage captured before a later compaction", async () => {
