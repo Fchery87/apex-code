@@ -7031,10 +7031,10 @@ export class InteractiveMode {
 		let proc: ReturnType<typeof spawn> | undefined;
 		try {
 			const result = await publishSessionShare({
-				confirm: () =>
+				confirm: (redactions) =>
 					this.showExtensionConfirm(
 						"Publish session to GitHub?",
-						"This uploads a complete HTML export to a secret GitHub Gist. Secret Gists are unlisted, not private or access-controlled; anyone with the URL can read the transcript, prompts, tool activity, and included file content. Review a local /export first if needed.",
+						`This uploads a complete HTML export to a secret GitHub Gist. Secret Gists are unlisted, not private or access-controlled; anyone with the URL can read the transcript, prompts, tool activity, and included file content. ${redactions > 0 ? `${redactions} credential-shaped value${redactions === 1 ? " was" : "s were"} replaced with [REDACTED] before upload. ` : ""}Review a local /export first if needed.`,
 					),
 				exportToHtml: async (exportPath) => {
 					await this.session.exportToHtml(exportPath);
