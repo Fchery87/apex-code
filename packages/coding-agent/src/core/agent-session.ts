@@ -376,6 +376,8 @@ export interface AgentSessionConfig {
 	 * returning zero results. Ignored when `baseToolsOverride` is set.
 	 */
 	webSearchOperations?: WebSearchOperations;
+	/** Passed to the web_fetch tool. Set from user settings by the services layer. */
+	webFetchAllowPrivateNetwork?: boolean;
 	/**
 	 * Git-backed worktree checkpoints. Absent, or present with `enabled` unset, captures
 	 * nothing and runs no `git` subprocess.
@@ -632,6 +634,7 @@ export class AgentSession {
 		return this._checkpoints;
 	}
 	private _webSearchOperations?: WebSearchOperations;
+	private _webFetchAllowPrivateNetwork: boolean;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionMode: ExtensionMode = "print";
 	private _extensionCommandContextActions?: ExtensionCommandContextActions;
@@ -705,6 +708,7 @@ export class AgentSession {
 		this._lspOperations = config.lspOperations;
 		this._mcpRuntime = config.mcpRuntime;
 		this._webSearchOperations = config.webSearchOperations;
+		this._webFetchAllowPrivateNetwork = config.webFetchAllowPrivateNetwork === true;
 		this._checkpoints = createSessionCheckpoints({
 			workspace: this._cwd,
 			sessionId: this.sessionManager.getSessionId(),
@@ -4493,6 +4497,7 @@ export class AgentSession {
 					...(this._lspOperations ? { lsp: { operations: this._lspOperations } } : {}),
 					...(this._mcpRuntime ? { mcp: this._mcpRuntime } : {}),
 					...(this._webSearchOperations ? { web_search: { operations: this._webSearchOperations } } : {}),
+					web_fetch: { allowPrivateNetwork: this._webFetchAllowPrivateNetwork },
 				});
 		baseToolDefinitions.tool_schema = createToolSchemaToolDefinition({
 			getTool: (name) => {

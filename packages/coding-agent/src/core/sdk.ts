@@ -181,6 +181,7 @@ export interface CreateAgentSessionOptions {
 	/** Optional `lsp` navigation tool transport (LSP.5); registers and activates `lsp` when present. */
 	lspOperations?: AgentSessionConfig["lspOperations"];
 	webSearchOperations?: AgentSessionConfig["webSearchOperations"];
+	webFetchAllowPrivateNetwork?: AgentSessionConfig["webFetchAllowPrivateNetwork"];
 	/**
 	 * Delegation entry point (roadmap Phase 5, ADR 0008). When set, `delegate`
 	 * executes real child sessions through `resolveAgent`, with the child's
@@ -802,6 +803,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					// once (possibly by running a shell command for the key) and a child
 					// that re-resolved nothing would hold a `web_search` that only throws.
 					webSearchOperations: options.webSearchOperations,
+					webFetchAllowPrivateNetwork: options.webFetchAllowPrivateNetwork,
 					// `checkpointSettings` is deliberately *not* forwarded. A child shares the
 					// parent's cwd, so it would write refs under its own session id into the
 					// same repository and interleave them with the parent's. The parent's
@@ -1011,6 +1013,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		diagnosticsOperations: options.diagnosticsOperations,
 		lspOperations: options.lspOperations,
 		webSearchOperations: options.webSearchOperations,
+		webFetchAllowPrivateNetwork: options.webFetchAllowPrivateNetwork,
 		mcpRuntime,
 		checkpointSettings: settingsManager.getCheckpointSettings(),
 		// Declarative hooks (spec 2026-08-31-declarative-hooks): assembled from the

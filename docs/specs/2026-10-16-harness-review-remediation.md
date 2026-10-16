@@ -274,6 +274,20 @@ Upstream Pi defined the read-tool defaults, compaction, the system prompt skelet
 | Where does the MCP startup notice go outside the TUI? | stderr in `-p` text mode, a structured event in JSON and RPC | Machine protocols on stdout stay clean. |
 | What versions ship? | A minor bump per stage that changes a default: Stage 1 0.7.0, Stage 2 0.8.0, Stage 4 0.9.0; Stages 3 and 5 ship as patches | Under 1.0, a minor bump is how npm users learn behavior changed. |
 
+### Amendment (2026-10-16, during implementation of HR.3 and HR.4)
+
+Two parts of HR.4 are deliberately narrower than first written.
+
+- **No DNS pinning.** HR.4 proposed a dedicated undici agent that connects to the address
+  it checked. That would bypass the proxy-aware global dispatcher that `web_fetch` must keep
+  using (see `tools/web-fetch.ts`). When `HTTP_PROXY` or `HTTPS_PROXY` is set, the proxy
+  resolves the target, so the client cannot pin it. The check resolves the host first and
+  refuses if any address is private, loopback, or link-local. A rebinding window between the
+  check and the connection remains. Pinning returns in a follow-up that covers the proxy case.
+- **User settings only, for now.** `webFetch.allowPrivateNetwork` is read from user
+  settings. Reading it from `policies` is not wired yet, because the policy file's shape
+  for this key needs its own decision. Project settings cannot enable it.
+
 ### Stage 1. Security
 
 | Task | Change | File(s) |
