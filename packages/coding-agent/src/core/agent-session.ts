@@ -635,6 +635,17 @@ export class AgentSession {
 	private readonly _permissionResponderFactory: (() => PermissionResponder | undefined) | undefined;
 
 	/** Worktree checkpoints for this session. Inert unless `checkpoints.enabled` is set. */
+	private _mcpDiscoveryStarted: string[] = [];
+
+	/** MCP servers the session started to list their tools at startup (HR.14). */
+	getMcpDiscoveryStarted(): readonly string[] {
+		return this._mcpDiscoveryStarted;
+	}
+
+	setMcpDiscoveryStarted(names: readonly string[]): void {
+		this._mcpDiscoveryStarted = [...names];
+	}
+
 	/** Agent definition files that exist but cannot be used, as `/resources` diagnostics. */
 	getAgentDefinitionDiagnostics(): Array<{ type: "warning"; message: string; path: string }> {
 		return agentDefinitionDiagnostics(this._delegationRuntime?.resolveAgent);

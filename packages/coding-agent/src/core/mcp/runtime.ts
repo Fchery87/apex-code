@@ -17,8 +17,13 @@ import type { McpConfigDiagnostic, McpConnector } from "./types.ts";
 
 export interface McpRuntime extends McpToolOptions {
 	diagnostics: readonly McpConfigDiagnostic[];
-	/** Connect `eager` servers and cache their tools, so they are discoverable cold. */
-	warm(): Promise<void>;
+	/**
+	 * Connect each server that needs it so its tools are discoverable cold: every `eager`
+	 * server, and every other server with no cache entry yet. Resolves to the names of the
+	 * servers it started, so the session can tell the user what ran. A server with a cache
+	 * entry is never started again.
+	 */
+	warm(): Promise<string[]>;
 	close(): Promise<void>;
 }
 
@@ -52,7 +57,20 @@ export function createMcpRuntime(
 		diagnostics,
 		warm: async () => {
 			await manager.warmEagerServers((server, tools) => cache.set(server, tools));
+			const started: string[] = [];
+			for (const server of servers.values()) {
+				if (server.lifecycle === "eager" || cache.get(server).length > 0) continue;
+				started.push(server.name);
+				try {
+					await manager.withConnection(server.name, async (connection) => {
+						cache.set(server, await connection.listTools());
+					});
+				} catch {
+					// Recorded as `failed` by the manager; the first real call reports it.
+				}
+			}
 			cache.save();
+			return started;
 		},
 		close: () => manager.closeAll(),
 	};
