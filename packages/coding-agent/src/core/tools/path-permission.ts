@@ -1,14 +1,25 @@
 /** Shared PermissionSpec construction for the path-shaped tools (read, grep, find, ls, write, edit). */
 
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 import { minimatch } from "minimatch";
 import type { Static, TSchema } from "typebox";
 import { formatPathRelativeToCwdOrAbsolute, resolvesInsideDirectory } from "../../utils/paths.ts";
 import { setPreparedPathOperation } from "../permissions/operations.ts";
-import { describeProtectedTarget } from "../permissions/protected-paths.ts";
+import { describeProtectedTarget, isSensitivePath } from "../permissions/protected-paths.ts";
 import type { PermissionPreview } from "../permissions/responder.ts";
 import type { PermissionBehavior, PermissionSpec } from "./contract.ts";
 import { preparePathOperation, resolveToCwd } from "./path-utils.ts";
+
+/**
+ * Escapes glob metacharacters in a literal path so a rule built from a directory name
+ * matches only that directory. Each character becomes a one-character class, which
+ * minimatch reads the same way on every platform, so no backslash escape is needed
+ * (backslash is the path separator on Windows). `!` is left alone: it only negates
+ * when it opens the whole pattern, and every path-scoped rule opens with an absolute path.
+ */
+export function escapeGlobLiteral(value: string): string {
+	return value.replace(/[[\]*?{}()+@]/g, (char) => `[${char}]`);
+}
 
 /**
  * Builds a glob-based PermissionSpec over a single path field. `getPath` extracts
@@ -40,6 +51,10 @@ export function createPathPermissionSpec<TParams extends TSchema>(options: {
 		return formatPathRelativeToCwdOrAbsolute(canonical, cwd);
 	};
 	const escapeExact = (value: string): string => `exact:${value}`;
+	const isSensitive = (params: Static<TParams>): boolean => {
+		const path = getPath(params);
+		return isSensitivePath(resolveToCwd(path?.trim() ? (path as string) : ".", cwd));
+	};
 	const isOutside = (params: Static<TParams>): boolean => {
 		const path = getPath(params);
 		return !resolvesInsideDirectory(resolveToCwd(path?.trim() ? (path as string) : ".", cwd), cwd);
@@ -47,13 +62,17 @@ export function createPathPermissionSpec<TParams extends TSchema>(options: {
 
 	return {
 		defaultBehavior,
-		...(outsideWorkspace
-			? {
-					defaultBehaviorFor(params: Static<TParams>) {
-						return isOutside(params) ? "ask" : undefined;
-					},
-				}
-			: {}),
+		defaultBehaviorFor(params: Static<TParams>) {
+			if (isSensitive(params)) return "ask";
+			if (outsideWorkspace && isOutside(params)) return "ask";
+			return undefined;
+		},
+		allowRuleGrants(ruleContent: string | undefined, params: Static<TParams>) {
+			if (!isSensitive(params)) return true;
+			if (ruleContent === undefined) return false;
+			const named = ruleContent.startsWith("exact:") ? ruleContent.slice("exact:".length) : ruleContent;
+			return basename(named) === basename(normalize(getPath(params)));
+		},
 		prepareCall(params) {
 			setPreparedPathOperation(params as object, preparePathOperation(getPath(params) ?? ".", cwd));
 		},
@@ -76,10 +95,10 @@ export function createPathPermissionSpec<TParams extends TSchema>(options: {
 			return `${verb} paths matching "${ruleContent}"`;
 		},
 		ruleForCall(params) {
-			if (outsideWorkspace && isOutside(params)) {
+			if (outsideWorkspace && isOutside(params) && !isSensitive(params)) {
 				const target = normalize(getPath(params));
 				const scope = outsideWorkspace === "parent" ? dirname(target) : target;
-				return `${scope}/**`;
+				return `${escapeGlobLiteral(scope)}/**`;
 			}
 			return escapeExact(normalize(getPath(params)));
 		},

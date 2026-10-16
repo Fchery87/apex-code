@@ -77,6 +77,31 @@ describe("read boundary: reads outside the workspace ask", () => {
 		expect(decision.block).toBe(true);
 	});
 
+	it("a directory name with glob characters grants only that literal directory", async () => {
+		const cwd = await scratchDir("apex-rb-");
+		const outside = await scratchDir("apex-rb-outside-");
+		dirs.push(cwd, outside);
+		const literal = join(outside, "a[1]*");
+		const lookalike = join(outside, "a1x");
+		await mkdir(literal, { recursive: true });
+		await mkdir(lookalike, { recursive: true });
+		await writeFile(join(literal, "x.ts"), "x");
+		await writeFile(join(lookalike, "y.ts"), "y");
+
+		const definition = createReadToolDefinition(cwd);
+		const saved = definition.contract.permission.ruleForCall({ path: join(literal, "x.ts") } as never);
+		const rule: PermissionRule = {
+			source: "session",
+			behavior: "allow",
+			toolName: "read",
+			ruleContent: saved as string,
+		};
+		const inside = await decide(definition, { path: join(literal, "x.ts") }, [rule]);
+		const other = await decide(definition, { path: join(lookalike, "y.ts") }, [rule]);
+		expect(inside.block).toBe(false);
+		expect(other.block).toBe(true);
+	});
+
 	it("an always-allow rule saved for one outside file grants its sibling files", async () => {
 		const cwd = await scratchDir("apex-rb-");
 		const outside = await scratchDir("apex-rb-outside-");
