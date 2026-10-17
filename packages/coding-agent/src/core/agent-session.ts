@@ -68,6 +68,7 @@ import {
 	calculateContextTokens,
 	collectEntriesForBranchSummary,
 	compact,
+	effectiveReserveTokens,
 	estimateContextTokens,
 	estimateProjectedContextTokens,
 	estimateTokens,
@@ -1017,6 +1018,7 @@ export class AgentSession {
 				estimateProjectedContextTokens(projection, this.sessionManager.getBranch()).tokens,
 				model.contextWindow,
 				settings,
+				model.maxTokens,
 			)
 		) {
 			return { ...context, messages: projection.messages };
@@ -1172,7 +1174,7 @@ export class AgentSession {
 		}
 
 		const contextTokens = estimateContextTokens(turn.context.messages).tokens;
-		if (!shouldCompact(contextTokens, contextWindow, settings)) {
+		if (!shouldCompact(contextTokens, contextWindow, settings, this.model?.maxTokens)) {
 			return false;
 		}
 
@@ -1218,8 +1220,8 @@ export class AgentSession {
 	 */
 	private _evictionBudget(): number {
 		const contextWindow = this.model?.contextWindow ?? 0;
-		const { reserveTokens } = this.settingsManager.getCompactionSettings();
-		return evictionBudget(contextWindow, reserveTokens);
+		const settings = this.settingsManager.getCompactionSettings();
+		return evictionBudget(contextWindow, effectiveReserveTokens(settings, this.model?.maxTokens));
 	}
 
 	// =========================================================================
@@ -3983,7 +3985,7 @@ export class AgentSession {
 		} else {
 			contextTokens = directContextTokens;
 		}
-		if (shouldCompact(contextTokens, contextWindow, settings)) {
+		if (shouldCompact(contextTokens, contextWindow, settings, this.model?.maxTokens)) {
 			return await this._runAutoCompaction("threshold", false);
 		}
 		return false;

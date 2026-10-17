@@ -284,11 +284,24 @@ export function estimateProjectedContextTokens(
 }
 
 /**
+ * The tokens kept free for the next response. It is never smaller than the model's own
+ * output limit (HR.29): a fixed reserve below that limit lets one response overflow the window.
+ */
+export function effectiveReserveTokens(settings: CompactionSettings, maxOutputTokens: number | undefined): number {
+	return Math.max(settings.reserveTokens, maxOutputTokens ?? 0);
+}
+
+/**
  * Check if compaction should trigger based on context usage.
  */
-export function shouldCompact(contextTokens: number, contextWindow: number, settings: CompactionSettings): boolean {
+export function shouldCompact(
+	contextTokens: number,
+	contextWindow: number,
+	settings: CompactionSettings,
+	maxOutputTokens?: number,
+): boolean {
 	if (!settings.enabled) return false;
-	return contextTokens > contextWindow - settings.reserveTokens;
+	return contextTokens > contextWindow - effectiveReserveTokens(settings, maxOutputTokens);
 }
 
 // ============================================================================
