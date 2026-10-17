@@ -1,6 +1,6 @@
 # Spec: Decisions settled after the harness review remediation
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 
@@ -36,17 +36,17 @@ Eight open questions from the merged remediation were settled. Three of them cha
 
 ## Goals
 
-- [ ] With a proxy configured, `web_fetch` refuses unless `webFetch.allowProxiedFetch` is set in user settings.
-- [ ] The compaction reserve's output-limit floor is capped at `outputReserveFraction` of the window, defaulting to one third.
-- [ ] `mcpStartupDiscovery: false` stops startup discovery of lazy MCP servers. It defaults to on.
-- [ ] The glossary defines Read ledger, Foreground subagent, Environment block, and Plan-mode active set.
+- [x] With a proxy configured, `web_fetch` refuses unless `webFetch.allowProxiedFetch` is set in user settings.
+- [x] The compaction reserve's output-limit floor is capped at `outputReserveFraction` of the window, defaulting to one third.
+- [x] `mcpStartupDiscovery: false` stops startup discovery of lazy MCP servers. It defaults to on.
+- [x] The glossary defines Read ledger, Foreground subagent, Environment block, and Plan-mode active set.
 
 ## Non-goals
 
-- [ ] `todo_write` and `ask_user` stay opt-in. The RS.9 task-list opt-in is deliberate, and `ask_user` needs a UI signal the session does not have at construction.
-- [ ] OpenCode Go stays on its previous model snapshot. Its refreshed data needs a Google-API provider in the frozen `packages/ai`.
-- [ ] The plugin API stays unpublished. Publishing needs a written stability policy first, and no market norm for one was found to copy.
-- [ ] `edit` keeps change detection only, with no required prior read. An exact, unique `oldText` match already limits blind edits.
+- [x] `todo_write` and `ask_user` stay opt-in. The RS.9 task-list opt-in is deliberate, and `ask_user` needs a UI signal the session does not have at construction.
+- [x] OpenCode Go stays on its previous model snapshot. Its refreshed data needs a Google-API provider in the frozen `packages/ai`.
+- [x] The plugin API stays unpublished. Publishing needs a written stability policy first, and no market norm for one was found to copy.
+- [x] `edit` keeps change detection only, with no required prior read. An exact, unique `oldText` match already limits blind edits.
 
 ## Proposed solution
 
@@ -81,7 +81,8 @@ Nothing else is removed. The change is additive apart from those three behaviors
 - `test/tools/web-fetch-boundary.test.ts` and `test/tools/web-fetch-settings.test.ts`: refusal with a proxy, no network access when refused, opt-in proceeds, user-only setting.
 - `test/compaction-reserve.test.ts`: the cap, the configured fraction, and the threshold on either side of the cap.
 - `test/mcp/cold-discovery.test.ts` and `test/tools/web-fetch-settings.test.ts`: `discoverLazy: false` starts nothing, and the setting defaults on.
-- Full `npm test` on the branch, then three-OS CI on its pull request.
+- Full `npm test` on the branch: 484 files and 4,426 tests pass, 51 skipped, exit 0 (run after the fixture fix, at `f9586cdf4`).
+- Three-OS CI on [PR #176](https://github.com/Fchery87/apex-code/pull/176) at `f9586cdf4`: ubuntu, macOS and Windows pass, with CodeQL and the frozen-package check.
 
 ## Rollout
 
