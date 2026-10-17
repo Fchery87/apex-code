@@ -139,7 +139,7 @@ jobs:
       # vitest, tsx, ...) no end user's install ever receives. "Complete
       # transitive production dependency license closure" means what actually
       # ships, not everything this repository happens to have installed.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: standalone-release-assets
           path: |
@@ -157,7 +157,7 @@ jobs:
       - name: Generate third-party license report
         run: npm run generate:license-report -- --node-modules "${RUNNER_TEMP}/packed-product-surface/smoke-install/node_modules" --release-manifest "${RUNNER_TEMP}/packed-product-surface/release-artifacts.json"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: third-party-licenses
           path: .artifacts/third-party-licenses.md
@@ -169,7 +169,7 @@ jobs:
       - name: Generate SBOM
         run: node scripts/apex/generate-sbom.mjs --release-manifest "${RUNNER_TEMP}/packed-product-surface/release-artifacts.json" --install-directory "${RUNNER_TEMP}/packed-product-surface/smoke-install"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom
           path: .artifacts/sbom-*.cyclonedx.json
@@ -255,7 +255,7 @@ jobs:
 
       # Durable release evidence includes both the retained local identity and
       # the observed registry digest and signed provenance result.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-evidence
           path: |
