@@ -37,10 +37,10 @@ describe("normalizeChangelogLinks", () => {
 
 		expect(normalizeChangelogLinks(markdown, entry)).toBe(
 			[
-				"[Project Trust](https://github.com/earendil-works/pi/blob/v0.79.0/packages/coding-agent/README.md#project-trust)",
-				"[Extensions](https://github.com/earendil-works/pi/blob/v0.79.0/packages/coding-agent/docs/extensions.md#project_trust)",
-				"[Examples](https://github.com/earendil-works/pi/tree/v0.79.0/packages/coding-agent/examples/extensions/)",
-				"[Root README](https://github.com/earendil-works/pi/blob/v0.79.0/README.md#supply-chain-hardening)",
+				"[Project Trust](https://github.com/Fchery87/apex-code/blob/v0.79.0/packages/coding-agent/README.md#project-trust)",
+				"[Extensions](https://github.com/Fchery87/apex-code/blob/v0.79.0/packages/coding-agent/docs/extensions.md#project_trust)",
+				"[Examples](https://github.com/Fchery87/apex-code/tree/v0.79.0/packages/coding-agent/examples/extensions/)",
+				"[Root README](https://github.com/Fchery87/apex-code/blob/v0.79.0/README.md#supply-chain-hardening)",
 			].join("\n"),
 		);
 	});
@@ -69,7 +69,7 @@ describe("normalizeChangelogLinks", () => {
 		const prereleaseEntry: ChangelogEntry = { major: 0, minor: 0, patch: 1, prerelease: "alpha.4", content: "" };
 
 		expect(normalizeChangelogLinks("[README](README.md)", prereleaseEntry)).toBe(
-			"[README](https://github.com/earendil-works/pi/blob/v0.0.1-alpha.4/packages/coding-agent/README.md)",
+			"[README](https://github.com/Fchery87/apex-code/blob/v0.0.1-alpha.4/packages/coding-agent/README.md)",
 		);
 	});
 });
