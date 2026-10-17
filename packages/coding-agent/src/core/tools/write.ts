@@ -10,6 +10,7 @@ import type { PermissionPreview } from "../permissions/responder.ts";
 import type { ApexToolDefinition, EvidenceRecord } from "./contract.ts";
 import type { DiagnosticsOperations, DiagnosticsOutcome } from "./diagnostics.ts";
 import { diagnosticEvidenceForPath, formatDiagnosticsOutcome } from "./diagnostics.ts";
+import { type FileReadLedger, readTextIfExists } from "./file-ledger.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
 import { readPreparedPath, resolveToCwd, writePathAtomically, writePreparedPath } from "./path-utils.ts";
@@ -63,6 +64,8 @@ const defaultWriteOperations: WriteOperations = {
 };
 
 export interface WriteToolOptions {
+	/** The session's read ledger (HR.24). Absent: writes are not checked against reads. */
+	ledger?: FileReadLedger;
 	/** Custom operations for file writing. Default: local filesystem */
 	operations?: WriteOperations;
 	/**
@@ -122,6 +125,7 @@ export function createWriteToolDefinition(
 	options?: WriteToolOptions,
 ): ApexToolDefinition<typeof writeSchema, WriteToolDetails> {
 	const ops = options?.operations ?? defaultWriteOperations;
+	const ledger = options?.ledger;
 	const diagnosticsOperations = options?.diagnosticsOperations;
 	return {
 		name: "write",
@@ -185,6 +189,10 @@ export function createWriteToolDefinition(
 				};
 
 				throwIfAborted();
+				if (ledger) {
+					const reason = ledger.checkWrite(absolutePath, await readTextIfExists(absolutePath));
+					if (reason) throw new Error(`write refused: ${reason}`);
+				}
 				if (prepared) {
 					// Gated path: no-follow execution against the exact authorized target.
 					ops.writePrepared!(prepared, content);
@@ -198,6 +206,7 @@ export function createWriteToolDefinition(
 					await ops.writeFile(absolutePath, content);
 					throwIfAborted();
 				}
+				ledger?.recordWrite(absolutePath, content);
 
 				const successText = `Successfully wrote to ${path}`;
 

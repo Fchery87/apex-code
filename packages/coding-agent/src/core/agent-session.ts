@@ -173,6 +173,7 @@ import {
 	type ToolContractSnapshotEntry,
 } from "./tools/contract-snapshot.ts";
 import type { DiagnosticsOperations } from "./tools/diagnostics.ts";
+import { FileReadLedger } from "./tools/file-ledger.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
 import type { LspOperations } from "./tools/lsp.ts";
 import { createPlanPresentToolDefinition, defaultPlanPresenter } from "./tools/plan-present.ts";
@@ -636,6 +637,9 @@ export class AgentSession {
 	private readonly _permissionResponderFactory: (() => PermissionResponder | undefined) | undefined;
 
 	/** Worktree checkpoints for this session. Inert unless `checkpoints.enabled` is set. */
+	/** What this session has read, so write and edit refuse replacements of unseen or changed files (HR.24). */
+	private readonly _fileLedger = new FileReadLedger();
+
 	private _mcpDiscoveryStarted: string[] = [];
 
 	/** MCP servers the session started to list their tools at startup (HR.14). */
@@ -4538,14 +4542,14 @@ export class AgentSession {
 					]),
 				)
 			: createAllToolDefinitions(this._cwd, {
-					read: { autoResizeImages },
+					read: { autoResizeImages, ledger: this._fileLedger },
 					bash: {
 						commandPrefix: shellCommandPrefix,
 						shellPath,
 						backgroundRegistry: this._backgroundShellRegistry,
 					},
-					edit: { diagnosticsOperations: this._diagnosticsOperations },
-					write: { diagnosticsOperations: this._diagnosticsOperations },
+					edit: { diagnosticsOperations: this._diagnosticsOperations, ledger: this._fileLedger },
+					write: { diagnosticsOperations: this._diagnosticsOperations, ledger: this._fileLedger },
 					...(this._lspOperations ? { lsp: { operations: this._lspOperations } } : {}),
 					...(this._mcpRuntime ? { mcp: this._mcpRuntime } : {}),
 					...(this._webSearchOperations ? { web_search: { operations: this._webSearchOperations } } : {}),
