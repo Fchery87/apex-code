@@ -540,9 +540,12 @@ describe("AgentSession compaction characterization", () => {
 			expect(observedSettings[0]).toEqual({ enabled: true, reserveTokens: 400, keepRecentTokens: 1750 });
 			// Apex resumes by restarting the run, so it emits a second agent_start.
 			expect(harness.eventsOfType("agent_start")).toHaveLength(agentStartsBefore + 2);
+			// The system prompt grew (environment block, working rules, default tools; HR.15-HR.17), so in this
+			// 2,600-token window the oversized result overflows before the threshold check runs. The reason is
+			// "overflow" now; compaction still runs before the provider and the resumed run keeps the summary.
 			expect(harness.eventsOfType("compaction_start").at(-1)).toEqual({
 				type: "compaction_start",
-				reason: "threshold",
+				reason: "overflow",
 			});
 			expect(resumedRequest).toContain("compacted history");
 			expect(resumedRequest).toContain("large-tool-result");
