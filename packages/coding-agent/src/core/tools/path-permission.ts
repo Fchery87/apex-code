@@ -11,6 +11,14 @@ import type { PermissionBehavior, PermissionSpec } from "./contract.ts";
 import { preparePathOperation, resolveToCwd } from "./path-utils.ts";
 
 /**
+ * Minimatch reads a backslash as an escape, so on Windows the path separator would break every
+ * pattern. Paths and patterns are compared with forward slashes there.
+ */
+function toGlobPath(path: string): string {
+	return process.platform === "win32" ? path.replace(/\\/g, "/") : path;
+}
+
+/**
  * Escapes glob metacharacters in a literal path so a rule built from a directory name
  * matches only that directory. Each character becomes a one-character class, which
  * minimatch reads the same way on every platform, so no backslash escape is needed
@@ -89,7 +97,7 @@ export function createPathPermissionSpec<TParams extends TSchema>(options: {
 		matches(ruleContent, params) {
 			return ruleContent.startsWith("exact:")
 				? normalize(getPath(params)) === ruleContent.slice("exact:".length)
-				: minimatch(normalize(getPath(params)), ruleContent, { dot: true });
+				: minimatch(toGlobPath(normalize(getPath(params))), toGlobPath(ruleContent), { dot: true });
 		},
 		describe(ruleContent) {
 			return `${verb} paths matching "${ruleContent}"`;
@@ -98,7 +106,7 @@ export function createPathPermissionSpec<TParams extends TSchema>(options: {
 			if (outsideWorkspace && isOutside(params) && !isSensitive(params)) {
 				const target = normalize(getPath(params));
 				const scope = outsideWorkspace === "parent" ? dirname(target) : target;
-				return `${escapeGlobLiteral(scope)}/**`;
+				return `${escapeGlobLiteral(toGlobPath(scope))}/**`;
 			}
 			return escapeExact(normalize(getPath(params)));
 		},
