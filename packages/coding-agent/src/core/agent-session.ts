@@ -385,6 +385,8 @@ export interface AgentSessionConfig {
 	webSearchOperations?: WebSearchOperations;
 	/** Passed to the web_fetch tool. Set from user settings by the services layer. */
 	webFetchAllowPrivateNetwork?: boolean;
+	/** Passed to the web_fetch tool: fetches are allowed while a proxy is configured (Q4). */
+	webFetchAllowProxiedFetch?: boolean;
 	/**
 	 * Git-backed worktree checkpoints. Absent, or present with `enabled` unset, captures
 	 * nothing and runs no `git` subprocess.
@@ -665,6 +667,7 @@ export class AgentSession {
 	}
 	private _webSearchOperations?: WebSearchOperations;
 	private _webFetchAllowPrivateNetwork: boolean;
+	private _webFetchAllowProxiedFetch: boolean;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionMode: ExtensionMode = "print";
 	private _extensionCommandContextActions?: ExtensionCommandContextActions;
@@ -739,6 +742,7 @@ export class AgentSession {
 		this._mcpRuntime = config.mcpRuntime;
 		this._webSearchOperations = config.webSearchOperations;
 		this._webFetchAllowPrivateNetwork = config.webFetchAllowPrivateNetwork === true;
+		this._webFetchAllowProxiedFetch = config.webFetchAllowProxiedFetch === true;
 		this._checkpoints = createSessionCheckpoints({
 			workspace: this._cwd,
 			sessionId: this.sessionManager.getSessionId(),
@@ -1221,7 +1225,7 @@ export class AgentSession {
 	private _evictionBudget(): number {
 		const contextWindow = this.model?.contextWindow ?? 0;
 		const settings = this.settingsManager.getCompactionSettings();
-		return evictionBudget(contextWindow, effectiveReserveTokens(settings, this.model?.maxTokens));
+		return evictionBudget(contextWindow, effectiveReserveTokens(settings, this.model?.maxTokens, contextWindow));
 	}
 
 	// =========================================================================
@@ -4558,7 +4562,10 @@ export class AgentSession {
 					...(this._lspOperations ? { lsp: { operations: this._lspOperations } } : {}),
 					...(this._mcpRuntime ? { mcp: this._mcpRuntime } : {}),
 					...(this._webSearchOperations ? { web_search: { operations: this._webSearchOperations } } : {}),
-					web_fetch: { allowPrivateNetwork: this._webFetchAllowPrivateNetwork },
+					web_fetch: {
+						allowPrivateNetwork: this._webFetchAllowPrivateNetwork,
+						allowProxiedFetch: this._webFetchAllowProxiedFetch,
+					},
 				});
 		baseToolDefinitions.tool_schema = createToolSchemaToolDefinition({
 			getTool: (name) => {
@@ -4628,6 +4635,9 @@ export class AgentSession {
 		await emitSessionShutdownEvent(oldRunner, { type: "session_shutdown", reason: "reload" });
 		oldRunner.invalidate();
 		await this.settingsManager.reload();
+		// The web_fetch opt-ins are read at construction. Refresh them here so a reload applies a removed opt-in.
+		this._webFetchAllowPrivateNetwork = this.settingsManager.getWebFetchAllowPrivateNetwork();
+		this._webFetchAllowProxiedFetch = this.settingsManager.getWebFetchAllowProxiedFetch();
 		this.syncQueueModesFromSettings();
 		resetApiProviders();
 		await this._resourceLoader.reload();

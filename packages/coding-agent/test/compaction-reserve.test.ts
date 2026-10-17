@@ -3,23 +3,37 @@ import { effectiveReserveTokens, shouldCompact } from "../src/core/compaction/co
 
 const settings = { enabled: true, reserveTokens: 16384, keepRecentTokens: 20000 };
 
-describe("compaction reserve follows the model's output limit (HR.29)", () => {
-	it("reserves at least the model's maximum output", () => {
-		expect(effectiveReserveTokens(settings, 128000)).toBe(128000);
+describe("compaction reserve follows the output limit, capped at a share of the window (HR.29, Q6)", () => {
+	it("reserves the output limit when it is a modest share of a large window", () => {
+		expect(effectiveReserveTokens(settings, 20000, 200000)).toBe(20000);
+	});
+
+	it("caps the output-limit floor at a third of the window by default", () => {
+		// A 128k output limit would take most of a 200k window; the floor is capped at 200000 / 3.
+		expect(effectiveReserveTokens(settings, 128000, 200000)).toBe(Math.floor(200000 / 3));
 	});
 
 	it("keeps the configured reserve when the output limit is smaller", () => {
-		expect(effectiveReserveTokens(settings, 4096)).toBe(16384);
+		expect(effectiveReserveTokens(settings, 4096, 200000)).toBe(16384);
 	});
 
 	it("keeps the configured reserve when the model declares no output limit", () => {
-		expect(effectiveReserveTokens(settings, undefined)).toBe(16384);
+		expect(effectiveReserveTokens(settings, undefined, 200000)).toBe(16384);
 	});
 
-	it("a large-output model compacts earlier than the fixed reserve would allow", () => {
-		// 200k window. With the 16k reserve, 80k used is far from the limit: no compaction.
+	it("uses a configured fraction instead of a third", () => {
+		const half = { ...settings, outputReserveFraction: 0.5 };
+		expect(effectiveReserveTokens(half, 128000, 200000)).toBe(100000);
+	});
+
+	it.each([0, -0.5, 2, Number.NaN])("falls back to a third when the fraction %s is out of range", (fraction) => {
+		const invalid = { ...settings, outputReserveFraction: fraction };
+		expect(effectiveReserveTokens(invalid, 128000, 200000)).toBe(66666);
+	});
+
+	it("a large-output model compacts earlier than the fixed reserve would allow, but not at the cap", () => {
 		expect(shouldCompact(80000, 200000, settings)).toBe(false);
-		// With a 128k output limit, the next response needs 128k, so 80k used is past the line.
-		expect(shouldCompact(80000, 200000, settings, 128000)).toBe(true);
+		expect(shouldCompact(120000, 200000, settings, 128000)).toBe(false);
+		expect(shouldCompact(140000, 200000, settings, 128000)).toBe(true);
 	});
 });

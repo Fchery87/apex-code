@@ -73,4 +73,12 @@ describe("cold MCP discovery (HR.14)", () => {
 		expect(second.counts.connects).toBe(0);
 		await runtime!.close();
 	});
+
+	it("starts nothing lazy when startup discovery is switched off (Q7)", async () => {
+		const fake = connector([docsSearch]);
+		const runtime = createMcpRuntime(root, fake.connect, { projectTrusted: false, agentDir });
+		expect(await runtime!.warm({ discoverLazy: false })).toEqual([]);
+		expect(fake.counts.connects).toBe(0);
+		await runtime!.close();
+	});
 });

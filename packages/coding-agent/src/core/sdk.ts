@@ -182,6 +182,7 @@ export interface CreateAgentSessionOptions {
 	lspOperations?: AgentSessionConfig["lspOperations"];
 	webSearchOperations?: AgentSessionConfig["webSearchOperations"];
 	webFetchAllowPrivateNetwork?: AgentSessionConfig["webFetchAllowPrivateNetwork"];
+	webFetchAllowProxiedFetch?: AgentSessionConfig["webFetchAllowProxiedFetch"];
 	/**
 	 * Delegation entry point (roadmap Phase 5, ADR 0008). When set, `delegate`
 	 * executes real child sessions through `resolveAgent`, with the child's
@@ -804,6 +805,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					// that re-resolved nothing would hold a `web_search` that only throws.
 					webSearchOperations: options.webSearchOperations,
 					webFetchAllowPrivateNetwork: options.webFetchAllowPrivateNetwork,
+					webFetchAllowProxiedFetch: options.webFetchAllowProxiedFetch,
 					// `checkpointSettings` is deliberately *not* forwarded. A child shares the
 					// parent's cwd, so it would write refs under its own session id into the
 					// same repository and interleave them with the parent's. The parent's
@@ -1020,6 +1022,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		lspOperations: options.lspOperations,
 		webSearchOperations: options.webSearchOperations,
 		webFetchAllowPrivateNetwork: options.webFetchAllowPrivateNetwork,
+		webFetchAllowProxiedFetch: options.webFetchAllowProxiedFetch,
 		mcpRuntime,
 		checkpointSettings: settingsManager.getCheckpointSettings(),
 		// Declarative hooks (spec 2026-08-31-declarative-hooks): assembled from the
@@ -1033,7 +1036,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// Eager servers connect here rather than on first use, so their tools are in the
 	// cache before the model's first search. Detached: a slow or broken server delays
 	// nothing, and `warmEagerServers` already swallows its own failures.
-	void mcpRuntime?.warm().then((started) => session.reportMcpDiscovery(started));
+	void mcpRuntime
+		?.warm({ discoverLazy: settingsManager.getMcpStartupDiscovery() })
+		.then((started) => session.reportMcpDiscovery(started));
 	const extensionsResult = resourceLoader.getExtensions();
 
 	return {

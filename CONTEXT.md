@@ -33,6 +33,10 @@ Rules live in `AGENTS.md`; rationale lives in `docs/`.
 | **Protected target** | A credential location outside the workspace (the agent's own credential file, SSH, cloud, and package-registry credentials). Only the machine owner's managed policy can grant it; no user or project rule can. |
 | **Sensitive path** | A file that commonly holds secrets inside a project, such as `.env`. Asks by default. Unlike a protected target, an ordinary rule can grant it, but only a rule that names the file; a rule covering its whole directory does not. |
 | **Built-in agent type** | A subagent definition shipped with Apex Code (`general`, `explore`). A user or trusted-project definition with the same name replaces it. |
+| **Read ledger** | What the session has read, per file: a content hash and whether the whole file was read. `write` and `edit` consult it so a replacement is never made against a file the model has not seen, has seen only in part, or that changed since. In memory, per session. |
+| **Foreground subagent** | A delegation whose tool call is still awaiting its result. Aborting the parent interrupts it. A background subagent is not in this set and keeps running. |
+| **Environment block** | The end of the system prompt: date, platform, shell, model, and git state (branch, clean or uncommitted). It is the last section, so the earlier prompt stays cacheable. |
+| **Plan-mode active set** | The tools active while plan mode is on: the read-only tools, plus `grep`, `find`, and `ls`, plus `plan_present`. Mutating and delegating tools are not in it. |
 | **Permission rule** | `{source, behavior: allow\|deny\|ask, value: {toolName, ruleContent?}}`. `ruleContent` is interpreted by the tool itself. Phase 2. |
 | **Tool contract** | The required `contract` field on every tool: capabilities, permission grammar, context behavior, evidence emission. Declared by the tool, consumed by four phases, never re-derived (ADR 0010). |
 | **Capability** | What class of thing a tool does — `fs.read`, `fs.write`, `exec`, `net`, `delegate`, `ui`, `state`. A set, not a single value. |
