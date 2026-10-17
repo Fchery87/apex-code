@@ -11,7 +11,7 @@ test("local release restores pinned model data before building, including when c
 	try {
 		const workspace = join(scratch, "workspace");
 		mkdirSync(workspace);
-		writeFileSync(join(workspace, "package.json"), JSON.stringify({ name: "pi-monorepo" }));
+		writeFileSync(join(workspace, "package.json"), JSON.stringify({ name: "apex-code-monorepo" }));
 		const preload = join(scratch, "stop-command.mjs");
 		writeFileSync(preload, `
 import childProcess from "node:child_process";
