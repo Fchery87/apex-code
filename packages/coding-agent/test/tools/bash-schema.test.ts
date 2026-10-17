@@ -148,6 +148,8 @@ describe("every tool advertises its fields to Anthropic", () => {
 		).result();
 
 		expect(fetch).not.toHaveBeenCalled();
+		expect(payload.tools).not.toHaveLength(0);
+		expect(payload.tools?.map((tool) => tool.name)).toEqual(tools.map((tool) => tool.name));
 		const empty = (payload.tools ?? [])
 			.filter((tool) => Object.keys(tool.input_schema?.properties ?? {}).length === 0)
 			.map((tool) => tool.name);

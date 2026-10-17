@@ -42,10 +42,10 @@ type InteractiveModePrivate = {
 };
 
 type PermissionModeContext = {
-	footer: { setPermissionMode: (mode: string) => void };
+	footer: { setPermissionMode: (mode: string, origin?: string) => void };
 	isInitialized: boolean;
 	session: {
-		getPermissionMode: () => Promise<{ mode: string } | undefined>;
+		getPermissionMode: () => Promise<{ mode: string; origin?: string } | undefined>;
 	};
 	ui: { requestRender: () => void };
 };
@@ -156,14 +156,14 @@ describe("InteractiveMode startup input", () => {
 	});
 
 	it("waits until the effective permission mode is reflected in the footer", async () => {
-		let resolvePermissionMode: ((resolution: { mode: string }) => void) | undefined;
+		let resolvePermissionMode: ((resolution: { mode: string; origin?: string }) => void) | undefined;
 		const context: PermissionModeContext = {
 			footer: { setPermissionMode: vi.fn() },
 			isInitialized: false,
 			session: {
 				getPermissionMode: vi.fn(
 					() =>
-						new Promise<{ mode: string }>((resolve) => {
+						new Promise<{ mode: string; origin?: string }>((resolve) => {
 							resolvePermissionMode = resolve;
 						}),
 				),
@@ -175,14 +175,14 @@ describe("InteractiveMode startup input", () => {
 		expect(refresh).toBeInstanceOf(Promise);
 		expect(context.footer.setPermissionMode).not.toHaveBeenCalled();
 
-		resolvePermissionMode?.({ mode: "bypassPermissions" });
+		resolvePermissionMode?.({ mode: "bypassPermissions", origin: "flag" });
 		await refresh;
 
-		expect(context.footer.setPermissionMode).toHaveBeenCalledWith("bypassPermissions");
+		expect(context.footer.setPermissionMode).toHaveBeenCalledWith("bypassPermissions", "flag");
 		expect(context.ui.requestRender).not.toHaveBeenCalled();
 
 		context.isInitialized = true;
-		vi.mocked(context.session.getPermissionMode).mockResolvedValue({ mode: "bypassPermissions" });
+		vi.mocked(context.session.getPermissionMode).mockResolvedValue({ mode: "bypassPermissions", origin: "flag" });
 		await interactiveModePrototype.refreshFooterPermissionMode.call(context);
 		expect(context.ui.requestRender).toHaveBeenCalledOnce();
 	});

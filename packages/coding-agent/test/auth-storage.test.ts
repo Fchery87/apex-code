@@ -265,6 +265,38 @@ describe("AuthStorage", () => {
 		});
 	});
 
+	test("reads under a lock without creating a missing file or parent directory", async () => {
+		const existingParent = join(tempDir, "existing-parent");
+		mkdirSync(existingParent);
+		const missingPath = join(existingParent, "permissions.json");
+		const backend = new FileAuthStorageBackend(missingPath);
+		const read = vi.fn(async (current: string | undefined) => current);
+
+		await expect(backend.withReadLockAsync(read)).resolves.toBeUndefined();
+
+		expect(read).toHaveBeenCalledOnce();
+		expect(read).toHaveBeenCalledWith(undefined);
+		expect(existsSync(missingPath)).toBe(false);
+		expect(existsSync(`${missingPath}.lock`)).toBe(false);
+		expect(existsSync(join(tempDir, "not-created"))).toBe(false);
+	});
+
+	test("surfaces non-ENOENT errors from a read under lock", async () => {
+		const directoryPath = join(tempDir, "not-a-file");
+		mkdirSync(directoryPath);
+		const backend = new FileAuthStorageBackend(directoryPath);
+		let failure: unknown;
+
+		try {
+			await backend.withReadLockAsync(async (current) => current);
+		} catch (error) {
+			failure = error;
+		}
+
+		expect(failure).toBeInstanceOf(Error);
+		expect(["EISDIR", "EPERM", "EACCES"]).toContain((failure as NodeJS.ErrnoException).code);
+	});
+
 	test("retries a briefly contended file lock", async () => {
 		writeAuthJson({ anthropic: { type: "api_key", key: "stored" } });
 		const backend = new FileAuthStorageBackend(authJsonPath);

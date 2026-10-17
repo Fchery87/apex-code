@@ -44,6 +44,8 @@ export interface CompactionSettings {
 	reserveTokens?: number; // default: 16384
 	keepRecentTokens?: number; // default: 20000
 	modelOverrides?: Record<string, CompactionModelOverride>; // exact "provider/modelId" keys
+	/** Share of the context window the output-limit floor may take (HR.29, Q6). */
+	outputReserveFraction?: number;
 }
 
 export interface BranchSummarySettings {
@@ -171,6 +173,10 @@ export type MermaidRenderingMode = "off" | "final" | "streaming";
 export const CACHE_WARMING_MODES = ["off", "streaming", "idle"] as const;
 export type CacheWarmingMode = (typeof CACHE_WARMING_MODES)[number];
 
+/** How much of the transcript is on screen; the expand key cycles it in this order. */
+export const CHAT_DETAILS = ["overview", "details", "all"] as const;
+export type ChatDetail = (typeof CHAT_DETAILS)[number];
+
 export interface MarkdownSettings {
 	codeBlockIndent?: string; // default: "  "
 	mermaid?: MermaidRenderingMode; // default: "streaming"
@@ -209,6 +215,13 @@ export type PackageSource =
  * resolved by `resolveConfigValue` exactly like a model provider's key. A literal
  * key must never be written here: settings are a file this loader writes back.
  */
+export interface WebFetchSettings {
+	/** Allow loopback, private, and link-local destinations. Read from user settings only. */
+	allowPrivateNetwork?: boolean;
+	/** Allow fetches while an HTTP proxy is configured (Q4). Read from user settings only. */
+	allowProxiedFetch?: boolean;
+}
+
 export interface WebSearchSettings {
 	provider?: "exa";
 	apiKey?: string; // default: the provider's own env var, e.g. "$EXA_API_KEY"
@@ -241,6 +254,7 @@ export interface Settings {
 	defaultProjectTrust?: DefaultProjectTrust; // default: "ask"; global setting only
 	shellCommandPrefix?: string; // Prefix prepended to every bash command (e.g., "shopt -s expand_aliases" for alias support)
 	npmCommand?: string[]; // Command used for npm package lookup/install operations, argv-style (e.g., ["mise", "exec", "node@20", "--", "npm"])
+	chatDetail?: ChatDetail; // Transcript detail level, saved when the user changes it (unset opens collapsed)
 	collapseChangelog?: boolean; // Show one line after an update (default true; /changelog for the full notes)
 	// default: true - HTTP attribution headers (e.g. OpenRouter/NVIDIA billing-origin
 	// tags) sent to the LLM provider you configured, for that provider's own
@@ -255,6 +269,7 @@ export interface Settings {
 	terminal?: TerminalSettings;
 	images?: ImageSettings;
 	enabledModels?: string[]; // Model patterns for cycling (same format as --models CLI flag)
+	taskPanelExpanded?: boolean;
 	defaultTools?: string[]; // Initial built-in tool selection
 	doubleEscapeAction?: "fork" | "tree" | "none"; // Action for double-escape with empty editor (default: "tree")
 	treeFilterMode?: "default" | "no-tools" | "user-only" | "labeled-only" | "all"; // Default filter when opening /tree
@@ -277,6 +292,9 @@ export interface Settings {
 	observability?: ObservabilitySettings;
 	lsp?: LspSettings;
 	webSearch?: WebSearchSettings;
+	webFetch?: WebFetchSettings;
+	/** Start lazy MCP servers at startup to list their tools (default on, Q7). */
+	mcpStartupDiscovery?: boolean;
 	/**
 	 * Git-backed worktree checkpoints. On by default inside git repositories
 	 * (spec 2026-09-01-checkpoints-default-on.md); `{ enabled: false }` opts
@@ -1165,11 +1183,14 @@ export class SettingsManager {
 		enabled: boolean;
 		reserveTokens: number;
 		keepRecentTokens: number;
+		outputReserveFraction?: number;
 	} {
+		const fraction = this.settings.compaction?.outputReserveFraction;
 		return {
 			enabled: this.getCompactionEnabled(),
 			reserveTokens: this.getCompactionReserveTokens(model),
 			keepRecentTokens: this.getCompactionKeepRecentTokens(model),
+			...(fraction !== undefined && fraction > 0 && fraction <= 1 ? { outputReserveFraction: fraction } : {}),
 		};
 	}
 
@@ -1182,6 +1203,24 @@ export class SettingsManager {
 
 	getLspSettings(): LspSettings | undefined {
 		return this.settings.lsp === undefined ? undefined : structuredClone(this.settings.lsp);
+	}
+
+	/**
+	 * Read from user settings only. A project's checked-in settings file must not be able to
+	 * open loopback and private addresses to the model (HR.4).
+	 */
+	getWebFetchAllowPrivateNetwork(): boolean {
+		return this.globalSettings.webFetch?.allowPrivateNetwork === true;
+	}
+
+	/** Read from user settings only, for the same reason as `getWebFetchAllowPrivateNetwork` (Q4). */
+	/** Whether lazy MCP servers are started at startup to list their tools (Q7). Default on. */
+	getMcpStartupDiscovery(): boolean {
+		return this.settings.mcpStartupDiscovery !== false;
+	}
+
+	getWebFetchAllowProxiedFetch(): boolean {
+		return this.globalSettings.webFetch?.allowProxiedFetch === true;
 	}
 
 	getWebSearchSettings(): WebSearchSettings | undefined {
@@ -1409,6 +1448,27 @@ export class SettingsManager {
 	setNpmCommand(command: string[] | undefined): void {
 		this.globalSettings.npmCommand = command ? [...command] : undefined;
 		this.markModified("npmCommand");
+		this.save();
+	}
+
+	/** The saved detail level, or undefined when none is saved or the saved value is unknown. */
+	getChatDetail(): ChatDetail | undefined {
+		const detail = this.globalSettings.chatDetail;
+		return CHAT_DETAILS.find((known) => known === detail);
+	}
+
+	setChatDetail(detail: ChatDetail): void {
+		this.globalSettings.chatDetail = detail;
+		this.markModified("chatDetail");
+		this.save();
+	}
+
+	getTaskPanelExpanded(): boolean {
+		return this.globalSettings.taskPanelExpanded ?? false;
+	}
+	setTaskPanelExpanded(expanded: boolean): void {
+		this.globalSettings.taskPanelExpanded = expanded;
+		this.markModified("taskPanelExpanded");
 		this.save();
 	}
 
@@ -1677,6 +1737,12 @@ export class SettingsManager {
 
 	getEnabledModels(): string[] | undefined {
 		return this.settings.enabledModels;
+	}
+
+	setDefaultTools(names: string[]): void {
+		this.globalSettings.defaultTools = [...names];
+		this.markModified("defaultTools");
+		this.save();
 	}
 
 	getDefaultTools(): string[] | undefined {

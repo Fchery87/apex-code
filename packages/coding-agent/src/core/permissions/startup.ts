@@ -44,7 +44,7 @@ const MODE_SOURCE_ORDER: readonly ["flag", ...WritablePermissionSource[]] = [
 ];
 
 /** Where an effective mode came from. `"default"` means nothing set one. */
-export type PermissionModeOrigin = "flag" | WritablePermissionSource | "default";
+export type PermissionModeOrigin = "interactive" | "flag" | WritablePermissionSource | "default";
 
 export interface EffectiveModeResolution {
 	mode: PermissionMode;

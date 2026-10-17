@@ -57,6 +57,40 @@ describe("SettingsSelectorComponent", () => {
 		expect(onCopyOnSelectChange.mock.calls.flat()).toEqual([false, true]);
 	});
 
+	it("cycles the remembered conversation detail level", () => {
+		const onChatDetailChange = vi.fn();
+		const config = {
+			chatDetail: "overview",
+			warnings: {},
+			availableDefaultModels: [],
+			availableThinkingLevels: [],
+			availableThemes: [],
+		} as unknown as SettingsConfig;
+		const list = new SettingsSelectorComponent(config, {
+			onChatDetailChange,
+		} as unknown as SettingsCallbacks).getSettingsList();
+		for (const character of "Conversation detail") list.handleInput(character);
+		for (let i = 0; i < 3; i++) list.handleInput("\r");
+
+		expect(onChatDetailChange.mock.calls.flat()).toEqual(["details", "all", "overview"]);
+	});
+
+	it("describes thinking visibility according to the saved preference", () => {
+		const config = {
+			chatDetail: "details",
+			hideThinkingBlock: true,
+			warnings: {},
+			availableDefaultModels: [],
+			availableThinkingLevels: [],
+			availableThemes: [],
+		} as unknown as SettingsConfig;
+		const list = new SettingsSelectorComponent(config, {} as unknown as SettingsCallbacks).getSettingsList();
+		for (const character of "Conversation detail") list.handleInput(character);
+		const output = stripAnsi(list.render(120).join("\n")).replace(/\s+/g, " ");
+
+		expect(output).toContain("follows the Hide thinking preference");
+	});
+
 	it("titles the panel and speaks the shared hint grammar", () => {
 		const selector = new SettingsSelectorComponent(
 			{
@@ -94,6 +128,26 @@ describe("SettingsSelectorComponent", () => {
 	}
 
 	const DOWN = "\x1b[B";
+
+	it("explains that the saved default is shadowed by this session's mode", () => {
+		const selector = new SettingsSelectorComponent(
+			{
+				permissionMode: { mode: "plan", origin: "interactive" },
+				warnings: {},
+				availableDefaultModels: [],
+				availableThinkingLevels: [],
+				availableThemes: [],
+			} as unknown as SettingsConfig,
+			{ onPermissionModeChange: vi.fn() } as unknown as SettingsCallbacks,
+		);
+		const list = selector.getSettingsList();
+		for (const character of "Permission mode") list.handleInput(character);
+		expect(stripAnsi(list.render(140).join("\n"))).toContain("shadowed");
+		list.handleInput("\r");
+		const submenu = stripAnsi(list.render(140).join("\n"));
+		expect(submenu).toContain("shadowed");
+		expect(submenu).not.toContain("undefined");
+	});
 
 	it("omits the permission mode row when the session has no permission gate", () => {
 		const selector = new SettingsSelectorComponent(

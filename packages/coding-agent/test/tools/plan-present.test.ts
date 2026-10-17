@@ -4,12 +4,13 @@ import { createPlanPresentTool, createPlanPresentToolDefinition } from "../../sr
 
 function fakeCtx(overrides: {
 	hasUI: boolean;
-	confirm?: (title: string, message: string) => Promise<boolean>;
+	select?: (title: string, options: string[], opts?: unknown) => Promise<string | undefined>;
 }): ExtensionContext {
 	return {
 		hasUI: overrides.hasUI,
 		ui: {
-			confirm: overrides.confirm ?? (async () => false),
+			select: overrides.select ?? (async () => undefined),
+			notify: vi.fn(),
 		},
 	} as unknown as ExtensionContext;
 }
@@ -43,8 +44,8 @@ describe("plan_present contract (task 4.5)", () => {
 });
 
 describe("plan_present execution (task 4.5)", () => {
-	it("presents the plan through ctx.ui.confirm and reports approval", async () => {
-		const confirm = vi.fn(async () => true);
+	it("presents the plan through the three-way selector and reports approval", async () => {
+		const select = vi.fn(async () => "Yes, and accept edits");
 		const definition = createPlanPresentToolDefinition();
 
 		const result = await definition.execute(
@@ -52,11 +53,19 @@ describe("plan_present execution (task 4.5)", () => {
 			{ plan: "1. Read the code\n2. Write the fix" },
 			undefined,
 			undefined,
-			fakeCtx({ hasUI: true, confirm }),
+			fakeCtx({ hasUI: true, select }),
 		);
 
-		expect(confirm).toHaveBeenCalledWith(expect.any(String), "1. Read the code\n2. Write the fix");
-		expect(result.details).toEqual({ plan: "1. Read the code\n2. Write the fix", approved: true });
+		expect(select).toHaveBeenCalledWith(
+			"Approve this plan?",
+			["Yes, and accept edits", "Yes, and ask before each edit", "No, keep planning"],
+			{ signal: undefined },
+		);
+		expect(result.details).toEqual({
+			plan: "1. Read the code\n2. Write the fix",
+			approved: true,
+			nextMode: "acceptEdits",
+		});
 		const text = result.content.find((c) => c.type === "text")?.text ?? "";
 		expect(text).toMatch(/approved/i);
 	});
@@ -69,7 +78,7 @@ describe("plan_present execution (task 4.5)", () => {
 			{ plan: "1. Do a risky thing" },
 			undefined,
 			undefined,
-			fakeCtx({ hasUI: true, confirm: async () => false }),
+			fakeCtx({ hasUI: true, select: async () => "No, keep planning" }),
 		);
 
 		expect(result.details).toEqual({ plan: "1. Do a risky thing", approved: false });
@@ -80,13 +89,13 @@ describe("plan_present execution (task 4.5)", () => {
 
 describe("plan_present fails closed without interactive UI (task 4.5)", () => {
 	it("throws rather than silently treating the no-op UI's resolved false as a real rejection, when ctx.hasUI is false", async () => {
-		const confirm = vi.fn(async () => false);
+		const select = vi.fn(async () => undefined);
 		const definition = createPlanPresentToolDefinition();
 
 		await expect(
-			definition.execute("call-1", { plan: "1. Step" }, undefined, undefined, fakeCtx({ hasUI: false, confirm })),
+			definition.execute("call-1", { plan: "1. Step" }, undefined, undefined, fakeCtx({ hasUI: false, select })),
 		).rejects.toThrow(/interactive UI|not available|headless/i);
-		expect(confirm).not.toHaveBeenCalled();
+		expect(select).not.toHaveBeenCalled();
 	});
 
 	it("throws when called with no context at all", async () => {
@@ -94,5 +103,42 @@ describe("plan_present fails closed without interactive UI (task 4.5)", () => {
 		await expect(tool.execute("call-1", { plan: "1. Step" })).rejects.toThrow(
 			/interactive UI|not available|headless/i,
 		);
+	});
+});
+
+describe("injected plan presenter", () => {
+	it.each(["acceptEdits", "default"] as const)("adds %s to result and evidence", async (nextMode) => {
+		const present = vi.fn(async () => ({ approved: true as const, nextMode }));
+		const tool = createPlanPresentToolDefinition({ present });
+		const ctx = fakeCtx({ hasUI: false });
+		const signal = new AbortController().signal;
+		const result = await tool.execute("id", { plan: "Plan" }, signal, undefined, ctx);
+		expect(present).toHaveBeenCalledWith("Plan", ctx, signal);
+		expect(result.details).toEqual({ plan: "Plan", approved: true, nextMode });
+		expect(tool.contract.evidence.capture({ plan: "Plan" }, result)).toEqual([
+			{ kind: "workflow", plan: "Plan", approved: true, nextMode },
+		]);
+	});
+	it("rejects cancelled approval", async () => {
+		const controller = new AbortController();
+		const tool = createPlanPresentToolDefinition({
+			present: async () => {
+				controller.abort();
+				return { approved: true, nextMode: "default" };
+			},
+		});
+		await expect(
+			tool.execute("id", { plan: "Plan" }, controller.signal, undefined, fakeCtx({ hasUI: false })),
+		).rejects.toThrow(/abort|cancel/i);
+	});
+	it("maps the ask choice to default", async () => {
+		const result = await createPlanPresentToolDefinition().execute(
+			"id",
+			{ plan: "Plan" },
+			undefined,
+			undefined,
+			fakeCtx({ hasUI: true, select: async () => "Yes, and ask before each edit" }),
+		);
+		expect(result.details).toEqual({ plan: "Plan", approved: true, nextMode: "default" });
 	});
 });

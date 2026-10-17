@@ -14,6 +14,7 @@ import { findRenderers } from "./find.ts";
 import { grepRenderers } from "./grep.ts";
 import { lsRenderers } from "./ls.ts";
 import { readRenderers } from "./read.ts";
+import { todoWriteRenderers } from "./todo-write.ts";
 import { writeRenderers } from "./write.ts";
 
 export type ToolRenderers = Pick<ToolDefinition<any, any>, "renderCall" | "renderResult">;
@@ -35,7 +36,7 @@ export {
  */
 export type RenderedToolName = Extract<
 	ToolName,
-	"read" | "bash" | "powershell" | "edit" | "write" | "grep" | "find" | "ls"
+	"read" | "bash" | "powershell" | "edit" | "write" | "grep" | "find" | "ls" | "todo_write"
 >;
 
 /** Renderers for every built-in tool that has one, keyed by tool name. */
@@ -49,6 +50,7 @@ export function createAllToolRenderers(): Record<RenderedToolName, ToolRenderers
 		grep: grepRenderers,
 		find: findRenderers,
 		ls: lsRenderers,
+		todo_write: todoWriteRenderers,
 	};
 }
 

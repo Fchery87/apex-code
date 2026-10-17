@@ -62,6 +62,14 @@ export interface PermissionSpec<TParams extends TSchema = TSchema> {
 	 */
 	protectedTarget?(params: Static<TParams>): string | undefined;
 
+	/**
+	 * Whether an allow rule may grant this call. Undefined means every matching allow rule
+	 * applies. A sensitive path (`.env`) returns false for a rule that does not name the
+	 * file itself, so a directory or blanket rule covering it does not grant it. Deny rules
+	 * are not consulted here and keep matching as before.
+	 */
+	allowRuleGrants?(ruleContent: string | undefined, params: Static<TParams>): boolean;
+
 	/** Prepare canonical operation facts on the validated call before authorization and execution. */
 	prepareCall?(params: Static<TParams>): void;
 
@@ -203,6 +211,7 @@ export interface WorkflowEvidenceRecord {
 	kind: "workflow";
 	plan?: string;
 	approved?: boolean;
+	nextMode?: "acceptEdits" | "default";
 	agentType?: string;
 	task?: string;
 	handle?: string;

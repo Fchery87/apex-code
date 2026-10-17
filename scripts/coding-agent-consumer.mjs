@@ -7,7 +7,7 @@ import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getPublicWorkspacePackages } from "./release-packages.mjs";
 
-const codingAgentName = "@earendil-works/pi-coding-agent";
+const codingAgentName = "apex-code";
 const developmentPackages = new Set(["pi-client", "pi-protocol", "pi-server"].map((name) => `@earendil-works/${name}`));
 
 function run(command, args, options = {}) {
@@ -113,7 +113,7 @@ for (const subpath of ["/client", "/experimental/plugin"]) {
 }
 `);
 		run(runtime, [entry], { cwd: directory, env, timeout: 30_000 });
-		for (const cli of new Set([manifest.bin.pi, "dist/cli.js"])) {
+		for (const cli of new Set([manifest.bin[codingAgentName], "dist/cli.js"])) {
 			const output = run(runtime, [join(packageDir, cli), "--version"], { cwd: directory, env, timeout: 30_000 });
 			if (output.trim() !== manifest.version) throw new Error(`Unexpected version from ${cli}: ${output}`);
 		}

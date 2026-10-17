@@ -388,5 +388,7 @@ export async function createAgentSessionFromServices(
 		diagnosticsOperations,
 		lspOperations,
 		webSearchOperations,
+		webFetchAllowPrivateNetwork: settingsManager.getWebFetchAllowPrivateNetwork(),
+		webFetchAllowProxiedFetch: settingsManager.getWebFetchAllowProxiedFetch(),
 	});
 }

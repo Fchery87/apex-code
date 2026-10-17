@@ -143,7 +143,12 @@ export interface CompactionSettings {
 	enabled: boolean;
 	reserveTokens: number;
 	keepRecentTokens: number;
+	/** Share of the context window the output-limit floor may take (default 1/3, HR.29 / Q6). */
+	outputReserveFraction?: number;
 }
+
+/** The output-limit floor may take at most this share of the window unless a setting says otherwise. */
+export const DEFAULT_OUTPUT_RESERVE_FRACTION = 1 / 3;
 
 export const DEFAULT_COMPACTION_SETTINGS: CompactionSettings = {
 	enabled: true,
@@ -284,11 +289,34 @@ export function estimateProjectedContextTokens(
 }
 
 /**
+ * The tokens kept free for the next response. It is never smaller than the model's own
+ * output limit (HR.29): a fixed reserve below that limit lets one response overflow the window.
+ */
+export function effectiveReserveTokens(
+	settings: CompactionSettings,
+	maxOutputTokens: number | undefined,
+	contextWindow: number,
+): number {
+	const configured = settings.outputReserveFraction;
+	const fraction =
+		configured !== undefined && Number.isFinite(configured) && configured > 0 && configured <= 1
+			? configured
+			: DEFAULT_OUTPUT_RESERVE_FRACTION;
+	const outputFloor = Math.min(maxOutputTokens ?? 0, Math.floor(contextWindow * fraction));
+	return Math.max(settings.reserveTokens, outputFloor);
+}
+
+/**
  * Check if compaction should trigger based on context usage.
  */
-export function shouldCompact(contextTokens: number, contextWindow: number, settings: CompactionSettings): boolean {
+export function shouldCompact(
+	contextTokens: number,
+	contextWindow: number,
+	settings: CompactionSettings,
+	maxOutputTokens?: number,
+): boolean {
 	if (!settings.enabled) return false;
-	return contextTokens > contextWindow - settings.reserveTokens;
+	return contextTokens > contextWindow - effectiveReserveTokens(settings, maxOutputTokens, contextWindow);
 }
 
 // ============================================================================

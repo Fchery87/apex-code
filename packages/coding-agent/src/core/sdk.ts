@@ -16,8 +16,9 @@ import { AgentSession, type AgentSessionConfig, type AggregateBudgetUsageSnapsho
 import { formatNoModelsAvailableMessage } from "./auth-guidance.ts";
 import { AuthStorage } from "./auth-storage.ts";
 import { CacheWarmer } from "./cache-warmer.ts";
+import { configuredDefaultToolNames } from "./default-tool-names.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
-import { createAgentDefinitionResolver } from "./delegation/agents.ts";
+import { type AgentDefinitionCatalogResolver, createAgentDefinitionResolver } from "./delegation/agents.ts";
 import {
 	type AgentDefinitionResolver,
 	type ChildRunPolicySnapshot,
@@ -180,6 +181,8 @@ export interface CreateAgentSessionOptions {
 	/** Optional `lsp` navigation tool transport (LSP.5); registers and activates `lsp` when present. */
 	lspOperations?: AgentSessionConfig["lspOperations"];
 	webSearchOperations?: AgentSessionConfig["webSearchOperations"];
+	webFetchAllowPrivateNetwork?: AgentSessionConfig["webFetchAllowPrivateNetwork"];
+	webFetchAllowProxiedFetch?: AgentSessionConfig["webFetchAllowProxiedFetch"];
 	/**
 	 * Delegation entry point (roadmap Phase 5, ADR 0008). When set, `delegate`
 	 * executes real child sessions through `resolveAgent`, with the child's
@@ -442,18 +445,17 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// registered either way, so an explicit `--tools` selection still reaches them and an
 	// unconfigured call still explains itself. Activating an unconfigured tool would put a
 	// name in the prompt that can only ever fail.
-	const defaultActiveToolNames: string[] = [
-		...(["read", "bash", "edit", "write"] satisfies ToolName[]),
-		...(options.lspOperations ? ["lsp"] : []),
-		...(options.webSearchOperations ? (["web_search"] satisfies ToolName[]) : []),
-		...(mcpRuntime ? ["mcp"] : []),
-	];
-	const configuredDefaultToolNames = settingsManager.getDefaultTools();
+	const defaultActiveToolNames = configuredDefaultToolNames({
+		lsp: Boolean(options.lspOperations),
+		webSearch: Boolean(options.webSearchOperations),
+		mcp: Boolean(mcpRuntime),
+	});
+	const savedDefaultToolNames = settingsManager.getDefaultTools();
 	const allowedToolNames = options.tools ?? (options.noTools === "all" ? [] : undefined);
 	const excludedToolNames = options.excludeTools;
 	const excludedToolNameSet = excludedToolNames ? new Set(excludedToolNames) : undefined;
 	const initialActiveToolNames = (
-		options.tools ?? (options.noTools ? [] : (configuredDefaultToolNames ?? defaultActiveToolNames))
+		options.tools ?? (options.noTools ? [] : (savedDefaultToolNames ?? defaultActiveToolNames))
 	).filter((name) => !excludedToolNameSet?.has(name));
 
 	// Create convertToLlm wrapper that filters images if blockImages is enabled (defense-in-depth)
@@ -788,7 +790,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					// No responder: a child's `ask` fails closed rather than prompting the
 					// human for a call the human did not make (ADR 0008, "Who answers a
 					// child's ask").
-					permissionGate: { store: derivedStore, getMode: parentPermissionGate.getMode },
+					permissionGate: {
+						store: derivedStore,
+						getMode: () =>
+							parentSessionRef.current?.getInteractivePermissionMode() ?? parentPermissionGate.getMode(),
+					},
 					// A delegated child shares the parent's cwd-bound LSP pool (spec, "no
 					// multi-root LSP connection and no sharing across cwd-bound service
 					// lifetimes" -- delegated children are the one sharing exception).
@@ -798,6 +804,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					// once (possibly by running a shell command for the key) and a child
 					// that re-resolved nothing would hold a `web_search` that only throws.
 					webSearchOperations: options.webSearchOperations,
+					webFetchAllowPrivateNetwork: options.webFetchAllowPrivateNetwork,
+					webFetchAllowProxiedFetch: options.webFetchAllowProxiedFetch,
 					// `checkpointSettings` is deliberately *not* forwarded. A child shares the
 					// parent's cwd, so it would write refs under its own session id into the
 					// same repository and interleave them with the parent's. The parent's
@@ -972,7 +980,13 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				};
 			},
 		};
-		customTools.push(createDelegateToolDefinition(delegationRuntime) as ToolDefinition<any, any>);
+		// The catalog is read once, at session start, so the model is told which types exist.
+		// A resolver supplied without a catalog (tests) leaves the description unchanged.
+		const agentCatalog =
+			typeof (resolveAgent as Partial<AgentDefinitionCatalogResolver>).list === "function"
+				? (resolveAgent as AgentDefinitionCatalogResolver).list()
+				: [];
+		customTools.push(createDelegateToolDefinition(delegationRuntime, agentCatalog) as ToolDefinition<any, any>);
 		// Historical resume (restart reconstruction) reattaches a persisted child
 		// through THIS runtime's buildChildSession seam. Wiring it here -- not only
 		// at the first delegation -- is what makes resume work on a freshly
@@ -996,6 +1010,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		modelRuntime,
 		cacheWarmer,
 		initialActiveToolNames,
+		implicitDefaultToolNames: defaultActiveToolNames,
 		allowedToolNames,
 		excludedToolNames,
 		extensionRunnerRef,
@@ -1006,6 +1021,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		diagnosticsOperations: options.diagnosticsOperations,
 		lspOperations: options.lspOperations,
 		webSearchOperations: options.webSearchOperations,
+		webFetchAllowPrivateNetwork: options.webFetchAllowPrivateNetwork,
+		webFetchAllowProxiedFetch: options.webFetchAllowProxiedFetch,
 		mcpRuntime,
 		checkpointSettings: settingsManager.getCheckpointSettings(),
 		// Declarative hooks (spec 2026-08-31-declarative-hooks): assembled from the
@@ -1019,7 +1036,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// Eager servers connect here rather than on first use, so their tools are in the
 	// cache before the model's first search. Detached: a slow or broken server delays
 	// nothing, and `warmEagerServers` already swallows its own failures.
-	void mcpRuntime?.warm();
+	void mcpRuntime
+		?.warm({ discoverLazy: settingsManager.getMcpStartupDiscovery() })
+		.then((started) => session.reportMcpDiscovery(started));
 	const extensionsResult = resourceLoader.getExtensions();
 
 	return {

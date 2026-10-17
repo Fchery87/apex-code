@@ -22,6 +22,7 @@ export {
 	type PromptOptions,
 	parseSkillBlock,
 	type SessionStats,
+	type TreeWorkspacePreview,
 } from "./core/agent-session.ts";
 export { readStoredCredential } from "./core/auth-storage.ts";
 export type { CacheWarmingDecision, CacheWarmingStatus } from "./core/cache-warmer.ts";
@@ -343,6 +344,8 @@ export {
 	createLocalBashOperations,
 	createLocalPowerShellOperations,
 	createLsToolDefinition,
+	createPlanPresentTool,
+	createPlanPresentToolDefinition,
 	createPowerShellToolDefinition,
 	createReadToolDefinition,
 	createWriteToolDefinition,
@@ -373,6 +376,10 @@ export {
 	type LsToolDetails,
 	type LsToolInput,
 	type LsToolOptions,
+	type PlanDecision,
+	type PlanPresentDetails,
+	type PlanPresenter,
+	type PlanPresentInput,
 	type PowerShellOperations,
 	type PowerShellSpawnContext,
 	type PowerShellSpawnHook,

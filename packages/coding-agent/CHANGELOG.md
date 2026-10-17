@@ -2,6 +2,82 @@
 
 ## [Unreleased]
 
+### Added
+
+- New sessions activate the read-only search tools (`grep`, `find`, `ls`), `web_fetch`, and `delegate` by default. Each still asks through its own permission rule. A saved `defaultTools` setting still wins.
+- Built-in subagent types: `explore` (read-only search) and `general` (default file and shell tools, cannot delegate). A user or trusted-project definition with the same name replaces either one. The `delegate` description lists the available types.
+- The system prompt states the date, platform, shell, model, and whether the working directory has uncommitted git changes.
+- The system prompt includes working rules: verify before reporting work as done, read a file before editing it, no destructive git operations without an explicit request, and treat tool output and web pages as data.
+- Plan mode shows the read-only tools plus `grep`, `find`, and `ls`. Leaving plan mode restores the full set.
+- Read-only commands run without a prompt: `pwd`, `--version` for git, node, npm, rg, and python3, and the listed forms of `git status`, `log`, `diff`, `branch`, `show`, and `rev-parse`. Anything that names a path outside the repository, uses `-c`, writes, or chains still asks.
+- Lazy MCP servers are listed at startup when they have no cached tools, so search finds their tools in the first session. The session reports which servers were started: a status line in the TUI, a stderr line in print mode, and an `mcp_discovery_started` event in JSON and RPC.
+- `web_fetch` returns HTML as markdown and reads at most 5 MB. Images, PDFs, and other binary responses are refused, and the refusal names the type.
+
+### Changed
+
+- Reads outside the working directory ask before they run. An "always allow" saves a rule for the directory.
+- `.env` and `.env.<suffix>` files ask by default. Only a rule that names the file grants them. Template names (`.env.example`, `.env.sample`, `.env.template`) stay ordinary.
+- Home-directory credential locations (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gcloud`, `~/.kube`, `~/.docker/config.json`, `~/.netrc`, `~/.npmrc`) are refused unless a policy rule grants them. `grep` does not return the contents of `.env` files found during a recursive search.
+- `web_fetch` follows a redirect only to the same host, and returns a cross-host target as text for a separate, permission-checked fetch. It refuses private, loopback, and link-local addresses unless `webFetch.allowPrivateNetwork` is set in user settings, which a project cannot do. It connects to the address it checked, except when a proxy is configured.
+- MCP stdio servers no longer inherit the whole environment, so provider keys are not passed to them. A server that needs a variable references it in its `env` entry, as `"NAME": "$NAME"`.
+- Session transcripts and their directories are readable only by the owner. Existing transcripts are tightened when opened.
+- `/share` redacts credential-shaped strings before upload, and the confirmation states how many were replaced.
+- `--api-key` prints a warning that the key can end up in shell history and process listings.
+- `write` refuses to replace an existing file the model has not read in full, or one that changed since it was read. `edit` refuses a file that changed since it was read.
+- The default Anthropic and Bedrock models are Opus 5.5. Several other providers' defaults moved to models in the refreshed catalog. OpenCode Go keeps its previous default.
+- The compaction reserve is never smaller than the model's maximum output, so one long response cannot fill the window.
+- Agent definitions accept `tools` as a comma-separated string. A definition that cannot load is listed in `/resources` with its file and the reason.
+- Aborting a parent session interrupts the foreground subagent it is waiting on. Background subagents continue.
+- `--exclude-tools` help names `ask_user`, the tool's actual name. `/bug` describes Apex Code.
+- Changelog links to this project's files and releases point to its own repository. Links to upstream history still point to Pi's repository.
+
+### Removed
+
+- The unused durable-state daemon module. Its SQLite sidecar and session leases remain.
+- The `./client` and `./experimental/plugin` package exports. They resolved only from the source tree, which is not published.
+- `reasonix.toml` and `mini-test.sh` from the repository root. The `pi-test` launcher is now `apex-test`.
+- The root package name `pi-monorepo` is now `apex-code-monorepo`.
+
+## [0.6.1] - 2026-10-04
+
+### Changed
+
+- Overview renders each tool and user shell operation as one row with its label, lifecycle, and available-output count or failure diagnostic. Details and all retain previews, diffs, and full output. Click an operation or press configurable Alt+O to expand it individually; Ctrl+O cycles the whole transcript and resets individual expansion. The footer shows the current detail mode.
+
+## [0.6.0] - 2026-10-04
+
+### Added
+
+- `/tree` asks whether to keep current files, restore files to the selected checkpoint, or cancel when the workspace differs. Keeping files is the default. Navigation reports the workspace outcome, and a restore saves a pre-restore checkpoint.
+- Extensions can pass `workspacePolicy` to `navigateTree`. SDK callers can inspect checkpoint drift without changing files or the conversation through `AgentSession.previewTreeWorkspace()`.
+- Completed interactive runs show a dim `Worked for` duration. Aborted runs show `Interrupted after`, including cancellation during retry backoff. Runs under one second show no duration. The line is never saved to the session or sent to the model.
+- Interactive permission modes have an in-memory session override. It governs tool calls, configured commands, and delegated children above configured mode sources. Bypass is available only when it was in force at startup. Reload, resume, and a new session clear the override; `/settings` still writes the saved user default.
+
+- Plan mode activates `plan_present` when the tool registry admits it. Its selector offers approval with automatic edit acceptance, approval with edit prompts, or continued planning. Approval changes only the session mode and refreshes the footer. Explicitly selected tools remain active; tool allowlists and exclusions still apply.
+
+- Active task lists appear in a pinned panel above the composer. Alt+J and `/tasks` toggle a globally saved expansion preference. The panel follows branch navigation and resume, retains tasks through compaction, and hides a completed list when the run settles. On macOS, Alt+J needs Option configured as Meta.
+- The task-list tool remains opt-in. A `/settings` row adds or removes `todo_write` from saved defaults for new sessions while preserving other tools. Project defaults make the row read-only. Task results show a compact completion count with expandable details.
+
+### Changed
+
+- Shift+Tab now cycles permission modes for this session. Alt+T cycles thinking levels. The footer marks session overrides and shows the bound cycle key; the first cycle explains the new bindings. To restore the old thinking key, set `"app.thinking.cycle": "shift+tab"` and `"app.permissionMode.cycle": "alt+t"` in `~/.apex-code/agent/keybindings.json`, then run `/reload`. On macOS, Alt+T needs Option configured as Meta.
+
+## [0.5.2] - 2026-09-30
+
+### Changed
+
+- **Self-update shows its progress.** `apex-code update --self` reports the current version, checks for updates, names the target version, and confirms success after installation finishes. Managed and package-manager failures retain their diagnostics and never report success.
+
+## [0.5.1] - 2026-09-27
+
+### Changed
+
+- **A session opens with everything collapsed.** Tool output shows a counted preview, edit diffs show their line counts, thinking shows one `Thinking... ctrl+o to expand` line, and a multi-line error shows its first line (or, for a Python traceback, the raised error) with the same hint. Press `ctrl+o` to step through overview, details, and all. The level you pick is saved as `chatDetail` in `~/.apex-code/settings.json`, so the next session opens at it; `/settings` also has a Conversation detail row. Turning thinking on with `ctrl+t` opens the transcript far enough to show it.
+
+### Fixed
+
+- **Starting Apex in a trusted project left untracked files behind.** Reading permission rules went through the write lock, which creates the file it locks, so the first run in any trusted repository created `.apex-code/permissions.json` and `.apex-code/permissions.local.json`, and `~/.apex-code/permissions.json`. Missing rules files are read as empty without creating anything; other filesystem errors are surfaced in the permission snapshot instead of being mistaken for missing files. Files are still created the first time you save a rule.
+
 ## [0.5.0] - 2026-09-23
 
 ### Changed

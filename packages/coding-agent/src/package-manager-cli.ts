@@ -9,7 +9,6 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
-import { Markdown, type MarkdownTheme } from "@earendil-works/pi-tui";
 import chalk from "chalk";
 import lockfile from "proper-lockfile";
 import { selectConfig } from "./cli/config-selector.ts";
@@ -231,23 +230,6 @@ async function runManagedSelfUpdate(managedRoot: string, version: string): Promi
 		await releaseLock();
 	}
 }
-
-const SELF_UPDATE_NOTE_MARKDOWN_THEME: MarkdownTheme = {
-	heading: (text) => chalk.bold(chalk.yellow(text)),
-	link: (text) => chalk.cyan(text),
-	linkUrl: (text) => chalk.dim(text),
-	code: (text) => chalk.yellow(text),
-	codeBlock: (text) => chalk.dim(text),
-	codeBlockBorder: (text) => chalk.dim(text),
-	quote: (text) => chalk.dim(text),
-	quoteBorder: (text) => chalk.dim(text),
-	hr: (text) => chalk.dim(text),
-	listBullet: (text) => chalk.yellow(text),
-	bold: (text) => chalk.bold(text),
-	italic: (text) => chalk.italic(text),
-	strikethrough: (text) => chalk.strikethrough(text),
-	underline: (text) => chalk.underline(text),
-};
 
 interface PackageCommandOptions {
 	command: PackageCommand;
@@ -647,32 +629,11 @@ function printPnpmSelfUpdateMetadataHint(): void {
 	console.error(chalk.yellow(`Run \`pnpm store prune\` and retry \`${APP_NAME} update --self\`.`));
 }
 
-function printSelfUpdateNote(note: string): void {
-	const trimmedNote = note.trim();
-	if (!trimmedNote) {
-		return;
-	}
-
-	console.log();
-	console.log(chalk.bold(chalk.yellow("Update note")));
-	try {
-		const width = Math.max(20, process.stdout.columns ?? 80);
-		const renderedLines = new Markdown(trimmedNote, 0, 0, SELF_UPDATE_NOTE_MARKDOWN_THEME)
-			.render(width)
-			.map((line) => line.trimEnd());
-		console.log(renderedLines.join("\n"));
-	} catch {
-		console.log(trimmedNote);
-	}
-	console.log();
-}
-
 interface SelfUpdatePlan {
 	packageName: string;
 	installSpec: string;
 	version: string;
 	shouldRun: boolean;
-	note?: string;
 }
 
 async function getSelfUpdatePlan(force: boolean): Promise<SelfUpdatePlan> {
@@ -695,12 +656,10 @@ async function getSelfUpdatePlan(force: boolean): Promise<SelfUpdatePlan> {
 			packageName,
 			installSpec,
 			version: latestRelease.version,
-			...(latestRelease.note ? { note: latestRelease.note } : {}),
 			shouldRun: true,
 		};
 	}
 
-	console.log(chalk.green(`${APP_NAME} is already up to date (v${VERSION})`));
 	return { packageName, installSpec, version: latestRelease.version, shouldRun: false };
 }
 
@@ -1046,16 +1005,19 @@ export async function handlePackageCommand(
 						process.exitCode = 1;
 						return true;
 					}
+					console.log(chalk.bold("Apex Code Update"));
+					console.log(`Current version: ${VERSION}`);
+					console.log();
+					console.log("Checking for updates...");
 					const selfUpdatePlan = await getSelfUpdatePlan(options.force);
 					if (!selfUpdatePlan.shouldRun) {
+						console.log(chalk.green(`${APP_NAME} is already up to date (v${VERSION})`));
 						return true;
 					}
+					console.log(`Updating: ${VERSION} → ${selfUpdatePlan.version}`);
 					if (managedInstallRoot) {
-						if (selfUpdatePlan.note) {
-							printSelfUpdateNote(selfUpdatePlan.note);
-						}
 						try {
-							console.log(chalk.dim(`Updating managed ${APP_NAME} installation...`));
+							console.log(chalk.dim("  [1/1] Installing update..."));
 							await runManagedSelfUpdate(managedInstallRoot, selfUpdatePlan.version);
 						} catch (error: unknown) {
 							const message = error instanceof Error ? error.message : "Unknown managed update error";
@@ -1063,40 +1025,32 @@ export async function handlePackageCommand(
 							process.exitCode = 1;
 							return true;
 						}
-						console.log(chalk.green(`Updated ${APP_NAME} from ${VERSION} to ${selfUpdatePlan.version}`));
-						return true;
-					}
-
-					const installMethod = detectInstallMethod();
-					const selfUpdateTarget = {
-						packageName: selfUpdatePlan.packageName,
-						installSpec: selfUpdatePlan.installSpec,
-					};
-					const selfUpdateCommand = getSelfUpdateCommand(PACKAGE_NAME, selfUpdateNpmCommand, selfUpdateTarget);
-					if (!selfUpdateCommand) {
-						printSelfUpdateUnavailable(selfUpdateNpmCommand, selfUpdateTarget);
-						process.exitCode = 1;
-						return true;
-					}
-					if (selfUpdatePlan.note) {
-						printSelfUpdateNote(selfUpdatePlan.note);
-					}
-					try {
-						if (installMethod === "npm") {
-							prepareWindowsNpmSelfUpdate();
+					} else {
+						const installMethod = detectInstallMethod();
+						const selfUpdateCommand = getSelfUpdateCommand(PACKAGE_NAME, selfUpdateNpmCommand, selfUpdatePlan);
+						if (!selfUpdateCommand) {
+							printSelfUpdateUnavailable(selfUpdateNpmCommand, selfUpdatePlan);
+							process.exitCode = 1;
+							return true;
 						}
-						await runSelfUpdate(selfUpdateCommand);
-					} catch (error: unknown) {
-						const message = error instanceof Error ? error.message : "Unknown package command error";
-						console.error(chalk.red(`Error: ${message}`));
-						if (installMethod === "pnpm") {
-							printPnpmSelfUpdateMetadataHint();
+						try {
+							if (installMethod === "npm") {
+								prepareWindowsNpmSelfUpdate();
+							}
+							console.log(chalk.dim("  [1/1] Installing update..."));
+							await runSelfUpdate(selfUpdateCommand);
+						} catch (error: unknown) {
+							const message = error instanceof Error ? error.message : "Unknown package command error";
+							console.error(chalk.red(`Error: ${message}`));
+							if (installMethod === "pnpm") {
+								printPnpmSelfUpdateMetadataHint();
+							}
+							printSelfUpdateFallback(selfUpdateCommand);
+							process.exitCode = 1;
+							return true;
 						}
-						printSelfUpdateFallback(selfUpdateCommand);
-						process.exitCode = 1;
-						return true;
 					}
-					console.log(chalk.green(`Updated ${APP_NAME} from ${VERSION} to ${selfUpdatePlan.version}`));
+					console.log(chalk.green(`✓ Successfully updated to version ${selfUpdatePlan.version}!`));
 				}
 				return true;
 			}

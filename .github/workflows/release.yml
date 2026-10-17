@@ -139,7 +139,7 @@ jobs:
       # vitest, tsx, ...) no end user's install ever receives. "Complete
       # transitive production dependency license closure" means what actually
       # ships, not everything this repository happens to have installed.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: standalone-release-assets
           path: |
@@ -157,7 +157,7 @@ jobs:
       - name: Generate third-party license report
         run: npm run generate:license-report -- --node-modules "${RUNNER_TEMP}/packed-product-surface/smoke-install/node_modules" --release-manifest "${RUNNER_TEMP}/packed-product-surface/release-artifacts.json"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: third-party-licenses
           path: .artifacts/third-party-licenses.md
@@ -169,7 +169,7 @@ jobs:
       - name: Generate SBOM
         run: node scripts/apex/generate-sbom.mjs --release-manifest "${RUNNER_TEMP}/packed-product-surface/release-artifacts.json" --install-directory "${RUNNER_TEMP}/packed-product-surface/smoke-install"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom
           path: .artifacts/sbom-*.cyclonedx.json
@@ -255,7 +255,7 @@ jobs:
 
       # Durable release evidence includes both the retained local identity and
       # the observed registry digest and signed provenance result.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-evidence
           path: |
@@ -266,11 +266,11 @@ jobs:
           # above for why every upload from it needs this set.
           include-hidden-files: true
 
-  # ADR 0005: Linux and macOS are the supported platforms (Windows is a standing
-  # exclusion, not reopened here). The Ubuntu job above builds, tests, and
-  # publishes; this job only verifies the already-published artifact installs
-  # and runs on the other supported platform -- it must never re-run the
-  # publish steps, or the release would be published twice.
+  # Apex Code supports Linux, macOS, and Windows. The Ubuntu job above builds,
+  # tests, and publishes. This job adds a packed-artifact install/run smoke test
+  # on macOS. Windows build, test, and PowerShell installer parsing run in
+  # .github/workflows/ci.yml. Keep publication in the Ubuntu job to avoid
+  # publishing the same release twice.
   verify-macos-packed:
     name: Verify packed artifact smoke on macOS before publication (Node ${{ matrix.node }})
     runs-on: macos-latest
@@ -349,7 +349,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: standalone-release-assets
           path: release-assets

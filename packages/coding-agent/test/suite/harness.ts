@@ -74,6 +74,7 @@ export interface HarnessOptions {
 	shouldStopAfterTurn?: Agent["shouldStopAfterTurn"];
 	withConfiguredAuth?: boolean;
 	modelsJson?: Record<string, unknown>;
+	webFetchAllowProxiedFetch?: boolean;
 }
 
 export interface Harness {
@@ -254,6 +255,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 		excludedToolNames: options.excludedToolNames,
 		extensionRunnerRef,
 		permissionGate: options.permissionGate,
+		webFetchAllowProxiedFetch: options.webFetchAllowProxiedFetch,
 	});
 
 	const events: AgentSessionEvent[] = [];

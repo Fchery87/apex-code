@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { installCodingAgentConsumer, packReleasePackages, smokeTestCodingAgentConsumer } from "./coding-agent-consumer.mjs";
 
-const codingAgentName = "@earendil-works/pi-coding-agent";
+const codingAgentName = "apex-code";
 const devPackages = ["pi-client", "pi-protocol", "pi-server"].map((name) => `@earendil-works/${name}`);
 
 function createFixture(t, { importServer = false, declareServer = false } = {}) {
@@ -13,7 +13,7 @@ function createFixture(t, { importServer = false, declareServer = false } = {}) 
 	t.after(() => rmSync(root, { recursive: true, force: true }));
 	const packages = [codingAgentName, "@earendil-works/chord", ...devPackages].map((name) => ({
 		name,
-		directory: join(root, "packages", name.split("/")[1]),
+		directory: join(root, "packages", name.replace("@earendil-works/", "")),
 	}));
 	for (const pkg of packages) {
 		const isAgent = pkg.name === codingAgentName;
@@ -27,7 +27,7 @@ function createFixture(t, { importServer = false, declareServer = false } = {}) 
 				"./experimental/plugin": { source: "./src/experimental/plugin.ts" },
 			} : "./dist/index.js",
 			...(isAgent ? {
-				bin: { pi: "dist/bundle/cli.js" },
+				bin: { [codingAgentName]: "dist/cli.js" },
 				dependencies: {
 					"@earendil-works/chord": "1.0.0",
 					...(declareServer ? { "@earendil-works/pi-server": "1.0.0" } : {}),
@@ -47,7 +47,6 @@ export class ModelRuntime { static create() {} }
 ` : 'export const marker = "local tarball";',
 			...(isAgent ? {
 				"dist/cli.js": 'console.log("1.0.0");',
-				"dist/bundle/cli.js": 'console.log("1.0.0");',
 			} : {}),
 		};
 		for (const [path, content] of Object.entries(files)) {

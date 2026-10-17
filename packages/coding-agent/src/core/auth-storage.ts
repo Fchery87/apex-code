@@ -40,6 +40,8 @@ let sharedAuthFileReadState: { authPath: string; readState: AuthFileReadState } 
 
 export interface AuthStorageBackend {
 	withLock<T>(fn: (current: string | undefined) => LockResult<T>): T;
+	/** Read under the file lock without creating the backing file or its parent directory. */
+	withReadLockAsync<T>(fn: (current: string | undefined) => Promise<T>, options?: AuthOperationOptions): Promise<T>;
 	withLockAsync<T>(
 		fn: (current: string | undefined) => Promise<LockResult<T>>,
 		options?: AuthOperationOptions,
@@ -152,6 +154,53 @@ export class FileAuthStorageBackend implements AuthStorageBackend {
 			}
 			return release;
 		}
+	}
+
+	withReadLockAsync<T>(fn: (current: string | undefined) => Promise<T>, options?: AuthOperationOptions): Promise<T> {
+		const operation = (async () => {
+			options?.signal?.throwIfAborted();
+			let release: (() => Promise<void>) | undefined;
+			let lockCompromised = false;
+			let lockCompromisedError: Error | undefined;
+			const throwIfCompromised = () => {
+				if (lockCompromised) {
+					throw lockCompromisedError ?? new Error("Auth storage lock was compromised");
+				}
+			};
+			try {
+				try {
+					release = await this.acquireLockAsync(options?.signal, (error) => {
+						lockCompromised = true;
+						lockCompromisedError = error;
+					});
+				} catch (error) {
+					options?.signal?.throwIfAborted();
+					if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return await fn(undefined);
+					throw error;
+				}
+				throwIfCompromised();
+				options?.signal?.throwIfAborted();
+				let current: string | undefined;
+				try {
+					current = readFileSync(this.authPath, "utf-8");
+				} catch (error) {
+					if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") throw error;
+				}
+				const result = await fn(current);
+				throwIfCompromised();
+				options?.signal?.throwIfAborted();
+				return result;
+			} finally {
+				if (release) {
+					try {
+						await release();
+					} catch {
+						// Ignore unlock errors when lock is compromised.
+					}
+				}
+			}
+		})();
+		return raceWithAbortSignal(operation, options?.signal);
 	}
 
 	async withLockAsync<T>(
@@ -305,6 +354,10 @@ export class InMemoryAuthStorageBackend implements AuthStorageBackend {
 			this.value = next;
 		}
 		return result;
+	}
+
+	withReadLockAsync<T>(fn: (current: string | undefined) => Promise<T>, options?: AuthOperationOptions): Promise<T> {
+		return this.withLockAsync(async (current) => ({ result: await fn(current) }), options);
 	}
 
 	withLockAsync<T>(

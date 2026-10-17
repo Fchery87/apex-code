@@ -11,7 +11,8 @@
  * the `bash` tool, which asks. It closes the path that asked nothing.
  */
 
-import { dirname } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import { getAuthPath } from "../../config.ts";
 import { canonicalizePath, resolvePath } from "../../utils/paths.ts";
 
@@ -34,7 +35,52 @@ export function describeProtectedTarget(path: string): string | undefined {
 	while (true) {
 		if (target === ancestor) return `${target} contains ${credentialPath}, which holds provider credentials`;
 		const parent = dirname(ancestor);
-		if (parent === ancestor) return undefined;
+		if (parent === ancestor) break;
 		ancestor = parent;
 	}
+	return homeCredentialMatch(target);
+}
+
+/**
+ * Credential locations under the home directory (ADR 0032 removed the boundary that
+ * hid them). Each is protected, and so is any directory that contains one, for the same
+ * reason the agent's own credential file is.
+ */
+const HOME_CREDENTIAL_LOCATIONS = [
+	".ssh",
+	".aws",
+	".gnupg",
+	".config/gcloud",
+	".kube",
+	".docker/config.json",
+	".netrc",
+	".npmrc",
+] as const;
+
+function isWithin(child: string, parent: string): boolean {
+	const rel = relative(parent, child);
+	return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function homeCredentialMatch(target: string): string | undefined {
+	const home = canonicalizePath(resolvePath(homedir()));
+	for (const entry of HOME_CREDENTIAL_LOCATIONS) {
+		const location = join(home, entry);
+		if (isWithin(target, location)) return `${location} holds credentials`;
+		if (isWithin(location, target)) return `${target} contains ${location}, which holds credentials`;
+	}
+	return undefined;
+}
+
+/** Template env files are documentation, not secrets. Everything else named `.env` or `.env.<suffix>` is sensitive. */
+const ENV_TEMPLATE_NAMES = new Set([".env.example", ".env.sample", ".env.template"]);
+
+/**
+ * A file that commonly holds secrets inside a project. It asks by default wherever it sits,
+ * and only a rule that names it can grant it (see PermissionSpec.allowRuleGrants).
+ */
+export function isSensitivePath(path: string): boolean {
+	const name = basename(path);
+	if (ENV_TEMPLATE_NAMES.has(name)) return false;
+	return name === ".env" || name.startsWith(".env.");
 }

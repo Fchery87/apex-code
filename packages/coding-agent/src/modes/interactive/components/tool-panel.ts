@@ -1,4 +1,5 @@
 import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { stripAnsi } from "../../../utils/ansi.ts";
 import { paintBackground, theme } from "../theme/theme.ts";
 
 export type ToolLifecycle = "queued" | "running" | "done" | "error";
@@ -152,4 +153,45 @@ export class ToolStatusLineComponent implements Component {
 	invalidate(): void {
 		this.child.invalidate?.();
 	}
+}
+
+export interface CompactOperationRowOptions extends ToolStatusLineOptions {
+	label: string;
+	summary?: string;
+}
+
+export function countOutputLines(output: string): number {
+	if (!output) return 0;
+	const lines = output.replace(/\r\n?/g, "\n").split("\n");
+	return lines.length - (lines.at(-1) === "" ? 1 : 0);
+}
+
+/** One physical row, with no panel decoration or spacing between operations. */
+export function renderCompactOperationRow(options: CompactOperationRowOptions, width: number): string[] {
+	if (width <= 0) return [];
+	const singleLine = (text: string) =>
+		stripAnsi(text)
+			.replace(/\p{Cc}/gu, " ")
+			.replace(/ +/g, " ")
+			.trim();
+	const { lifecycle, symbolPreset, durationMs } = options;
+	const status = theme.fg(lifecycleColor(lifecycle), LIFECYCLE_SYMBOLS[symbolPreset][lifecycle]);
+	const prefix = `${status} `;
+	const prefixWidth = visibleWidth(prefix);
+	if (prefixWidth >= width) return [truncateToWidth(status, width, "")];
+	const separator = symbolPreset === "ascii" ? " - " : " · ";
+	const duration = durationMs === undefined ? "" : formatToolDuration(durationMs);
+	const metadata = singleLine([lifecycle, options.summary, duration].filter(Boolean).join(separator));
+	const label = singleLine(options.label);
+	const available = width - prefixWidth - visibleWidth(separator);
+	if (available < 2) return [truncateToWidth(`${prefix}${label}`, width, "")];
+	// Preserve state and diagnostics even when a path or command fills the row.
+	const minimumLabel = Math.min(
+		visibleWidth(label),
+		Math.max(1, Math.floor(available * (lifecycle === "error" ? 0.3 : 0.5))),
+	);
+	const metadataWidth = Math.min(visibleWidth(metadata), available - minimumLabel);
+	const clippedMetadata = truncateToWidth(metadata, metadataWidth, "");
+	const clippedLabel = truncateToWidth(label, available - visibleWidth(clippedMetadata), "").trimEnd();
+	return [`${prefix}${clippedLabel}${theme.fg("muted", separator + clippedMetadata)}`];
 }

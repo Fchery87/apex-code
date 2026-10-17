@@ -1,0 +1,71 @@
+RS.2 red (exit 1, six missing-method failures, eight passing existing cases).
+npm test --workspace packages/coding-agent -- test/agent-session-tree-workspace-policy.test.ts
+Log rs2-red.log.
+
+RS.2 green (exit 0, 14 passing).
+npm test --workspace packages/coding-agent -- test/agent-session-tree-workspace-policy.test.ts
+Log rs2-green.log.
+
+RS.2 types (exit 0, no diagnostics).
+npx tsgo --noEmit
+Log rs2-types.log.
+
+RS.3 red (exit 1, 17 failures at absent policy, prompt, or outcome line).
+npm test --workspace packages/coding-agent -- test/tree-workspace-prompt.test.ts
+Log rs3-red.log.
+
+RS.3 compaction race red (exit 1, expected one selector, received two).
+npm test --workspace packages/coding-agent -- test/tree-workspace-prompt.test.ts -t 'compaction starts during a differing preview'
+Log rs3-race-red.log.
+
+RS.3 combined initial run (exit 1, 88 passing, three failures).
+npm test --workspace packages/coding-agent -- test/tree-workspace-prompt.test.ts test/interactive-mode-tree-navigation.test.ts test/agent-session-tree-workspace-policy.test.ts test/extensions-runner.test.ts
+Log rs3-green.log. Fixed new fixture to navigate to an assistant entry. Existing extensions-runner case exceeded its 30-second timeout under parallel load.
+
+RS.3 final tree verification (exit 0, 3 files / 37 passing).
+npm test --workspace packages/coding-agent -- test/tree-workspace-prompt.test.ts test/interactive-mode-tree-navigation.test.ts test/agent-session-tree-workspace-policy.test.ts --maxWorkers=1
+Log rs3-green-final.log.
+
+RS.3 final types (exit 0, no diagnostics).
+npx tsgo --noEmit
+Log rs3-types-final.log.
+
+RS.3 extension suite (exit 0, 55 passing).
+npm test --workspace packages/coding-agent -- test/extensions-runner.test.ts --maxWorkers=1
+Log rs3-extension-green.log.
+
+Diff whitespace validation (exit 0, no diagnostics).
+git diff --check
+
+Full repository tests (exit 0).
+npm test
+Log full-test.log.
+Agent-core output.
+ Test Files  81 passed (81)
+      Tests  975 passed | 1 skipped (976)
+Coding-agent output.
+ Test Files  447 passed | 6 skipped (453)
+      Tests  4065 passed | 51 skipped (4116)
+
+Full repository checks (exit 0).
+npm run check
+Log full-check.log.
+Checked 1183 files in 12s. No fixes applied.
+Documentation lifecycle validation passed.
+Every process-spawning test retries its recursive scratch cleanup.
+
+Manual terminal fixture setup (exit 0).
+npx tsx --tsconfig tsconfig.runtime.json .apex-code/verification/reachable-surfaces/seed-terminal-session.mts
+Fixture /tmp/apex-tree-terminal-uhQuf1/fixture.json.
+The installed tsx binary ran src/cli.ts with the absolute tsconfig.runtime.json path
+from the scratch workspace. APEX_CODE_CODING_AGENT_DIR pointed to the fixture's agent
+directory. APEX_CODE_OFFLINE=1 and --no-tools avoided provider calls.
+Navigation selected First answer through the actual /tree command and arrow keys.
+The drift prompt selected Keep current files by default.
+Cancel preserved session SHA256 2cfcc8f151e5bbe665044300aeb538d6bb735f275c481ec60e1bccee9c33544d and tracked.txt content edited.
+Keep navigated and left tracked.txt as edited.
+Restore navigated and changed tracked.txt to checkpointed.
+The pre-restore ref refs/apex-code/pre-restore/01a1031c-3506-73e5-abc2-109f81f953d4/2 contained tracked.txt as edited.
+Selecting a missing checkpoint skipped the dialog and reported Files unchanged · no checkpoint for this point.
+Selecting the matching checkpoint after restoration skipped the dialog and reported Files unchanged.
+Log terminal-transcript.log.

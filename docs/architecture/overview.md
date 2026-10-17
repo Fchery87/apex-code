@@ -26,7 +26,7 @@ boundary falls where it does (ADR 0001).
 ├───────────────────────────────────────────────────────────────┤
 │  APEX CODE  (fork of pi-coding-agent)                         │
 │    Tools ─ permissions ─ sessions ─ compaction ─ eviction     │
-│    Delegation ─ evidence capture ─ daemon ─ CLI/RPC/SDK       │
+│    Delegation ─ evidence capture ─ CLI/RPC/SDK                │
 ├───────────────────────────────────────────────────────────────┤
 │  APEX CODE CORE  (fork of pi-agent-core)                      │
 │    Agent loop · steering & follow-up queues · tool execution  │
@@ -52,7 +52,7 @@ Everything above the dependency line is Apex Code's to change. Nothing below it 
 | 3 Context | apex-code | Tool-result eviction, deferred schemas, reactive compaction |
 | 4 Tools | apex-code | The tool surface, each with its own rule grammar |
 | 5 Delegation | apex-code | Subagents, capability ceiling, depth bound, artifact isolation |
-| 6 State | apex-code | SQLite indices, daemon + clients, command journal, session leases |
+| 6 State | apex-code | SQLite indices, command journal, session leases (the daemon was removed in HR.25) |
 | 7 Evidence | core + extension | Capture in core; SpecEngine and policy as a bundled extension |
 | 8 Observability | apex-code | Cost and latency accounting, OTel export, status line |
 | 9 Release | all | Install, update, session migration, docs, security posture |

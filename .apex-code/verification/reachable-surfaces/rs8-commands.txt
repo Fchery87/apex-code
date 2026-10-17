@@ -1,0 +1,53 @@
+2026-10-03 local verification. No full gates run by implementation owner.
+
+npm test --workspace packages/coding-agent -- test/task-panel.test.ts --maxWorkers=1
+Initial exit 1. Missing task-panel module. rs8-panel-red.log. This was an import failure, not behavioral RED. Root requested discipline correction. Initial body deleted; compileable no-op scaffold and no-op expansion setter installed.
+Same command exit 1. 5 failed tests. rs8-panel-behavior-red.log. Assertions failed for count, branch cache, completed retention, navigation and normalized expanded rows. Fresh implementation followed.
+
+npm test --workspace packages/coding-agent -- test/task-panel.test.ts test/task-panel-integration.test.ts --maxWorkers=1
+Exit 1. 4 failed / 6 passed tests, 11.17s. rs8-behavior-red-integration.log. Missing task key, removed core widget, missing compact result summary, and absent settlement forwarding failed actual assertions.
+Same command exit 0. 2 files / 10 tests passed, 10.92s. rs8-focused-green.log.
+
+npm test --workspace packages/coding-agent -- test/task-panel.test.ts --maxWorkers=1
+Exit 1. 1 failed / 5 passed tests, 2.54s. rs8-rebind-red.log. Same-session rebind after missed settlement retained completed panel incorrectly. Implementation now uses existing isStreaming authority at rebind.
+
+npm test --workspace packages/coding-agent -- test/task-panel.test.ts test/task-panel-integration.test.ts test/task-panel-session.test.ts --maxWorkers=1
+Exit 0. 3 files / 16 tests passed, 25.84s. rs8-session-focused.log.
+
+npm test --workspace packages/coding-agent -- test/task-panel.test.ts test/task-panel-integration.test.ts test/task-panel-session.test.ts test/extensions-runner.test.ts test/keybindings.test.ts test/tool-execution-component.test.ts --maxWorkers=1
+Exit 0. 6 files / 133 tests passed, 24.02s. rs8-related-green.log.
+
+npx tsgo --noEmit
+Initial intermediate exit 2. New in-progress code errors in rs8-types.log, including unsupported hook callback return. Those errors were fixed. Subsequent command exited 0 with no output. rs8-types.log contains final empty output.
+
+npm test --workspace packages/coding-agent -- test/task-tool-defaults.test.ts --maxWorkers=1
+Exit 1. 4 failed tests, 10.67s. rs9-behavior-red.log. New construction-default getter and persistence methods were no-op scaffolds. Actual /settings row missing and project explanation absent. Implementation followed.
+First implementation run 3 passed / 1 failed. Row callback was routed into wrong earlier switch; corrected before broader checks. Final result follows below.
+
+npm test --workspace packages/coding-agent -- test/task-tool-defaults.test.ts --maxWorkers=1
+Exit 0. 4 tests passed, 10.87s. rs9-focused-green.log.
+
+npm test --workspace packages/coding-agent -- test/task-tool-defaults.test.ts test/settings-selector.test.ts --maxWorkers=1
+First expanded run exit 1, 2 failed / 18 passed. Fixture assumptions omitted existing automatic tool_schema in deferred-tool loadouts. Fixed expected active lists without production changes. Also supplied required public streamFn to low-level Agent fixture.
+Final exit 0. 2 files / 20 tests passed, 14.69s. rs9-related-green.log.
+
+npx biome check --write packages/coding-agent/src/core/default-tool-names.ts packages/coding-agent/src/core/tools/renderers/todo-write.ts packages/coding-agent/src/modes/interactive/components/task-panel.ts packages/coding-agent/src/core/tools/renderers/index.ts packages/coding-agent/src/core/sdk.ts packages/coding-agent/src/core/agent-session.ts packages/coding-agent/src/core/settings-manager.ts packages/coding-agent/src/core/keybindings.ts packages/coding-agent/src/core/extensions/runner.ts packages/coding-agent/src/core/slash-commands.ts packages/coding-agent/src/modes/interactive/components/settings-selector.ts packages/coding-agent/src/modes/interactive/interactive-mode.ts packages/coding-agent/test/task-panel.test.ts packages/coding-agent/test/task-panel-integration.test.ts packages/coding-agent/test/task-panel-session.test.ts packages/coding-agent/test/task-tool-defaults.test.ts packages/coding-agent/test/extensions-runner.test.ts
+Exit 0. Checked 17 files in 1845ms. Fixed 8 files. rs8-lint.log. Follow-up single-file style/import checks passed as well. No suppression added.
+
+npx tsgo --noEmit
+Exit 0. No output. rs9-types.log.
+
+npm test --workspace packages/coding-agent -- test/task-panel.test.ts test/task-panel-integration.test.ts test/task-panel-session.test.ts test/task-tool-defaults.test.ts test/extensions-runner.test.ts test/keybindings.test.ts test/tool-execution-component.test.ts test/settings-selector.test.ts --maxWorkers=1
+Exit 0. 8 files / 153 tests passed, 40.87s. rs8-final-focused.log. This predates one additional mounted settlement case, not source changes.
+
+npm test --workspace packages/coding-agent -- test/task-panel-session.test.ts --maxWorkers=1
+Exit 0. 5 tests passed, 10.53s. rs8-mounted-green.log. The added mode test mounts the real panel child, observes completed count, forwards settlement through actual InteractiveMode handler, and asserts the requested frame has removed the panel.
+
+npx tsgo --noEmit
+Exit 0. No output. rs8-final-types.log.
+
+git diff --check
+Exit 0. No output.
+
+npm test --workspace packages/coding-agent -- test/task-panel.test.ts test/task-panel-integration.test.ts test/task-panel-session.test.ts test/task-tool-defaults.test.ts --maxWorkers=1
+Exit 0. 4 files / 25 tests passed, 59.49s. rs8-final-feature-green.log. Final current snapshot. Source/test freeze after this run; no owner test processes remain.

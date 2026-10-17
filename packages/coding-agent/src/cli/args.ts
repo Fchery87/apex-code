@@ -228,6 +228,11 @@ export function parseArgs(args: readonly string[]): Args {
 			result.model = args[++i];
 		} else if (arg === "--api-key" && i + 1 < args.length) {
 			result.apiKey = args[++i];
+			result.diagnostics.push({
+				type: "warning",
+				message:
+					"--api-key puts the key in your shell history and in process listings. Use /login, or an environment variable, instead.",
+			});
 		} else if (arg === "--system-prompt" && i + 1 < args.length) {
 			result.systemPrompt = args[++i];
 		} else if (arg === "--append-system-prompt" && i + 1 < args.length) {
@@ -533,7 +538,7 @@ ${chalk.bold("Examples:")}
   ${APP_NAME} --tools read,grep,find,ls -p "Review the code in src/"
 
   # Disable one tool while keeping the rest available
-  ${APP_NAME} --exclude-tools ask_question
+  ${APP_NAME} --exclude-tools ask_user
 
   # Export a session file to HTML
   ${APP_NAME} --export ~/${CONFIG_DIR_NAME}/agent/sessions/--path--/session.jsonl

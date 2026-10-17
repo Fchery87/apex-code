@@ -620,6 +620,8 @@ export class ChildRunRegistry {
 	private readonly entries = new Map<string, BackgroundDelegation>();
 	private readonly workspaceClaims = new Map<string, string[]>();
 	private readonly children = new Set<ChildSessionHandle>();
+	/** Handles of foreground delegations still awaited by a tool call. Background work is never in this set. */
+	private readonly foregroundHandles = new Set<string>();
 	/**
 	 * Session ids whose workspace this registry must release on close/dispose
 	 * (spec 2026-09-09, "Parallel work and ownership"): populated by
@@ -1582,6 +1584,31 @@ export class ChildRunRegistry {
 	 * immediately and the active attempt is marked `cancelled`; without a
 	 * reason the attempt settles plain `interrupted` at the turn's settlement.
 	 */
+	markForeground(id: string): void {
+		this.foregroundHandles.add(id);
+	}
+
+	releaseForeground(id: string): void {
+		this.foregroundHandles.delete(id);
+	}
+
+	/**
+	 * Interrupts every foreground child still running, with an explicit reason. Used when the
+	 * parent session is aborted, so an Esc that stops the parent also stops the work it is
+	 * waiting on. Background children are not touched: they were launched to outlive the turn.
+	 */
+	interruptForeground(reason: string): void {
+		for (const id of [...this.foregroundHandles]) {
+			const entry = this.entries.get(id);
+			if (entry?.child?.status !== "running") continue;
+			try {
+				this.interrupt(id, reason);
+			} catch {
+				// A handle that settled between the check and the interrupt needs no interrupt.
+			}
+		}
+	}
+
 	interrupt(id: string, reason?: string): void {
 		this.child(id).interrupt();
 		if (reason === undefined) return;
@@ -1706,6 +1733,8 @@ export async function runDelegation(
 	task: string,
 	request: {
 		background?: boolean;
+		/** Aborting this signal interrupts a foreground child with the reason "parent aborted". */
+		signal?: AbortSignal;
 		workspace?: ChildWorkspaceRequest;
 		handleId?: string;
 		/** Spawn dedupe key (spec 2026-09-09, idempotent spawn): a known key returns the EXISTING handle without building a second child. */
@@ -1822,7 +1851,30 @@ export async function runDelegation(
 			...(request.idempotencyKey !== undefined ? { idempotencyKey: request.idempotencyKey } : {}),
 			...(timeoutMs !== undefined ? { deadlineMs: Date.now() + timeoutMs } : {}),
 		});
-		if (!request.background) return promise;
+		if (!request.background) {
+			registry.markForeground(handleId);
+			const settle = () => registry.releaseForeground(handleId);
+			promise.then(settle, settle);
+			const { signal } = request;
+			if (signal) {
+				const onAbort = () => {
+					try {
+						registry.interrupt(handleId, "parent aborted");
+					} catch {
+						// The child settled before the abort arrived; there is nothing left to stop.
+					}
+				};
+				if (signal.aborted) onAbort();
+				else {
+					signal.addEventListener("abort", onAbort, { once: true });
+					promise.then(
+						() => signal.removeEventListener("abort", onAbort),
+						() => signal.removeEventListener("abort", onAbort),
+					);
+				}
+			}
+			return promise;
+		}
 		return { agentType, task, output: `Delegation started. Retrieve result with handle "${handleId}".`, handleId };
 	} catch (error) {
 		// The delegation never started: release the workspace immediately (also

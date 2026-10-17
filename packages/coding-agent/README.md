@@ -170,6 +170,7 @@ Type `/` in the editor to trigger commands. [Extensions](#extensions) can regist
 | `/thinking` | Switch thinking level; Ctrl+S in the picker saves the startup default |
 | `/scoped-models` | Enable/disable models for Ctrl+P cycling |
 | `/settings` | Theme, message delivery, transport, and other preferences |
+| `/tasks` | Expand or collapse the pinned task panel |
 | `/resume` | Pick from previous sessions |
 | `/new` | Start a new session |
 | `/name <name>` | Set session display name |
@@ -203,10 +204,48 @@ See `/hotkeys` for the full list. Customize via `~/.apex-code/agent/keybindings.
 | Escape twice | Open `/tree` |
 | Ctrl+L | Open model selector |
 | Ctrl+P / Shift+Ctrl+P | Cycle scoped models forward/backward |
-| Shift+Tab | Cycle thinking level |
+| Shift+Tab | Cycle permission mode for this session |
+| Alt+T | Cycle thinking level |
 | Ctrl+O | Collapse/expand tool output |
 | Ctrl+T | Collapse/expand thinking blocks |
+| Alt+J | Expand or collapse the task panel |
 | Ctrl+X | Copy the last assistant message; with fullscreen copy-on-select disabled, copy the active text selection |
+
+The permission cycle affects only the running session. The footer marks a session
+override, and `/settings` still changes the saved default. The cycle includes bypass
+only when bypass was in force at startup. On macOS, Alt+T needs Option configured as
+Meta. See [keybinding configuration](docs/keybindings.md#custom-configuration) to
+restore Shift+Tab for thinking levels.
+
+### Plan approval
+
+Plan mode activates `plan_present` when your tool selection admits it. When the agent
+presents a plan, choose **Yes, and accept edits**, **Yes, and ask before each edit**,
+or **No, keep planning**. Approval changes the permission mode for this session
+and updates the footer. Keeping planning or dismissing the selector leaves plan
+mode unchanged. Reload clears the session override.
+
+If you use `--tools`, include `plan_present` to allow the approval flow. A tool
+listed explicitly stays active after approval. `--no-tools` and tool exclusions
+remain authoritative.
+
+### Task list
+
+When `todo_write` is active and the agent records tasks, a panel above the
+composer shows completed and total counts plus the task in progress. Press Alt+J
+or run `/tasks` to expand up to five items and an overflow count. Your expansion
+choice is saved globally. On macOS, configure Option as Meta for Alt+J.
+
+The panel follows the current branch through `/tree` and resume, and retains
+tasks through compaction. A newly completed list hides when the run settles.
+The transcript keeps a compact `Task list updated · N/M complete` result;
+expand that result to inspect the recorded list.
+
+Enable the task-list tool in `/settings` for new sessions. This preserves your
+other default tools and does not change the current session. A project
+`defaultTools` selection makes the row read-only. CLI tool selection and
+exclusions take precedence. To enable it for one invocation, include
+`todo_write` in `--tools` alongside the other tools you want.
 
 ### Message Queue
 
@@ -525,7 +564,7 @@ Pi is aggressively extensible so it doesn't have to dictate your workflow. Featu
 
 **No permission popups.** Run in a container, or build your own confirmation flow with [extensions](#extensions) inline with your environment and security requirements.
 
-**No plan mode.** Write plans to files, or build it with [extensions](#extensions), or install a package.
+**Plan mode.** Apex Code supports a session permission mode for planning and an interactive [plan approval flow](#plan-approval). Approval selects the edit policy for the running session.
 
 **No built-in to-dos.** They confuse models. Use a TODO.md file, or build your own with [extensions](#extensions).
 

@@ -72,7 +72,9 @@ export {
 export {
 	createPlanPresentTool,
 	createPlanPresentToolDefinition,
+	type PlanDecision,
 	type PlanPresentDetails,
+	type PlanPresenter,
 	type PlanPresentInput,
 } from "./plan-present.ts";
 export {

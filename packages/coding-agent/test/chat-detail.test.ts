@@ -5,7 +5,12 @@ import type { TUI } from "@earendil-works/pi-tui";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createEditToolDefinition } from "../src/core/tools/edit.ts";
 import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.ts";
-import { type ChatDetail, chatDetailView, nextChatDetail } from "../src/modes/interactive/interactive-mode.ts";
+import {
+	type ChatDetail,
+	chatDetailView,
+	INITIAL_CHAT_DETAIL,
+	nextChatDetail,
+} from "../src/modes/interactive/interactive-mode.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
@@ -46,17 +51,17 @@ describe("conversation detail cycle", () => {
 		expect(chatDetailView("overview")).toEqual({
 			toolOutputExpanded: false,
 			editDiffsExpanded: false,
-			revealThinking: false,
+			thinking: "collapsed",
 		});
 		expect(chatDetailView("details")).toEqual({
 			toolOutputExpanded: false,
 			editDiffsExpanded: true,
-			revealThinking: false,
+			thinking: "preference",
 		});
 		expect(chatDetailView("all")).toEqual({
 			toolOutputExpanded: true,
 			editDiffsExpanded: true,
-			revealThinking: true,
+			thinking: "revealed",
 		});
 	});
 
@@ -65,10 +70,18 @@ describe("conversation detail cycle", () => {
 		expect(new Set(seen).size).toBe(ALL_DETAILS.length);
 	});
 
-	it("overrides a hidden-thinking preference only at the top rung", () => {
-		// The cycle may reveal thinking, but never writes that back to settings,
-		// so the preference still governs the two lower rungs.
-		expect(ALL_DETAILS.filter((detail) => chatDetailView(detail).revealThinking)).toEqual(["all"]);
+	it("defers to the thinking preference only at the middle rung", () => {
+		// Overview collapses thinking and all reveals it; neither is written back to settings.
+		expect(ALL_DETAILS.filter((detail) => chatDetailView(detail).thinking === "preference")).toEqual(["details"]);
+	});
+
+	it("starts a session with everything collapsed", () => {
+		expect(INITIAL_CHAT_DETAIL).toBe("overview");
+		expect(chatDetailView(INITIAL_CHAT_DETAIL)).toEqual({
+			toolOutputExpanded: false,
+			editDiffsExpanded: false,
+			thinking: "collapsed",
+		});
 	});
 });
 

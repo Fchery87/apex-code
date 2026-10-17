@@ -7,9 +7,12 @@ import { TuiMainScreen } from "../../tui/src/tui-main-screen.ts";
 import { VirtualTerminal } from "../../tui/test/virtual-terminal.ts";
 import type { AutocompleteProviderFactory } from "../src/core/extensions/types.ts";
 import type { SourceInfo } from "../src/core/source-info.ts";
+import { BashExecutionComponent } from "../src/modes/interactive/components/bash-execution.ts";
 import type { AuthSelectorProvider } from "../src/modes/interactive/components/oauth-selector.ts";
+import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { stripAnsi } from "../src/utils/ansi.ts";
 
 function renderLastLine(container: Container, width = 120): string {
 	const last = container.children[container.children.length - 1];
@@ -187,8 +190,40 @@ describe("InteractiveMode conversation detail", () => {
 			ui: { requestRender: vi.fn() },
 			showStatus: vi.fn(),
 		});
-		return { mode, header, loadedResourcesChild, chatChild };
+		const settings = { setChatDetail: vi.fn(), setHideThinkingBlock: vi.fn() };
+		Object.defineProperty(mode, "settingsManager", { value: settings });
+		return { mode, header, loadedResourcesChild, chatChild, settings };
 	}
+
+	test("adopts explicit overview and cycles pending shells with the transcript", () => {
+		const { mode } = createMode();
+		const shell = new BashExecutionComponent("echo pending", mode.ui);
+		shell.appendOutput("pending output");
+		shell.setComplete(0, false);
+		mode.chatDetail = "overview";
+		mode.adoptChatDetail(shell);
+		expect(shell.render(100)).toHaveLength(1);
+		mode.pendingMessagesContainer = { children: [shell] };
+		mode.cycleChatDetail();
+		expect(shell.render(100).length).toBeGreaterThan(1);
+	});
+	test("toggles the latest operation only and resets its override on a detail cycle", () => {
+		const { mode } = createMode();
+		const first = new ToolExecutionComponent("first", "first", {}, {}, undefined, mode.ui, process.cwd());
+		const latest = new BashExecutionComponent("echo latest", mode.ui);
+		first.updateResult({ content: [{ type: "text", text: "first detail" }], isError: false });
+		latest.appendOutput("latest detail");
+		latest.setComplete(0, false);
+		mode.chatContainer = { children: [first, latest] };
+		mode.setChatDetail("overview");
+		mode.toggleLatestOperation();
+		expect(first.render(100)).toHaveLength(1);
+		expect(stripAnsi(latest.render(100).join("\n"))).toContain("latest detail");
+		mode.cycleChatDetail();
+		mode.cycleChatDetail();
+		mode.cycleChatDetail();
+		expect(latest.render(100)).toHaveLength(1);
+	});
 
 	test("applies expansion state to the active header and chat entries", () => {
 		const { mode, header, loadedResourcesChild, chatChild } = createMode();
@@ -199,7 +234,7 @@ describe("InteractiveMode conversation detail", () => {
 		expect(header.setExpanded).toHaveBeenCalledWith(true);
 		expect(loadedResourcesChild.setExpanded).toHaveBeenCalledWith(true);
 		expect(chatChild.setExpanded).toHaveBeenCalledWith(true);
-		expect(mode.showStatus).toHaveBeenCalledWith("Conversation detail: all");
+		expect(mode.showStatus).not.toHaveBeenCalled();
 	});
 
 	test("collapsing through the boolean API stops at details, keeping diffs", () => {
@@ -225,6 +260,35 @@ describe("InteractiveMode conversation detail", () => {
 		expect(mode.chatDetail).toBe("details");
 	});
 
+	test("remembers the level the user cycles to", () => {
+		const { mode, settings } = createMode();
+
+		mode.cycleChatDetail();
+
+		expect(settings.setChatDetail).toHaveBeenCalledWith("all");
+	});
+
+	test("does not remember a level an extension asks for", () => {
+		const { mode, settings } = createMode();
+
+		mode.setToolsExpanded(true);
+
+		expect(settings.setChatDetail).not.toHaveBeenCalled();
+	});
+
+	test("opens at the remembered level, or collapsed when there is none", () => {
+		const { mode } = createMode();
+
+		mode.loadChatDetail(undefined);
+		expect(mode.chatDetail).toBe("overview");
+		expect(mode.editDiffsExpanded).toBe(false);
+
+		mode.loadChatDetail("all");
+		expect(mode.chatDetail).toBe("all");
+		expect(mode.toolOutputExpanded).toBe(true);
+		expect(mode.editDiffsExpanded).toBe(true);
+	});
+
 	test("collapses diffs only at overview", () => {
 		const { mode, chatChild } = createMode();
 
@@ -245,6 +309,43 @@ describe("InteractiveMode conversation detail", () => {
 		expect(mode.isThinkingHidden()).toBe(true);
 		// The override is presentation only; the preference itself is untouched.
 		expect(mode.hideThinkingBlock).toBe(true);
+	});
+
+	test("collapses visible thinking at overview and shows it again at details", () => {
+		const { mode } = createMode();
+		mode.hideThinkingBlock = false;
+
+		mode.setChatDetail("overview");
+		expect(mode.isThinkingHidden()).toBe(true);
+		mode.setChatDetail("details");
+		expect(mode.isThinkingHidden()).toBe(false);
+		expect(mode.hideThinkingBlock).toBe(false);
+	});
+
+	test("showing thinking from overview opens the transcript far enough to see it", () => {
+		const { mode, settings } = createMode();
+		mode.hideThinkingBlock = true;
+		mode.offerFirstUseHint = vi.fn();
+		mode.setChatDetail("overview");
+
+		mode.toggleThinkingBlockVisibility();
+
+		expect(mode.chatDetail).toBe("details");
+		expect(settings.setChatDetail).toHaveBeenCalledWith("details");
+		expect(mode.isThinkingHidden()).toBe(false);
+	});
+
+	test("the first thinking toggle from overview reveals thinking when its preference is already visible", () => {
+		const { mode, settings } = createMode();
+		mode.hideThinkingBlock = false;
+		mode.offerFirstUseHint = vi.fn();
+		mode.setChatDetail("overview");
+
+		mode.toggleThinkingBlockVisibility();
+
+		expect(mode.chatDetail).toBe("details");
+		expect(settings.setHideThinkingBlock).toHaveBeenCalledWith(false);
+		expect(mode.isThinkingHidden()).toBe(false);
 	});
 });
 
@@ -634,6 +735,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 			},
 			session: {
 				promptTemplates: options.promptTemplates ?? [],
+				getAgentDefinitionDiagnostics: () => [],
 				extensionRunner: {
 					getCommandDiagnostics: () => [],
 					getShortcutDiagnostics: () => [],

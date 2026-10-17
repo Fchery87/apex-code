@@ -60,7 +60,7 @@ import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from "./auth
 import { type BashResult, executeBashWithOperations } from "./bash-executor.ts";
 import { generateBugReportSummary } from "./bug-report.ts";
 import type { CacheWarmer, CacheWarmingStatus } from "./cache-warmer.ts";
-import type { CheckpointSettings } from "./checkpoints/git-checkpoints.ts";
+import type { CheckpointSettings, GitCheckpoint, GitCheckpoints } from "./checkpoints/git-checkpoints.ts";
 import { createSessionCheckpoints, type SessionCheckpoints } from "./checkpoints/session-checkpoints.ts";
 import {
 	type CompactionPreparation,
@@ -68,6 +68,7 @@ import {
 	calculateContextTokens,
 	collectEntriesForBranchSummary,
 	compact,
+	effectiveReserveTokens,
 	estimateContextTokens,
 	estimateProjectedContextTokens,
 	estimateTokens,
@@ -76,7 +77,9 @@ import {
 	shouldCompact,
 } from "./compaction/index.ts";
 import { evictionBudget, installContextPipeline, isDefaultStreamFunction } from "./context/pipeline.ts";
+import { configuredDefaultToolNames } from "./default-tool-names.ts";
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVEL_OPTIONS } from "./defaults.ts";
+import { agentDefinitionDiagnostics } from "./delegation/agents.ts";
 import type {
 	ChildRunPolicySnapshot,
 	ChildRunRecord,
@@ -98,6 +101,7 @@ import {
 	type BoundaryContextPreview,
 	type ContextUsage,
 	type ExtensionCommandContextActions,
+	type ExtensionContext,
 	type ExtensionErrorListener,
 	type ExtensionMode,
 	ExtensionRunner,
@@ -130,6 +134,7 @@ import { type BashExecutionMessage, type CustomMessage, convertToLlm } from "./m
 import { ModelRegistry } from "./model-registry.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
 import { evaluateToolCall, type PermissionGateOptions } from "./permissions/gate.ts";
+import { isPlanModeDenied } from "./permissions/modes.ts";
 import { type AuthorizeConfiguredCommand, authorizeConfiguredCommand } from "./permissions/policy-command.ts";
 import type { PermissionResponder } from "./permissions/responder.ts";
 import { createInteractiveResponder } from "./permissions/responder.ts";
@@ -152,6 +157,7 @@ import type { CacheWarmingMode, SettingsManager } from "./settings-manager.ts";
 import { slugifySkillCommandName } from "./skills.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
+import { currentEnvironmentSection } from "./system-environment.ts";
 import {
 	buildSystemPrompt,
 	buildSystemPromptSections,
@@ -168,8 +174,10 @@ import {
 	type ToolContractSnapshotEntry,
 } from "./tools/contract-snapshot.ts";
 import type { DiagnosticsOperations } from "./tools/diagnostics.ts";
+import { FileReadLedger } from "./tools/file-ledger.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
 import type { LspOperations } from "./tools/lsp.ts";
+import { createPlanPresentToolDefinition, defaultPlanPresenter } from "./tools/plan-present.ts";
 import { createSkillSearchToolDefinition } from "./tools/skill-search.ts";
 import { createTodoWriteToolDefinition } from "./tools/todo-write.ts";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
@@ -237,6 +245,8 @@ export type AgentSessionEvent =
 			followUp: readonly string[];
 	  }
 	| { type: "compaction_start"; reason: "manual" | "threshold" | "overflow" }
+	/** MCP servers started at startup to list their tools (HR.14). Emitted once, only when there are any. */
+	| { type: "mcp_discovery_started"; servers: readonly string[] }
 	| { type: "entry_appended"; entry: SessionEntry }
 	| { type: "session_info_changed"; name: string | undefined }
 	| { type: "thinking_level_changed"; level: ThinkingLevel }
@@ -249,7 +259,7 @@ export type AgentSessionEvent =
 			errorMessage?: string;
 	  }
 	| { type: "auto_retry_start"; attempt: number; maxAttempts: number; delayMs: number; errorMessage: string }
-	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
+	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string; aborted?: boolean }
 	| {
 			type: "summarization_retry_scheduled";
 			attempt: number;
@@ -293,6 +303,7 @@ export interface AggregateBudgetUsageSnapshot {
 }
 
 export interface AgentSessionConfig {
+	implicitDefaultToolNames?: readonly string[];
 	childRunRegistry?: ChildRunRegistry;
 	/**
 	 * The session's delegation runtime options when delegation is configured.
@@ -372,6 +383,10 @@ export interface AgentSessionConfig {
 	 * returning zero results. Ignored when `baseToolsOverride` is set.
 	 */
 	webSearchOperations?: WebSearchOperations;
+	/** Passed to the web_fetch tool. Set from user settings by the services layer. */
+	webFetchAllowPrivateNetwork?: boolean;
+	/** Passed to the web_fetch tool: fetches are allowed while a proxy is configured (Q4). */
+	webFetchAllowProxiedFetch?: boolean;
 	/**
 	 * Git-backed worktree checkpoints. Absent, or present with `enabled` unset, captures
 	 * nothing and runs no `git` subprocess.
@@ -485,6 +500,17 @@ function estimateMessagesTokens(messages: AgentMessage[]): number {
 /** Explicit workspace policy for `/tree` and `/fork`-family navigation (spec § 4). */
 export type TreeWorkspacePolicy = "keep" | "restore" | "fail-if-drifted" | "cancel";
 
+export type TreeWorkspacePreview =
+	| { state: "no-checkpoint" }
+	| { state: "unavailable"; reason: string }
+	| { state: "matches" }
+	| { state: "differs" };
+
+type TreeWorkspaceInspection =
+	| { state: "no-checkpoint" }
+	| { state: "unavailable"; reason: string; navigationOutcome: "missing-checkpoint" | "failed" }
+	| { state: "matches" | "differs"; engine: GitCheckpoints; checkpoint: GitCheckpoint };
+
 /** What the navigation did to the workspace, reported separately from the conversation move. */
 export interface TreeWorkspaceOutcome {
 	policy: TreeWorkspacePolicy;
@@ -501,6 +527,9 @@ export interface TreeNavigationResult {
 	summaryEntry?: BranchSummaryEntry;
 	workspace?: TreeWorkspaceOutcome;
 }
+
+/** Read-only search tools that plan mode adds to the active set. */
+const PLAN_MODE_SEARCH_TOOLS = ["grep", "find", "ls"] as const;
 
 export class AgentSession {
 	private _lifecycle: AgentSessionLifecycle = "created";
@@ -586,9 +615,15 @@ export class AgentSession {
 	private _initialActiveToolNames?: string[];
 	private _allowedToolNames?: Set<string>;
 	private _excludedToolNames?: Set<string>;
+	private readonly _implicitDefaultToolNames?: readonly string[];
 	private _baseToolsOverride?: Record<string, AgentTool>;
 	private _sessionStartEvent: SessionStartEvent;
 	private _permissionGate?: Omit<PermissionGateOptions, "getContract">;
+	private _interactivePermissionMode?: PermissionMode;
+	private _interactivePermissionModeGeneration = 0;
+	private readonly _startupPermissionMode?: Promise<
+		{ ok: true; mode: PermissionMode } | { ok: false; error: unknown }
+	>;
 	private _evidenceSink?: EvidenceSink;
 	private _diagnosticsOperations?: DiagnosticsOperations;
 	private _lspOperations?: LspOperations;
@@ -607,10 +642,32 @@ export class AgentSession {
 	private readonly _permissionResponderFactory: (() => PermissionResponder | undefined) | undefined;
 
 	/** Worktree checkpoints for this session. Inert unless `checkpoints.enabled` is set. */
+	/** What this session has read, so write and edit refuse replacements of unseen or changed files (HR.24). */
+	private readonly _fileLedger = new FileReadLedger();
+
+	private _mcpDiscoveryStarted: string[] = [];
+
+	/** MCP servers the session started to list their tools at startup (HR.14). */
+	getMcpDiscoveryStarted(): readonly string[] {
+		return this._mcpDiscoveryStarted;
+	}
+
+	reportMcpDiscovery(names: readonly string[]): void {
+		this._mcpDiscoveryStarted = [...names];
+		if (names.length > 0) this._emit({ type: "mcp_discovery_started", servers: [...names] });
+	}
+
+	/** Agent definition files that exist but cannot be used, as `/resources` diagnostics. */
+	getAgentDefinitionDiagnostics(): Array<{ type: "warning"; message: string; path: string }> {
+		return agentDefinitionDiagnostics(this._delegationRuntime?.resolveAgent);
+	}
+
 	get checkpoints(): SessionCheckpoints {
 		return this._checkpoints;
 	}
 	private _webSearchOperations?: WebSearchOperations;
+	private _webFetchAllowPrivateNetwork: boolean;
+	private _webFetchAllowProxiedFetch: boolean;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionMode: ExtensionMode = "print";
 	private _extensionCommandContextActions?: ExtensionCommandContextActions;
@@ -632,6 +689,13 @@ export class AgentSession {
 	private _baseSystemPromptOptions!: NormalizedBuildSystemPromptOptions;
 	/** Prompt options after before_agent_start mutations for the active run. */
 	private _runSystemPromptOptions?: NormalizedBuildSystemPromptOptions;
+	private _requestedToolNames: string[] = [];
+	private _runRequestedToolNames?: string[];
+	private _planToolMode?: PermissionMode;
+	private _planToolSyncGeneration = 0;
+	private _pendingPlanToolSync?: Promise<void>;
+	private _planToolSyncChange = new AbortController();
+	private _planPresentationGeneration = 0;
 
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
@@ -651,13 +715,34 @@ export class AgentSession {
 		this._allowedToolNames = config.allowedToolNames ? new Set(config.allowedToolNames) : undefined;
 		this._excludedToolNames = config.excludedToolNames ? new Set(config.excludedToolNames) : undefined;
 		this._baseToolsOverride = config.baseToolsOverride;
+		this._implicitDefaultToolNames = config.implicitDefaultToolNames
+			? [...config.implicitDefaultToolNames]
+			: undefined;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
-		this._permissionGate = config.permissionGate;
+		if (config.permissionGate) {
+			const configuredGate = config.permissionGate;
+			try {
+				const startupMode = configuredGate.getMode();
+				if (typeof startupMode === "string") this._planToolMode = startupMode;
+				this._startupPermissionMode = Promise.resolve(startupMode).then(
+					(mode) => ({ ok: true, mode }),
+					(error: unknown) => ({ ok: false, error }),
+				);
+			} catch (error) {
+				this._startupPermissionMode = Promise.resolve({ ok: false, error });
+			}
+			this._permissionGate = {
+				...configuredGate,
+				getMode: () => this._interactivePermissionMode ?? configuredGate.getMode(),
+			};
+		}
 		this._evidenceSink = config.evidenceSink ?? new SessionEvidenceSink(this.sessionManager);
 		this._diagnosticsOperations = config.diagnosticsOperations;
 		this._lspOperations = config.lspOperations;
 		this._mcpRuntime = config.mcpRuntime;
 		this._webSearchOperations = config.webSearchOperations;
+		this._webFetchAllowPrivateNetwork = config.webFetchAllowPrivateNetwork === true;
+		this._webFetchAllowProxiedFetch = config.webFetchAllowProxiedFetch === true;
 		this._checkpoints = createSessionCheckpoints({
 			workspace: this._cwd,
 			sessionId: this.sessionManager.getSessionId(),
@@ -711,6 +796,15 @@ export class AgentSession {
 			includeAllExtensionTools: true,
 		});
 		if (this._initialActiveToolNames === undefined) this._restoreToolsFromTranscript();
+		const generation = this._planToolSyncGeneration;
+		void this._startupPermissionMode
+			?.then((startup) => {
+				if (startup.ok && generation === this._planToolSyncGeneration && this._lifecycle !== "closed") {
+					this._planToolMode = startup.mode;
+					this._applyRequestedTools();
+				}
+			})
+			.catch(() => {});
 	}
 
 	get modelRuntime(): ModelRuntime {
@@ -928,6 +1022,7 @@ export class AgentSession {
 				estimateProjectedContextTokens(projection, this.sessionManager.getBranch()).tokens,
 				model.contextWindow,
 				settings,
+				model.maxTokens,
 			)
 		) {
 			return { ...context, messages: projection.messages };
@@ -1023,6 +1118,7 @@ export class AgentSession {
 				? async (_turn: PrepareNextTurnContext, signal?: AbortSignal) => await this.agent.prepareNextTurn?.(signal)
 				: undefined);
 		this.agent.prepareNextTurnWithContext = async (turn, signal) => {
+			await this._syncPlanToolMode();
 			const context = await this._compactBeforeNextAssistantResponse({
 				...turn.context,
 				messages: this.sessionManager.buildSessionProjection().messages,
@@ -1032,7 +1128,7 @@ export class AgentSession {
 			const runOptions = this._runSystemPromptOptions ?? this._baseSystemPromptOptions;
 			const options = normalizeBuildSystemPromptOptions({
 				...runOptions,
-				selectedTools: this.getActiveToolNames(),
+				selectedTools: this._projectToolNames(this._runRequestedToolNames ?? this._requestedToolNames),
 				toolSnippets: { ...this._baseSystemPromptOptions.toolSnippets, ...runOptions.toolSnippets },
 				toolGuidelines: { ...this._baseSystemPromptOptions.toolGuidelines, ...runOptions.toolGuidelines },
 			});
@@ -1082,7 +1178,7 @@ export class AgentSession {
 		}
 
 		const contextTokens = estimateContextTokens(turn.context.messages).tokens;
-		if (!shouldCompact(contextTokens, contextWindow, settings)) {
+		if (!shouldCompact(contextTokens, contextWindow, settings, this.model?.maxTokens)) {
 			return false;
 		}
 
@@ -1128,8 +1224,8 @@ export class AgentSession {
 	 */
 	private _evictionBudget(): number {
 		const contextWindow = this.model?.contextWindow ?? 0;
-		const { reserveTokens } = this.settingsManager.getCompactionSettings();
-		return evictionBudget(contextWindow, reserveTokens);
+		const settings = this.settingsManager.getCompactionSettings();
+		return evictionBudget(contextWindow, effectiveReserveTokens(settings, this.model?.maxTokens, contextWindow));
 	}
 
 	// =========================================================================
@@ -1798,6 +1894,10 @@ export class AgentSession {
 	dispose(): void {
 		if (this._lifecycle === "closed") return;
 		this._lifecycle = "closed";
+		this._planPresentationGeneration++;
+		this._planToolSyncGeneration++;
+		this._setPendingPlanToolSync();
+		this._interactivePermissionModeGeneration++;
 		try {
 			this.abortRetry();
 			this.abortCompaction();
@@ -1882,6 +1982,15 @@ export class AgentSession {
 		return this._retryAttempt;
 	}
 
+	getImplicitDefaultToolNames(): string[] {
+		return this._implicitDefaultToolNames
+			? [...this._implicitDefaultToolNames]
+			: configuredDefaultToolNames({
+					baseNames: this._baseToolsOverride ? Object.keys(this._baseToolsOverride) : undefined,
+					lsp: Boolean(this._lspOperations),
+				});
+	}
+
 	/**
 	 * Get the names of currently active tools.
 	 * Returns the names of tools currently set on the agent.
@@ -1926,17 +2035,110 @@ export class AgentSession {
 	 * Changes take effect on the next agent turn.
 	 */
 	setActiveToolsByName(toolNames: string[]): void {
-		const tools: AgentTool[] = [];
-		const validToolNames: string[] = [];
-		for (const name of toolNames) {
-			const tool = this._toolRegistry.get(name);
-			if (tool) {
-				tools.push(tool);
-				validToolNames.push(name);
+		this._requestedToolNames = [...new Set(toolNames)].filter((name) => this._toolRegistry.has(name));
+		this._runRequestedToolNames = undefined;
+		this._applyRequestedTools();
+	}
+
+	private _projectToolNames(names: readonly string[]): string[] {
+		const planMode = this._planToolMode === "plan";
+		// In plan mode the active set is the read-only part of the requested set, not the whole
+		// set minus refusals at call time. A tool with no contract is refused, because plan mode
+		// is a safety floor and an unknown capability cannot be shown to be read-only.
+		const projected = [...new Set(names)].filter((name) => {
+			if (!this._toolRegistry.has(name)) return false;
+			if (!planMode) return true;
+			const definition = this._toolDefinitions.get(name)?.definition as
+				| { contract?: { capabilities?: Parameters<typeof isPlanModeDenied>[0] } }
+				| undefined;
+			const capabilities = definition?.contract?.capabilities;
+			return capabilities !== undefined && !isPlanModeDenied(capabilities);
+		});
+		if (planMode) {
+			// Search tools join the set so a planning model can still look at the workspace.
+			for (const name of PLAN_MODE_SEARCH_TOOLS) {
+				if (this._toolRegistry.has(name) && !projected.includes(name)) projected.push(name);
 			}
 		}
-		this.agent.state.tools = tools;
-		this._rebuildSystemPrompt(validToolNames);
+		if (planMode && this._toolRegistry.has("plan_present") && !projected.includes("plan_present"))
+			projected.push("plan_present");
+		return projected;
+	}
+
+	private _applyRequestedTools(): void {
+		const names = this._projectToolNames(this._runRequestedToolNames ?? this._requestedToolNames);
+		this.agent.state.tools = names.flatMap((name) => {
+			const tool = this._toolRegistry.get(name);
+			return tool ? [tool] : [];
+		});
+		this._rebuildSystemPrompt(this._projectToolNames(this._requestedToolNames));
+	}
+
+	private _setPendingPlanToolSync(task?: Promise<void>): void {
+		this._pendingPlanToolSync = task;
+		const previous = this._planToolSyncChange;
+		this._planToolSyncChange = new AbortController();
+		previous.abort();
+	}
+
+	private async _syncPlanToolMode(): Promise<void> {
+		const generation = ++this._planToolSyncGeneration;
+		const task = (async () => {
+			const mode = await this._permissionGate?.getMode();
+			if (generation !== this._planToolSyncGeneration || this._lifecycle === "closed") return;
+			this._planToolMode = mode;
+			this._applyRequestedTools();
+		})();
+		this._setPendingPlanToolSync(task);
+		let pending = task;
+		for (;;) {
+			const signal = this._planToolSyncChange.signal;
+			let wake!: () => void;
+			const changed = new Promise<void>((resolve) => {
+				wake = resolve;
+				signal.addEventListener("abort", wake, { once: true });
+			});
+			try {
+				await Promise.race([pending, changed]);
+			} catch (error) {
+				if (pending === this._pendingPlanToolSync) throw error;
+			} finally {
+				signal.removeEventListener("abort", wake);
+			}
+			if (!this._pendingPlanToolSync || pending === this._pendingPlanToolSync) return;
+			pending = this._pendingPlanToolSync;
+		}
+	}
+
+	private _schedulePlanToolSync(): void {
+		void this._syncPlanToolMode().catch(() => {});
+	}
+
+	private async _presentPlan(plan: string, ctx: ExtensionContext, signal?: AbortSignal) {
+		const generation = this._planPresentationGeneration;
+		const modeGeneration = this._interactivePermissionModeGeneration;
+		const obsolete = () =>
+			signal?.aborted ||
+			this._lifecycle === "closed" ||
+			generation !== this._planPresentationGeneration ||
+			modeGeneration !== this._interactivePermissionModeGeneration;
+		const decision = await defaultPlanPresenter.present(plan, ctx, signal);
+		if (obsolete()) throw new Error("Plan approval was cancelled because its dialog is obsolete.");
+		if (!decision.approved) return decision;
+		if (!this._permissionGate) throw new Error("Cannot apply the approved plan mode without a permission gate.");
+		const resolution = await this._setInteractivePermissionMode(
+			decision.nextMode,
+			() => !signal?.aborted && this._lifecycle !== "closed" && generation === this._planPresentationGeneration,
+		);
+		if (
+			signal?.aborted ||
+			generation !== this._planPresentationGeneration ||
+			modeGeneration + 1 !== this._interactivePermissionModeGeneration ||
+			resolution?.mode !== decision.nextMode ||
+			resolution.origin !== "interactive"
+		)
+			throw new Error("Plan approval was cancelled because its dialog is obsolete.");
+		return decision;
 	}
 
 	/** Whether compaction or branch summarization is currently running */
@@ -2040,7 +2242,20 @@ export class AgentSession {
 			selectedTools: validToolNames,
 			toolSnippets,
 			toolGuidelines: Object.fromEntries(this._toolPromptGuidelines),
+			// The last section, so the earlier prompt bytes do not change when the date does (HR.16).
+			sections: { environment: this._currentEnvironmentSection() },
 		});
+	}
+
+	private _environmentSection: { modelId: string | undefined; text: string } | undefined;
+
+	/** The environment block for the current model, rebuilt when the model changes or on reload (HR.16). */
+	private _currentEnvironmentSection(): string {
+		const modelId = this.model?.id;
+		if (!this._environmentSection || this._environmentSection.modelId !== modelId) {
+			this._environmentSection = { modelId, text: currentEnvironmentSection(this._cwd, modelId) };
+		}
+		return this._environmentSection.text;
 	}
 
 	/**
@@ -2057,7 +2272,7 @@ export class AgentSession {
 		options: NormalizedBuildSystemPromptOptions,
 		messages: AgentMessage[] = this.agent.state.messages,
 	): SystemMessage | undefined {
-		options.selectedTools = [...new Set(options.selectedTools)].filter((name) => this._toolRegistry.has(name));
+		options.selectedTools = this._projectToolNames(options.selectedTools);
 		this.agent.state.tools = options.selectedTools.flatMap((name) => {
 			const tool = this._toolRegistry.get(name);
 			return tool ? [tool] : [];
@@ -2100,14 +2315,13 @@ export class AgentSession {
 	private _restoreToolsFromTranscript(): void {
 		const current = getCurrentSystemMessage(this.sessionManager.buildSessionContext().messages);
 		if (!current) return;
-		const toolNames = (current.toolsAdded ?? [])
+		const explicitPlanTool = this._requestedToolNames.includes("plan_present");
+		this._requestedToolNames = (current.toolsAdded ?? [])
 			.map((tool) => tool.name)
-			.filter((name) => this._toolRegistry.has(name));
-		this.agent.state.tools = toolNames.flatMap((name) => {
-			const registered = this._toolRegistry.get(name);
-			return registered ? [registered] : [];
-		});
-		this._rebuildSystemPrompt(toolNames);
+			.filter((name) => this._toolRegistry.has(name) && (name !== "plan_present" || explicitPlanTool));
+		if (explicitPlanTool && !this._requestedToolNames.includes("plan_present"))
+			this._requestedToolNames.push("plan_present");
+		this._applyRequestedTools();
 	}
 
 	// =========================================================================
@@ -2132,6 +2346,8 @@ export class AgentSession {
 		} finally {
 			if (this._agentRunAbortRequested) this._finishCancelledRetry();
 			this._runSystemPromptOptions = undefined;
+			this._runRequestedToolNames = undefined;
+			this._applyRequestedTools();
 			this._flushPendingBashMessages();
 			this._flushPendingCustomMessages();
 			await this._emitAgentSettled();
@@ -2374,6 +2590,8 @@ export class AgentSession {
 				await this._checkCompaction(lastAssistant, false);
 			}
 
+			await this._syncPlanToolMode();
+
 			// Emit before_agent_start before normalizing images so extension-driven model
 			// selection determines the resize profile used for the request and history.
 			const selectedToolsBefore = this._baseSystemPromptOptions.selectedTools;
@@ -2388,7 +2606,16 @@ export class AgentSession {
 			const handlerEditedTools =
 				result.systemPromptOptions.selectedTools.length !== selectedToolsBefore.length ||
 				result.systemPromptOptions.selectedTools.some((name, index) => name !== selectedToolsBefore[index]);
-			if (!handlerEditedTools) result.systemPromptOptions.selectedTools = this.getActiveToolNames();
+			const inheritedImplicitPlanTool =
+				selectedToolsBefore.includes("plan_present") && !this._requestedToolNames.includes("plan_present");
+			this._runRequestedToolNames = handlerEditedTools
+				? result.systemPromptOptions.selectedTools.filter(
+						(name) => name !== "plan_present" || !inheritedImplicitPlanTool,
+					)
+				: undefined;
+			result.systemPromptOptions.selectedTools = this._projectToolNames(
+				this._runRequestedToolNames ?? this._requestedToolNames,
+			);
 
 			const normalized = await this._normalizePromptImages(currentImages);
 			const userText =
@@ -2760,6 +2987,8 @@ export class AgentSession {
 	 * Abort current operation and wait for agent to become idle.
 	 */
 	async abort(): Promise<void> {
+		this._planPresentationGeneration++;
+		this._interactivePermissionModeGeneration++;
 		if (this._activePrompt && this._lifecycle !== "closed") this._lifecycle = "interrupted";
 		if (this._isAgentRunActive) {
 			this._agentRunAbortRequested = true;
@@ -2768,6 +2997,7 @@ export class AgentSession {
 		this.abortCompaction();
 		this.abortBranchSummary();
 		if (this._isBeforeSettle) this._abortDuringBeforeSettle = true;
+		this._childRunRegistry?.interruptForeground("parent aborted");
 		this.agent.abort();
 		await this.waitForIdle();
 	}
@@ -2809,8 +3039,60 @@ export class AgentSession {
 	 */
 	async getPermissionMode(): Promise<EffectiveModeResolution | undefined> {
 		if (!this._permissionGate) return undefined;
+		if (this._interactivePermissionMode !== undefined) {
+			return { mode: this._interactivePermissionMode, origin: "interactive" };
+		}
 		const snapshot = await this._permissionGate.store.snapshot();
+		if (this._interactivePermissionMode !== undefined) {
+			return { mode: this._interactivePermissionMode, origin: "interactive" };
+		}
 		return resolveEffectiveModeWithOrigin(this._permissionGate.flagMode, snapshot.modesBySource);
+	}
+
+	getInteractivePermissionMode(): PermissionMode | undefined {
+		return this._interactivePermissionMode;
+	}
+
+	async getInteractivePermissionModeCycle(): Promise<readonly PermissionMode[]> {
+		if (!this._permissionGate) return [];
+		const modes: PermissionMode[] = ["default", "acceptEdits", "plan"];
+		const startup = await this._startupPermissionMode;
+		if (startup?.ok === false) throw startup.error;
+		if (startup?.mode === "bypassPermissions") modes.push("bypassPermissions");
+		return modes;
+	}
+
+	async setInteractivePermissionMode(mode: PermissionMode): Promise<EffectiveModeResolution | undefined> {
+		return this._setInteractivePermissionMode(mode);
+	}
+
+	private async _setInteractivePermissionMode(
+		mode: PermissionMode,
+		canApply?: () => boolean,
+	): Promise<EffectiveModeResolution | undefined> {
+		if (!this._permissionGate) return undefined;
+		const generation = ++this._interactivePermissionModeGeneration;
+		const startup = await this._startupPermissionMode;
+		if (startup?.ok === false) throw startup.error;
+		if (generation !== this._interactivePermissionModeGeneration) return this.getPermissionMode();
+		if (mode === "bypassPermissions" && startup?.mode !== "bypassPermissions") {
+			throw new Error("Interactive bypassPermissions requires a session that started with bypassPermissions.");
+		}
+		if (canApply && !canApply()) throw new Error("Plan approval was cancelled because its dialog is obsolete.");
+		this._interactivePermissionMode = mode;
+		this._planToolSyncGeneration++;
+		this._planToolMode = mode;
+		this._applyRequestedTools();
+		this._setPendingPlanToolSync();
+		return { mode, origin: "interactive" };
+	}
+
+	clearInteractivePermissionMode(): void {
+		this._interactivePermissionModeGeneration++;
+		this._interactivePermissionMode = undefined;
+		this._planToolMode = undefined;
+		this._applyRequestedTools();
+		this._schedulePlanToolSync();
 	}
 
 	/**
@@ -2822,6 +3104,7 @@ export class AgentSession {
 	async setPermissionMode(mode: PermissionMode): Promise<EffectiveModeResolution | undefined> {
 		if (!this._permissionGate) return undefined;
 		await this._permissionGate.store.apply({ type: "setMode", destination: "user", mode });
+		await this._syncPlanToolMode();
 		return this.getPermissionMode();
 	}
 
@@ -3706,7 +3989,7 @@ export class AgentSession {
 		} else {
 			contextTokens = directContextTokens;
 		}
-		if (shouldCompact(contextTokens, contextWindow, settings)) {
+		if (shouldCompact(contextTokens, contextWindow, settings, this.model?.maxTokens)) {
 			return await this._runAutoCompaction("threshold", false);
 		}
 		return false;
@@ -3924,6 +4207,7 @@ export class AgentSession {
 
 	async bindExtensions(bindings: ExtensionBindings): Promise<void> {
 		if (bindings.uiContext !== undefined) {
+			this._planPresentationGeneration++;
 			this._extensionUIContext = bindings.uiContext;
 		}
 		if (bindings.mode !== undefined) {
@@ -3968,6 +4252,8 @@ export class AgentSession {
 		};
 
 		this._resourceLoader.extendResources(extensionPaths);
+		// A reload re-reads the git state and the date, so the environment section is rebuilt.
+		this._environmentSection = undefined;
 		this._rebuildSystemPrompt(this.getActiveToolNames());
 	}
 
@@ -4149,7 +4435,7 @@ export class AgentSession {
 
 	private _refreshToolRegistry(options?: { activeToolNames?: string[]; includeAllExtensionTools?: boolean }): void {
 		const previousRegistryNames = new Set(this._toolRegistry.keys());
-		const previousActiveToolNames = this.getActiveToolNames();
+		const previousActiveToolNames = this._requestedToolNames;
 		const allowedToolNames = this._allowedToolNames;
 		const excludedToolNames = this._excludedToolNames;
 		const isAllowedTool = (name: string): boolean =>
@@ -4245,7 +4531,8 @@ export class AgentSession {
 		if (hasDeferredActiveTool && this._toolRegistry.has("tool_schema")) {
 			nextActiveToolNames.push("tool_schema");
 		}
-		this.setActiveToolsByName([...new Set(nextActiveToolNames)]);
+		this._requestedToolNames = [...new Set(nextActiveToolNames)].filter((name) => this._toolRegistry.has(name));
+		this._applyRequestedTools();
 	}
 
 	private _buildRuntime(options: {
@@ -4264,17 +4551,21 @@ export class AgentSession {
 					]),
 				)
 			: createAllToolDefinitions(this._cwd, {
-					read: { autoResizeImages },
+					read: { autoResizeImages, ledger: this._fileLedger },
 					bash: {
 						commandPrefix: shellCommandPrefix,
 						shellPath,
 						backgroundRegistry: this._backgroundShellRegistry,
 					},
-					edit: { diagnosticsOperations: this._diagnosticsOperations },
-					write: { diagnosticsOperations: this._diagnosticsOperations },
+					edit: { diagnosticsOperations: this._diagnosticsOperations, ledger: this._fileLedger },
+					write: { diagnosticsOperations: this._diagnosticsOperations, ledger: this._fileLedger },
 					...(this._lspOperations ? { lsp: { operations: this._lspOperations } } : {}),
 					...(this._mcpRuntime ? { mcp: this._mcpRuntime } : {}),
 					...(this._webSearchOperations ? { web_search: { operations: this._webSearchOperations } } : {}),
+					web_fetch: {
+						allowPrivateNetwork: this._webFetchAllowPrivateNetwork,
+						allowProxiedFetch: this._webFetchAllowProxiedFetch,
+					},
 				});
 		baseToolDefinitions.tool_schema = createToolSchemaToolDefinition({
 			getTool: (name) => {
@@ -4285,6 +4576,9 @@ export class AgentSession {
 			markLoaded: (name) => {
 				this._loadedDeferredSchemas.add(name);
 			},
+		}) as ToolDefinition<any, any>;
+		baseToolDefinitions.plan_present = createPlanPresentToolDefinition({
+			present: (plan, ctx, signal) => this._presentPlan(plan, ctx, signal),
 		}) as ToolDefinition<any, any>;
 		baseToolDefinitions.todo_write = createTodoWriteToolDefinition({
 			write: (todos) => {
@@ -4322,11 +4616,10 @@ export class AgentSession {
 		this._bindExtensionCore(this._extensionRunner);
 		this._applyExtensionBindings(this._extensionRunner);
 
-		const defaultActiveToolNames = this._baseToolsOverride
-			? Object.keys(this._baseToolsOverride)
-			: this._lspOperations
-				? ["read", "bash", "edit", "write", "lsp"]
-				: ["read", "bash", "edit", "write"];
+		const defaultActiveToolNames = configuredDefaultToolNames({
+			baseNames: this._baseToolsOverride ? Object.keys(this._baseToolsOverride) : undefined,
+			lsp: Boolean(this._lspOperations),
+		});
 		const baseActiveToolNames = options.activeToolNames ?? defaultActiveToolNames;
 		this._refreshToolRegistry({
 			activeToolNames: baseActiveToolNames,
@@ -4335,16 +4628,21 @@ export class AgentSession {
 	}
 
 	async reload(options?: { beforeSessionStart?: () => void | Promise<void> }): Promise<void> {
+		this._planPresentationGeneration++;
+		this.clearInteractivePermissionMode();
 		const oldRunner = this._extensionRunner;
 		const previousFlagValues = oldRunner.getFlagValues();
 		await emitSessionShutdownEvent(oldRunner, { type: "session_shutdown", reason: "reload" });
 		oldRunner.invalidate();
 		await this.settingsManager.reload();
+		// The web_fetch opt-ins are read at construction. Refresh them here so a reload applies a removed opt-in.
+		this._webFetchAllowPrivateNetwork = this.settingsManager.getWebFetchAllowPrivateNetwork();
+		this._webFetchAllowProxiedFetch = this.settingsManager.getWebFetchAllowProxiedFetch();
 		this.syncQueueModesFromSettings();
 		resetApiProviders();
 		await this._resourceLoader.reload();
 		this._buildRuntime({
-			activeToolNames: this.getActiveToolNames(),
+			activeToolNames: this._requestedToolNames,
 			flagValues: previousFlagValues,
 			includeAllExtensionTools: true,
 		});
@@ -4415,6 +4713,7 @@ export class AgentSession {
 			success: false,
 			attempt,
 			finalError: "Retry cancelled",
+			aborted: true,
 		});
 	}
 
@@ -4836,51 +5135,64 @@ export class AgentSession {
 		}
 	}
 
-	/**
-	 * WS.6: resolve what navigation may do to the workspace before the
-	 * conversation moves. `keep` never touches files; `restore` overwrites
-	 * only through the engine's pinned pre-restore checkpoint; `fail-if-
-	 * drifted` and `cancel` refuse when the workspace moved; a missing
-	 * checkpoint leaves the workspace unchanged and says so. Never throws.
-	 */
+	async previewTreeWorkspace(targetId: string): Promise<TreeWorkspacePreview> {
+		const inspection = await this._inspectTreeWorkspace(targetId);
+		return inspection.state === "unavailable"
+			? { state: inspection.state, reason: inspection.reason }
+			: { state: inspection.state };
+	}
+
+	private async _inspectTreeWorkspace(targetId: string): Promise<TreeWorkspaceInspection> {
+		try {
+			const engine = await this._checkpoints.engine();
+			if (!engine) {
+				return {
+					state: "unavailable",
+					reason: "checkpoints are unavailable; workspace left unchanged",
+					navigationOutcome: "missing-checkpoint",
+				};
+			}
+			const checkpoint = await engine.lookup(targetId);
+			if (!checkpoint) return { state: "no-checkpoint" };
+			const matches = await engine.matchesWorktree(checkpoint);
+			if (matches === undefined) {
+				return {
+					state: "unavailable",
+					reason: "could not compare the workspace against the checkpoint",
+					navigationOutcome: "failed",
+				};
+			}
+			return { state: matches ? "matches" : "differs", engine, checkpoint };
+		} catch (error) {
+			return {
+				state: "unavailable",
+				reason: `workspace policy check failed: ${error instanceof Error ? error.message : String(error)}`,
+				navigationOutcome: "failed",
+			};
+		}
+	}
+
 	private async _resolveTreeWorkspaceStep(
 		targetId: string,
 		policy: TreeWorkspacePolicy,
 	): Promise<{ cancelled?: boolean; outcome: TreeWorkspaceOutcome }> {
 		const unchanged: TreeWorkspaceOutcome = { policy, outcome: "unchanged", warnings: [] };
 		if (policy === "keep") return { outcome: unchanged };
+		const inspection = await this._inspectTreeWorkspace(targetId);
+		if (inspection.state === "no-checkpoint") {
+			return { outcome: { policy, outcome: "missing-checkpoint", warnings: [] } };
+		}
+		if (inspection.state === "unavailable") {
+			return { outcome: { policy, outcome: inspection.navigationOutcome, warnings: [inspection.reason] } };
+		}
+		if (inspection.state === "matches") return { outcome: unchanged };
+		if (policy === "fail-if-drifted" || policy === "cancel") {
+			return { cancelled: true, outcome: { policy, outcome: "refused-drifted", warnings: [] } };
+		}
 		try {
-			const engine = await this._checkpoints.engine();
-			if (!engine) {
-				return {
-					outcome: {
-						policy,
-						outcome: "missing-checkpoint",
-						warnings: ["checkpoints are unavailable; workspace left unchanged"],
-					},
-				};
-			}
-			const checkpoint = await engine.lookup(targetId);
-			if (!checkpoint) return { outcome: { policy, outcome: "missing-checkpoint", warnings: [] } };
-			const matches = await engine.matchesWorktree(checkpoint);
-			if (matches === undefined) {
-				return {
-					outcome: {
-						policy,
-						outcome: "failed",
-						warnings: ["could not compare the workspace against the checkpoint"],
-					},
-				};
-			}
-			if (matches) return { outcome: unchanged };
-			if (policy === "fail-if-drifted" || policy === "cancel") {
-				return { cancelled: true, outcome: { policy, outcome: "refused-drifted", warnings: [] } };
-			}
-			const preRestore = await engine.restore(checkpoint);
+			const preRestore = await inspection.engine.restore(inspection.checkpoint);
 			if (!preRestore) {
-				return {
-					outcome: { policy, outcome: "failed", warnings: ["restore failed; workspace left unchanged"] },
-				};
+				return { outcome: { policy, outcome: "failed", warnings: ["restore failed; workspace left unchanged"] } };
 			}
 			return {
 				outcome: {

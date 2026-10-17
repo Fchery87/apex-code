@@ -21,6 +21,7 @@ function memoryBackend(initialValue?: string) {
 			if (result.next !== undefined) value = result.next;
 			return result.result;
 		},
+		withReadLockAsync: async <T>(fn: (current: string | undefined) => Promise<T>) => fn(value),
 		withLockAsync: async <T>(fn: (current: string | undefined) => Promise<{ result: T; next?: string }>) => {
 			const result = await fn(value);
 			if (result.next !== undefined) value = result.next;

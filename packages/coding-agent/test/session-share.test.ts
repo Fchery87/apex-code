@@ -7,13 +7,14 @@ import { formatShareUnavailableMessage, publishSessionShare } from "../src/core/
 afterEach(() => vi.restoreAllMocks());
 
 describe("session sharing", () => {
-	it("does not export or publish before affirmative confirmation", async () => {
-		const exportToHtml = vi.fn();
+	it("does not publish before affirmative confirmation", async () => {
+		const exportToHtml = vi.fn(async (path: string) => {
+			await writeFile(path, "complete session");
+		});
 		const publishGist = vi.fn();
 		await expect(publishSessionShare({ confirm: async () => false, exportToHtml, publishGist })).resolves.toEqual({
 			kind: "cancelled",
 		});
-		expect(exportToHtml).not.toHaveBeenCalled();
 		expect(publishGist).not.toHaveBeenCalled();
 	});
 

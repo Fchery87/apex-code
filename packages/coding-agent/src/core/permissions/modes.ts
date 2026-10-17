@@ -24,7 +24,8 @@ import type { PermissionMode } from "./store.ts";
  */
 const PLAN_MODE_DENIED_CAPABILITIES: readonly Capability[] = ["fs.write", "exec", "delegate"];
 
-function isPlanModeDenied(capabilities: ReadonlySet<Capability>): boolean {
+/** Whether plan mode refuses a tool with these capabilities. Used to shape the active tool set. */
+export function isPlanModeDenied(capabilities: ReadonlySet<Capability>): boolean {
 	return PLAN_MODE_DENIED_CAPABILITIES.some((capability) => capabilities.has(capability));
 }
 

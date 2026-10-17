@@ -1,11 +1,26 @@
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { Container, Text } from "@earendil-works/pi-tui";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentSessionEvent } from "../../../src/core/agent-session.ts";
 import type { ExtensionUIContext } from "../../../src/core/extensions/index.ts";
 import { InteractiveMode } from "../../../src/modes/interactive/interactive-mode.ts";
 import { initTheme, type Theme, theme } from "../../../src/modes/interactive/theme/theme.ts";
 import { createHarness } from "../harness.ts";
+import { rmScratchResilient, scratchDir } from "../scratch.ts";
+
+let cwd: string;
+let previousCwd: string;
+
+beforeEach(async () => {
+	previousCwd = process.cwd();
+	cwd = await scratchDir("apex-session-start-notify-");
+	process.chdir(cwd);
+});
+
+afterEach(async () => {
+	process.chdir(previousCwd);
+	await rmScratchResilient(cwd);
+});
 
 function createUiContext(
 	onNotify: (message: string, type: "info" | "warning" | "error" | undefined) => void,
@@ -89,17 +104,21 @@ type RebindContext = {
 
 type ReloadCommandContext = {
 	hideThinkingBlock: boolean;
+	chatDetail?: string;
+	loadChatDetail: (saved: string | undefined) => void;
+	assignChatDetail: (detail: string) => void;
 	session: {
 		isStreaming: boolean;
 		isCompacting: boolean;
 		reload: (options?: { beforeSessionStart?: () => void | Promise<void> }) => Promise<void>;
 		resourceLoader: { getThemes: () => { themes: [] } };
 		extensionRunner: unknown;
-		modelRegistry: { getError: () => string | undefined };
+		modelRuntime: { getError: () => string | undefined };
 	};
 	settingsManager: {
 		getHttpIdleTimeoutMs: () => number;
 		getHideThinkingBlock: () => boolean;
+		getChatDetail: () => string | undefined;
 		getOutputPad: () => 0 | 1;
 		getEditorPaddingX: () => number;
 		getAutocompleteMaxVisible: () => number;
@@ -120,6 +139,8 @@ type ReloadCommandContext = {
 	defaultEditor: { setPaddingX: (padding: number) => void; setAutocompleteMaxVisible: (maxVisible: number) => void };
 	themeController: { applyFromSettings: () => Promise<void> };
 	resetExtensionUI: () => void;
+	applyRuntimeSettings: () => void;
+	refreshFooterPermissionMode: () => Promise<void>;
 	rebuildChatFromMessages: () => void;
 	setupAutocompleteProvider: () => void;
 	setupExtensionShortcuts: (runner: unknown) => void;
@@ -158,6 +179,8 @@ function createReloadCommandContext(overrides: ReloadCommandContextOverrides = {
 	const editor = overrides.editor ?? {};
 	return {
 		hideThinkingBlock: overrides.hideThinkingBlock ?? false,
+		loadChatDetail: (InteractiveMode.prototype as unknown as ReloadCommandContext).loadChatDetail,
+		assignChatDetail: (InteractiveMode.prototype as unknown as ReloadCommandContext).assignChatDetail,
 		session: {
 			isStreaming: false,
 			isCompacting: false,
@@ -166,12 +189,13 @@ function createReloadCommandContext(overrides: ReloadCommandContextOverrides = {
 			},
 			resourceLoader: { getThemes: () => ({ themes: [] }) },
 			extensionRunner: {},
-			modelRegistry: { getError: () => undefined },
+			modelRuntime: { getError: () => undefined },
 			...overrides.session,
 		},
 		settingsManager: {
 			getHttpIdleTimeoutMs: () => 0,
 			getHideThinkingBlock: () => false,
+			getChatDetail: () => undefined,
 			getOutputPad: () => 1,
 			getEditorPaddingX: () => 1,
 			getAutocompleteMaxVisible: () => 10,
@@ -194,6 +218,8 @@ function createReloadCommandContext(overrides: ReloadCommandContextOverrides = {
 		customHeader: overrides.customHeader,
 		builtInHeader: overrides.builtInHeader,
 		resetExtensionUI: overrides.resetExtensionUI ?? (() => {}),
+		applyRuntimeSettings: overrides.applyRuntimeSettings ?? (() => {}),
+		refreshFooterPermissionMode: overrides.refreshFooterPermissionMode ?? (async () => {}),
 		rebuildChatFromMessages: overrides.rebuildChatFromMessages ?? (() => {}),
 		setupAutocompleteProvider: overrides.setupAutocompleteProvider ?? (() => {}),
 		setupExtensionShortcuts: overrides.setupExtensionShortcuts ?? (() => {}),
@@ -201,7 +227,7 @@ function createReloadCommandContext(overrides: ReloadCommandContextOverrides = {
 		maybeSaveImplicitProjectTrustAfterReload: overrides.maybeSaveImplicitProjectTrustAfterReload ?? (() => false),
 		showStatus: overrides.showStatus ?? (() => {}),
 		showWarning: overrides.showWarning ?? (() => {}),
-		showError: overrides.showError ?? (() => {}),
+		showError: overrides.showError ?? vi.fn(),
 	};
 }
 
@@ -369,6 +395,10 @@ describe("regression #5943: session_start transient UI", () => {
 
 	it("subscribes before replacement session_start handlers send user messages", async () => {
 		const events: string[] = [];
+		let markSettled!: () => void;
+		const settled = new Promise<void>((resolve) => {
+			markSettled = resolve;
+		});
 		const harness = await createHarness({
 			extensionFactories: [
 				(pi) => {
@@ -394,6 +424,7 @@ describe("regression #5943: session_start transient UI", () => {
 				subscribeToAgent: () => {
 					events.push("subscribe");
 					harness.session.subscribe((event) => {
+						if (event.type === "agent_settled") markSettled();
 						if (event.type !== "message_start" && event.type !== "message_end") {
 							return;
 						}
@@ -406,7 +437,7 @@ describe("regression #5943: session_start transient UI", () => {
 			};
 
 			await interactiveModePrototype.rebindCurrentSession.call(context, { renderBeforeBind: true });
-			await harness.session.agent.waitForIdle();
+			await settled;
 
 			expect(events.slice(0, 3)).toEqual(["render", "subscribe", "bind"]);
 			expect(events).toContain("message_start:user:user from start");
@@ -450,12 +481,12 @@ describe("regression #5943: session_start transient UI", () => {
 		}
 	});
 
-	it("refreshes hideThinkingBlock before rebuilding chat during reload", async () => {
+	it("refreshes hideThinkingBlock and the saved detail level before rebuilding chat during reload", async () => {
 		initTheme("dark", false);
 		const events: string[] = [];
 		let context: ReloadCommandContext;
 		context = createReloadCommandContext({
-			settingsManager: { getHideThinkingBlock: () => true },
+			settingsManager: { getHideThinkingBlock: () => true, getChatDetail: () => "all" },
 			session: {
 				reload: async (options) => {
 					events.push("reload");
@@ -464,14 +495,15 @@ describe("regression #5943: session_start transient UI", () => {
 				},
 			},
 			rebuildChatFromMessages: () => {
-				events.push(`rebuild:${context.hideThinkingBlock}`);
+				events.push(`rebuild:${context.hideThinkingBlock}:${context.chatDetail}`);
 			},
 		});
 
 		await interactiveModePrototype.handleReloadCommand.call(context);
 
 		expect(context.hideThinkingBlock).toBe(true);
-		expect(events).toEqual(["reload", "rebuild:true", "start:true"]);
+		expect(events).toEqual(["reload", "rebuild:true:all", "start:true"]);
+		expect(context.showError).not.toHaveBeenCalled();
 	});
 
 	it("keeps the reload blocker focused until async reload completes", async () => {
@@ -517,5 +549,6 @@ describe("regression #5943: session_start transient UI", () => {
 		await reloadPromise;
 
 		expect(focused).toBe(editor);
+		expect(context.showError).not.toHaveBeenCalled();
 	});
 });

@@ -166,6 +166,50 @@ describe("ExtensionRunner", () => {
 	});
 
 	describe("shortcut conflicts", () => {
+		it.each(["alt+j", "ctrl+x"] as const)("reserves the task panel action at %s", async (key) => {
+			fs.writeFileSync(
+				path.join(extensionsDir, "task-panel.ts"),
+				`export default function(pi) { pi.registerShortcut("${key}", { handler: async () => {} }); }`,
+			);
+			const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+			try {
+				const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+				const runner = new ExtensionRunner(
+					result.extensions,
+					result.runtime,
+					tempDir,
+					sessionManager,
+					modelRegistry,
+				);
+				const keybindings = new KeybindingsManager({ "app.tasks.toggle": key }).getEffectiveConfig();
+				expect(runner.getShortcuts(keybindings).has(key)).toBe(false);
+				expect(warning).toHaveBeenCalledWith(expect.stringContaining("conflicts with built-in shortcut"));
+			} finally {
+				warning.mockRestore();
+			}
+		});
+		it.each(["shift+tab", "ctrl+x"] as const)("reserves the permission mode cycle action at %s", async (key) => {
+			fs.writeFileSync(
+				path.join(extensionsDir, "permission-cycle.ts"),
+				`export default function(pi) { pi.registerShortcut("${key}", { handler: async () => {} }); }`,
+			);
+			const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+			try {
+				const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+				const runner = new ExtensionRunner(
+					result.extensions,
+					result.runtime,
+					tempDir,
+					sessionManager,
+					modelRegistry,
+				);
+				const keybindings = new KeybindingsManager({ "app.permissionMode.cycle": key }).getEffectiveConfig();
+				expect(runner.getShortcuts(keybindings).has(key)).toBe(false);
+				expect(warning).toHaveBeenCalledWith(expect.stringContaining("conflicts with built-in shortcut"));
+			} finally {
+				warning.mockRestore();
+			}
+		});
 		it("warns when extension shortcut conflicts with built-in", async () => {
 			const extCode = `
 				export default function(pi) {

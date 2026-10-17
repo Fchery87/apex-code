@@ -1,0 +1,37 @@
+RS.5 red
+npm test --workspace packages/coding-agent -- test/permissions/interactive-mode-override.test.ts --maxWorkers=1
+Exit 1. Test Files 1 failed. Tests 18 failed. Missing interactive session API.
+Log rs5-red.log.
+
+RS.5 regression suite
+npm test --workspace packages/coding-agent -- test/permissions test/policy-authorization.test.ts test/delegation/end-to-end.test.ts --maxWorkers=1
+Exit 0. Test Files 18 passed (18). Tests 329 passed (329). Duration 59.75s.
+Log rs5-suite.log.
+
+RS.5 types
+npx tsgo --noEmit
+Exit 0. No diagnostics. Log rs5-types-final.log.
+
+RS.6 red
+npm test --workspace packages/coding-agent -- test/interactive-permission-cycle.test.ts test/footer-width.test.ts test/settings-selector.test.ts test/extensions-runner.test.ts --maxWorkers=1
+Exit 1. Test Files 4 failed (4). Tests 16 failed | 89 passed (105).
+Log rs6-red-final.log.
+
+RS.6 additional failing boundary cases
+npm test --workspace packages/coding-agent -- test/interactive-permission-cycle.test.ts --maxWorkers=1
+Reload cases: Exit 1. Tests 2 failed | 11 passed (13). Log rs6-reload-red.log.
+Replacement queue case: Exit 1. Tests 1 failed | 13 passed (14). Log rs6-rebind-red.log.
+npm test --workspace packages/coding-agent -- test/footer-width.test.ts --maxWorkers=1
+Full footer case: Exit 1. Tests 1 failed | 26 passed (27). Log rs6-full-footer-red.log.
+
+RS.6 final regression suite
+npm test --workspace packages/coding-agent -- test/interactive-permission-cycle.test.ts test/footer-width.test.ts test/settings-selector.test.ts test/extensions-runner.test.ts test/keybindings.test.ts test/keybindings-migration.test.ts test/first-use-hints.test.ts test/permissions/interactive-mode-override.test.ts test/interactive-mode-startup-input.test.ts --maxWorkers=1
+Exit 0. Test Files 9 passed (9). Tests 145 passed (145). Duration 49.84s.
+Log rs6-final.log.
+
+RS.6 final types
+npx tsgo --noEmit
+Exit 0. No diagnostics. Log rs6-final-types.log.
+
+git diff --check
+Exit 0. No diagnostics.

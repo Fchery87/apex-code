@@ -8,8 +8,9 @@
 
 import type { CredentialStore } from "@earendil-works/pi-ai";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
+import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { APP_NAME, VERSION } from "../../config.ts";
+import { resolveConfigValue } from "../resolve-config-value.ts";
 import type { FetchLike } from "./oauth/discover.ts";
 import { authRequired, ensureFreshServerToken } from "./oauth/mcp-token.ts";
 import type { CachedTool, McpCallResult, McpConnection, McpConnector, McpServerConfig } from "./types.ts";
@@ -31,12 +32,29 @@ export function resolveAuthorizationHeaders(
 	return headers;
 }
 
+/**
+ * The environment a stdio server starts with: the SDK's safe default set (PATH, locale,
+ * and the like), then the entry's own `env` with each value resolved through the same
+ * `$VAR` / `${VAR}` / `$$` syntax provider keys use. A server does not inherit the rest of
+ * the parent's environment, so a provider key in the shell never reaches a third-party
+ * process. A reference to an unset variable is omitted, and the connect-failure hint says
+ * how to reference one.
+ */
+export function buildStdioEnvironment(configured: Record<string, string>): Record<string, string> {
+	const resolved: Record<string, string> = {};
+	for (const [name, value] of Object.entries(configured)) {
+		const resolvedValue = resolveConfigValue(value);
+		if (resolvedValue !== undefined) resolved[name] = resolvedValue;
+	}
+	return { ...getDefaultEnvironment(), ...resolved };
+}
+
 function createTransport(server: McpServerConfig, oauthAuthorization?: string) {
 	if (server.transport.kind === "stdio") {
 		return new StdioClientTransport({
 			command: server.transport.command,
 			args: server.transport.args,
-			env: { ...process.env, ...server.transport.env } as Record<string, string>,
+			env: buildStdioEnvironment(server.transport.env),
 			cwd: server.transport.cwd,
 		});
 	}
@@ -71,7 +89,15 @@ function toCallResult(raw: unknown): McpCallResult {
 
 export async function connectMcpServer(server: McpServerConfig, oauthAuthorization?: string): Promise<McpConnection> {
 	const client = new Client({ name: APP_NAME, version: VERSION });
-	await client.connect(createTransport(server, oauthAuthorization));
+	try {
+		await client.connect(createTransport(server, oauthAuthorization));
+	} catch (error) {
+		if (server.transport.kind !== "stdio") throw error;
+		const message = error instanceof Error ? error.message : String(error);
+		throw new Error(
+			`${message}. The server starts with only its safe default environment. To pass a variable from yours, reference it in the server's env entry as "NAME": "$NAME".`,
+		);
+	}
 
 	return {
 		async listTools(): Promise<CachedTool[]> {

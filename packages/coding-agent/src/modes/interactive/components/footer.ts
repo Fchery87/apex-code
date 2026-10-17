@@ -3,9 +3,12 @@ import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/p
 import type { AgentSession } from "../../../core/agent-session.ts";
 import { areExperimentalFeaturesEnabled } from "../../../core/experimental.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
+import type { PermissionModeOrigin } from "../../../core/permissions/startup.ts";
 import type { PermissionMode } from "../../../core/permissions/store.ts";
+import type { ChatDetail } from "../../../core/settings-manager.ts";
 import { addUsageToTotals, createUsageTotals } from "../../../core/usage-totals.ts";
 import { theme } from "../theme/theme.ts";
+import { keyDisplayText } from "./keybinding-hints.ts";
 
 /**
  * Sanitize text for display in a single-line status.
@@ -91,6 +94,7 @@ export function formatCwdForFooter(cwd: string, home: string | undefined): strin
 export class FooterComponent implements Component {
 	private autoCompactEnabled = true;
 	private permissionMode: PermissionMode = "default";
+	private permissionModeOrigin: PermissionModeOrigin | undefined;
 	private session: AgentSession;
 	private footerData: ReadonlyFooterDataProvider;
 	private accessibilitySettings: FooterAccessibilitySettings;
@@ -106,6 +110,12 @@ export class FooterComponent implements Component {
 		this.accessibilitySettings = accessibilitySettings;
 	}
 
+	private chatDetail?: ChatDetail;
+
+	setChatDetail(detail: ChatDetail): void {
+		this.chatDetail = detail;
+	}
+
 	setSession(session: AgentSession): void {
 		this.session = session;
 		// The usage totals are cached against the previous session's entry
@@ -117,8 +127,9 @@ export class FooterComponent implements Component {
 		this.autoCompactEnabled = enabled;
 	}
 
-	setPermissionMode(mode: PermissionMode): void {
+	setPermissionMode(mode: PermissionMode, origin?: PermissionModeOrigin): void {
 		this.permissionMode = mode;
+		this.permissionModeOrigin = origin;
 	}
 
 	/**
@@ -307,25 +318,37 @@ export class FooterComponent implements Component {
 		// Text carries the signal and color remains a second channel (WCAG 1.4.1).
 		const modeColor =
 			this.permissionMode === "bypassPermissions" ? "error" : this.permissionMode === "default" ? "dim" : "warning";
-		statsParts.unshift(theme.fg(modeColor, this.permissionMode));
+		const sessionMarker = this.permissionModeOrigin === "interactive" ? " (session)" : "";
+		const cycleKey = this.session.hasPermissionGate ? keyDisplayText("app.permissionMode.cycle") : "";
+		const cycleHint = cycleKey ? theme.fg("dim", `${cycleKey} mode`) : undefined;
+		const compactPermissionNames: Record<PermissionMode, string> = {
+			default: "default",
+			plan: "plan",
+			acceptEdits: "accept",
+			bypassPermissions: "bypass",
+			dontAsk: "dontAsk",
+		};
+		const permissionName = this.permissionMode + sessionMarker;
+		const safetyName =
+			sessionMarker && visibleWidth(permissionName) > width
+				? compactPermissionNames[this.permissionMode] + sessionMarker
+				: permissionName;
+		statsParts.unshift(theme.fg(modeColor, safetyName));
+		if (cycleHint) statsParts.push(cycleHint);
 
 		if (tokenUsageDisplay !== "full") {
 			const separator = theme.fg("dim", symbolPreset === "ascii" ? " - " : " · ");
-			const compactPermissionNames: Record<PermissionMode, string> = {
-				default: "default",
-				plan: "plan",
-				acceptEdits: "accept",
-				bypassPermissions: "bypass",
-				dontAsk: "dontAsk",
-			};
 			const permissionColor =
 				this.permissionMode === "bypassPermissions"
 					? "error"
 					: this.permissionMode === "default"
 						? "dim"
 						: "warning";
-			const permissionFull = theme.fg(permissionColor, this.permissionMode);
-			const permissionCompact = theme.fg(permissionColor, compactPermissionNames[this.permissionMode]);
+			const permissionFull = theme.fg(permissionColor, this.permissionMode + sessionMarker);
+			const permissionCompact = theme.fg(
+				permissionColor,
+				compactPermissionNames[this.permissionMode] + sessionMarker,
+			);
 			const compactPercent = contextPercent === "?" ? "?" : contextPercentValue.toFixed(0);
 			const compactPressure = contextPercentValue > 90 ? "!!" : contextPercentValue > 70 ? "!" : "";
 			const contextColor =
@@ -393,7 +416,13 @@ export class FooterComponent implements Component {
 			}
 
 			const optional: string[] = [];
+
+			if (cycleHint) optional.push(cycleHint);
 			optional.push(theme.fg("dim", state.model?.id || "no-model"));
+			const detailHint = this.chatDetail
+				? theme.fg("dim", `${this.chatDetail} ${keyDisplayText("app.tools.expand")}`)
+				: undefined;
+			if (detailHint) optional.push(detailHint);
 			if (state.model?.reasoning && state.thinkingLevel && state.thinkingLevel !== "off") {
 				optional.push(theme.fg("dim", state.thinkingLevel));
 			}
@@ -423,6 +452,8 @@ export class FooterComponent implements Component {
 
 			for (const segment of optional) {
 				if (fits([...left, segment, right])) left.push(segment);
+				else if (segment === detailHint && this.chatDetail && fits([...left, this.chatDetail, right]))
+					left.push(theme.fg("dim", this.chatDetail));
 			}
 
 			const leftText = joinSegments(left);
@@ -439,6 +470,7 @@ export class FooterComponent implements Component {
 			return lines;
 		}
 
+		if (this.chatDetail) statsParts.push(theme.fg("dim", `${this.chatDetail} ${keyDisplayText("app.tools.expand")}`));
 		let statsLeft = statsParts.join(" ");
 
 		// Add model name on the right side, plus thinking level if model supports it

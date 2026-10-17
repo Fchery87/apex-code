@@ -76,7 +76,8 @@ not OS containment. For untrusted repositories, generated code you will not revi
 unattended runs, run the CLI inside a container, VM, dev container, or sandbox with only
 the files and credentials the task needs. Containment inside a session is an extension's
 job, and `packages/coding-agent/examples/extensions/sandbox/` is a working example of one.
-See [`SECURITY.md`](../SECURITY.md) for what this does and does not guarantee.
+See the [Windows isolation guide](windows-isolation.md) for Windows setup options and
+[`SECURITY.md`](../SECURITY.md) for what Apex Code does and does not guarantee.
 
 **Sessions.** Conversations are stored as JSONL files with a branching tree
 structure — you can fork from any earlier point (`/fork`, `/tree`) rather than only

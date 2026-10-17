@@ -1,0 +1,87 @@
+RS.4 narrow validation on 2026-10-03.
+npm test --workspace packages/coding-agent -- test/turn-summary.test.ts test/interactive-mode-compaction.test.ts test/agent-session-retry.test.ts --maxWorkers=1
+Test Files 3 passed (3)
+Tests 23 passed (23)
+Duration 41.12s
+npx tsgo --noEmit
+Exit 0, no diagnostics.
+
+RS.4 source CLI verification in /tmp/apex-surfaces-terminal-byuzbd30/workspace.
+APEX_CODE_CODING_AGENT_DIR=/tmp/apex-surfaces-terminal-byuzbd30/agent APEX_CODE_OFFLINE=1 APEX_TERMINAL_PROBE_TOKEN=local-probe /home/nochaserz/Documents/Coding\ Projects/apex-code/node_modules/.bin/tsx --tsconfig /home/nochaserz/Documents/Coding\ Projects/apex-code/tsconfig.runtime.json /home/nochaserz/Documents/Coding\ Projects/apex-code/packages/coding-agent/src/cli.ts --no-extensions --no-skills --no-prompt-templates --no-themes --no-tools --provider terminal-probe --model probe -e /home/nochaserz/Documents/Coding\ Projects/apex-code/.apex-code/verification/reachable-surfaces/terminal-probe-provider.ts
+Submitted complete. Observed Worked for 1s.
+Submitted interrupt. Pressed Escape while working. Observed Operation aborted, then Interrupted after 7s.
+Exited with Ctrl+D, exit 0.
+Read scratch session JSONL and asserted neither duration label was present. Assertion passed.
+Transcript in rs4-terminal.log. Provider fixture in terminal-probe-provider.ts uses no network.
+
+RS.5 permission boundary validation.
+npm test --workspace packages/coding-agent -- test/permissions test/policy-authorization.test.ts test/delegation/end-to-end.test.ts --maxWorkers=1
+Test Files 18 passed (18)
+Tests 329 passed (329)
+Duration 59.75s
+npx tsgo --noEmit
+Exit 0, no diagnostics.
+Logs in rs5-suite.log and rs5-types-final.log.
+
+RS.6 focused validation.
+npm test --workspace packages/coding-agent -- test/interactive-permission-cycle.test.ts test/footer-width.test.ts test/settings-selector.test.ts test/extensions-runner.test.ts test/keybindings.test.ts test/keybindings-migration.test.ts test/first-use-hints.test.ts test/permissions/interactive-mode-override.test.ts test/interactive-mode-startup-input.test.ts --maxWorkers=1
+Test Files 9 passed (9)
+Tests 145 passed (145)
+Duration 49.84s
+npx tsgo --noEmit
+Exit 0, no diagnostics.
+
+RS.6 CLI runs used the RS.4 command with --permission-mode plan, then --permission-mode bypassPermissions.
+Plan startup showed plan without a session marker. Shift+Tab showed default (session), acceptEdits (session), and plan (session).
+Alt+T changed thinking from medium to high and kept acceptEdits (session).
+/reload restored plan without a session marker. The next Shift+Tab worked and did not repeat the migration hint.
+Bypass startup cycled default, acceptEdits, plan, bypassPermissions, all with the session marker.
+Both sessions exited with Ctrl+D, exit 0.
+Assertions confirmed exactly one permission-mode-cycle hint identifier in global settings, no saved permission mode, and no created permission files.
+Transcripts in rs6-terminal.log and rs6-bypass-terminal.log.
+
+npm run check
+Exit 0. Checked 1187 files in 9s. No fixes applied.
+Documentation lifecycle validation passed.
+Every process-spawning test retries its recursive scratch cleanup.
+TypeScript, dependency locks, and browser smoke checks passed.
+Full log rs4-rs6-full-check.log.
+
+Review.
+RS.4 and RS.5 independent reviews were clean. RS.6 root source review was clean.
+The independent RS.6 reviewer stopped at the agent usage limit and did not deliver a verdict.
+
+Root review correction.
+The first full npm test run was interrupted with Ctrl+C, exit 130, after discovering the failed-reload footer race. It is not a verification pass. Its output remains in rs4-rs6-full-test-interrupted.log.
+npm test --workspace packages/coding-agent -- test/interactive-permission-cycle.test.ts --maxWorkers=1
+Red: 1 failed | 14 passed (15). The footer still showed default/interactive after the reload fixture changed authoritative mode to bypassPermissions/flag and failed.
+Added an awaited footer refresh on reload failure.
+npm test --workspace packages/coding-agent -- test/interactive-permission-cycle.test.ts test/footer-width.test.ts test/settings-selector.test.ts test/extensions-runner.test.ts test/keybindings.test.ts test/keybindings-migration.test.ts test/first-use-hints.test.ts test/permissions/interactive-mode-override.test.ts test/interactive-mode-startup-input.test.ts --maxWorkers=1
+Green: Test Files 9 passed (9). Tests 146 passed (146). Duration 38.89s.
+npx tsgo --noEmit
+Exit 0, no diagnostics.
+Logs rs6-reload-failure-red.log, rs6-final-after-review.log, and rs6-final-after-review-types.log.
+
+The next full npm test run exited 1. Agent-core passed 975 tests with one skipped. Coding-agent reported 2 failed | 4118 passed | 51 skipped across 1 failed | 449 passed | 6 skipped files. Both failures were in test/suite/regressions/5943-session-start-notify.test.ts, whose plain mocked receiver lacked refreshFooterPermissionMode and still named modelRegistry instead of modelRuntime. Full output is rs4-rs6-full-test-red-fixture.log.
+Updated the receiver to match the current runtime, supplied its UI helpers, and added no-error assertions to both successful reload cases.
+npm test --workspace packages/coding-agent -- test/suite/regressions/5943-session-start-notify.test.ts test/interactive-permission-cycle.test.ts --maxWorkers=1
+Test Files 2 passed (2). Tests 22 passed (22). Duration 31.45s.
+npx tsgo --noEmit
+Exit 0, no diagnostics.
+Logs rs6-regression-fixture-green.log and rs6-regression-fixture-types.log.
+
+Final full gates after the regression fixture correction.
+npm run check
+Exit 0. Checked 1187 files in 12s. No fixes applied.
+Documentation lifecycle validation passed.
+Full log rs4-rs6-final-check.log.
+npm test
+Exit 0. Root scrubber: 21 tests passed.
+Agent-core: Test Files 81 passed (81). Tests 975 passed | 1 skipped (976).
+Coding-agent: Test Files 450 passed | 6 skipped (456). Tests 4120 passed | 51 skipped (4171). Duration 1764.06s.
+Full log rs4-rs6-final-test.log.
+Plan and roadmap updated to reflect RS.1 through RS.6 passing local gates with completion commits still pending.
+node scripts/validate-docs-lifecycle.mjs .
+Documentation lifecycle validation passed.
+git diff --check
+Exit 0, no diagnostics.

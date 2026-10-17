@@ -10,6 +10,7 @@ export const workspaceSourcePaths = {
 	telemetryIndex: fileURLToPath(new URL("./packages/telemetry/src/index.ts", import.meta.url)),
 	telemetryTesting: fileURLToPath(new URL("./packages/telemetry/src/testing/index.ts", import.meta.url)),
 	aiIndex: fileURLToPath(new URL("./packages/ai/src/index.ts", import.meta.url)),
+	aiApi: fileURLToPath(new URL("./packages/ai/src/api/", import.meta.url)),
 	aiCompat: fileURLToPath(new URL("./packages/ai/src/compat.ts", import.meta.url)),
 	aiOAuth: fileURLToPath(new URL("./packages/ai/src/oauth.ts", import.meta.url)),
 	aiProviders: fileURLToPath(new URL("./packages/ai/src/providers", import.meta.url)),
@@ -29,6 +30,7 @@ export const workspaceSourcePaths = {
 export default defineConfig({
 	resolve: {
 		alias: [
+			{ find: /^apex-code-agent-core$/, replacement: workspaceSourcePaths.agentIndex },
 			{ find: /^apex-code-agent-core\/(.+)$/, replacement: `${workspaceSourcePaths.agentSourceRoot}$1` },
 			{ find: /^@earendil-works\/chord$/, replacement: workspaceSourcePaths.chordIndex },
 			{ find: /^@earendil-works\/chord\/context$/, replacement: workspaceSourcePaths.chordContext },
@@ -40,6 +42,7 @@ export default defineConfig({
 			{ find: /^@earendil-works\/pi-ai$/, replacement: workspaceSourcePaths.aiIndex },
 			{ find: /^@earendil-works\/pi-ai\/compat$/, replacement: workspaceSourcePaths.aiCompat },
 			{ find: /^@earendil-works\/pi-ai\/oauth$/, replacement: workspaceSourcePaths.aiOAuth },
+			{ find: /^@earendil-works\/pi-ai\/api\/(.+)$/, replacement: `${workspaceSourcePaths.aiApi}$1.ts` },
 			{
 				find: /^@earendil-works\/pi-ai\/utils\/(.+)$/,
 				replacement: `${workspaceSourcePaths.aiUtils}/$1.ts`,

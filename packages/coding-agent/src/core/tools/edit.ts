@@ -21,6 +21,7 @@ import {
 	normalizeToLF,
 	restoreLineEndings,
 } from "./edit-diff.ts";
+import type { FileReadLedger } from "./file-ledger.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
 import { readPreparedPath, resolveToCwd, writePathAtomically, writePreparedPath } from "./path-utils.ts";
@@ -120,6 +121,8 @@ const defaultEditOperations: EditOperations = {
 };
 
 export interface EditToolOptions {
+	/** The session's read ledger (HR.24). Absent: edits are not checked against reads. */
+	ledger?: FileReadLedger;
 	/** Custom operations for file editing. Default: local filesystem */
 	operations?: EditOperations;
 	/**
@@ -212,6 +215,7 @@ export function createEditToolDefinition(
 	options?: EditToolOptions,
 ): ApexToolDefinition<typeof editSchema, EditToolDetails | undefined, EditRenderState> {
 	const ops = options?.operations ?? defaultEditOperations;
+	const ledger = options?.ledger;
 	const diagnosticsOperations = options?.diagnosticsOperations;
 	return {
 		name: "edit",
@@ -282,6 +286,11 @@ export function createEditToolDefinition(
 				const buffer = prepared ? ops.readPreparedFile!(prepared) : await ops.readFile(absolutePath);
 				const rawContent = buffer.toString("utf-8");
 				throwIfAborted();
+				if (ledger) {
+					const reason = ledger.checkEdit(absolutePath, rawContent);
+					if (reason) throw new Error(`edit refused: ${reason}`);
+				}
+				throwIfAborted();
 
 				// Strip BOM before matching. The model will not include an invisible BOM in oldText.
 				const { bom, text: content } = splitBom(rawContent);
@@ -294,6 +303,7 @@ export function createEditToolDefinition(
 				if (prepared) ops.writePreparedFile!(prepared, Buffer.from(finalContent, "utf-8"));
 				else await ops.writeFile(absolutePath, finalContent);
 				throwIfAborted();
+				ledger?.recordWrite(absolutePath, finalContent);
 
 				const diffResult = generateDiffString(baseContent, newContent);
 				const patch = generateUnifiedPatch(path, baseContent, newContent);

@@ -18,6 +18,8 @@ import { PERMISSION_MODES, type PermissionMode } from "../../../core/permissions
 import {
 	CACHE_WARMING_MODES,
 	type CacheWarmingMode,
+	CHAT_DETAILS,
+	type ChatDetail,
 	type DefaultProjectTrust,
 	type FullscreenExitOutput,
 	type MermaidRenderingMode,
@@ -90,6 +92,7 @@ const PERMISSION_MODE_DESCRIPTIONS: Record<PermissionMode, string> = {
  * `user` and `default` are absent because neither shadows anything this menu writes.
  */
 export const PERMISSION_MODE_OVERRIDE_HINTS: Partial<Record<PermissionModeOrigin, string>> = {
+	interactive: "the interactive permission mode",
 	flag: "--permission-mode on the command line",
 	local: ".apex-code/permissions.local.json in this project",
 	project: ".apex-code/permissions.json in this project",
@@ -104,7 +107,9 @@ function permissionModeItems(current: SettingsConfig["permissionMode"], callback
 		{
 			id: "permission-mode",
 			label: "Permission mode",
-			description: PERMISSION_MODE_DESCRIPTIONS[current.mode],
+			description:
+				PERMISSION_MODE_DESCRIPTIONS[current.mode] +
+				(current.origin === "interactive" ? " The saved default is shadowed for this session." : ""),
 			currentValue: current.mode,
 			submenu: (currentValue, done) =>
 				new PermissionModeSubmenu(
@@ -118,6 +123,7 @@ function permissionModeItems(current: SettingsConfig["permissionMode"], callback
 }
 
 export interface SettingsConfig {
+	taskListTool?: { enabled: boolean; projectControlled: boolean };
 	autoCompact: boolean;
 	defaultModel: string;
 	currentModel?: Model<any>;
@@ -139,6 +145,7 @@ export interface SettingsConfig {
 	terminalTheme: TerminalTheme;
 	availableThemes: string[];
 	hideThinkingBlock: boolean;
+	chatDetail: ChatDetail;
 	mermaidRenderingMode: MermaidRenderingMode;
 	showCacheMissNotices: boolean;
 	collapseChangelog: boolean;
@@ -163,6 +170,7 @@ export interface SettingsConfig {
 }
 
 export interface SettingsCallbacks {
+	onTaskListToolChange?: (enabled: boolean) => void;
 	onAutoCompactChange: (enabled: boolean) => void;
 	onShowImagesChange: (enabled: boolean) => void;
 	onImageWidthCellsChange: (width: number) => void;
@@ -179,6 +187,7 @@ export interface SettingsCallbacks {
 	onThemeChange: (theme: string) => void;
 	onThemePreview?: (theme: string) => void;
 	onHideThinkingBlockChange: (hidden: boolean) => void;
+	onChatDetailChange: (detail: ChatDetail) => void;
 	onMermaidRenderingModeChange: (mode: MermaidRenderingMode) => void;
 	onShowCacheMissNoticesChange: (shown: boolean) => void;
 	onCollapseChangelogChange: (collapsed: boolean) => void;
@@ -304,6 +313,9 @@ class PermissionModeSubmenu extends Container {
 	}
 
 	private description(): string {
+		if (this.origin === "interactive") {
+			return "Saved to user scope for future sessions. The saved default is shadowed by the interactive mode for this session.";
+		}
 		const overridden =
 			this.origin !== "user" && this.origin !== "default"
 				? ` Currently set by ${PERMISSION_MODE_OVERRIDE_HINTS[this.origin]}.`
@@ -680,6 +692,14 @@ export class SettingsSelectorComponent extends Container {
 				values: ["true", "false"],
 			},
 			{
+				id: "chat-detail",
+				label: "Conversation detail",
+				description:
+					"Overview collapses everything; details shows diffs and follows the Hide thinking preference; all shows full tool output and thinking",
+				currentValue: config.chatDetail,
+				values: [...CHAT_DETAILS],
+			},
+			{
 				id: "mermaid-rendering",
 				label: "Mermaid diagrams",
 				description: "Render Mermaid code blocks as Unicode diagrams",
@@ -998,6 +1018,17 @@ export class SettingsSelectorComponent extends Container {
 			values: ["true", "false"],
 		});
 
+		if (config.taskListTool)
+			items.push({
+				id: "task-list-tool",
+				label: "Task-list tool",
+				description: config.taskListTool.projectControlled
+					? "Controlled by project defaultTools. Edit project settings to change this future-session default."
+					: "Enable todo_write by default for new sessions. Current tools and reload keep their selection.",
+				currentValue: config.taskListTool.enabled ? "enabled" : "disabled",
+				values: config.taskListTool.projectControlled ? undefined : ["disabled", "enabled"],
+			});
+
 		// Add borders
 		this.addChild(new DynamicBorder());
 		this.addChild(new Text(theme.bold(theme.fg("accent", "Settings")), 0, 0));
@@ -1009,6 +1040,9 @@ export class SettingsSelectorComponent extends Container {
 			getSettingsSelectorListTheme(),
 			(id, newValue) => {
 				switch (id) {
+					case "task-list-tool":
+						if (!config.taskListTool?.projectControlled) callbacks.onTaskListToolChange?.(newValue === "enabled");
+						break;
 					case "autocompact":
 						callbacks.onAutoCompactChange(newValue === "true");
 						break;
@@ -1048,6 +1082,9 @@ export class SettingsSelectorComponent extends Container {
 						break;
 					case "hide-thinking":
 						callbacks.onHideThinkingBlockChange(newValue === "true");
+						break;
+					case "chat-detail":
+						callbacks.onChatDetailChange(newValue as ChatDetail);
 						break;
 					case "mermaid-rendering":
 						callbacks.onMermaidRenderingModeChange(newValue as MermaidRenderingMode);

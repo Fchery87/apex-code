@@ -47,6 +47,7 @@ import type {
 } from "apex-code-agent-core";
 import type { Static, TSchema } from "typebox";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
+import type { TreeWorkspacePolicy } from "../agent-session.ts";
 import type { BashResult } from "../bash-executor.ts";
 import type { CacheWarmingDecisionEvent, CacheWarmingDecisionEventResult } from "../cache-warmer.ts";
 import type { CompactionPreparation, CompactionResult } from "../compaction/index.ts";
@@ -382,7 +383,13 @@ export interface ExtensionCommandContext extends ExtensionContext {
 	/** Navigate to a different point in the session tree. */
 	navigateTree(
 		targetId: string,
-		options?: { summarize?: boolean; customInstructions?: string; replaceInstructions?: boolean; label?: string },
+		options?: {
+			summarize?: boolean;
+			customInstructions?: string;
+			replaceInstructions?: boolean;
+			label?: string;
+			workspacePolicy?: TreeWorkspacePolicy;
+		},
 	): Promise<{ cancelled: boolean }>;
 
 	/** Switch to a different session file. */
@@ -1886,7 +1893,13 @@ export interface ExtensionCommandContextActions {
 	) => Promise<{ cancelled: boolean }>;
 	navigateTree: (
 		targetId: string,
-		options?: { summarize?: boolean; customInstructions?: string; replaceInstructions?: boolean; label?: string },
+		options?: {
+			summarize?: boolean;
+			customInstructions?: string;
+			replaceInstructions?: boolean;
+			label?: string;
+			workspacePolicy?: TreeWorkspacePolicy;
+		},
 	) => Promise<{ cancelled: boolean }>;
 	switchSession: (
 		sessionPath: string,

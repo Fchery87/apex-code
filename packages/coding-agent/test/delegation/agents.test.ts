@@ -53,7 +53,7 @@ describe("agent definition discovery", () => {
 		const agentDir = join(scratch, "agent");
 		const dir = join(agentDir, "agents");
 		await definition(dir, "missing-tools.md", `---\nname: missing-tools\ndescription: nope\n---\nbody`);
-		await definition(dir, "bad-tools.md", `---\nname: bad-tools\ndescription: nope\ntools: read\n---\nbody`);
+		await definition(dir, "bad-tools.md", `---\nname: bad-tools\ndescription: nope\ntools: 42\n---\nbody`);
 		await definition(dir, "bad-yaml.md", `---\nname: [unterminated\n---\nbody`);
 		const resolve = createAgentDefinitionResolver({ cwd: scratch, agentDir, isProjectTrusted: () => false });
 		expect(resolve("missing-tools")).toBeUndefined();

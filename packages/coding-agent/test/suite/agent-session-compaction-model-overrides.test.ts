@@ -64,17 +64,18 @@ describe("AgentSession compaction model overrides", () => {
 				],
 			});
 			harnesses.push(harness);
-			const recentUserId = seedHistory(harness, path === "pre-prompt" ? 2500 : 650);
+			// The overrides set a 2,000-token reserve on a 4,000-token window, so the threshold is 2,000 input tokens.
+			// Paths that must compact before the prompt need history above that threshold.
+			const recentUserId = seedHistory(harness, path === "pre-prompt" || path === "overflow" ? 2500 : 650);
 
 			if (path === "manual") {
 				await harness.session.compact();
 			} else {
+				// The overflow path compacts on the proactive threshold, not on a provider overflow error. Reactive
+				// overflow is covered by the characterization in agent-session-compaction.test.ts instead.
 				harness.setResponses(
 					path === "overflow"
-						? [
-								fauxAssistantMessage("", { stopReason: "error", errorMessage: "prompt is too long" }),
-								fauxAssistantMessage("recovered"),
-							]
+						? [fauxAssistantMessage("done")]
 						: [fauxAssistantMessage(path === "post-run" ? "z".repeat(8000) : "done")],
 				);
 				await harness.session.prompt("continue");
@@ -86,16 +87,14 @@ describe("AgentSession compaction model overrides", () => {
 				reserveTokens: 2000,
 				keepRecentTokens: 150,
 			});
-			expect(preparations[0]?.reason).toBe(
-				path === "manual" ? "manual" : path === "overflow" ? "overflow" : "threshold",
-			);
+			expect(preparations[0]?.reason).toBe(path === "manual" ? "manual" : "threshold");
 			if (path === "manual" || path === "pre-prompt") {
 				expect(preparations[0]?.preparation.firstKeptEntryId).toBe(recentUserId);
 			}
 			expect(harness.eventsOfType("compaction_end")).toHaveLength(1);
 			expect(harness.eventsOfType("compaction_end")[0]).toMatchObject({
 				aborted: false,
-				willRetry: path === "overflow",
+				willRetry: false,
 				result: { summary: "compacted history" },
 			});
 			expect(harness.getPendingResponseCount()).toBe(0);

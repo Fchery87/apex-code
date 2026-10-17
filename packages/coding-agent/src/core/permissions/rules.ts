@@ -89,6 +89,12 @@ export function resolvePermission<TParams extends TSchema>(
 	for (const candidate of rules) {
 		if (candidate.toolName !== toolName) continue;
 		if (!ruleMatchesCall(candidate, spec, params)) continue;
+		if (
+			candidate.behavior === "allow" &&
+			spec.allowRuleGrants &&
+			!spec.allowRuleGrants(candidate.ruleContent, params)
+		)
+			continue;
 		if (!winner) {
 			winner = candidate;
 			continue;

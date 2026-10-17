@@ -135,6 +135,27 @@ describe("AgentSession retry", () => {
 		return { session, getCallCount: () => callCount };
 	}
 
+	it("reports a typed aborted outcome when cancelled during retry backoff", async () => {
+		const originalCwd = process.cwd();
+		try {
+			process.chdir(tempDir);
+			const created = await createSession({ failCount: 99 });
+			created.session.settingsManager.applyOverrides({ retry: { enabled: true, baseDelayMs: 1000 } });
+			const outcomes: unknown[] = [];
+			created.session.subscribe((event) => {
+				if (event.type === "auto_retry_start") queueMicrotask(() => created.session.abortRetry());
+				if (event.type === "auto_retry_end") outcomes.push(event);
+			});
+			await created.session.prompt("Test");
+			expect(outcomes).toEqual([
+				{ type: "auto_retry_end", success: false, attempt: 1, finalError: "Retry cancelled", aborted: true },
+			]);
+			expect(created.getCallCount()).toBe(1);
+		} finally {
+			process.chdir(originalCwd);
+		}
+	});
+
 	it("retries after a transient error and succeeds", async () => {
 		const created = await createSession({ failCount: 1 });
 		const events: string[] = [];

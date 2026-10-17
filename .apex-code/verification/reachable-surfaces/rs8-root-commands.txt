@@ -1,0 +1,35 @@
+RS.8/RS.9 root verification record
+Source/test starting snapshot: /tmp/apex-rs8-baseline.
+Trunk benchmark archive: /tmp/apex-rs8-trunk-bench from HEAD 0f80e91810f1a7dfaaa59ba4dfd4c9ef8d333f08.
+git cat-file -t 0f80e91810f1a7dfaaa59ba4dfd4c9ef8d333f08 -> commit.
+git rev-parse --verify main -> 329ec80eace5af98d8e98958e953fa31ca87f431.
+git cat-file -t 329ec80eace5af98d8e98958e953fa31ca87f431 -> commit.
+git diff --stat main HEAD -- packages/coding-agent/src packages/coding-agent/test/streaming-render-bench.ts packages/tui/src -> exit0, no output; relevant source identical.
+Preimplementation spec amendment and user docs draft:
+node scripts/validate-docs-lifecycle.mjs . -> exit0, Documentation lifecycle validation passed.
+git diff --check -> exit0, no output.
+Root inspected initial component red log: missing module, no tests executed. Requested compileable no-op scaffold and fresh implementation; rs8-panel-behavior-red.log then recorded 5 assertion failures. Root inspected that actual output.
+
+RS.8/RS.9 root final verification after source freeze.
+Actual offline source CLI PTYs exited 0. rs8-cli.log, rs9-cli-new-session.log and rs8-cli-resume.log; observations recorded in rs8-terminal-verification.md.
+npx tsx --tsconfig tsconfig.runtime.json .apex-code/verification/reachable-surfaces/rs8-panel-bench.ts --smoke
+Initial sandbox exit1 EPERM local IPC; escalated retry exit0, eight smoke cases.
+npx tsx --tsconfig tsconfig.runtime.json packages/coding-agent/test/streaming-render-bench.ts
+Archived baseline then current worktree, back to back. Both exit0. rs8-streaming-trunk.log and rs8-streaming-head.log. Host not idle; timing gate remains open.
+npx tsx --tsconfig tsconfig.runtime.json .apex-code/verification/reachable-surfaces/rs8-panel-bench.ts
+Exit0, 24 cases of 80 frames, all scan/geometry assertions passed. Raw rs8-panel-bench.log; interpretation rs8-performance.md.
+Independent source/test and decision-trail review found no blocking findings in rs8-review.md. Comment Sicko zero added comments/suppressions independently confirmed.
+npm test
+Running, rs8-final-full-test.log.
+npm run check
+Running, rs8-final-full-check.log.
+
+npm run check final exit 0. Checked 1195 files in 96s. No fixes applied. Documentation lifecycle validation passed; scratch cleanup, pinned dependencies, import, scrubber type, lockfile and browser smoke gates passed. rs8-final-full-check.log.
+node scripts/validate-docs-lifecycle.mjs . after final spec/plan/roadmap updates exited0: Documentation lifecycle validation passed.
+git diff --check exit0 after docs updates.
+
+npm test final exit 0 on 2026-10-04. Root script tests 216 passed, 4 skipped, 0 failed. Scrubber 2 files / 21 tests passed. Agent-core 81 files / 975 passed, 1 skipped. Coding-agent 455 passed files / 6 skipped; 4192 passed tests / 51 skipped; duration 1589.38s. Raw rs8-final-full-test.log.
+
+Post-suite vmstat 1 3 exit 0; instantaneous CPU idle 67% and 62%. ps process-name check exit 0. Unrelated host activity remains. No unrelated process stopped and no contaminated timing result promoted to a pass.
+
+Final documentation lifecycle and whitespace checks after recording full-suite totals exited 0. Documentation lifecycle validation passed. git diff --check produced no output.
