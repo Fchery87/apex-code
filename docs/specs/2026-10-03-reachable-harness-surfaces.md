@@ -1,6 +1,6 @@
 # Spec: Make built features reachable from the terminal
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 
@@ -388,3 +388,29 @@ ADR 0037 (G2's mode layer) and the Shift+Tab binding are settled. Needs a plan u
 G1, G5, then G2, G3, G4, because G1 and G5 have no dependencies and G3 depends on G2.
 Each user-visible change goes under `[Unreleased]` in
 `packages/coding-agent/CHANGELOG.md`.
+
+## Landed behavior
+
+Verified at `bc0ac1b0d`, shipped on `main` as `16134d4f3` (PR #167), and released in `0.6.0` (2026-10-04).
+
+- `/tree` asks before restoring changed files. Keeping files is the default, and the preview cannot change files, checkpoints, or session entries.
+- Completed interactive runs show `Worked for`, and aborted runs show `Interrupted after`. Both appear only above one second, and neither changes session entries or model context.
+- Shift+Tab cycles the session permission mode, and the footer marks session overrides. Thinking moves to Alt+T.
+- Plan approval offers three choices, and accepting switches the session mode. `plan_present` is active when plan mode is on.
+- Active task lists sit in a pinned panel above the composer, toggled by Alt+J or `/tasks`. Its expansion is a global setting. `todo_write` renders as `Task list updated · N/M complete`.
+- `/settings` adds or removes `todo_write` from the saved `defaultTools` for new sessions. Other tools are preserved.
+
+### Idle-host timing
+
+`test/streaming-render-bench.ts` ran against trunk `329ec80ea` and head `16134d4f3`, alternating three times on an idle host. The 1-minute load was 0.77 when the runs started. Medians:
+
+| Scenario | Trunk | Head |
+| --- | --- | --- |
+| Streaming chunk, 2,000 chars (ms) | 1.27 | 1.32 |
+| Streaming chunk, 32,000 chars (ms) | 4.51 | 4.63 |
+| Frame, 20 messages (ms) | 1.51 | 1.46 |
+| Frame, 100 messages (ms) | 5.27 | 5.37 |
+| Frame, 300 messages (ms) | 14.32 | 14.42 |
+| Rebuild, 300 messages (ms) | 478 | 485 |
+
+Every scenario is within about 3% of trunk. One head run in the first scenario was an outlier, so the means are not used. The bench does not mount the task panel. The panel's own tests cover it.
