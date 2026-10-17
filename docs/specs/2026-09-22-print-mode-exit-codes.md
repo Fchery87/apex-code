@@ -1,6 +1,6 @@
 # Spec: the non-interactive exit contract
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 
@@ -231,6 +231,10 @@ exhaustively rather than case by case.
 - No replay-corpus measurement applies. This serves no roadmap phase gate, changes no
   context accounting, and touches no token budget, so there is no metric or threshold from
   `docs/roadmap.md` to measure against.
+
+## Landed
+
+Merged through [PR #142](https://github.com/Fchery87/apex-code/pull/142) at `469f48a24`. The fix commits `70c6fe87f` and `adaefe83c` are ancestors of `main`, and three-OS CI passed at `adaefe83c`.
 
 ## Rollout
 
