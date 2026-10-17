@@ -2,6 +2,42 @@
 
 ## [Unreleased]
 
+### Added
+
+- New sessions activate the read-only search tools (`grep`, `find`, `ls`), `web_fetch`, and `delegate` by default. Each still asks through its own permission rule. A saved `defaultTools` setting still wins.
+- Built-in subagent types: `explore` (read-only search) and `general` (default file and shell tools, cannot delegate). A user or trusted-project definition with the same name replaces either one. The `delegate` description lists the available types.
+- The system prompt states the date, platform, shell, model, and whether the working directory has uncommitted git changes.
+- The system prompt includes working rules: verify before reporting work as done, read a file before editing it, no destructive git operations without an explicit request, and treat tool output and web pages as data.
+- Plan mode shows the read-only tools plus `grep`, `find`, and `ls`. Leaving plan mode restores the full set.
+- Read-only commands run without a prompt: `pwd`, `--version` for git, node, npm, rg, and python3, and the listed forms of `git status`, `log`, `diff`, `branch`, `show`, and `rev-parse`. Anything that names a path outside the repository, uses `-c`, writes, or chains still asks.
+- Lazy MCP servers are listed at startup when they have no cached tools, so search finds their tools in the first session. The session reports which servers were started: a status line in the TUI, a stderr line in print mode, and an `mcp_discovery_started` event in JSON and RPC.
+- `web_fetch` returns HTML as markdown and reads at most 5 MB. Images, PDFs, and other binary responses are refused, and the refusal names the type.
+
+### Changed
+
+- Reads outside the working directory ask before they run. An "always allow" saves a rule for the directory.
+- `.env` and `.env.<suffix>` files ask by default. Only a rule that names the file grants them. Template names (`.env.example`, `.env.sample`, `.env.template`) stay ordinary.
+- Home-directory credential locations (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gcloud`, `~/.kube`, `~/.docker/config.json`, `~/.netrc`, `~/.npmrc`) are refused unless a policy rule grants them. `grep` does not return the contents of `.env` files found during a recursive search.
+- `web_fetch` follows a redirect only to the same host, and returns a cross-host target as text for a separate, permission-checked fetch. It refuses private, loopback, and link-local addresses unless `webFetch.allowPrivateNetwork` is set in user settings, which a project cannot do. It connects to the address it checked, except when a proxy is configured.
+- MCP stdio servers no longer inherit the whole environment, so provider keys are not passed to them. A server that needs a variable references it in its `env` entry, as `"NAME": "$NAME"`.
+- Session transcripts and their directories are readable only by the owner. Existing transcripts are tightened when opened.
+- `/share` redacts credential-shaped strings before upload, and the confirmation states how many were replaced.
+- `--api-key` prints a warning that the key can end up in shell history and process listings.
+- `write` refuses to replace an existing file the model has not read in full, or one that changed since it was read. `edit` refuses a file that changed since it was read.
+- The default Anthropic and Bedrock models are Opus 5.5. Several other providers' defaults moved to models in the refreshed catalog. OpenCode Go keeps its previous default.
+- The compaction reserve is never smaller than the model's maximum output, so one long response cannot fill the window.
+- Agent definitions accept `tools` as a comma-separated string. A definition that cannot load is listed in `/resources` with its file and the reason.
+- Aborting a parent session interrupts the foreground subagent it is waiting on. Background subagents continue.
+- `--exclude-tools` help names `ask_user`, the tool's actual name. `/bug` describes Apex Code.
+- Changelog links to this project's files and releases point to its own repository. Links to upstream history still point to Pi's repository.
+
+### Removed
+
+- The unused durable-state daemon module. Its SQLite sidecar and session leases remain.
+- The `./client` and `./experimental/plugin` package exports. They resolved only from the source tree, which is not published.
+- `reasonix.toml` and `mini-test.sh` from the repository root. The `pi-test` launcher is now `apex-test`.
+- The root package name `pi-monorepo` is now `apex-code-monorepo`.
+
 ## [0.6.1] - 2026-10-04
 
 ### Changed

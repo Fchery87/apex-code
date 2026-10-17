@@ -81,7 +81,8 @@ async function buildSession(sessionManager: SessionManager, tempDir: string) {
 	const settingsManager = SettingsManager.create(tempDir, tempDir, { projectTrusted: true });
 	settingsManager.applyOverrides({ compaction: { reserveTokens: RESERVE_TOKENS } });
 
-	const model = { ...fauxModel, contextWindow: CONTEXT_WINDOW };
+	// The output limit stays under the configured reserve, so the reserve under test is the one applied (HR.29).
+	const model = { ...fauxModel, contextWindow: CONTEXT_WINDOW, maxTokens: 1000 };
 
 	const { streamFn, state: faux } = createFauxStreamFn([
 		{ toolCalls: [{ name: "big_read", args: {} }] },
