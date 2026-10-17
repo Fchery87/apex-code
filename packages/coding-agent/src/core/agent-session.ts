@@ -156,6 +156,7 @@ import type { CacheWarmingMode, SettingsManager } from "./settings-manager.ts";
 import { slugifySkillCommandName } from "./skills.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
+import { currentEnvironmentSection } from "./system-environment.ts";
 import {
 	buildSystemPrompt,
 	buildSystemPromptSections,
@@ -2228,7 +2229,20 @@ export class AgentSession {
 			selectedTools: validToolNames,
 			toolSnippets,
 			toolGuidelines: Object.fromEntries(this._toolPromptGuidelines),
+			// The last section, so the earlier prompt bytes do not change when the date does (HR.16).
+			sections: { environment: this._currentEnvironmentSection() },
 		});
+	}
+
+	private _environmentSection: { modelId: string | undefined; text: string } | undefined;
+
+	/** The environment block for the current model, rebuilt when the model changes or on reload (HR.16). */
+	private _currentEnvironmentSection(): string {
+		const modelId = this.model?.id;
+		if (!this._environmentSection || this._environmentSection.modelId !== modelId) {
+			this._environmentSection = { modelId, text: currentEnvironmentSection(this._cwd, modelId) };
+		}
+		return this._environmentSection.text;
 	}
 
 	/**
@@ -4225,6 +4239,8 @@ export class AgentSession {
 		};
 
 		this._resourceLoader.extendResources(extensionPaths);
+		// A reload re-reads the git state and the date, so the environment section is rebuilt.
+		this._environmentSection = undefined;
 		this._rebuildSystemPrompt(this.getActiveToolNames());
 	}
 
