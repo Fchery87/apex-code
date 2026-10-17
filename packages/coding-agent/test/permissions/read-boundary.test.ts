@@ -81,7 +81,8 @@ describe("read boundary: reads outside the workspace ask", () => {
 		const cwd = await scratchDir("apex-rb-");
 		const outside = await scratchDir("apex-rb-outside-");
 		dirs.push(cwd, outside);
-		const literal = join(outside, "a[1]*");
+		// `*` is not a legal file name on Windows, so the literal uses brackets, which are.
+		const literal = join(outside, "a[1]x");
 		const lookalike = join(outside, "a1x");
 		await mkdir(literal, { recursive: true });
 		await mkdir(lookalike, { recursive: true });
