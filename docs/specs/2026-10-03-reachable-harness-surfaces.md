@@ -1,6 +1,6 @@
 # Spec: Make built features reachable from the terminal
 
-**Status:** Draft
+**Status:** Active
 
 ## Metadata
 
