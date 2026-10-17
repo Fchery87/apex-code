@@ -3624,6 +3624,9 @@ export class InteractiveMode {
 		this.taskPanel?.handleEvent(event);
 
 		switch (event.type) {
+			case "mcp_discovery_started":
+				this.showStatus(`Started MCP ${event.servers.join(", ")} to list its tools.`);
+				break;
 			case "agent_start":
 				this.clearPendingTools();
 				if (this.settingsManager.getShowTerminalProgress()) {

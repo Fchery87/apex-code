@@ -244,6 +244,8 @@ export type AgentSessionEvent =
 			followUp: readonly string[];
 	  }
 	| { type: "compaction_start"; reason: "manual" | "threshold" | "overflow" }
+	/** MCP servers started at startup to list their tools (HR.14). Emitted once, only when there are any. */
+	| { type: "mcp_discovery_started"; servers: readonly string[] }
 	| { type: "entry_appended"; entry: SessionEntry }
 	| { type: "session_info_changed"; name: string | undefined }
 	| { type: "thinking_level_changed"; level: ThinkingLevel }
@@ -647,8 +649,9 @@ export class AgentSession {
 		return this._mcpDiscoveryStarted;
 	}
 
-	setMcpDiscoveryStarted(names: readonly string[]): void {
+	reportMcpDiscovery(names: readonly string[]): void {
 		this._mcpDiscoveryStarted = [...names];
+		if (names.length > 0) this._emit({ type: "mcp_discovery_started", servers: [...names] });
 	}
 
 	/** Agent definition files that exist but cannot be used, as `/resources` diagnostics. */

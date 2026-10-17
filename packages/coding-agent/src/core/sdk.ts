@@ -1033,7 +1033,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// Eager servers connect here rather than on first use, so their tools are in the
 	// cache before the model's first search. Detached: a slow or broken server delays
 	// nothing, and `warmEagerServers` already swallows its own failures.
-	void mcpRuntime?.warm().then((started) => session.setMcpDiscoveryStarted(started));
+	void mcpRuntime?.warm().then((started) => session.reportMcpDiscovery(started));
 	const extensionsResult = resourceLoader.getExtensions();
 
 	return {
