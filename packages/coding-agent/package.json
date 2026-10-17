@@ -19,12 +19,6 @@
 		},
 		"./rpc-entry": {
 			"import": "./dist/bundle/rpc-entry.js"
-		},
-		"./client": {
-			"source": "./src/client/index.ts"
-		},
-		"./experimental/plugin": {
-			"source": "./src/experimental/plugin.ts"
 		}
 	},
 	"files": [
