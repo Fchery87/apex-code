@@ -4635,6 +4635,9 @@ export class AgentSession {
 		await emitSessionShutdownEvent(oldRunner, { type: "session_shutdown", reason: "reload" });
 		oldRunner.invalidate();
 		await this.settingsManager.reload();
+		// The web_fetch opt-ins are read at construction. Refresh them here so a reload applies a removed opt-in.
+		this._webFetchAllowPrivateNetwork = this.settingsManager.getWebFetchAllowPrivateNetwork();
+		this._webFetchAllowProxiedFetch = this.settingsManager.getWebFetchAllowProxiedFetch();
 		this.syncQueueModesFromSettings();
 		resetApiProviders();
 		await this._resourceLoader.reload();

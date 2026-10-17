@@ -26,6 +26,11 @@ describe("compaction reserve follows the output limit, capped at a share of the 
 		expect(effectiveReserveTokens(half, 128000, 200000)).toBe(100000);
 	});
 
+	it.each([0, -0.5, 2, Number.NaN])("falls back to a third when the fraction %s is out of range", (fraction) => {
+		const invalid = { ...settings, outputReserveFraction: fraction };
+		expect(effectiveReserveTokens(invalid, 128000, 200000)).toBe(66666);
+	});
+
 	it("a large-output model compacts earlier than the fixed reserve would allow, but not at the cap", () => {
 		expect(shouldCompact(80000, 200000, settings)).toBe(false);
 		expect(shouldCompact(120000, 200000, settings, 128000)).toBe(false);

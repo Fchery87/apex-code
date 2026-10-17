@@ -297,7 +297,11 @@ export function effectiveReserveTokens(
 	maxOutputTokens: number | undefined,
 	contextWindow: number,
 ): number {
-	const fraction = settings.outputReserveFraction ?? DEFAULT_OUTPUT_RESERVE_FRACTION;
+	const configured = settings.outputReserveFraction;
+	const fraction =
+		configured !== undefined && Number.isFinite(configured) && configured > 0 && configured <= 1
+			? configured
+			: DEFAULT_OUTPUT_RESERVE_FRACTION;
 	const outputFloor = Math.min(maxOutputTokens ?? 0, Math.floor(contextWindow * fraction));
 	return Math.max(settings.reserveTokens, outputFloor);
 }
