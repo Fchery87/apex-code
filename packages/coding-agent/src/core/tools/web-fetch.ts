@@ -1,6 +1,7 @@
 import { lookup as systemLookup } from "node:dns/promises";
 import type { AgentToolResult } from "apex-code-agent-core";
 import { minimatch } from "minimatch";
+import TurndownService from "turndown";
 import { type Static, Type } from "typebox";
 import { Agent, fetch as undiciFetch } from "undici";
 import type { ApexToolDefinition } from "./contract.ts";
@@ -21,6 +22,55 @@ export interface WebFetchDetails {
 
 export interface WebFetchOperations {
 	fetch(url: string, signal?: AbortSignal): Promise<{ status: number; text: string }>;
+}
+
+/** Largest body the tool reads. The model sees at most the truncated head of it. */
+const MAX_BODY_BYTES = 5 * 1024 * 1024;
+const FETCH_TIMEOUT_MS = 30_000;
+
+/** Reads at most `limit` bytes and stops the download there. Reports whether it was cut short. */
+async function readBodyCapped(response: Response, limit: number): Promise<{ text: string; truncated: boolean }> {
+	if (!response.body) return { text: "", truncated: false };
+	const reader = response.body.getReader();
+	const decoder = new TextDecoder();
+	let received = 0;
+	let text = "";
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		if (received + value.byteLength > limit) {
+			text += decoder.decode(value.subarray(0, limit - received), { stream: true });
+			await reader.cancel();
+			return { text: text + decoder.decode(), truncated: true };
+		}
+		received += value.byteLength;
+		text += decoder.decode(value, { stream: true });
+	}
+	return { text: text + decoder.decode(), truncated: false };
+}
+
+const TEXTUAL_MEDIA = /^(text\/|application\/(json|xml|javascript|ld\+json)$|application\/[a-z0-9.+-]+\+(json|xml)$)/;
+const HTML_MEDIA = new Set(["text/html", "application/xhtml+xml"]);
+
+function mediaTypeOf(response: Response): string {
+	return (response.headers.get("content-type") ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
+}
+
+/** Whether the model should read a body of this media type. An empty type is treated as text. */
+function isReadable(mediaType: string): boolean {
+	return mediaType === "" || HTML_MEDIA.has(mediaType) || TEXTUAL_MEDIA.test(mediaType);
+}
+
+/**
+ * HTML becomes markdown, with the head, scripts, styles, and navigation removed. Other text
+ * passes through unchanged.
+ */
+export function renderFetchedBody(mediaType: string, body: string): string {
+	if (!HTML_MEDIA.has(mediaType)) return body;
+	const withoutHead = body.replace(/<head[\s\S]*?<\/head>/i, "");
+	const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
+	turndown.remove(["script", "style", "noscript", "nav"]);
+	return turndown.turndown(withoutHead);
 }
 
 const MAX_REDIRECTS = 5;
@@ -164,11 +214,30 @@ function createDefaultWebFetchOperations(allowPrivateNetwork: boolean, resolveHo
 					? undefined
 					: new Agent({ connect: { lookup: pinnedLookup(addresses) as never } });
 				try {
+					const requestSignal = signal
+						? AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)])
+						: AbortSignal.timeout(FETCH_TIMEOUT_MS);
 					const response = (agent
-						? await undiciFetch(current.href, { signal, redirect: "manual", dispatcher: agent })
-						: await globalThis.fetch(current.href, { signal, redirect: "manual" })) as unknown as Response;
+						? await undiciFetch(current.href, { signal: requestSignal, redirect: "manual", dispatcher: agent })
+						: await globalThis.fetch(current.href, {
+								signal: requestSignal,
+								redirect: "manual",
+							})) as unknown as Response;
 					if (!REDIRECT_STATUSES.has(response.status)) {
-						return { status: response.status, text: await response.text() };
+						const mediaType = mediaTypeOf(response);
+						if (!isReadable(mediaType)) {
+							await response.body?.cancel();
+							return {
+								status: response.status,
+								text: `web_fetch did not read this response: it is ${mediaType}, which is not text. Only text, markdown, HTML, and JSON are returned.`,
+							};
+						}
+						const { text, truncated } = await readBodyCapped(response, MAX_BODY_BYTES);
+						const body = renderFetchedBody(mediaType, text);
+						return {
+							status: response.status,
+							text: truncated ? `${body}\n\n[truncated: the body exceeded ${MAX_BODY_BYTES} bytes]` : body,
+						};
 					}
 					const location = response.headers.get("location");
 					await response.body?.cancel();

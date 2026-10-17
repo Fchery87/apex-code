@@ -67,6 +67,7 @@
 		"minimatch": "10.2.6",
 		"proper-lockfile": "4.1.2",
 		"semver": "7.8.5",
+		"turndown": "7.2.4",
 		"typebox": "1.3.27",
 		"undici": "8.10.2",
 		"yaml": "2.9.0"
@@ -90,11 +91,12 @@
 		"@types/node": "22.19.19",
 		"@types/proper-lockfile": "4.1.4",
 		"@types/semver": "7.7.1",
+		"@types/turndown": "5.0.6",
 		"glob": "13.0.6",
+		"marked": "18.0.11",
 		"shx": "0.4.0",
 		"typescript": "5.9.3",
-		"vitest": "4.1.9",
-		"marked": "18.0.11"
+		"vitest": "4.1.9"
 	},
 	"keywords": [
 		"coding-agent",
