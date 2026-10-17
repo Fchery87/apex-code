@@ -18,6 +18,7 @@ import { getExperimentalToolSampling } from "../experimental.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
 import { type BackgroundShellRegistry, createBackgroundShellRegistry } from "./background-shell.ts";
 import { classifyBashCommand } from "./bash-command-segments.ts";
+import { isReadOnlyCommand } from "./bash-readonly.ts";
 import { type ApexToolDefinition, type PermissionSpec, toolUnion } from "./contract.ts";
 import { OutputAccumulator } from "./output-accumulator.ts";
 import { BASH_UPDATE_THROTTLE_MS, createShellRenderers } from "./renderers/bash.ts";
@@ -146,7 +147,13 @@ export function createBashPermissionSpec(): PermissionSpec<typeof bashSchema> {
 		defaultBehaviorFor(params) {
 			const parsed = parseShellOperation(params);
 			if (!parsed.ok) return undefined;
-			return parsed.operation.kind === "run" ? undefined : "allow";
+			if (parsed.operation.kind !== "run") return "allow";
+			// A single command on the read-only allow-list needs no prompt (HR.21). A chain never qualifies.
+			const classification = classifyBashCommand(parsed.operation.command);
+			if (classification.type === "segments" && classification.segments.length === 1) {
+				return isReadOnlyCommand(classification.segments[0]) ? "allow" : undefined;
+			}
+			return undefined;
 		},
 		matches(ruleContent, params) {
 			const parsed = parseShellOperation(params);
