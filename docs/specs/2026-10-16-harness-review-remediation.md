@@ -1,6 +1,6 @@
 # Spec: Harness review remediation
 
-**Status:** Active
+**Status:** Landed
 
 ## Metadata
 
@@ -429,3 +429,18 @@ margin the test file's history uses. It is never raised without a measurement.
   ship as patch releases.
 - HR.13 starts after the reachable-harness-surfaces plan closes, because both touch the
   plan-mode tool projection.
+
+## Landed behavior
+
+Verified at `9aa1088b7` on [PR #173](https://github.com/Fchery87/apex-code/pull/173): three-OS CI and the first CodeQL run pass, and the local full suite passed at each stage.
+
+- Reads outside the workspace ask. Home credential locations are protected. `.env` files ask and need a rule that names them.
+- `web_fetch` refuses private addresses, follows same-host redirects only, pins connections when no proxy is set, returns markdown, and refuses non-text.
+- MCP stdio servers get a safe environment with `$VAR` references. Session files are owner-only. `/share` redacts secrets. `--api-key` warns.
+- `explore` and `general` subagents exist. Esc stops foreground subagents. Plan mode shows read-only tools. Default tools include search, `web_fetch`, and `delegate`.
+- The system prompt carries an environment block and working rules. Default models are current. The compaction reserve is at least the model's output limit.
+- A closed allow-list runs read-only commands without a prompt. `write` and `edit` consult the session's read ledger.
+- The daemon, two broken exports, and stray root files are removed. The root package is `apex-code-monorepo`. CodeQL runs weekly and on each change.
+
+Open after landing, each recorded as a non-goal or a product decision in this spec: `todo_write` and `ask_user` stay opt-in; OpenCode Go keeps its previous model snapshot; the plugin API stays unpublished; a DNS-rebinding window remains when a proxy is configured.
+
