@@ -44,6 +44,8 @@ export interface CompactionSettings {
 	reserveTokens?: number; // default: 16384
 	keepRecentTokens?: number; // default: 20000
 	modelOverrides?: Record<string, CompactionModelOverride>; // exact "provider/modelId" keys
+	/** Share of the context window the output-limit floor may take (HR.29, Q6). */
+	outputReserveFraction?: number;
 }
 
 export interface BranchSummarySettings {
@@ -216,6 +218,8 @@ export type PackageSource =
 export interface WebFetchSettings {
 	/** Allow loopback, private, and link-local destinations. Read from user settings only. */
 	allowPrivateNetwork?: boolean;
+	/** Allow fetches while an HTTP proxy is configured (Q4). Read from user settings only. */
+	allowProxiedFetch?: boolean;
 }
 
 export interface WebSearchSettings {
@@ -289,6 +293,8 @@ export interface Settings {
 	lsp?: LspSettings;
 	webSearch?: WebSearchSettings;
 	webFetch?: WebFetchSettings;
+	/** Start lazy MCP servers at startup to list their tools (default on, Q7). */
+	mcpStartupDiscovery?: boolean;
 	/**
 	 * Git-backed worktree checkpoints. On by default inside git repositories
 	 * (spec 2026-09-01-checkpoints-default-on.md); `{ enabled: false }` opts
@@ -1177,11 +1183,14 @@ export class SettingsManager {
 		enabled: boolean;
 		reserveTokens: number;
 		keepRecentTokens: number;
+		outputReserveFraction?: number;
 	} {
+		const fraction = this.settings.compaction?.outputReserveFraction;
 		return {
 			enabled: this.getCompactionEnabled(),
 			reserveTokens: this.getCompactionReserveTokens(model),
 			keepRecentTokens: this.getCompactionKeepRecentTokens(model),
+			...(fraction !== undefined && fraction > 0 && fraction <= 1 ? { outputReserveFraction: fraction } : {}),
 		};
 	}
 
@@ -1202,6 +1211,16 @@ export class SettingsManager {
 	 */
 	getWebFetchAllowPrivateNetwork(): boolean {
 		return this.globalSettings.webFetch?.allowPrivateNetwork === true;
+	}
+
+	/** Read from user settings only, for the same reason as `getWebFetchAllowPrivateNetwork` (Q4). */
+	/** Whether lazy MCP servers are started at startup to list their tools (Q7). Default on. */
+	getMcpStartupDiscovery(): boolean {
+		return this.settings.mcpStartupDiscovery !== false;
+	}
+
+	getWebFetchAllowProxiedFetch(): boolean {
+		return this.globalSettings.webFetch?.allowProxiedFetch === true;
 	}
 
 	getWebSearchSettings(): WebSearchSettings | undefined {

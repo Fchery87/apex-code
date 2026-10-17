@@ -147,3 +147,42 @@ describe("web_fetch connects to the address it checked (HR.4 pinning)", () => {
 		expect(calls).toEqual(["pinned.example.invalid"]);
 	});
 });
+
+describe("web_fetch with a proxy configured refuses unless the user opts in (Q4)", () => {
+	const proxyVars = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"];
+	const saved: Record<string, string | undefined> = {};
+	beforeEach(() => {
+		for (const name of proxyVars) {
+			saved[name] = process.env[name];
+			delete process.env[name];
+		}
+		process.env.HTTPS_PROXY = "http://proxy.invalid:3128";
+	});
+	afterEach(() => {
+		for (const name of proxyVars) {
+			if (saved[name] === undefined) delete process.env[name];
+			else process.env[name] = saved[name];
+		}
+	});
+
+	it("refuses the fetch and names the setting that allows it", async () => {
+		const tool = createWebFetchTool({ allowPrivateNetwork: true });
+		await expect(tool.execute("call", { url: "https://example.com/" })).rejects.toThrow(
+			/webFetch\.allowProxiedFetch/,
+		);
+	});
+
+	it("does not reach the network when refused", async () => {
+		const server = await serve(() => ({ status: 200, body: "reached" }));
+		const tool = createWebFetchTool({ allowPrivateNetwork: true });
+		await expect(tool.execute("call", { url: `${server.url}/` })).rejects.toThrow(/allowProxiedFetch/);
+		expect(server.hostHeaders).toHaveLength(0);
+	});
+
+	it("proceeds when the user has opted in", async () => {
+		const server = await serve(() => ({ status: 200, body: "allowed" }));
+		const tool = createWebFetchTool({ allowPrivateNetwork: true, allowProxiedFetch: true });
+		const result = await tool.execute("call", { url: `${server.url}/` });
+		expect(result.content[0]).toMatchObject({ type: "text" });
+	});
+});

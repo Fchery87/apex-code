@@ -23,7 +23,7 @@ export interface McpRuntime extends McpToolOptions {
 	 * servers it started, so the session can tell the user what ran. A server with a cache
 	 * entry is never started again.
 	 */
-	warm(): Promise<string[]>;
+	warm(options?: { discoverLazy?: boolean }): Promise<string[]>;
 	close(): Promise<void>;
 }
 
@@ -55,9 +55,14 @@ export function createMcpRuntime(
 		cache,
 		manager,
 		diagnostics,
-		warm: async () => {
+		warm: async (options) => {
 			await manager.warmEagerServers((server, tools) => cache.set(server, tools));
 			const started: string[] = [];
+			// Lazy discovery starts servers and runs their commands. A user can turn it off (Q7).
+			if (options?.discoverLazy === false) {
+				cache.save();
+				return started;
+			}
 			for (const server of servers.values()) {
 				if (server.lifecycle === "eager" || cache.get(server).length > 0) continue;
 				started.push(server.name);

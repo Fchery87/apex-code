@@ -37,3 +37,18 @@ describe("webFetch.allowPrivateNetwork setting (HR.4)", () => {
 		expect(manager.getWebFetchAllowPrivateNetwork()).toBe(false);
 	});
 });
+
+describe("webFetch.allowProxiedFetch setting (Q4)", () => {
+	it("is off when unset, on when the user sets it, and ignored in a project", () => {
+		expect(setup(undefined, undefined).getWebFetchAllowProxiedFetch()).toBe(false);
+		expect(setup({ webFetch: { allowProxiedFetch: true } }, undefined).getWebFetchAllowProxiedFetch()).toBe(true);
+		expect(setup(undefined, { webFetch: { allowProxiedFetch: true } }).getWebFetchAllowProxiedFetch()).toBe(false);
+	});
+});
+
+describe("mcpStartupDiscovery setting (Q7)", () => {
+	it("is on by default and off when the user sets it", () => {
+		expect(setup(undefined, undefined).getMcpStartupDiscovery()).toBe(true);
+		expect(setup({ mcpStartupDiscovery: false }, undefined).getMcpStartupDiscovery()).toBe(false);
+	});
+});

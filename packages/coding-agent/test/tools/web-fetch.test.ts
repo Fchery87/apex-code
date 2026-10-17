@@ -98,7 +98,7 @@ describe("web_fetch default operations use the global, proxy-aware fetch (task 4
 				.spyOn(globalThis, "fetch")
 				.mockResolvedValue(new Response("real fetch content", { status: 200 }));
 
-			const tool = createWebFetchTool();
+			const tool = createWebFetchTool({ allowProxiedFetch: true });
 			const result = await tool.execute("call-1", { url: "https://example.com/real" });
 
 			expect(fetchSpy).toHaveBeenCalledWith("https://example.com/real", expect.anything());

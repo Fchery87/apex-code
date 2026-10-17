@@ -204,9 +204,20 @@ function pinnedLookup(addresses: readonly ResolvedAddress[]) {
  * With a proxy configured, the global proxy-aware fetch is used, and the check still runs
  * first, but the proxy resolves the target, so the address is not pinned.
  */
-function createDefaultWebFetchOperations(allowPrivateNetwork: boolean, resolveHost: ResolveHost): WebFetchOperations {
+function createDefaultWebFetchOperations(
+	allowPrivateNetwork: boolean,
+	resolveHost: ResolveHost,
+	allowProxiedFetch: boolean,
+): WebFetchOperations {
 	return {
 		async fetch(url, signal) {
+			// With a proxy, the proxy resolves the target and this tool cannot pin the address it checked, so the
+			// check alone cannot prevent DNS rebinding. The fetch is refused unless the user opts in (Q4).
+			if (proxyConfigured() && !allowProxiedFetch) {
+				throw new Error(
+					"web_fetch refused: a proxy is configured, so the destination address cannot be pinned to the one that was checked. Set webFetch.allowProxiedFetch to allow fetches through the proxy.",
+				);
+			}
 			let current = new URL(url);
 			for (let hop = 0; ; hop++) {
 				const addresses = await checkDestination(current, allowPrivateNetwork, resolveHost);
@@ -265,6 +276,8 @@ export interface WebFetchToolOptions {
 	operations?: WebFetchOperations;
 	/** Allow loopback, private, and link-local destinations. Set from user settings only. */
 	allowPrivateNetwork?: boolean;
+	/** Allow fetches while an HTTP proxy is configured (Q4). Set from user settings only. */
+	allowProxiedFetch?: boolean;
 	/** How hosts are resolved for the check and the pinned connection. The system resolver by default. */
 	resolveHost?: ResolveHost;
 }
@@ -279,7 +292,11 @@ export function createWebFetchToolDefinition(
 ): ApexToolDefinition<typeof webFetchSchema, WebFetchDetails> {
 	const ops =
 		options?.operations ??
-		createDefaultWebFetchOperations(options?.allowPrivateNetwork === true, options?.resolveHost ?? systemResolveHost);
+		createDefaultWebFetchOperations(
+			options?.allowPrivateNetwork === true,
+			options?.resolveHost ?? systemResolveHost,
+			options?.allowProxiedFetch === true,
+		);
 	return {
 		name: "web_fetch",
 		label: "web_fetch",

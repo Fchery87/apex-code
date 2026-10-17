@@ -64,15 +64,15 @@ describe("AgentSession compaction model overrides", () => {
 				],
 			});
 			harnesses.push(harness);
-			const recentUserId = seedHistory(harness, path === "pre-prompt" ? 2500 : 650);
+			// The overrides set a 2,000-token reserve on a 4,000-token window, so the threshold is 2,000 input tokens.
+			// Paths that must compact before the prompt need history above that threshold.
+			const recentUserId = seedHistory(harness, path === "pre-prompt" || path === "overflow" ? 2500 : 650);
 
 			if (path === "manual") {
 				await harness.session.compact();
 			} else {
-				// The overflow case was written to reach reactive recovery. With HR.29 the reserve is the model's own
-				// output limit (16,384 for this faux model), which is larger than this fixture's window, so the
-				// proactive threshold check compacts first and no provider overflow is sent. Reactive overflow is
-				// covered by the characterization in agent-session-compaction.test.ts instead.
+				// The overflow path compacts on the proactive threshold, not on a provider overflow error. Reactive
+				// overflow is covered by the characterization in agent-session-compaction.test.ts instead.
 				harness.setResponses(
 					path === "overflow"
 						? [fauxAssistantMessage("done")]
