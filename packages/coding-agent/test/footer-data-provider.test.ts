@@ -1,5 +1,6 @@
 import { execFile, spawnSync } from "child_process";
-import { existsSync, type FSWatcher, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { EventEmitter } from "events";
+import { existsSync, type FSWatcher, mkdirSync, mkdtempSync, rmSync, type WatchListener, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -36,6 +37,34 @@ vi.mock("child_process", () => ({
 		return { status: 1, stdout: "", stderr: "" };
 	}),
 }));
+
+// Set by the listener-driven cases below. Real fs watchers deliver events on their own
+// schedule (FSEvents can report the fixture's writes after registration, and watchFile
+// polls in real time), which adds refreshes the fake clock never scheduled.
+let isolateWatchers = false;
+
+vi.mock("fs", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("fs")>();
+	return {
+		...actual,
+		watchFile: (...args: Parameters<typeof actual.watchFile>) =>
+			isolateWatchers ? (undefined as never) : actual.watchFile(...args),
+	};
+});
+
+vi.mock("../src/utils/fs-watch.ts", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../src/utils/fs-watch.ts")>();
+	return {
+		...actual,
+		watchWithErrorHandler: (path: string, listener: WatchListener<string>, onError: () => void) => {
+			if (!isolateWatchers) return actual.watchWithErrorHandler(path, listener, onError);
+			const watcher = new EventEmitter();
+			watcher.on("change", listener);
+			watcher.on("error", onError);
+			return watcher as unknown as FSWatcher;
+		},
+	};
+});
 
 import { FooterDataProvider } from "../src/core/footer-data-provider.ts";
 import { FS_WATCH_RETRY_DELAY_MS } from "../src/utils/fs-watch.ts";
@@ -121,6 +150,7 @@ describe("FooterDataProvider reftable branch detection", () => {
 		originalCwd = process.cwd();
 		tempDir = mkdtempSync(join(tmpdir(), "footer-data-provider-"));
 		resolvedBranch = "main";
+		isolateWatchers = false;
 		vi.mocked(spawnSync).mockClear();
 		vi.mocked(execFile).mockClear();
 	});
@@ -196,6 +226,7 @@ describe("FooterDataProvider reftable branch detection", () => {
 	// Drive debounce behavior explicitly; native fs.watch delivery can race watcher startup.
 	it("does not notify listeners when reftable updates keep the same branch", async () => {
 		vi.useFakeTimers();
+		isolateWatchers = true;
 		const { worktreeDir } = createReftableWorktree(tempDir);
 		process.chdir(worktreeDir);
 
@@ -221,6 +252,7 @@ describe("FooterDataProvider reftable branch detection", () => {
 
 	it("debounces rapid reftable updates into a single async refresh", async () => {
 		vi.useFakeTimers();
+		isolateWatchers = true;
 		const { worktreeDir } = createReftableWorktree(tempDir);
 		process.chdir(worktreeDir);
 
