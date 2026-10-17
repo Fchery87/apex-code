@@ -12,6 +12,7 @@ afterEach(async () => {
 const anthropicKey = `sk-ant-api03-${"A".repeat(40)}`;
 const githubToken = `ghp_${"b".repeat(36)}`;
 const awsKey = `AKIA${"C".repeat(16)}`;
+// Assembled at runtime so no source file holds a token-shaped literal (secret scanners flag it).
 const slackToken = ["xoxb", "1234567890", "abcdefghijklmnop"].join("-");
 const pemBlock = "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\n-----END PRIVATE KEY-----";
 
