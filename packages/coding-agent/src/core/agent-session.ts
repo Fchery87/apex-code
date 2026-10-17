@@ -68,6 +68,7 @@ import {
 	calculateContextTokens,
 	collectEntriesForBranchSummary,
 	compact,
+	effectiveReserveTokens,
 	estimateContextTokens,
 	estimateProjectedContextTokens,
 	estimateTokens,
@@ -78,6 +79,7 @@ import {
 import { evictionBudget, installContextPipeline, isDefaultStreamFunction } from "./context/pipeline.ts";
 import { configuredDefaultToolNames } from "./default-tool-names.ts";
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVEL_OPTIONS } from "./defaults.ts";
+import { agentDefinitionDiagnostics } from "./delegation/agents.ts";
 import type {
 	ChildRunPolicySnapshot,
 	ChildRunRecord,
@@ -132,6 +134,7 @@ import { type BashExecutionMessage, type CustomMessage, convertToLlm } from "./m
 import { ModelRegistry } from "./model-registry.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
 import { evaluateToolCall, type PermissionGateOptions } from "./permissions/gate.ts";
+import { isPlanModeDenied } from "./permissions/modes.ts";
 import { type AuthorizeConfiguredCommand, authorizeConfiguredCommand } from "./permissions/policy-command.ts";
 import type { PermissionResponder } from "./permissions/responder.ts";
 import { createInteractiveResponder } from "./permissions/responder.ts";
@@ -154,6 +157,7 @@ import type { CacheWarmingMode, SettingsManager } from "./settings-manager.ts";
 import { slugifySkillCommandName } from "./skills.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
+import { currentEnvironmentSection } from "./system-environment.ts";
 import {
 	buildSystemPrompt,
 	buildSystemPromptSections,
@@ -170,6 +174,7 @@ import {
 	type ToolContractSnapshotEntry,
 } from "./tools/contract-snapshot.ts";
 import type { DiagnosticsOperations } from "./tools/diagnostics.ts";
+import { FileReadLedger } from "./tools/file-ledger.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
 import type { LspOperations } from "./tools/lsp.ts";
 import { createPlanPresentToolDefinition, defaultPlanPresenter } from "./tools/plan-present.ts";
@@ -240,6 +245,8 @@ export type AgentSessionEvent =
 			followUp: readonly string[];
 	  }
 	| { type: "compaction_start"; reason: "manual" | "threshold" | "overflow" }
+	/** MCP servers started at startup to list their tools (HR.14). Emitted once, only when there are any. */
+	| { type: "mcp_discovery_started"; servers: readonly string[] }
 	| { type: "entry_appended"; entry: SessionEntry }
 	| { type: "session_info_changed"; name: string | undefined }
 	| { type: "thinking_level_changed"; level: ThinkingLevel }
@@ -376,6 +383,8 @@ export interface AgentSessionConfig {
 	 * returning zero results. Ignored when `baseToolsOverride` is set.
 	 */
 	webSearchOperations?: WebSearchOperations;
+	/** Passed to the web_fetch tool. Set from user settings by the services layer. */
+	webFetchAllowPrivateNetwork?: boolean;
 	/**
 	 * Git-backed worktree checkpoints. Absent, or present with `enabled` unset, captures
 	 * nothing and runs no `git` subprocess.
@@ -517,6 +526,9 @@ export interface TreeNavigationResult {
 	workspace?: TreeWorkspaceOutcome;
 }
 
+/** Read-only search tools that plan mode adds to the active set. */
+const PLAN_MODE_SEARCH_TOOLS = ["grep", "find", "ls"] as const;
+
 export class AgentSession {
 	private _lifecycle: AgentSessionLifecycle = "created";
 	private _activePrompt = false;
@@ -628,10 +640,31 @@ export class AgentSession {
 	private readonly _permissionResponderFactory: (() => PermissionResponder | undefined) | undefined;
 
 	/** Worktree checkpoints for this session. Inert unless `checkpoints.enabled` is set. */
+	/** What this session has read, so write and edit refuse replacements of unseen or changed files (HR.24). */
+	private readonly _fileLedger = new FileReadLedger();
+
+	private _mcpDiscoveryStarted: string[] = [];
+
+	/** MCP servers the session started to list their tools at startup (HR.14). */
+	getMcpDiscoveryStarted(): readonly string[] {
+		return this._mcpDiscoveryStarted;
+	}
+
+	reportMcpDiscovery(names: readonly string[]): void {
+		this._mcpDiscoveryStarted = [...names];
+		if (names.length > 0) this._emit({ type: "mcp_discovery_started", servers: [...names] });
+	}
+
+	/** Agent definition files that exist but cannot be used, as `/resources` diagnostics. */
+	getAgentDefinitionDiagnostics(): Array<{ type: "warning"; message: string; path: string }> {
+		return agentDefinitionDiagnostics(this._delegationRuntime?.resolveAgent);
+	}
+
 	get checkpoints(): SessionCheckpoints {
 		return this._checkpoints;
 	}
 	private _webSearchOperations?: WebSearchOperations;
+	private _webFetchAllowPrivateNetwork: boolean;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionMode: ExtensionMode = "print";
 	private _extensionCommandContextActions?: ExtensionCommandContextActions;
@@ -705,6 +738,7 @@ export class AgentSession {
 		this._lspOperations = config.lspOperations;
 		this._mcpRuntime = config.mcpRuntime;
 		this._webSearchOperations = config.webSearchOperations;
+		this._webFetchAllowPrivateNetwork = config.webFetchAllowPrivateNetwork === true;
 		this._checkpoints = createSessionCheckpoints({
 			workspace: this._cwd,
 			sessionId: this.sessionManager.getSessionId(),
@@ -984,6 +1018,7 @@ export class AgentSession {
 				estimateProjectedContextTokens(projection, this.sessionManager.getBranch()).tokens,
 				model.contextWindow,
 				settings,
+				model.maxTokens,
 			)
 		) {
 			return { ...context, messages: projection.messages };
@@ -1139,7 +1174,7 @@ export class AgentSession {
 		}
 
 		const contextTokens = estimateContextTokens(turn.context.messages).tokens;
-		if (!shouldCompact(contextTokens, contextWindow, settings)) {
+		if (!shouldCompact(contextTokens, contextWindow, settings, this.model?.maxTokens)) {
 			return false;
 		}
 
@@ -1185,8 +1220,8 @@ export class AgentSession {
 	 */
 	private _evictionBudget(): number {
 		const contextWindow = this.model?.contextWindow ?? 0;
-		const { reserveTokens } = this.settingsManager.getCompactionSettings();
-		return evictionBudget(contextWindow, reserveTokens);
+		const settings = this.settingsManager.getCompactionSettings();
+		return evictionBudget(contextWindow, effectiveReserveTokens(settings, this.model?.maxTokens));
 	}
 
 	// =========================================================================
@@ -2002,12 +2037,26 @@ export class AgentSession {
 	}
 
 	private _projectToolNames(names: readonly string[]): string[] {
-		const projected = [...new Set(names)].filter((name) => this._toolRegistry.has(name));
-		if (
-			this._planToolMode === "plan" &&
-			this._toolRegistry.has("plan_present") &&
-			!projected.includes("plan_present")
-		)
+		const planMode = this._planToolMode === "plan";
+		// In plan mode the active set is the read-only part of the requested set, not the whole
+		// set minus refusals at call time. A tool with no contract is refused, because plan mode
+		// is a safety floor and an unknown capability cannot be shown to be read-only.
+		const projected = [...new Set(names)].filter((name) => {
+			if (!this._toolRegistry.has(name)) return false;
+			if (!planMode) return true;
+			const definition = this._toolDefinitions.get(name)?.definition as
+				| { contract?: { capabilities?: Parameters<typeof isPlanModeDenied>[0] } }
+				| undefined;
+			const capabilities = definition?.contract?.capabilities;
+			return capabilities !== undefined && !isPlanModeDenied(capabilities);
+		});
+		if (planMode) {
+			// Search tools join the set so a planning model can still look at the workspace.
+			for (const name of PLAN_MODE_SEARCH_TOOLS) {
+				if (this._toolRegistry.has(name) && !projected.includes(name)) projected.push(name);
+			}
+		}
+		if (planMode && this._toolRegistry.has("plan_present") && !projected.includes("plan_present"))
 			projected.push("plan_present");
 		return projected;
 	}
@@ -2189,7 +2238,20 @@ export class AgentSession {
 			selectedTools: validToolNames,
 			toolSnippets,
 			toolGuidelines: Object.fromEntries(this._toolPromptGuidelines),
+			// The last section, so the earlier prompt bytes do not change when the date does (HR.16).
+			sections: { environment: this._currentEnvironmentSection() },
 		});
+	}
+
+	private _environmentSection: { modelId: string | undefined; text: string } | undefined;
+
+	/** The environment block for the current model, rebuilt when the model changes or on reload (HR.16). */
+	private _currentEnvironmentSection(): string {
+		const modelId = this.model?.id;
+		if (!this._environmentSection || this._environmentSection.modelId !== modelId) {
+			this._environmentSection = { modelId, text: currentEnvironmentSection(this._cwd, modelId) };
+		}
+		return this._environmentSection.text;
 	}
 
 	/**
@@ -2931,6 +2993,7 @@ export class AgentSession {
 		this.abortCompaction();
 		this.abortBranchSummary();
 		if (this._isBeforeSettle) this._abortDuringBeforeSettle = true;
+		this._childRunRegistry?.interruptForeground("parent aborted");
 		this.agent.abort();
 		await this.waitForIdle();
 	}
@@ -3922,7 +3985,7 @@ export class AgentSession {
 		} else {
 			contextTokens = directContextTokens;
 		}
-		if (shouldCompact(contextTokens, contextWindow, settings)) {
+		if (shouldCompact(contextTokens, contextWindow, settings, this.model?.maxTokens)) {
 			return await this._runAutoCompaction("threshold", false);
 		}
 		return false;
@@ -4185,6 +4248,8 @@ export class AgentSession {
 		};
 
 		this._resourceLoader.extendResources(extensionPaths);
+		// A reload re-reads the git state and the date, so the environment section is rebuilt.
+		this._environmentSection = undefined;
 		this._rebuildSystemPrompt(this.getActiveToolNames());
 	}
 
@@ -4482,17 +4547,18 @@ export class AgentSession {
 					]),
 				)
 			: createAllToolDefinitions(this._cwd, {
-					read: { autoResizeImages },
+					read: { autoResizeImages, ledger: this._fileLedger },
 					bash: {
 						commandPrefix: shellCommandPrefix,
 						shellPath,
 						backgroundRegistry: this._backgroundShellRegistry,
 					},
-					edit: { diagnosticsOperations: this._diagnosticsOperations },
-					write: { diagnosticsOperations: this._diagnosticsOperations },
+					edit: { diagnosticsOperations: this._diagnosticsOperations, ledger: this._fileLedger },
+					write: { diagnosticsOperations: this._diagnosticsOperations, ledger: this._fileLedger },
 					...(this._lspOperations ? { lsp: { operations: this._lspOperations } } : {}),
 					...(this._mcpRuntime ? { mcp: this._mcpRuntime } : {}),
 					...(this._webSearchOperations ? { web_search: { operations: this._webSearchOperations } } : {}),
+					web_fetch: { allowPrivateNetwork: this._webFetchAllowPrivateNetwork },
 				});
 		baseToolDefinitions.tool_schema = createToolSchemaToolDefinition({
 			getTool: (name) => {

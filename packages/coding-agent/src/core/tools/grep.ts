@@ -7,6 +7,7 @@ import { type Static, Type } from "typebox";
 import { ensureTool } from "../../utils/tools-manager.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
 import { getPreparedPathOperation } from "../permissions/operations.ts";
+import { isSensitivePath } from "../permissions/protected-paths.ts";
 import type { ApexToolDefinition } from "./contract.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
 import { resolveToCwd } from "./path-utils.ts";
@@ -88,6 +89,7 @@ export function createGrepToolDefinition(
 			permission: createPathPermissionSpec({
 				cwd,
 				defaultBehavior: "allow",
+				outsideWorkspace: "target",
 				verb: "Search",
 				getPath: (params) => params.path,
 			}),
@@ -256,6 +258,9 @@ export function createGrepToolDefinition(
 								const filePath = event.data?.path?.text;
 								const lineNumber = event.data?.line_number;
 								const lineText = event.data?.lines?.text;
+								// A recursive search must not hand a `.env` file's contents to the model without a
+								// decision. The file is skipped; read it by its path to review it.
+								if (filePath && isSensitivePath(filePath)) return;
 								if (filePath && typeof lineNumber === "number")
 									matches.push({ filePath, lineNumber, lineText });
 								if (matchCount >= effectiveLimit) matchLimitReached = true;

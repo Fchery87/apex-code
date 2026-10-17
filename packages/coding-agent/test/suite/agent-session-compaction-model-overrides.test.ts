@@ -69,12 +69,13 @@ describe("AgentSession compaction model overrides", () => {
 			if (path === "manual") {
 				await harness.session.compact();
 			} else {
+				// The overflow case was written to reach reactive recovery. With HR.29 the reserve is the model's own
+				// output limit (16,384 for this faux model), which is larger than this fixture's window, so the
+				// proactive threshold check compacts first and no provider overflow is sent. Reactive overflow is
+				// covered by the characterization in agent-session-compaction.test.ts instead.
 				harness.setResponses(
 					path === "overflow"
-						? [
-								fauxAssistantMessage("", { stopReason: "error", errorMessage: "prompt is too long" }),
-								fauxAssistantMessage("recovered"),
-							]
+						? [fauxAssistantMessage("done")]
 						: [fauxAssistantMessage(path === "post-run" ? "z".repeat(8000) : "done")],
 				);
 				await harness.session.prompt("continue");
@@ -86,16 +87,14 @@ describe("AgentSession compaction model overrides", () => {
 				reserveTokens: 2000,
 				keepRecentTokens: 150,
 			});
-			expect(preparations[0]?.reason).toBe(
-				path === "manual" ? "manual" : path === "overflow" ? "overflow" : "threshold",
-			);
+			expect(preparations[0]?.reason).toBe(path === "manual" ? "manual" : "threshold");
 			if (path === "manual" || path === "pre-prompt") {
 				expect(preparations[0]?.preparation.firstKeptEntryId).toBe(recentUserId);
 			}
 			expect(harness.eventsOfType("compaction_end")).toHaveLength(1);
 			expect(harness.eventsOfType("compaction_end")[0]).toMatchObject({
 				aborted: false,
-				willRetry: path === "overflow",
+				willRetry: false,
 				result: { summary: "compacted history" },
 			});
 			expect(harness.getPendingResponseCount()).toBe(0);

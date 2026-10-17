@@ -116,13 +116,18 @@ describe("future task tool defaults", () => {
 			"bash",
 			"edit",
 			"write",
+			"grep",
+			"find",
+			"ls",
+			"web_fetch",
+			"delegate",
 			"lsp",
 			"web_search",
 			"mcp",
 		]);
 		const names = session.getImplicitDefaultToolNames();
 		names.length = 0;
-		expect(session.getImplicitDefaultToolNames()).toHaveLength(7);
+		expect(session.getImplicitDefaultToolNames()).toHaveLength(12);
 		expect(session.getActiveToolNames()).toEqual(["read"]);
 	});
 	it("persists defensive default arrays globally", async () => {
@@ -146,6 +151,11 @@ describe("future task tool defaults", () => {
 			"bash",
 			"edit",
 			"write",
+			"grep",
+			"find",
+			"ls",
+			"web_fetch",
+			"delegate",
 			"lsp",
 			"web_search",
 			"mcp",
@@ -188,6 +198,11 @@ describe("future task tool defaults", () => {
 			"bash",
 			"edit",
 			"write",
+			"grep",
+			"find",
+			"ls",
+			"web_fetch",
+			"delegate",
 			"todo_write",
 			"tool_schema",
 		]);
@@ -212,6 +227,11 @@ describe("future task tool defaults", () => {
 			"bash",
 			"edit",
 			"write",
+			"grep",
+			"find",
+			"ls",
+			"web_fetch",
+			"delegate",
 			"lsp",
 			"web_search",
 			"mcp",
@@ -237,8 +257,31 @@ describe("future task tool defaults", () => {
 			sessionManager: SessionManager.inMemory(cwd),
 		});
 		sessions.push(plain);
-		expect(plain.getImplicitDefaultToolNames()).toEqual(["read", "bash", "edit", "write", "lsp"]);
-		expect(plain.getActiveToolNames()).toEqual(["read", "bash", "edit", "write", "lsp", "tool_schema"]);
+		expect(plain.getImplicitDefaultToolNames()).toEqual([
+			"read",
+			"bash",
+			"edit",
+			"write",
+			"grep",
+			"find",
+			"ls",
+			"web_fetch",
+			"delegate",
+			"lsp",
+		]);
+		expect(plain.getActiveToolNames()).toEqual([
+			"read",
+			"bash",
+			"edit",
+			"write",
+			"grep",
+			"find",
+			"ls",
+			"web_fetch",
+			"delegate",
+			"lsp",
+			"tool_schema",
+		]);
 		const read = original.session.agent.state.tools.find((tool) => tool.name === "read");
 		if (!read) throw new Error("Missing read tool");
 		const custom = new AgentSession({

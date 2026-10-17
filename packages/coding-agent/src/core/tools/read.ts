@@ -9,6 +9,7 @@ import { getExperimentalToolSampling } from "../experimental.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
 import { getPreparedPathOperation } from "../permissions/operations.ts";
 import type { ApexToolDefinition } from "./contract.ts";
+import type { FileReadLedger } from "./file-ledger.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
 import { readPreparedPath, resolveReadPathAsync } from "./path-utils.ts";
 import { readRenderers } from "./renderers/read.ts";
@@ -52,6 +53,8 @@ const defaultReadOperations: ReadOperations = {
 };
 
 export interface ReadToolOptions {
+	/** The session's read ledger (HR.24). Absent: nothing is recorded. */
+	ledger?: FileReadLedger;
 	/** Whether to auto-resize images. Default: true */
 	autoResizeImages?: boolean;
 	/** Fallback resize profile when the execution context has no model metadata. */
@@ -86,6 +89,7 @@ export function createReadToolDefinition(
 			permission: createPathPermissionSpec({
 				cwd,
 				defaultBehavior: "allow",
+				outsideWorkspace: "parent",
 				verb: "Read",
 				getPath: (params) => params.path,
 			}),
@@ -176,6 +180,12 @@ export function createReadToolDefinition(
 								}
 								// Apply truncation, respecting both line and byte limits.
 								const truncation = truncateHead(selectedContent);
+								if (options?.ledger)
+									options.ledger.recordRead(
+										absolutePath,
+										textContent,
+										offset === undefined && limit === undefined && !truncation.truncated,
+									);
 								let outputText: string;
 								if (truncation.firstLineExceedsLimit) {
 									// First line alone exceeds the byte limit. Point the model at a bash fallback.

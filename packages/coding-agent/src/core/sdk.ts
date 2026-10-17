@@ -18,7 +18,7 @@ import { AuthStorage } from "./auth-storage.ts";
 import { CacheWarmer } from "./cache-warmer.ts";
 import { configuredDefaultToolNames } from "./default-tool-names.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
-import { createAgentDefinitionResolver } from "./delegation/agents.ts";
+import { type AgentDefinitionCatalogResolver, createAgentDefinitionResolver } from "./delegation/agents.ts";
 import {
 	type AgentDefinitionResolver,
 	type ChildRunPolicySnapshot,
@@ -181,6 +181,7 @@ export interface CreateAgentSessionOptions {
 	/** Optional `lsp` navigation tool transport (LSP.5); registers and activates `lsp` when present. */
 	lspOperations?: AgentSessionConfig["lspOperations"];
 	webSearchOperations?: AgentSessionConfig["webSearchOperations"];
+	webFetchAllowPrivateNetwork?: AgentSessionConfig["webFetchAllowPrivateNetwork"];
 	/**
 	 * Delegation entry point (roadmap Phase 5, ADR 0008). When set, `delegate`
 	 * executes real child sessions through `resolveAgent`, with the child's
@@ -802,6 +803,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					// once (possibly by running a shell command for the key) and a child
 					// that re-resolved nothing would hold a `web_search` that only throws.
 					webSearchOperations: options.webSearchOperations,
+					webFetchAllowPrivateNetwork: options.webFetchAllowPrivateNetwork,
 					// `checkpointSettings` is deliberately *not* forwarded. A child shares the
 					// parent's cwd, so it would write refs under its own session id into the
 					// same repository and interleave them with the parent's. The parent's
@@ -976,7 +978,13 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				};
 			},
 		};
-		customTools.push(createDelegateToolDefinition(delegationRuntime) as ToolDefinition<any, any>);
+		// The catalog is read once, at session start, so the model is told which types exist.
+		// A resolver supplied without a catalog (tests) leaves the description unchanged.
+		const agentCatalog =
+			typeof (resolveAgent as Partial<AgentDefinitionCatalogResolver>).list === "function"
+				? (resolveAgent as AgentDefinitionCatalogResolver).list()
+				: [];
+		customTools.push(createDelegateToolDefinition(delegationRuntime, agentCatalog) as ToolDefinition<any, any>);
 		// Historical resume (restart reconstruction) reattaches a persisted child
 		// through THIS runtime's buildChildSession seam. Wiring it here -- not only
 		// at the first delegation -- is what makes resume work on a freshly
@@ -1011,6 +1019,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		diagnosticsOperations: options.diagnosticsOperations,
 		lspOperations: options.lspOperations,
 		webSearchOperations: options.webSearchOperations,
+		webFetchAllowPrivateNetwork: options.webFetchAllowPrivateNetwork,
 		mcpRuntime,
 		checkpointSettings: settingsManager.getCheckpointSettings(),
 		// Declarative hooks (spec 2026-08-31-declarative-hooks): assembled from the
@@ -1024,7 +1033,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// Eager servers connect here rather than on first use, so their tools are in the
 	// cache before the model's first search. Detached: a slow or broken server delays
 	// nothing, and `warmEagerServers` already swallows its own failures.
-	void mcpRuntime?.warm();
+	void mcpRuntime?.warm().then((started) => session.reportMcpDiscovery(started));
 	const extensionsResult = resourceLoader.getExtensions();
 
 	return {

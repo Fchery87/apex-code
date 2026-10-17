@@ -735,6 +735,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 			},
 			session: {
 				promptTemplates: options.promptTemplates ?? [],
+				getAgentDefinitionDiagnostics: () => [],
 				extensionRunner: {
 					getCommandDiagnostics: () => [],
 					getShortcutDiagnostics: () => [],

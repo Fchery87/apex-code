@@ -165,6 +165,8 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 			}
 			if (mode === "json") {
 				writeRawStdout(`${JSON.stringify(toJsonEvent(event))}\n`);
+			} else if (event.type === "mcp_discovery_started") {
+				console.error(`Started MCP ${event.servers.join(", ")} to list its tools.`);
 			}
 		});
 		unsubscribeBackpressure =

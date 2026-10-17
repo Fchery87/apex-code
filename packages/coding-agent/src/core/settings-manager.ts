@@ -213,6 +213,11 @@ export type PackageSource =
  * resolved by `resolveConfigValue` exactly like a model provider's key. A literal
  * key must never be written here: settings are a file this loader writes back.
  */
+export interface WebFetchSettings {
+	/** Allow loopback, private, and link-local destinations. Read from user settings only. */
+	allowPrivateNetwork?: boolean;
+}
+
 export interface WebSearchSettings {
 	provider?: "exa";
 	apiKey?: string; // default: the provider's own env var, e.g. "$EXA_API_KEY"
@@ -283,6 +288,7 @@ export interface Settings {
 	observability?: ObservabilitySettings;
 	lsp?: LspSettings;
 	webSearch?: WebSearchSettings;
+	webFetch?: WebFetchSettings;
 	/**
 	 * Git-backed worktree checkpoints. On by default inside git repositories
 	 * (spec 2026-09-01-checkpoints-default-on.md); `{ enabled: false }` opts
@@ -1188,6 +1194,14 @@ export class SettingsManager {
 
 	getLspSettings(): LspSettings | undefined {
 		return this.settings.lsp === undefined ? undefined : structuredClone(this.settings.lsp);
+	}
+
+	/**
+	 * Read from user settings only. A project's checked-in settings file must not be able to
+	 * open loopback and private addresses to the model (HR.4).
+	 */
+	getWebFetchAllowPrivateNetwork(): boolean {
+		return this.globalSettings.webFetch?.allowPrivateNetwork === true;
 	}
 
 	getWebSearchSettings(): WebSearchSettings | undefined {

@@ -10,7 +10,10 @@ export interface ChangelogEntry {
 	content: string;
 }
 
-const GITHUB_REPO = "earendil-works/pi";
+/** This project's repository: relative links and release routes in its own changelog point here. */
+const GITHUB_REPO = "Fchery87/apex-code";
+/** Upstream history: legacy absolute links to Pi's repositories keep pointing at upstream. */
+const UPSTREAM_REPO = "earendil-works/pi";
 /**
  * Everything below this heading is pre-fork Pi history, kept in CHANGELOG.md for attribution.
  * Those versions (0.10.x - 0.84.x) sort above Apex Code's own 0.0.x line, so leaving them in
@@ -131,8 +134,10 @@ function isDirectoryTarget(originalPath: string, repositoryPath: string): boolea
 }
 
 function normalizeChangelogLinkTarget(target: string, tag: string): string {
-	let canonicalTarget = target.replace(LEGACY_REPO_RE, `https://github.com/${GITHUB_REPO}`);
-	const repoUrl = `https://github.com/${GITHUB_REPO}`;
+	const legacy = LEGACY_REPO_RE.test(target);
+	let canonicalTarget = target.replace(LEGACY_REPO_RE, `https://github.com/${UPSTREAM_REPO}`);
+	// A legacy link stays in the repository it named, so its floating branch pins there too.
+	const repoUrl = `https://github.com/${legacy ? UPSTREAM_REPO : GITHUB_REPO}`;
 
 	for (const route of ["blob", "tree"]) {
 		for (const branch of ["main", "master"]) {

@@ -29,6 +29,10 @@ Rules live in `AGENTS.md`; rationale lives in `docs/`.
 | **Extension** | A TypeScript module loaded via `jiti`, subscribing to lifecycle events and registering tools, commands, shortcuts, flags, and providers. |
 | **Project trust** | Upstream Pi's guard on *loading* project-local config and extensions. Not a sandbox and not a permission system. |
 | **Isolation** | Containment comes from the operator's container or VM, not the harness. Apex Code ships no built-in sandbox, so built-in tools, extensions, and package installs run with the permissions of the account that started the CLI. Separate from the permission gate, which is policy, not containment. |
+| **Workspace** | The directory the session was started in, and everything beneath it. Not the enclosing git repository. Reads inside it are free; reads outside it ask. One boundary, used by every permission decision that asks "inside or outside". |
+| **Protected target** | A credential location outside the workspace (the agent's own credential file, SSH, cloud, and package-registry credentials). Only the machine owner's managed policy can grant it; no user or project rule can. |
+| **Sensitive path** | A file that commonly holds secrets inside a project, such as `.env`. Asks by default. Unlike a protected target, an ordinary rule can grant it, but only a rule that names the file; a rule covering its whole directory does not. |
+| **Built-in agent type** | A subagent definition shipped with Apex Code (`general`, `explore`). A user or trusted-project definition with the same name replaces it. |
 | **Permission rule** | `{source, behavior: allow\|deny\|ask, value: {toolName, ruleContent?}}`. `ruleContent` is interpreted by the tool itself. Phase 2. |
 | **Tool contract** | The required `contract` field on every tool: capabilities, permission grammar, context behavior, evidence emission. Declared by the tool, consumed by four phases, never re-derived (ADR 0010). |
 | **Capability** | What class of thing a tool does — `fs.read`, `fs.write`, `exec`, `net`, `delegate`, `ui`, `state`. A set, not a single value. |

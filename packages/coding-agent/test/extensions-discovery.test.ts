@@ -7,6 +7,14 @@ import { discoverAndLoadExtensions } from "../src/core/extensions/loader.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Loading real extension files compiles each one through jiti. On 2026-10-16 this test exceeded the
+ * 60-second default under full-suite load, and the same test took 54 seconds when run alone during
+ * that review. Run alone again later, the whole file took 13 seconds, so the cost depends on host
+ * load and jiti's cache. The limit is headroom for a cold run on a busy host, not a claim about speed.
+ */
+const EXTENSION_LOAD_TIMEOUT_MS = 180_000;
+
 describe("extensions discovery", () => {
 	let tempDir: string;
 	let extensionsDir: string;
@@ -40,16 +48,20 @@ describe("extensions discovery", () => {
 		}
 	`;
 
-	it("discovers direct .ts files in extensions/", async () => {
-		fs.writeFileSync(path.join(extensionsDir, "foo.ts"), extensionCode);
-		fs.writeFileSync(path.join(extensionsDir, "bar.ts"), extensionCode);
+	it(
+		"discovers direct .ts files in extensions/",
+		async () => {
+			fs.writeFileSync(path.join(extensionsDir, "foo.ts"), extensionCode);
+			fs.writeFileSync(path.join(extensionsDir, "bar.ts"), extensionCode);
 
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
 
-		expect(result.errors).toHaveLength(0);
-		expect(result.extensions).toHaveLength(2);
-		expect(result.extensions.map((e) => path.basename(e.path)).sort()).toEqual(["bar.ts", "foo.ts"]);
-	});
+			expect(result.errors).toHaveLength(0);
+			expect(result.extensions).toHaveLength(2);
+			expect(result.extensions.map((e) => path.basename(e.path)).sort()).toEqual(["bar.ts", "foo.ts"]);
+		},
+		EXTENSION_LOAD_TIMEOUT_MS,
+	);
 
 	it("loads the coding-agent entrypoint without rewriting pi-ai provider subpaths", async () => {
 		fs.writeFileSync(

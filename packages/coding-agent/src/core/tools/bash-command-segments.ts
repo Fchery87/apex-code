@@ -16,6 +16,9 @@ export type BashCommandClassification =
 	| { type: "unparseable" }
 	| { type: "segments"; segments: readonly string[] };
 
+/** Redirections that discard or merge output, anchored at the operator. */
+const DISCARD_REDIRECTION = /^(?:&>\/dev\/null|>&\d|>\/dev\/null|\d?>&\d|\d?>\/dev\/null)(?=$|[\s;&|)])/;
+
 const ESCAPABLE_IN_DOUBLE_QUOTES = new Set(["$", "`", '"', "\\", "\n"]);
 
 export function classifyBashCommand(command: string): BashCommandClassification {
@@ -87,6 +90,25 @@ export function classifyBashCommand(command: string): BashCommandClassification 
 			i += 2;
 			continue;
 		}
+		// Discarding or merging output does not change what a command reads or writes, so these stay
+		// part of their segment (HR.22). A redirection to a file is still unparseable.
+		if (quote === undefined) {
+			const discard = DISCARD_REDIRECTION.exec(command.slice(i));
+			if (discard) {
+				current += discard[0];
+				i += discard[0].length;
+				continue;
+			}
+		}
+		// A tilde that starts a word, or follows = or :, expands to a home path. Inside a word it is
+		// a literal character, so HEAD~3 matches a rule like any other word (HR.22).
+		if (quote === undefined && ch === "~") {
+			const previous = current.at(-1);
+			if (previous === undefined || /[\s=:;]/.test(previous)) return { type: "unparseable" };
+			current += ch;
+			i++;
+			continue;
+		}
 		// These forms make a seemingly read-only command perform I/O, expand into
 		// different arguments, or introduce grammar this deliberately small parser
 		// cannot prove safe. A permission rule must never authorize them by prefix.
@@ -102,8 +124,7 @@ export function classifyBashCommand(command: string): BashCommandClassification 
 			ch === "*" ||
 			ch === "?" ||
 			ch === "[" ||
-			ch === "]" ||
-			ch === "~"
+			ch === "]"
 		) {
 			return { type: "unparseable" };
 		}

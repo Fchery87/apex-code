@@ -2031,6 +2031,7 @@ export class InteractiveMode {
 			{ label: "Prompt conflicts", diagnostics: this.session.resourceLoader.getPrompts().diagnostics },
 			{ label: "Extension issues", diagnostics: extensionDiagnostics },
 			{ label: "Theme conflicts", diagnostics: this.session.resourceLoader.getThemes().diagnostics },
+			{ label: "Agent definitions", diagnostics: this.session.getAgentDefinitionDiagnostics() },
 		].filter((group) => group.diagnostics.length > 0);
 	}
 
@@ -3623,6 +3624,9 @@ export class InteractiveMode {
 		this.taskPanel?.handleEvent(event);
 
 		switch (event.type) {
+			case "mcp_discovery_started":
+				this.showStatus(`Started MCP ${event.servers.join(", ")} to list its tools.`);
+				break;
 			case "agent_start":
 				this.clearPendingTools();
 				if (this.settingsManager.getShowTerminalProgress()) {
@@ -7031,10 +7035,10 @@ export class InteractiveMode {
 		let proc: ReturnType<typeof spawn> | undefined;
 		try {
 			const result = await publishSessionShare({
-				confirm: () =>
+				confirm: (redactions) =>
 					this.showExtensionConfirm(
 						"Publish session to GitHub?",
-						"This uploads a complete HTML export to a secret GitHub Gist. Secret Gists are unlisted, not private or access-controlled; anyone with the URL can read the transcript, prompts, tool activity, and included file content. Review a local /export first if needed.",
+						`This uploads a complete HTML export to a secret GitHub Gist. Secret Gists are unlisted, not private or access-controlled; anyone with the URL can read the transcript, prompts, tool activity, and included file content. ${redactions > 0 ? `${redactions} credential-shaped value${redactions === 1 ? " was" : "s were"} replaced with [REDACTED] before upload. ` : ""}Review a local /export first if needed.`,
 					),
 				exportToHtml: async (exportPath) => {
 					await this.session.exportToHtml(exportPath);

@@ -50,7 +50,20 @@ describe("regression #5109: exclude tools", () => {
 			expect(allToolNames).not.toContain("ask_question");
 			expect(allToolNames).toContain("bash");
 			expect(allToolNames).toContain("dynamic_tool");
-			expect(harness.session.getActiveToolNames().sort()).toEqual(["bash", "dynamic_tool", "edit", "write"]);
+			// The default set gained the search, web, and delegate tools (HR.15). The assertion is the
+			// exclusion itself: read is gone, and everything else is the default set minus it.
+			expect(harness.session.getActiveToolNames().sort()).toEqual([
+				"bash",
+				"delegate",
+				"dynamic_tool",
+				"edit",
+				"find",
+				"grep",
+				"ls",
+				"tool_schema",
+				"web_fetch",
+				"write",
+			]);
 			expect(harness.session.systemPrompt).not.toContain("- read:");
 			expect(harness.session.systemPrompt).not.toContain("ask_question");
 			expect(harness.session.systemPrompt).toContain("- dynamic_tool: Run dynamic test behavior");

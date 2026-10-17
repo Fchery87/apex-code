@@ -77,7 +77,7 @@ test("generateSbomFor refuses to treat an empty component list as evidence", asy
 test("describeTreeLockfileMismatch names the stale tree and the remedy", () => {
 	// Real stderr captured from `npm sbom` after a lockfile-only dependabot bump
 	// landed while node_modules still held the old version.
-	const stderr = ["npm error code ESBOMPROBLEMS", "npm error invalid: esbuild@0.28.1, 0.28.2 required by pi-monorepo@0.0.3"].join("\n");
+	const stderr = ["npm error code ESBOMPROBLEMS", "npm error invalid: esbuild@0.28.1, 0.28.2 required by apex-code-monorepo@0.0.3"].join("\n");
 	const message = describeTreeLockfileMismatch(stderr);
 	assert.ok(message, "expected a diagnosis for an ESBOMPROBLEMS tree");
 	assert.match(message, /esbuild/);
