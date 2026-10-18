@@ -74,7 +74,7 @@ describe("durable-state sqlite backend selection", () => {
 				[
 					`import { openDurableStateStore } from ${JSON.stringify(sqliteModulePath)};`,
 					`const store = openDurableStateStore(${JSON.stringify(databasePath)});`,
-					`if (store.schemaVersion() !== 4) throw new Error("unexpected schema version: " + store.schemaVersion());`,
+					`if (store.schemaVersion() !== 5) throw new Error("unexpected schema version: " + store.schemaVersion());`,
 					`store.beginCommand({ id: "cmd-1", sessionId: "s1", command: "echo hi" });`,
 					`store.transitionCommand("cmd-1", "running");`,
 					`const done = store.transitionCommand("cmd-1", "completed");`,

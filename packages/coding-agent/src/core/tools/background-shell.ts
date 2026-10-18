@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { killProcessTree } from "../../utils/shell.ts";
+import type { CommandJournalRecorder } from "../durable-state/command-journal.ts";
 import type { OutputAccumulator } from "./output-accumulator.ts";
 
 /**
@@ -15,6 +16,12 @@ export interface BackgroundShellLaunch {
 	pid?: number;
 	output: OutputAccumulator;
 	exited: Promise<number | null>;
+	/** The journal record begun before the process started, so its outcome can be recorded. */
+	journalId?: string;
+}
+
+export interface BackgroundShellRegistryOptions {
+	readonly journal?: CommandJournalRecorder;
 }
 
 export interface BackgroundShellStatus {
@@ -39,6 +46,20 @@ interface Entry extends BackgroundShellStatus {
 
 export class BackgroundShellRegistry {
 	readonly #entries = new Map<string, Entry>();
+	readonly #journal: CommandJournalRecorder | undefined;
+
+	constructor(options: BackgroundShellRegistryOptions = {}) {
+		this.#journal = options.journal;
+	}
+
+	/**
+	 * Records a background command as running before its process is started. Throws when the
+	 * journal cannot record it, so the caller refuses to start the command instead of running
+	 * it unrecorded. Returns undefined when no journal is configured.
+	 */
+	beginJournal(command: string): string | undefined {
+		return this.#journal?.begin(command);
+	}
 
 	launch(input: BackgroundShellLaunch): string {
 		const handle = randomUUID();
@@ -53,14 +74,21 @@ export class BackgroundShellRegistry {
 			finalized: false,
 		};
 		this.#entries.set(handle, entry);
+		const recordOutcome = (exitCode: number | null) => {
+			if (input.journalId !== undefined) {
+				this.#journal?.finish(input.journalId, { exitCode, killed: entry.killed });
+			}
+		};
 		void input.exited.then(
 			(code) => {
 				entry.running = false;
 				entry.exitCode = code;
+				recordOutcome(code);
 			},
 			() => {
 				entry.running = false;
 				entry.exitCode = null;
+				recordOutcome(null);
 			},
 		);
 		return handle;
@@ -117,6 +145,6 @@ export class BackgroundShellRegistry {
 	}
 }
 
-export function createBackgroundShellRegistry(): BackgroundShellRegistry {
-	return new BackgroundShellRegistry();
+export function createBackgroundShellRegistry(options: BackgroundShellRegistryOptions = {}): BackgroundShellRegistry {
+	return new BackgroundShellRegistry(options);
 }
