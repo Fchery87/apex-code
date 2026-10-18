@@ -112,7 +112,7 @@ export const BUILT_IN_AGENT_DEFINITIONS: readonly AgentDefinition[] = [
 	{
 		name: "general",
 		description: "General-purpose helper with the default file and shell tools. Cannot delegate further.",
-		tools: ["read", "bash", "edit", "write", "grep", "find", "ls", "todo_write"],
+		tools: ["read", "bash", "edit", "write", "grep", "find", "ls"],
 		systemPrompt:
 			"You complete the task you are given using the tools available to you. Keep changes to what the task requires, and report what you changed and what you verified.",
 	},

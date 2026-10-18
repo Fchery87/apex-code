@@ -29,6 +29,11 @@ describe("built-in agent types (HR.9)", () => {
 		expect(general?.tools).not.toContain("delegate");
 	});
 
+	it("keeps todo_write opt-in for built-in children too (HR.15)", () => {
+		const general = resolverFor(join(scratch, "empty-agent"))("general");
+		expect(general?.tools).not.toContain("todo_write");
+	});
+
 	it("gives both built-ins a description and a system prompt", () => {
 		const resolve = resolverFor(join(scratch, "empty-agent"));
 		for (const name of ["explore", "general"]) {

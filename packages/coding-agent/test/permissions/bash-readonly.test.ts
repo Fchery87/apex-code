@@ -58,6 +58,8 @@ describe("bash allow-list for commands that cannot read outside the repository (
 		"git diff --output=out.txt",
 		"git diff --no-index a b",
 		"git log -- secret.txt",
+		"git diff src/*.ts",
+		"git diff config=local.txt",
 		"./evil --version",
 	])("asks for %s", async (command) => {
 		expect(await asks(command)).toBe(true);
