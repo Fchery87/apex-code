@@ -989,8 +989,9 @@ it.
 
 **Status (2026-10-18): partly met.** The daemon was removed in HR.25. The command journal
 table and its update functions exist in `durable-state/sqlite.ts`, but no production path
-writes command entries, so the `kill -9` recovery clause is not met. Two clients attaching
-to one session are covered by session-lease tests. Whether to wire the journal into command
+writes command entries, so the `kill -9` recovery clause is not met. Multiple shared
+session leases for one `sessionId` are covered by `sqlite-store.test.ts`. Two clients attaching through
+the same session path are not covered by the tests. Whether to wire the journal into command
 execution, or to delete it, is an open product decision.
 
 ---

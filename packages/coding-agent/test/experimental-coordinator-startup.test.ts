@@ -31,8 +31,11 @@ describe("coordinator startup timeout", () => {
 		expect(child).toBeDefined();
 		const exited = await new Promise<boolean>((resolve) => {
 			if (child!.exitCode !== null || child!.signalCode !== null) return resolve(true);
-			child!.once("exit", () => resolve(true));
-			setTimeout(() => resolve(false), 5_000);
+			const timer = setTimeout(() => resolve(false), 5_000);
+			child!.once("exit", () => {
+				clearTimeout(timer);
+				resolve(true);
+			});
 		});
 		expect(exited).toBe(true);
 	});
