@@ -26,6 +26,8 @@ import {
 	type ChildTurnResult,
 	type DelegationRuntimeOptions,
 } from "./delegation/runtime.ts";
+import { createCommandJournalRecorder } from "./durable-state/command-journal.ts";
+import { DURABLE_STATE_DATABASE_FILENAME } from "./durable-state/sqlite.ts";
 import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
 import { loadHookRuntime } from "./hooks/loader.ts";
 import type { HookRuntime } from "./hooks/types.ts";
@@ -320,7 +322,22 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// A caller wanting project scope supplies a manager built with the decision. ADR 0034.
 	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir, { projectTrusted: false });
 	const sessionManager = options.sessionManager ?? SessionManager.create(cwd, getDefaultSessionDir(cwd, agentDir));
-	const backgroundShellRegistry = options.backgroundShellRegistry ?? createBackgroundShellRegistry();
+	// Background commands are journaled in the durable sidecar (spec 2026-08-15, goal 2). A caller that
+	// supplies its own registry owns its journal.
+	const commandJournal = options.backgroundShellRegistry
+		? undefined
+		: createCommandJournalRecorder(join(agentDir, DURABLE_STATE_DATABASE_FILENAME), sessionManager.getSessionId());
+	if (commandJournal) {
+		// Commands owned by a process that has exited are marked interrupted, not left running.
+		// Recovery is best-effort: a stale row is corrected on the next start.
+		try {
+			commandJournal.recoverOrphans();
+		} catch {
+			// Leave the rows as they are. They are recovered the next time a session starts.
+		}
+	}
+	const backgroundShellRegistry =
+		options.backgroundShellRegistry ?? createBackgroundShellRegistry({ journal: commandJournal });
 	// One resolved per-run budget policy: the caller's override when supplied,
 	// else the settings policy. Children built below inherit this resolved value
 	// so a child run carries the same per-run policy as its parent without

@@ -566,16 +566,36 @@ export function createShellToolDefinition(
 						undefined,
 					);
 				}
+				// The journal row must exist before the process starts. If it cannot be written,
+				// the command is refused rather than run unrecorded (spec 2026-08-15, goal 2).
+				let journalId: string | undefined;
+				try {
+					journalId = registry.beginJournal(spawnContext.command);
+				} catch (error) {
+					const reason = error instanceof Error ? error.message : String(error);
+					throw new ToolExecutionError(
+						`Could not record the background command in the durable journal, so it was not started: ${reason}`,
+						undefined,
+					);
+				}
 				const output = new OutputAccumulator({ tempFilePrefix: config.tempFilePrefix });
-				const launched = await spawnBg(spawnContext.command, spawnContext.cwd, {
-					env: spawnContext.env,
-					onData: (data) => output.append(data),
-				});
+				let launched: Awaited<ReturnType<typeof spawnBg>>;
+				try {
+					launched = await spawnBg(spawnContext.command, spawnContext.cwd, {
+						env: spawnContext.env,
+						onData: (data) => output.append(data),
+					});
+				} catch (error) {
+					// The journal row already exists. Record that the process never started.
+					if (journalId !== undefined) registry.failJournal(journalId, error);
+					throw error;
+				}
 				const handle = registry.launch({
 					command: spawnContext.command,
 					pid: launched.pid,
 					output,
 					exited: launched.exited,
+					journalId,
 				});
 				return {
 					content: [

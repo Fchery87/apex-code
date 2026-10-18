@@ -3,6 +3,7 @@ import type { Model } from "@earendil-works/pi-ai";
 import type { ThinkingLevel } from "apex-code-agent-core";
 import { getAgentDir, getAuthPath } from "../config.ts";
 import { resolvePath } from "../utils/paths.ts";
+import { DURABLE_STATE_DATABASE_FILENAME } from "./durable-state/sqlite.ts";
 import type { SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
 import { LspDiagnostics } from "./lsp/diagnostics.ts";
 import { LspPool } from "./lsp/pool.ts";
@@ -25,7 +26,6 @@ import { SqliteUsagePerformanceStore } from "./usage-performance-store.ts";
 import { createDeferredWebSearchOperations, resolveWebSearchOperations } from "./web-search-provider.ts";
 
 /** Filename of the shared durable-state database within an agent directory (roadmap Phase 8). */
-const DURABLE_STATE_DATABASE_FILENAME = "state.sqlite";
 
 /**
  * Non-fatal issues collected while creating services or sessions.

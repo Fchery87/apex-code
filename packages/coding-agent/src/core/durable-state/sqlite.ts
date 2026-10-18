@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import type { DatabaseSync } from "node:sqlite";
+import type { ProcessOwner } from "./process-identity.ts";
 
 /**
  * `bun build --compile` bundles this module into the standalone binary, and Bun does not
@@ -33,7 +34,16 @@ function loadSqliteDatabaseConstructor(): SqliteDatabaseConstructor {
 }
 
 /** Current schema for the daemon-owned durable-state sidecar. */
-export const CURRENT_DURABLE_STATE_SCHEMA_VERSION = 4;
+/** The sidecar file name under the agent directory. Every caller opens the same file. */
+export const DURABLE_STATE_DATABASE_FILENAME = "state.sqlite";
+export const CURRENT_DURABLE_STATE_SCHEMA_VERSION = 5;
+
+export interface CommandJournalInput {
+	id?: string;
+	sessionId: string;
+	command: string;
+	owner?: ProcessOwner;
+}
 
 export type CommandJournalState = "created" | "running" | "completed" | "failed" | "interrupted";
 
@@ -123,8 +133,18 @@ export interface DurableStateStore {
 	schemaVersion(): number;
 	tableNames(): string[];
 	columns(tableName: string): string[];
-	beginCommand(input: { id?: string; sessionId: string; command: string }): CommandJournalRecord;
-	runCommand<T>(input: { id?: string; sessionId: string; command: string }, operation: () => Promise<T>): Promise<T>;
+	beginCommand(input: CommandJournalInput): CommandJournalRecord;
+	runCommand<T>(input: CommandJournalInput, operation: () => Promise<T>): Promise<T>;
+	/**
+	 * Marks unfinished commands interrupted when their owning process is gone. `isOwnerAlive`
+	 * decides per owner. A command with no recorded owner has no proof of a live owner, so it
+	 * is treated as orphaned.
+	 */
+	recoverOrphanedCommands(
+		isOwnerAlive: (owner: ProcessOwner | undefined) => boolean,
+		reason?: string,
+	): CommandJournalRecord[];
+	pragmaValue(name: string): unknown;
 	transitionCommand(id: string, state: Exclude<CommandJournalState, "created">, reason?: string): CommandJournalRecord;
 	getCommand(id: string): CommandJournalRecord | undefined;
 	commandCount(): number;
@@ -168,7 +188,12 @@ function createSchema(database: DatabaseSync): void {
 			state TEXT NOT NULL,
 			recovery_reason TEXT,
 			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
+			updated_at TEXT NOT NULL,
+			owner_id TEXT,
+			owner_pid INTEGER,
+			owner_start TEXT,
+			owner_host TEXT,
+			owner_boot TEXT
 		);
 		CREATE TABLE IF NOT EXISTS session_leases (
 			session_id TEXT NOT NULL,
@@ -201,6 +226,28 @@ function createSchema(database: DatabaseSync): void {
 			expires_at TEXT
 		);
 	`);
+}
+
+function insertCommand(database: DatabaseSync, input: CommandJournalInput): CommandJournalRecord {
+	const id = input.id ?? randomUUID();
+	const now = new Date().toISOString();
+	database
+		.prepare(
+			"INSERT INTO command_journal (id, session_id, command, state, created_at, updated_at, owner_id, owner_pid, owner_start, owner_host, owner_boot) VALUES (?, ?, ?, 'created', ?, ?, ?, ?, ?, ?, ?)",
+		)
+		.run(
+			id,
+			input.sessionId,
+			input.command,
+			now,
+			now,
+			input.owner?.id ?? null,
+			input.owner?.pid ?? null,
+			input.owner?.startToken ?? null,
+			input.owner?.host ?? null,
+			input.owner?.boot ?? null,
+		);
+	return readCommand(database, id)!;
 }
 
 function readCommand(database: DatabaseSync, id: string): CommandJournalRecord | undefined {
@@ -270,6 +317,10 @@ export function openDurableStateStore(path: string): DurableStateStore {
 	const Sqlite = loadSqliteDatabaseConstructor();
 	const database = new Sqlite(path);
 	try {
+		// Several CLI processes may share this sidecar. WAL lets readers proceed during a write,
+		// and the busy timeout makes a contending writer wait rather than fail.
+		database.exec("PRAGMA busy_timeout = 5000");
+		database.exec("PRAGMA journal_mode = WAL");
 		database.exec("BEGIN IMMEDIATE");
 		createSchema(database);
 		const version = readSchemaVersion(database);
@@ -311,6 +362,22 @@ export function openDurableStateStore(path: string): DurableStateStore {
 			}
 			database.exec("DROP TABLE IF EXISTS usage_totals");
 		}
+		if (version < 5) {
+			const journalColumns = database.prepare('PRAGMA table_info("command_journal")').all() as Array<{
+				name: string;
+			}>;
+			const existingJournalNames = new Set(journalColumns.map((column) => column.name));
+			for (const [name, type] of [
+				["owner_id", "TEXT"],
+				["owner_pid", "INTEGER"],
+				["owner_start", "TEXT"],
+				["owner_host", "TEXT"],
+				["owner_boot", "TEXT"],
+			] as const) {
+				if (!existingJournalNames.has(name))
+					database.exec(`ALTER TABLE command_journal ADD COLUMN ${name} ${type}`);
+			}
+		}
 		if (version < CURRENT_DURABLE_STATE_SCHEMA_VERSION) {
 			database
 				.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)")
@@ -341,26 +408,9 @@ export function openDurableStateStore(path: string): DurableStateStore {
 			const rows = database.prepare(`PRAGMA table_info("${tableName}")`).all() as Array<{ name: string }>;
 			return rows.map((row) => row.name);
 		},
-		beginCommand: ({ id = randomUUID(), sessionId, command }) => {
-			const now = new Date().toISOString();
-			database
-				.prepare(
-					"INSERT INTO command_journal (id, session_id, command, state, created_at, updated_at) VALUES (?, ?, ?, 'created', ?, ?)",
-				)
-				.run(id, sessionId, command, now, now);
-			return readCommand(database, id)!;
-		},
+		beginCommand: (input) => insertCommand(database, input),
 		runCommand: async (input, operation) => {
-			const entry = (() => {
-				const id = input.id ?? randomUUID();
-				const now = new Date().toISOString();
-				database
-					.prepare(
-						"INSERT INTO command_journal (id, session_id, command, state, created_at, updated_at) VALUES (?, ?, ?, 'created', ?, ?)",
-					)
-					.run(id, input.sessionId, input.command, now, now);
-				return readCommand(database, id)!;
-			})();
+			const entry = insertCommand(database, input);
 			transitionCommand(database, entry.id, "running");
 			try {
 				const result = await operation();
@@ -385,6 +435,48 @@ export function openDurableStateStore(path: string): DurableStateStore {
 		getCommand: (id) => readCommand(database, id),
 		commandCount: () =>
 			(database.prepare("SELECT COUNT(*) AS count FROM command_journal").get() as { count: number }).count,
+		recoverOrphanedCommands: (isOwnerAlive, reason = "owning process exited before the command completed") => {
+			database.exec("BEGIN IMMEDIATE");
+			try {
+				const rows = database
+					.prepare(
+						"SELECT id, owner_id, owner_pid, owner_start, owner_host, owner_boot FROM command_journal WHERE state IN ('created', 'running')",
+					)
+					.all() as Array<{
+					id: string;
+					owner_id: string | null;
+					owner_pid: number | null;
+					owner_start: string | null;
+					owner_host: string | null;
+					owner_boot: string | null;
+				}>;
+				const recovered: CommandJournalRecord[] = [];
+				for (const row of rows) {
+					const owner: ProcessOwner | undefined =
+						row.owner_id !== null && row.owner_pid !== null
+							? {
+									id: row.owner_id,
+									pid: row.owner_pid,
+									startToken: row.owner_start ?? undefined,
+									host: row.owner_host ?? undefined,
+									boot: row.owner_boot ?? undefined,
+								}
+							: undefined;
+					// No recorded owner means no proof that a live process still runs the command.
+					if (owner !== undefined && isOwnerAlive(owner)) continue;
+					recovered.push(transitionCommand(database, row.id, "interrupted", reason));
+				}
+				database.exec("COMMIT");
+				return recovered;
+			} catch (error) {
+				database.exec("ROLLBACK");
+				throw error;
+			}
+		},
+		pragmaValue: (name) => {
+			const row = database.prepare(`PRAGMA ${name}`).get() as Record<string, unknown> | undefined;
+			return row ? Object.values(row)[0] : undefined;
+		},
 		recoverUnfinishedCommands: (reason = "daemon restarted before command completion") => {
 			const rows = database
 				.prepare("SELECT id FROM command_journal WHERE state IN ('created', 'running')")
