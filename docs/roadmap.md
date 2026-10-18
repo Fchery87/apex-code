@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0 through 12 landed · **Created:** 2026-08-08 · **Last updated:** 2026-10-03
+**Status:** Active — Phases 0 through 12 landed · **Created:** 2026-08-08 · **Last updated:** 2026-10-18
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -88,13 +88,13 @@ capable and measurably worse.
 | 3 | Context engineering | **landed** — eviction + deferred schemas verified against the replay corpus · `72a2fefe4` | [spec](specs/2026-08-13-context-engineering.md) | — |
 | 4 | Tool surface | **landed** — all 7 tasks (4.1–4.7) done, budget fixed at 2,150/2,300 tokens · `faffaa79e` | [spec](specs/2026-08-13-tool-surface.md) | — |
 | 5 | Delegation & multi-agent | **landed** — 7 of 7 tasks · `be00e1ab0` | [spec](specs/2026-08-14-delegation-and-multi-agent.md) | — |
-| 6 | Durable state & daemon | **landed** · `baf5e5302`. The daemon was removed in HR.25 (2026-10-16) because nothing constructed it. The SQLite sidecar, the command journal, and session leases remain: `apex-code cost` and the usage store use the sidecar, and session leases are test-verified in `packages/coding-agent/test/durable-state/`. | [spec](specs/2026-08-15-durable-state-and-daemon.md) | — |
+| 6 | Durable state & daemon | **partly met** (2026-10-18: the command journal is not written by any production path, so the `kill -9` recovery criterion is unmet) · `baf5e5302`. The daemon was removed in HR.25 (2026-10-16) because nothing constructed it. The SQLite sidecar, the command journal, and session leases remain: `apex-code cost` and the usage store use the sidecar, and session leases are test-verified in `packages/coding-agent/test/durable-state/`. | [spec](specs/2026-08-15-durable-state-and-daemon.md) | — |
 | 7 | Evidence & verification | **landed** — 7 of 7 tasks · `c82584312` (clean Node 22 verification) | [spec](specs/2026-08-16-evidence-and-verification.md) | — |
 | 8 | Observability & cost | **landed** — 7 of 7 tasks, exit criterion amended before implementation · `9c7c9e9aa` | [spec](specs/2026-08-15-observability-and-cost.md) | — |
 | 9 | Release hardening | **landed** — 6 of 6 tasks · `a0be145d7` | [spec](specs/2026-08-16-release-hardening.md) | — |
 | 10 | Complete the Apex Code product surface | **landed** — 7 of 7 tasks · `6b602044d` (required three-OS CI run 31940072123) | [spec](specs/2026-08-16-complete-apex-product-surface.md) | — |
 | 11 | Remove unowned hosted-service defaults | **landed** — 5 of 5 tasks · `bfa746d0c` (required three-OS CI run 31945192886) | [spec](specs/2026-08-16-remove-unowned-hosted-service-defaults.md) | — |
-| 12 | Production graduation and release integrity | **landed** — baseline 15 of 15 tasks at `eb6df850d`; standalone GitHub Release installer landed at `ac930a485` | [baseline spec](specs/2026-08-16-production-graduation-and-release-integrity.md) · [installer spec](specs/2026-08-25-standalone-release-installer.md) | — |
+| 12 | Production graduation and release integrity | **landed** — baseline 15 of 15 tasks at `eb6df850d`; standalone GitHub Release installer landed at `6de694b54` | [baseline spec](specs/2026-08-16-production-graduation-and-release-integrity.md) · [installer spec](specs/2026-08-25-standalone-release-installer.md) | — |
 
 ## Product-surface follow-ups
 
@@ -102,7 +102,7 @@ capable and measurably worse.
 | --- | --- | --- | --- |
 | LSP diagnostics | **landed** — LSP.1 through LSP.6, ADR 0020 accepted | [spec](specs/2026-08-18-lsp.md) | — |
 | Sandbox skill projection | **landed** — SKILL.1 through SKILL.9 · `cac7e49f8` | [spec](specs/2026-08-20-sandbox-skill-projection.md) | — |
-| Supervisor-mediated credential writes | **landed** — `4016794c3` | [spec](specs/2026-08-22-supervisor-mediated-credential-writes.md) | — |
+| Supervisor-mediated credential writes | **landed** — `c193e3bf5` | [spec](specs/2026-08-22-supervisor-mediated-credential-writes.md) | — |
 | Terminal interaction polish | **landed** — `697746b94` | [spec](specs/2026-08-23-terminal-interaction-polish.md) | — |
 | Sandbox delegation and escalation | **superseded** · removed on 2026-09-12 by [ADR 0032](adr/0032-no-built-in-sandbox.md) | [spec](specs/2026-08-28-sandbox-delegation-and-escalation.md) | — |
 | Composer dock surface | **landed** — filled, cursor-safe prompt dock · `2bd3008f1` | [spec](specs/2026-08-23-composer-dock-surface.md) | — |
@@ -142,7 +142,7 @@ capable and measurably worse.
 | Self-update quality audit | **landed**. PR #166 merged at `adeb7b942` after Ubuntu, macOS, Windows, and upstream-integrity checks passed. Ordered CLI output and failure diagnostics are pinned; unreachable note rendering and duplicate success reporting are removed. | [spec](specs/2026-09-29-self-update-quality.md) | — |
 | Reachable harness surfaces | **landed** — RS.1 through RS.10 at `bc0ac1b0d`, shipped on `main` as `16134d4f3` (PR #167) and released in `0.6.0`. Three-OS CI passed at `c010d923904d13930a3d12faa03f9fa990f5d21a`. Idle-host render timing against trunk `329ec80ea` is within about 3% on every scenario. | [spec](specs/2026-10-03-reachable-harness-surfaces.md) | — |
 | Compact operation output | **landed**. Uniform compact rows, individual disclosure, and preserved detail views. Independent review and Linux, macOS, and Windows CI passed in [PR #168](https://github.com/Fchery87/apex-code/pull/168). | [spec](specs/2026-10-04-compact-operation-output.md) | — |
-| Harness review remediation | **landed** — all 32 tasks. Three-OS CI and the first CodeQL run are green at `9aa1088b7` on [PR #173](https://github.com/Fchery87/apex-code/pull/173). Merge to `main` is pending the operator's decision. | [spec](specs/2026-10-16-harness-review-remediation.md) | — |
+| Harness review remediation | **landed** — all 32 tasks. Three-OS CI and the first CodeQL run were green at `9aa1088b7`. Merged to `main` as [PR #173](https://github.com/Fchery87/apex-code/pull/173) at `8e050a67e`. | [spec](specs/2026-10-16-harness-review-remediation.md) | — |
 | Decisions settled after the remediation | **landed** at `f9586cdf4`. Full suite and three-OS CI pass on [PR #176](https://github.com/Fchery87/apex-code/pull/176). Proxy opt-in for `web_fetch`, capped compaction reserve, startup MCP discovery setting, and four glossary terms. | [spec](specs/2026-10-17-grill-decisions.md) | — |
 
 ---
@@ -448,18 +448,18 @@ content lives in this entry and in the spec's own closure amendment.
 **Post-PR-#33 review follow-ups landed, 2026-08-22.** Three review leftovers from the
 `web_search` merge, worked as a plan rather than a phase:
 
-- **Supervisor-mediated credential writes** (`4016794c3`), implementing
+- **Supervisor-mediated credential writes** (`c193e3bf5`), implementing
   [spec](specs/2026-08-22-supervisor-mediated-credential-writes.md): `/login` works inside
   a sandboxed session through a supervisor-owned unix socket that refuses `!command` and
   `$VAR` values, audits every accepted write and refusal, and leaves every read path and
   the read-only mount untouched. ADR 0015 carries the dated amendment. Linux is verified
   by a live sandboxed CLI turn; macOS is verified at the Seatbelt-profile level, with the
   live gate (now platform-general) awaiting its first CI run on push.
-- **Supervisor launch cost** (`93e0138ba`): `settings-manager` no longer statically
+- **Supervisor launch cost** (`48fac1d75`): `settings-manager` no longer statically
   imports `proper-lockfile` or `undici` on the pre-child path. Measured A/B with
   `scripts/measure-supervisor-imports.mjs --dist` on one loaded machine: the module fell
   1968.8 ms → 576.8 ms and the whole supervisor import path 2728.9 ms → 812.1 ms.
-- **Review small items** (`e798d83a5`): the suite harness now scrubs every provider
+- **Review small items** (`75bb0859b`): the suite harness now scrubs every provider
   credential variable `getEnvApiKey` reads (closing the `7209` breadth gap for
   `HF_TOKEN`, `COPILOT_GITHUB_TOKEN`, the Bedrock container vars, and the Vertex ADC
   trio, with a pinning test), and `web_search` snippets trim to a word boundary. The
@@ -987,6 +987,12 @@ Git provenance in the session header.
 is recovered from the journal. Two clients attach to one session without corrupting
 it.
 
+**Status (2026-10-18): partly met.** The daemon was removed in HR.25. The command journal
+table and its update functions exist in `durable-state/sqlite.ts`, but no production path
+writes command entries, so the `kill -9` recovery clause is not met. Two clients attaching
+to one session are covered by session-lease tests. Whether to wire the journal into command
+execution, or to delete it, is an open product decision.
+
 ---
 
 ## Phase 7 — Evidence & verification
@@ -1280,6 +1286,10 @@ trusted policy cross the sandbox boundary only through tested least-privilege pa
 executables reject unverified artifacts; Apex-only release tooling leaves frozen packages
 untouched; security/support ownership and the latest-supported-release policy are published.
 This phase does not claim Windows sandbox enforcement or 24/7 support.
+
+**Superseded clauses (2026-10-18).** The sandbox credential and state handoff clauses above
+describe a boundary that [ADR 0032](adr/0032-no-built-in-sandbox.md) removed. They are
+superseded, not met. The remaining Phase 12 clauses are unaffected.
 
 **Current state.** Landed. All 15 plan tasks complete: security-boundary ADRs
 (0015, 0016), the sandbox credential/state handoff and trust-first policy resolution, pinned

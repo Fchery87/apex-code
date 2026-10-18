@@ -1,6 +1,6 @@
 # Spec: Durable state & daemon
 
-**Status:** Landed
+**Status:** Active
 
 
 ## Metadata
