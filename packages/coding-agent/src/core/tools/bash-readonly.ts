@@ -23,11 +23,6 @@ function isRefLike(token: string): boolean {
 	return /^[A-Za-z0-9._~^@/:+-]+$/.test(token);
 }
 
-/** A pathspec inside the repository: relative, with no escape out of it. */
-function isInRepoPath(token: string): boolean {
-	return isRefLike(token) || (!token.startsWith("-") && !token.startsWith("/") && !token.split("/").includes(".."));
-}
-
 function isReadOnlyGit(tokens: readonly string[]): boolean {
 	const [subcommand, ...rest] = tokens;
 	const flags = subcommand ? GIT_FLAGS[subcommand] : undefined;
@@ -37,7 +32,7 @@ function isReadOnlyGit(tokens: readonly string[]): boolean {
 	}
 	return rest.every((token) => {
 		if (token.startsWith("-")) return flags.has(token) || (subcommand === "log" && /^-\d+$/.test(token));
-		return subcommand === "diff" ? isInRepoPath(token) : isRefLike(token);
+		return isRefLike(token);
 	});
 }
 

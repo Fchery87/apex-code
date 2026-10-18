@@ -2,22 +2,34 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { discoverAndLoadExtensions } from "../src/core/extensions/loader.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
- * Loading real extension files compiles each one through jiti. On 2026-10-16 this test exceeded the
- * 60-second default under full-suite load, and the same test took 54 seconds when run alone during
- * that review. Run alone again later, the whole file took 13 seconds, so the cost depends on host
- * load and jiti's cache. The limit is headroom for a cold run on a busy host, not a claim about speed.
+ * The first extension load in a process imports the whole runtime module graph through
+ * `virtual-modules.ts`, the same for every later load in that process. Measured 2026-10-18 on
+ * a cold process: 20 to 41 seconds for that one load, then about 0.1 to 0.4 seconds per load. The
+ * budget covers that one-time warm-up, run in `beforeAll`, so every discovery case keeps the
+ * package's 60-second test timeout and a slowdown in discovery itself still fails.
  */
 const EXTENSION_LOAD_TIMEOUT_MS = 180_000;
 
 describe("extensions discovery", () => {
 	let tempDir: string;
 	let extensionsDir: string;
+
+	beforeAll(async () => {
+		const warmDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-ext-warm-"));
+		try {
+			fs.mkdirSync(path.join(warmDir, "extensions"));
+			fs.writeFileSync(path.join(warmDir, "extensions", "warm.ts"), `export default function(pi) {}`);
+			await discoverAndLoadExtensions([], warmDir, warmDir);
+		} finally {
+			fs.rmSync(warmDir, { recursive: true, force: true });
+		}
+	}, EXTENSION_LOAD_TIMEOUT_MS);
 
 	beforeEach(() => {
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-ext-test-"));
@@ -48,20 +60,16 @@ describe("extensions discovery", () => {
 		}
 	`;
 
-	it(
-		"discovers direct .ts files in extensions/",
-		async () => {
-			fs.writeFileSync(path.join(extensionsDir, "foo.ts"), extensionCode);
-			fs.writeFileSync(path.join(extensionsDir, "bar.ts"), extensionCode);
+	it("discovers direct .ts files in extensions/", async () => {
+		fs.writeFileSync(path.join(extensionsDir, "foo.ts"), extensionCode);
+		fs.writeFileSync(path.join(extensionsDir, "bar.ts"), extensionCode);
 
-			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
 
-			expect(result.errors).toHaveLength(0);
-			expect(result.extensions).toHaveLength(2);
-			expect(result.extensions.map((e) => path.basename(e.path)).sort()).toEqual(["bar.ts", "foo.ts"]);
-		},
-		EXTENSION_LOAD_TIMEOUT_MS,
-	);
+		expect(result.errors).toHaveLength(0);
+		expect(result.extensions).toHaveLength(2);
+		expect(result.extensions.map((e) => path.basename(e.path)).sort()).toEqual(["bar.ts", "foo.ts"]);
+	});
 
 	it("loads the coding-agent entrypoint without rewriting pi-ai provider subpaths", async () => {
 		fs.writeFileSync(

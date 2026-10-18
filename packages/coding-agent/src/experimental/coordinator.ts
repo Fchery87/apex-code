@@ -1,3 +1,4 @@
+import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { chmod, lstat, unlink } from "node:fs/promises";
 import { createConnection, createServer, type Server, type Socket } from "node:net";
@@ -184,16 +185,29 @@ export interface CoordinatorStartupLease {
 	close(): void;
 }
 
-export async function ensureCoordinator(publicPath: string, controlPath: string): Promise<CoordinatorStartupLease> {
+export interface CoordinatorStartupOptions {
+	readonly startTimeoutMs?: number;
+	readonly spawnChild?: (role: "coordinator", args: readonly string[]) => ChildProcess;
+}
+
+export async function ensureCoordinator(
+	publicPath: string,
+	controlPath: string,
+	options: CoordinatorStartupOptions = {},
+): Promise<CoordinatorStartupLease> {
 	const existing = await tryConnect(controlPath);
 	if (existing) return { close: () => existing.destroy() };
-	const child = spawnInternalProcess("coordinator", [publicPath, controlPath]);
-	const deadline = Date.now() + COORDINATOR_START_TIMEOUT_MS;
+	const child = (options.spawnChild ?? spawnInternalProcess)("coordinator", [publicPath, controlPath]);
+	const deadline = Date.now() + (options.startTimeoutMs ?? COORDINATOR_START_TIMEOUT_MS);
 	while (true) {
 		const socket = await tryConnect(controlPath);
 		if (socket) return { close: () => socket.destroy() };
 		if (child.exitCode !== null || child.signalCode !== null) throw new Error("Coordinator exited during startup");
-		if (Date.now() >= deadline) throw new Error("Timed out waiting for coordinator startup");
+		if (Date.now() >= deadline) {
+			// The child never became ready, so there is no state to save. Kill it rather than leave it running.
+			child.kill("SIGKILL");
+			throw new Error("Timed out waiting for coordinator startup");
+		}
 		await new Promise<void>((resolve) => setTimeout(resolve, COORDINATOR_RETRY_MS));
 	}
 }

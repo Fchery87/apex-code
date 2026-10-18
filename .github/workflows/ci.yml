@@ -94,6 +94,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Packs the built coding-agent package and installs it into a clean
+      # consumer, so a broken export or a missing built file fails here rather
+      # than in a user's install (HR.26).
+      - name: Package install gate
+        run: npm run check:package-install
+
       # `check` is biome (lint + format, warnings are errors) plus upstream's
       # pinned-dependency and TS-import guards. There is no separate typecheck
       # script; the build typechecks.

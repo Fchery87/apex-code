@@ -49,7 +49,7 @@ own spec later.
 ## Context and motivation
 
 - `docs/plans/2026-10-16-harness-review-remediation.md` is the task board for this spec. Its
-  task ids (HR.0 to HR.32) are used below.
+  task ids (HR.0 to HR.32) are used below. HR.0 is this spec and its plan. HR.32 is the closeout that verifies and closes the work. The tables below list HR.1 to HR.31.
 - `docs/adr/0032-no-built-in-sandbox.md` removed the OS boundary. The permission gate is now
   the only control between the model and the account's files, so its defaults carry more
   weight than they did when they were set.
@@ -137,7 +137,7 @@ an existing file the model never opened.
 - The help text uses `--exclude-tools ask_question` (`cli/args.ts:536`), but the tool is
   `ask_user`.
 - `/bug` says "Report a bug to the Pi developers" (`core/slash-commands.ts:31`).
-- `utils/changelog.ts:13` rewrites links to `earendil-works/pi`.
+- `utils/changelog.ts:13` rewrites links to `earendil-works/pi`. Decided in `51fa25df1`: relative links and release routes in this project's changelog point to `Fchery87/apex-code`. Legacy absolute links to Pi's repositories keep pointing upstream, because they are real history.
 - The root `package.json` is named `pi-monorepo` and carries 10 to 40 leading tabs per line.
 - `reasonix.toml` and the `pi-test.*` scripts are tracked at the root.
 
