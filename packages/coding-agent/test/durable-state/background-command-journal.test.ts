@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -140,4 +140,20 @@ describe("background command journal at the bash tool", () => {
 			expect(existsSync(marker)).toBe(false);
 		},
 	);
+});
+
+describe("command journal releases the sidecar between operations", () => {
+	it("leaves no open WAL behind after a command is journaled and finished", () => {
+		// Windows cannot delete a database file while a handle is open, so a recorder that keeps
+		// its connection open breaks the temp-directory cleanup in every test that runs a session.
+		const dir = mkdtempSync(join(tmpdir(), "apex-bg-release-"));
+		tempDirs.push(dir);
+		const databasePath = join(dir, "state.sqlite");
+		const recorder = createCommandJournalRecorder(databasePath, "session-1");
+		const id = recorder.begin("echo done");
+		recorder.finish(id, { exitCode: 0, killed: false });
+		expect(existsSync(`${databasePath}-wal`)).toBe(false);
+		rmSync(dir, { recursive: true, force: true });
+		expect(existsSync(dir)).toBe(false);
+	});
 });
