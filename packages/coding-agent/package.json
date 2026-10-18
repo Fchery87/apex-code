@@ -18,7 +18,7 @@
 			"import": "./dist/index.js"
 		},
 		"./rpc-entry": {
-			"import": "./dist/bundle/rpc-entry.js"
+			"import": "./dist/rpc-entry.js"
 		}
 	},
 	"files": [

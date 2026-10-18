@@ -8,7 +8,7 @@ import { installCodingAgentConsumer, packReleasePackages, smokeTestCodingAgentCo
 const codingAgentName = "apex-code";
 const devPackages = ["pi-client", "pi-protocol", "pi-server"].map((name) => `@earendil-works/${name}`);
 
-function createFixture(t, { importServer = false, declareServer = false } = {}) {
+function createFixture(t, { importServer = false, declareServer = false, extraExports = {} } = {}) {
 	const root = mkdtempSync(join(tmpdir(), "pi-consumer-test-"));
 	t.after(() => rmSync(root, { recursive: true, force: true }));
 	const packages = [codingAgentName, "@earendil-works/chord", ...devPackages].map((name) => ({
@@ -23,8 +23,7 @@ function createFixture(t, { importServer = false, declareServer = false } = {}) 
 			type: "module",
 			exports: isAgent ? {
 				".": "./dist/index.js",
-				"./client": { source: "./src/client/index.ts" },
-				"./experimental/plugin": { source: "./src/experimental/plugin.ts" },
+				...extraExports,
 			} : "./dist/index.js",
 			...(isAgent ? {
 				bin: { [codingAgentName]: "dist/cli.js" },
@@ -91,4 +90,10 @@ test("fails when the SDK imports an undeclared server despite a working CLI", (t
 test("fails if a development-only dependency is added back to the published dependency tree", (t) => {
 	const directory = createFixture(t, { declareServer: true });
 	assert.throws(() => smokeTestCodingAgentConsumer(directory), /pi-server must not be installed/);
+});
+
+// HR.26: an export whose built file is missing must fail the gate, not a user's install.
+test("fails when an exported subpath has no built file", (t) => {
+	const directory = createFixture(t, { extraExports: { "./rpc-entry": { import: "./dist/bundle/rpc-entry.js" } } });
+	assert.throws(() => smokeTestCodingAgentConsumer(directory), /has no built file at \.\/dist\/bundle\/rpc-entry\.js/);
 });

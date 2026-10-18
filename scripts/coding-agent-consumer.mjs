@@ -82,6 +82,14 @@ export function smokeTestCodingAgentConsumer(directory, runtime = process.execPa
 	for (const path of ["dist/client", "dist/experimental", "dist/cli/experimental", "dist/bundle/client.js", "dist/bundle/coordinator.js"]) {
 		if (existsSync(join(packageDir, path))) throw new Error(`Published package contains development-only code: ${path}`);
 	}
+	const exportedSpecifiers = Object.entries(manifest.exports).map(([subpath, target]) => {
+		if (subpath.includes("*")) throw new Error(`Pattern export ${subpath} is not covered by the consumer smoke test`);
+		const importTarget = typeof target === "string" ? target : target.import;
+		if (!importTarget || !existsSync(join(packageDir, importTarget))) {
+			throw new Error(`Export ${subpath} has no built file at ${importTarget}`);
+		}
+		return subpath === "." ? codingAgentName : `${codingAgentName}/${subpath.slice(2)}`;
+	});
 	const home = mkdtempSync(join(directory, "smoke-home-"));
 	const entry = join(directory, "smoke-sdk.mjs");
 	const env = {
@@ -107,6 +115,9 @@ assert.equal(typeof SessionManager.inMemory, "function");
 assert.equal(typeof ModelRuntime.create, "function");
 for (const name of ["pi-client", "pi-protocol", "pi-server"]) {
   assert.throws(() => import.meta.resolve("@earendil-works/" + name), /Cannot find|cannot find/, name + " must not be installed");
+}
+for (const specifier of ${JSON.stringify(exportedSpecifiers)}) {
+  assert.doesNotThrow(() => import.meta.resolve(specifier), specifier + " must resolve");
 }
 for (const subpath of ["/client", "/experimental/plugin"]) {
   assert.throws(() => import.meta.resolve("${codingAgentName}" + subpath), /not exported|not defined|Cannot find|cannot find/);
