@@ -22,6 +22,8 @@ export interface CommandJournalRecorder {
 	begin(command: string): string;
 	/** Records how the command ended. A failure here leaves the row for recovery to mark. */
 	finish(id: string, outcome: CommandOutcome): void;
+	/** Records a command whose process never started, so recovery does not report it as interrupted. */
+	fail(id: string, reason: string): void;
 	/**
 	 * Marks unfinished commands interrupted when their owning process has exited. Commands
 	 * owned by a live process are left alone. Run once at session start.
@@ -59,6 +61,13 @@ export function createCommandJournalRecorder(databasePath: string, sessionId: st
 				});
 			} catch {
 				// The row stays `running`. Recovery marks it interrupted once its owner has exited.
+			}
+		},
+		fail(id, reason) {
+			try {
+				withStore((store) => store.transitionCommand(id, "failed", reason));
+			} catch {
+				// The row stays `created` or `running`. Recovery will mark it when its owner exits.
 			}
 		},
 		recoverOrphans() {

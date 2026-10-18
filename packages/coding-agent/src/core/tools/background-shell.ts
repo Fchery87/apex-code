@@ -61,6 +61,12 @@ export class BackgroundShellRegistry {
 		return this.#journal?.begin(command);
 	}
 
+	/** Records a journaled command whose process never started. */
+	failJournal(id: string, error: unknown): void {
+		const reason = error instanceof Error ? error.message : String(error);
+		this.#journal?.fail(id, `launch failed: ${reason}`);
+	}
+
 	launch(input: BackgroundShellLaunch): string {
 		const handle = randomUUID();
 		const entry: Entry = {

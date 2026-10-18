@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { hostname } from "node:os";
 
 /**
  * The process that owns a journaled command. A PID alone is not identity, because the
@@ -9,6 +10,22 @@ export interface ProcessOwner {
 	readonly id: string;
 	readonly pid: number;
 	readonly startToken?: string;
+	/**
+	 * Host and boot identity. A PID means something only on the host and boot it came from.
+	 * A sidecar in a shared agent directory can hold a row written by another host or container.
+	 */
+	readonly hostId?: string;
+}
+
+/** This host and boot. Two processes match only if both the host and the boot match. */
+export function localHostId(): string {
+	let boot = "";
+	try {
+		boot = readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+	} catch {
+		// Not Linux, or /proc is unavailable. The host name alone is the identity then.
+	}
+	return `${hostname()}:${boot}`;
 }
 
 /** Linux start time for a PID, or undefined where /proc is unavailable. */
@@ -25,7 +42,7 @@ export function processStartToken(pid: number): string | undefined {
 }
 
 export function currentProcessOwner(id: string): ProcessOwner {
-	return { id, pid: process.pid, startToken: processStartToken(process.pid) };
+	return { id, pid: process.pid, startToken: processStartToken(process.pid), hostId: localHostId() };
 }
 
 /**
@@ -34,6 +51,8 @@ export function currentProcessOwner(id: string): ProcessOwner {
  * marking it interrupted on weak evidence.
  */
 export function ownerIsAlive(owner: ProcessOwner): boolean {
+	// Local PID checks prove nothing about a process on another host, namespace, or boot.
+	if (owner.hostId !== undefined && owner.hostId !== localHostId()) return true;
 	try {
 		process.kill(owner.pid, 0);
 	} catch (error) {

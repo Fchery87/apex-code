@@ -126,3 +126,22 @@ function ownerPidExists(pid: number): boolean {
 		return false;
 	}
 }
+
+describe("command journal owners on another host", () => {
+	it("does not interrupt a command whose owner ran on another host, even when its PID is not local", async () => {
+		const { ownerIsAlive } = await import("../../src/core/durable-state/process-identity.ts");
+		const path = createDatabasePath();
+		const store = open(path);
+		const remote = store.beginCommand({
+			sessionId: "s1",
+			command: "remote work",
+			owner: { id: "remote", pid: 999_999, hostId: "another-host:boot-a" },
+		});
+		store.transitionCommand(remote.id, "running");
+
+		const recovered = store.recoverOrphanedCommands((owner) => (owner ? ownerIsAlive(owner) : false));
+
+		expect(recovered).toEqual([]);
+		expect(store.getCommand(remote.id)).toMatchObject({ state: "running" });
+	});
+});

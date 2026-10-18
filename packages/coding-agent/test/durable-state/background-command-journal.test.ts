@@ -121,6 +121,7 @@ describe("background command journal at the bash tool", () => {
 					throw new Error("sidecar unavailable");
 				},
 				finish: () => {},
+				fail: () => {},
 				recoverOrphans: () => [],
 				close: () => {},
 			};
@@ -155,5 +156,19 @@ describe("command journal releases the sidecar between operations", () => {
 		expect(existsSync(`${databasePath}-wal`)).toBe(false);
 		rmSync(dir, { recursive: true, force: true });
 		expect(existsSync(dir)).toBe(false);
+	});
+});
+
+describe("background command journal after a failed launch", () => {
+	it("records a launch that threw as failed, not as interrupted by a later recovery", () => {
+		const { registry, reader, close } = setup();
+		try {
+			const journalId = registry.beginJournal("sleep 30");
+			registry.failJournal(journalId!, new Error("Working directory does not exist"));
+			expect(reader.getCommand(journalId!)).toMatchObject({ state: "failed" });
+			expect(reader.getCommand(journalId!)?.recoveryReason).toMatch(/Working directory does not exist/);
+		} finally {
+			close();
+		}
 	});
 });
