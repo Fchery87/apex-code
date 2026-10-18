@@ -88,7 +88,7 @@ capable and measurably worse.
 | 3 | Context engineering | **landed** — eviction + deferred schemas verified against the replay corpus · `72a2fefe4` | [spec](specs/2026-08-13-context-engineering.md) | — |
 | 4 | Tool surface | **landed** — all 7 tasks (4.1–4.7) done, budget fixed at 2,150/2,300 tokens · `faffaa79e` | [spec](specs/2026-08-13-tool-surface.md) | — |
 | 5 | Delegation & multi-agent | **landed** — 7 of 7 tasks · `be00e1ab0` | [spec](specs/2026-08-14-delegation-and-multi-agent.md) | — |
-| 6 | Durable state & daemon | **partly met** (2026-10-18: the command journal is not written by any production path, so the `kill -9` recovery criterion is unmet) · `baf5e5302`. The daemon was removed in HR.25 (2026-10-16) because nothing constructed it. The SQLite sidecar, the command journal, and session leases remain: `apex-code cost` and the usage store use the sidecar, and session leases are test-verified in `packages/coding-agent/test/durable-state/`. | [spec](specs/2026-08-15-durable-state-and-daemon.md) | — |
+| 6 | Durable state & daemon | **partly met** (2026-10-18: background commands are journaled and recovered after a SIGKILL of the owner; two-client attach is not yet tested) · `baf5e5302`. The daemon was removed in HR.25 (2026-10-16) because nothing constructed it. The SQLite sidecar, the command journal, and session leases remain: `apex-code cost` and the usage store use the sidecar, and session leases are test-verified in `packages/coding-agent/test/durable-state/`. | [spec](specs/2026-08-15-durable-state-and-daemon.md) | — |
 | 7 | Evidence & verification | **landed** — 7 of 7 tasks · `c82584312` (clean Node 22 verification) | [spec](specs/2026-08-16-evidence-and-verification.md) | — |
 | 8 | Observability & cost | **landed** — 7 of 7 tasks, exit criterion amended before implementation · `9c7c9e9aa` | [spec](specs/2026-08-15-observability-and-cost.md) | — |
 | 9 | Release hardening | **landed** — 6 of 6 tasks · `a0be145d7` | [spec](specs/2026-08-16-release-hardening.md) | — |
@@ -952,6 +952,14 @@ depth guard (`rlmDepth` in the session header) and per-subagent artifact isolati
 Background work with retrievable results; inter-agent messaging only if a concrete
 use case demands it.
 
+**Status note (2026-10-18): coordinator startup under load.** A startup timeout now kills the child
+it spawned. Six parallel runs of `experimental-remote-runtime.test.ts` on this 4-core host, with load
+average near 20, reproduced failures: 4 to 9 failing tests per run. Measured per child, the wait
+before the coordinator module evaluates had a median of 7.1s, against about 0.7s idle. The work
+after evaluation took about 12 ms to reach `main` and about 46 ms to listen. The cause is CPU
+starvation from oversubscription, not the readiness protocol. The 10s parent budget is wall-clock,
+so it is exceeded under that load. The budget was not raised.
+
 **Exit criterion.** A child agent cannot obtain a grant its parent lacks (test).
 Recursive delegation terminates at a bounded depth. Subagent artifacts never write
 outside their own directory.
@@ -987,12 +995,13 @@ Git provenance in the session header.
 is recovered from the journal. Two clients attach to one session without corrupting
 it.
 
-**Status (2026-10-18): partly met.** The daemon was removed in HR.25. The command journal
-table and its update functions exist in `durable-state/sqlite.ts`, but no production path
-writes command entries, so the `kill -9` recovery clause is not met. Multiple shared
-session leases for one `sessionId` are covered by `sqlite-store.test.ts`. Two clients attaching through
-the same session path are not covered by the tests. Whether to wire the journal into command
-execution, or to delete it, is an open product decision.
+**Status (2026-10-18): partly met.** The daemon was removed in HR.25. Background commands now
+write a durable journal record before their process starts (`durable-state/command-journal.ts`,
+`tools/bash.ts`). When the owning process is killed, a restart marks its unfinished commands
+`interrupted`, and never `completed` (`test/durable-state/command-journal-ownership.test.ts`).
+Ownership is checked by PID plus the Linux start token, so a reused PID is not mistaken for the
+owner. Not yet demonstrated: two clients attaching through the same session path. The tests cover
+only multiple shared leases for one `sessionId` (`sqlite-store.test.ts`).
 
 ---
 

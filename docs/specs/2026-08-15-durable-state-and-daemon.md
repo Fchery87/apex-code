@@ -3,6 +3,21 @@
 **Status:** Active
 
 
+## Status update (2026-10-18)
+
+The daemon this spec describes was removed (HR.25) because nothing constructed it. The acceptance
+clause that says "a test kills the daemon" therefore refers to the owning CLI process instead.
+
+- Background commands write a durable `command_journal` record before their process starts
+  (`src/core/durable-state/command-journal.ts`). A failed write refuses the command rather than
+  running it unrecorded (`src/core/tools/bash.ts`).
+- Each record stores its owner's PID and Linux start token (`src/core/durable-state/process-identity.ts`).
+  A restart marks unfinished commands whose owner has exited as `interrupted`, and never as `completed`.
+  The SIGKILL test is in `test/durable-state/command-journal-ownership.test.ts`.
+- The sidecar opens in WAL mode with a busy timeout, so several CLI processes can share it.
+- Still not demonstrated: two clients attaching to one session through the same path. The lease tests
+  cover multiple shared leases for one `sessionId` only.
+
 ## Metadata
 
 | Field | Value |
