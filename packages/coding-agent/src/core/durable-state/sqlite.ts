@@ -192,7 +192,8 @@ function createSchema(database: DatabaseSync): void {
 			owner_id TEXT,
 			owner_pid INTEGER,
 			owner_start TEXT,
-			owner_host TEXT
+			owner_host TEXT,
+			owner_boot TEXT
 		);
 		CREATE TABLE IF NOT EXISTS session_leases (
 			session_id TEXT NOT NULL,
@@ -232,7 +233,7 @@ function insertCommand(database: DatabaseSync, input: CommandJournalInput): Comm
 	const now = new Date().toISOString();
 	database
 		.prepare(
-			"INSERT INTO command_journal (id, session_id, command, state, created_at, updated_at, owner_id, owner_pid, owner_start, owner_host) VALUES (?, ?, ?, 'created', ?, ?, ?, ?, ?, ?)",
+			"INSERT INTO command_journal (id, session_id, command, state, created_at, updated_at, owner_id, owner_pid, owner_start, owner_host, owner_boot) VALUES (?, ?, ?, 'created', ?, ?, ?, ?, ?, ?, ?)",
 		)
 		.run(
 			id,
@@ -243,7 +244,8 @@ function insertCommand(database: DatabaseSync, input: CommandJournalInput): Comm
 			input.owner?.id ?? null,
 			input.owner?.pid ?? null,
 			input.owner?.startToken ?? null,
-			input.owner?.hostId ?? null,
+			input.owner?.host ?? null,
+			input.owner?.boot ?? null,
 		);
 	return readCommand(database, id)!;
 }
@@ -370,6 +372,7 @@ export function openDurableStateStore(path: string): DurableStateStore {
 				["owner_pid", "INTEGER"],
 				["owner_start", "TEXT"],
 				["owner_host", "TEXT"],
+				["owner_boot", "TEXT"],
 			] as const) {
 				if (!existingJournalNames.has(name))
 					database.exec(`ALTER TABLE command_journal ADD COLUMN ${name} ${type}`);
@@ -437,7 +440,7 @@ export function openDurableStateStore(path: string): DurableStateStore {
 			try {
 				const rows = database
 					.prepare(
-						"SELECT id, owner_id, owner_pid, owner_start, owner_host FROM command_journal WHERE state IN ('created', 'running')",
+						"SELECT id, owner_id, owner_pid, owner_start, owner_host, owner_boot FROM command_journal WHERE state IN ('created', 'running')",
 					)
 					.all() as Array<{
 					id: string;
@@ -445,6 +448,7 @@ export function openDurableStateStore(path: string): DurableStateStore {
 					owner_pid: number | null;
 					owner_start: string | null;
 					owner_host: string | null;
+					owner_boot: string | null;
 				}>;
 				const recovered: CommandJournalRecord[] = [];
 				for (const row of rows) {
@@ -454,7 +458,8 @@ export function openDurableStateStore(path: string): DurableStateStore {
 									id: row.owner_id,
 									pid: row.owner_pid,
 									startToken: row.owner_start ?? undefined,
-									hostId: row.owner_host ?? undefined,
+									host: row.owner_host ?? undefined,
+									boot: row.owner_boot ?? undefined,
 								}
 							: undefined;
 					// No recorded owner means no proof that a live process still runs the command.

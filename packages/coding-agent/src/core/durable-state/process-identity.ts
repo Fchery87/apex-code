@@ -11,21 +11,25 @@ export interface ProcessOwner {
 	readonly pid: number;
 	readonly startToken?: string;
 	/**
-	 * Host and boot identity. A PID means something only on the host and boot it came from.
-	 * A sidecar in a shared agent directory can hold a row written by another host or container.
+	 * The machine the PID belongs to. A sidecar in a shared agent directory can hold rows written
+	 * by another host or container, whose PIDs mean nothing here.
 	 */
-	readonly hostId?: string;
+	readonly host?: string;
+	/** The boot the PID belongs to. After a reboot every process from the old boot has exited. */
+	readonly boot?: string;
 }
 
-/** This host and boot. Two processes match only if both the host and the boot match. */
-export function localHostId(): string {
-	let boot = "";
+export function localHost(): string {
+	return hostname();
+}
+
+/** This boot's id, or "" where /proc is unavailable. */
+export function localBoot(): string {
 	try {
-		boot = readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+		return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
 	} catch {
-		// Not Linux, or /proc is unavailable. The host name alone is the identity then.
+		return "";
 	}
-	return `${hostname()}:${boot}`;
 }
 
 /** Linux start time for a PID, or undefined where /proc is unavailable. */
@@ -42,7 +46,13 @@ export function processStartToken(pid: number): string | undefined {
 }
 
 export function currentProcessOwner(id: string): ProcessOwner {
-	return { id, pid: process.pid, startToken: processStartToken(process.pid), hostId: localHostId() };
+	return {
+		id,
+		pid: process.pid,
+		startToken: processStartToken(process.pid),
+		host: localHost(),
+		boot: localBoot(),
+	};
 }
 
 /**
@@ -51,8 +61,10 @@ export function currentProcessOwner(id: string): ProcessOwner {
  * marking it interrupted on weak evidence.
  */
 export function ownerIsAlive(owner: ProcessOwner): boolean {
-	// Local PID checks prove nothing about a process on another host, namespace, or boot.
-	if (owner.hostId !== undefined && owner.hostId !== localHostId()) return true;
+	// A PID from another host proves nothing here, so do not interrupt on weak evidence.
+	if (owner.host !== undefined && owner.host !== localHost()) return true;
+	// Every process from an earlier boot has exited.
+	if (owner.boot !== undefined && owner.boot !== localBoot()) return false;
 	try {
 		process.kill(owner.pid, 0);
 	} catch (error) {

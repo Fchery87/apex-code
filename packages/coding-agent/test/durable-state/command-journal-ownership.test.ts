@@ -135,7 +135,7 @@ describe("command journal owners on another host", () => {
 		const remote = store.beginCommand({
 			sessionId: "s1",
 			command: "remote work",
-			owner: { id: "remote", pid: 999_999, hostId: "another-host:boot-a" },
+			owner: { id: "remote", pid: 999_999, host: "another-host", boot: "boot-a" },
 		});
 		store.transitionCommand(remote.id, "running");
 
@@ -143,5 +143,25 @@ describe("command journal owners on another host", () => {
 
 		expect(recovered).toEqual([]);
 		expect(store.getCommand(remote.id)).toMatchObject({ state: "running" });
+	});
+});
+
+describe("command journal owners across a reboot", () => {
+	it("recovers a command whose owner ran on this host before a reboot", async () => {
+		const { ownerIsAlive } = await import("../../src/core/durable-state/process-identity.ts");
+		const { hostname } = await import("node:os");
+		const path = createDatabasePath();
+		const store = open(path);
+		const previousBoot = store.beginCommand({
+			sessionId: "s1",
+			command: "pre-reboot work",
+			owner: { id: "pre-reboot", pid: 999_999, host: hostname(), boot: "boot-before-reboot" },
+		});
+		store.transitionCommand(previousBoot.id, "running");
+
+		const recovered = store.recoverOrphanedCommands((owner) => (owner ? ownerIsAlive(owner) : false));
+
+		expect(recovered.map((record) => record.id)).toEqual([previousBoot.id]);
+		expect(store.getCommand(previousBoot.id)).toMatchObject({ state: "interrupted" });
 	});
 });
