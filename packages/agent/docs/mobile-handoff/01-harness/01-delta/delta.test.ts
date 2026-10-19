@@ -254,10 +254,15 @@ describe("dead-op elimination", () => {
 			t.flush();
 			return performance.now() - started;
 		};
+		// One sample per size is at the mercy of scheduler noise: the small run takes about a
+		// millisecond, so a single preemption moved the ratio past the limit. The median of
+		// several runs keeps the check on growth rather than on one unlucky sample.
+		const median = (samples: number[]) => [...samples].sort((a, b) => a - b)[Math.floor(samples.length / 2)]!;
+		const timed = (n: number) => median(Array.from({ length: 7 }, () => wide(n)));
 		wide(200);                                    // warm
-		const small = Math.max(wide(250), 0.1);
-		const large = wide(2500);
-		expect(large / small).toBeLessThan(40);       // linear would be ~10x
+		const small = Math.max(timed(250), 0.1);
+		const large = timed(2500);
+		expect(large / small).toBeLessThan(40);      // linear would be ~10x
 	});
 
 	it("collapses a pathological redundant producer", () => {
