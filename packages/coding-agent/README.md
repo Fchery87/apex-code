@@ -11,10 +11,10 @@ Node.js 22.19 or newer. It installs the same way with npm, pnpm, Yarn, or Bun, w
 resolve it from the same npm registry:
 
 ```bash
-npm install --global apex-code      # npm
-pnpm add --global apex-code         # pnpm
-yarn global add apex-code           # Yarn
-bun add --global apex-code          # Bun
+npm install --global apex-code
+pnpm add --global apex-code
+yarn global add apex-code
+bun add --global apex-code
 
 apex-code --version
 apex-code
