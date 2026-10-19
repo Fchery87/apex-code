@@ -58,8 +58,8 @@ same way.
 Built-in capabilities include file/search tools, shell execution, web tools, user
 questions, planning, and bounded subagent delegation.
 
-Reads outside the session's workspace ask. Credential locations such as `~/.ssh` and `~/.aws` are
-refused unless managed policy grants them. A project's `.env` files ask. Read-only shell commands
+Reads outside the session's workspace ask. Credential locations such as `~/.ssh` and `~/.aws` ask before any read. With no one to
+answer, they are refused. Managed policy can grant them, and you can approve a single call. A project's `.env` files ask. Read-only shell commands
 run without a prompt, and `write` and `edit` need a prior read of the file. The
 [safety model](https://github.com/Fchery87/apex-code#safety-model) describes each rule and its limits.
 
