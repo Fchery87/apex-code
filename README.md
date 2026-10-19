@@ -104,11 +104,11 @@ To install one specific release rather than the latest GitHub Release, set the v
 in the receiving shell:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Fchery87/apex-code/main/install.sh | APEX_CODE_INSTALL_VERSION=0.0.1-alpha.8 bash
+curl -fsSL https://raw.githubusercontent.com/Fchery87/apex-code/main/install.sh | APEX_CODE_INSTALL_VERSION=0.7.0 bash
 ```
 
 ```powershell
-$env:APEX_CODE_INSTALL_VERSION = "0.0.1-alpha.8"; irm https://raw.githubusercontent.com/Fchery87/apex-code/main/install.ps1 | iex
+$env:APEX_CODE_INSTALL_VERSION = "0.7.0"; irm https://raw.githubusercontent.com/Fchery87/apex-code/main/install.ps1 | iex
 ```
 
 The standalone channel does not require Node.js and does not update itself; re-run the
@@ -229,6 +229,18 @@ For the complete flag reference:
 apex-code --help
 ```
 
+### Interactive keys and modes
+
+- `Shift+Tab` cycles the permission mode for this session only. The footer marks a session
+  override. `/settings` still sets the saved default.
+- `Alt+T` cycles the thinking level.
+- `Alt+J` or `/tasks` shows or hides the task panel.
+- `Esc` interrupts the running turn, including a foreground subagent.
+- In plan mode, `plan_present` offers three choices: approve and accept edits, approve and ask
+  before edits, or keep planning. Approving switches the permission mode.
+- In `/tree`, restoring files asks first when the workspace differs from the checkpoint. Keeping
+  the current files is the default.
+
 ## How Apex Code works
 
 Apex Code is an agent loop surrounded by policy, state, and verification layers. A
@@ -257,6 +269,23 @@ normal turn follows this shape:
 The loop is intentionally extensible. Extensions can intercept tool calls, transform
 context, register tools and commands, add providers, and render custom UI. They extend
 the same permission and session machinery rather than bypassing it.
+
+### Built-in tools and subagents
+
+A new session starts with these tools active: `read`, `bash`, `edit`, `write`, `grep`,
+`find`, `ls`, `web_fetch`, and `delegate`. Search and fetch are on by default, and each
+still asks through its own permission rule. `lsp`, `web_search`, and `mcp` join when they
+are configured. `todo_write` (the task list) and `ask_user` stay opt-in. Turn the task list
+on in `/settings`. A saved `defaultTools` setting replaces the default set.
+
+`delegate` runs a subagent with its own context. Two built-in types ship:
+
+- `explore` reads, searches, and lists files. It cannot edit files or run commands.
+- `general` has the default file and shell tools. It cannot delegate further.
+
+A definition in `~/.apex-code/agent/agents/` or, in a trusted project, `.apex-code/agents/`
+with the same name replaces a built-in. Press `Esc` to interrupt a foreground subagent.
+A background subagent keeps running.
 
 ### Architecture at a glance
 
@@ -299,7 +328,8 @@ content.
 Permission modes change the default interaction posture:
 
 - `default` asks for operations that policy does not already allow.
-- `plan` blocks mutating operations while you investigate or design a change.
+- `plan` blocks mutating operations while you investigate or design a change. Its tool
+  set is the read-only tools plus `grep`, `find`, `ls`, and `plan_present`.
 - `acceptEdits` auto-allows file edits whose target stays inside the workspace, and still
   asks for an edit that leaves it, for commands, and for network access.
 - `dontAsk` declines operations that would require an interactive decision.
@@ -326,6 +356,34 @@ Settings can also declare hooks: commands or HTTP endpoints attached to lifecycl
 A hook's output can return an allow, block, or ask decision, and that decision feeds the
 same permission gate. Hooks are absent until you configure them under a `hooks` key in
 settings.
+
+### Reads, credentials, and edits
+
+**Reads outside the workspace ask.** The workspace is the directory the session started in
+and everything beneath it, not the enclosing git repository. `read`, `grep`, `find`, and
+`ls` ask before they reach a target outside it. "Always allow" saves a rule for that
+target's directory and everything beneath it, not for one file. A symlink that points
+outside the workspace counts as outside.
+
+**Credential locations are protected.** `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gcloud`,
+`~/.kube`, `~/.docker/config.json`, `~/.netrc`, `~/.npmrc`, and Apex Code's own `auth.json`
+are protected in every mode. A read of one asks first, and with no one to answer, it is refused.
+The machine owner's managed policy can grant them, and the interactive responder can approve an
+individual call. No user or project rule can grant them.
+
+**Sensitive files ask.** A project's `.env` and `.env.<suffix>` files ask by default. Only
+a rule that names the file grants one, such as `**/.env`. A rule for its directory does not.
+The template names `.env.example`, `.env.sample`, and `.env.template` are ordinary files.
+
+**Read-only commands run without a prompt.** In `default` mode, `pwd`, `--version` for git,
+node, npm, rg, and python3, and the listed read-only forms of `git status`, `log`, `diff`,
+`branch`, `show`, and `rev-parse` run without asking. A flag outside the list, a path outside
+the repository, a git option before the subcommand, or a chain of commands makes the call ask.
+
+**Edits need a read first.** `write` refuses to replace an existing file the model has not
+read in full in this session. `edit` refuses a file that changed on disk since it was read,
+and a partial read satisfies `edit` but not `write`. A resumed session starts with no reads,
+so the first write asks the model to read the file again.
 
 ### Isolation
 
@@ -394,6 +452,7 @@ Apex Code stores state under `~/.apex-code/agent/` by default. The main location
 | `prompts/` | Global prompt templates |
 | `themes/` | Global themes |
 | `tools/` | User tools and supporting resources |
+| `state.sqlite` | Usage and cost records, background command records, and session leases. It runs in WAL mode, so several processes can share it. |
 
 Project-local resources live under `.apex-code/`, including project settings,
 extensions, skills, prompts, and other repository-specific configuration. Keep local
@@ -405,6 +464,9 @@ Sessions are JSONL files whose entries form a tree through parent and entry IDs.
 means you can branch in place instead of creating a new transcript for every experiment:
 `/tree` navigates branches, `/fork` creates a new branch, and `--continue` or `--resume`
 returns to prior work.
+
+Session files are readable only by your user (`0600`), and their directories are `0700` on
+POSIX systems. Files that an earlier version created are tightened when they are opened.
 
 In a git repository, worktree checkpoints are on by default. Apex Code records the
 worktree as the session changes it, so an earlier state can be restored after a bad edit.
@@ -468,6 +530,14 @@ apex-code --session path/to/session.jsonl
 apex-code --fork path/to/session.jsonl
 ```
 
+### Run a long command in the background
+
+Ask the `bash` tool for `background: true` to start a command and get a handle back at once.
+Retrieve its output with `{ "handle": "..." }`, and stop it with `{ "handle": "...", "kill": true }`.
+Each background command is recorded in `state.sqlite` before its process starts. If Apex Code
+exits while one is running, the next session marks it `interrupted` rather than reporting it as
+completed. A background command is refused, not run unrecorded, when its record cannot be written.
+
 ### Run without saving a session
 
 ```bash
@@ -501,8 +571,9 @@ Code to ACP clients such as Zed and the JetBrains IDEs.
 a **secret Gist** through the GitHub CLI. Secret means unlisted, not private or
 access-controlled; anyone with the URL can read it. The upload runs your authenticated
 GitHub CLI with your host credentials. The export can contain
-prompts, tool calls and results, paths, and file content. Use `/export` to inspect a
-local copy first. By default Apex Code returns the GitHub Gist URL; configure
+prompts, tool calls and results, paths, and file content. Credential-shaped strings such as provider keys, GitHub and AWS tokens, and PEM private keys
+are replaced before upload, and the confirmation states how many were replaced. Use `/export`
+to inspect a local copy first. By default Apex Code returns the GitHub Gist URL; configure
 `APEX_CODE_SHARE_VIEWER_URL` only for a viewer you explicitly trust.
 
 ## Extensions and customization
@@ -549,6 +620,16 @@ apex-code mcp auth <server-name>
 The command opens the OAuth flow in a browser and stores the tokens in the local
 credential store, never in the project.
 
+A stdio MCP server starts with the SDK's safe default environment, not your full environment.
+To pass a variable to it, reference the variable in the server's `env` entry:
+`"GITHUB_TOKEN": "$GITHUB_TOKEN"`. `${NAME}` works too. Write a literal dollar sign as `$$`.
+`!command` runs a command and is allowed in a project `.mcp.json`. A server that exits during
+startup gets a hint that names this syntax.
+
+Lazy servers are started once at startup to list their tools, so search finds their tools in
+the first session. Apex Code reports which servers it started. Set `mcpStartupDiscovery` to
+`false` to skip this.
+
 ## Network and privacy
 
 Apex Code sends no project-directed usage telemetry. At startup it may query npm for the
@@ -563,6 +644,16 @@ APEX_CODE_SKIP_VERSION_CHECK=1 apex-code
 Model requests go to the provider you select. Optional OTLP traces are sent only to an
 endpoint you explicitly configure, using an allowlist that excludes prompts, messages,
 tool arguments, tool results, file paths, workspace paths, and environment values.
+
+`web_fetch` fetches the URLs the model requests, after the usual permission check. Only `http`
+and `https` are allowed. It refuses loopback, private, link-local, and unique-local addresses
+after DNS resolution, and it connects to the address it checked. To reach an intranet host,
+set `webFetch.allowPrivateNetwork` in your user settings. When an HTTP proxy is configured,
+`web_fetch` refuses to fetch unless `webFetch.allowProxiedFetch` is set in user settings,
+because the proxy resolves the destination and cannot be pinned to the address that was
+checked. A redirect to another host is not followed; the target is returned for a separate,
+permission-checked fetch. Responses are read up to 5 MB and converted from HTML to Markdown.
+Both settings are read from user settings only, so a project cannot enable them.
 
 The default model catalog is local. The `/share` viewer is not a default hosted service;
 `APEX_CODE_SHARE_VIEWER_URL` is an explicit opt-in endpoint. The npm registry, your model
@@ -592,6 +683,16 @@ When both names are set, the canonical `APEX_CODE_*` value wins; legacy-only use
 a deprecation diagnostic. See the complete
 [`environment variable reference`](packages/coding-agent/docs/environment-variables.md)
 for subprocess metadata and all controls.
+
+### Settings added or changed in 0.7.0
+
+| Setting | Where | Effect |
+| --- | --- | --- |
+| `defaultTools` | settings | Replaces the default tool set for new sessions. A saved list still wins. |
+| `webFetch.allowPrivateNetwork` | user settings | Lets `web_fetch` reach loopback and private addresses. Default off. |
+| `webFetch.allowProxiedFetch` | user settings | Lets `web_fetch` run through a configured HTTP proxy. Default off. |
+| `mcpStartupDiscovery` | settings | Starts lazy MCP servers at startup to list their tools. Default on. |
+| `compaction.outputReserveFraction` | settings | Caps the output-limit part of the compaction reserve at this share of the context window. Default one third. |
 
 ## Troubleshooting
 
@@ -633,6 +734,33 @@ Declining the trust prompt, or answering it later, keeps that repository's setti
 permission grants, agents, eager MCP servers, and `AGENTS.md` or `CLAUDE.md` out of the
 session. It is not containment and does not stop a tool call you approve. It stops the
 checkout from configuring the agent before you have looked at it.
+
+### `web_fetch` refuses an address
+
+The address is loopback, private, link-local, or unique-local, or it resolves to one of those.
+For an intranet host, set `webFetch.allowPrivateNetwork` in your user settings. A project cannot
+set it.
+
+### `web_fetch` refuses because a proxy is configured
+
+The proxy resolves the destination, so the address that was checked cannot be pinned. Set
+`webFetch.allowProxiedFetch` in your user settings to accept that.
+
+### `write` or `edit` says the file was not read or changed
+
+Read the file again, then retry. `write` needs a full read of an existing file. `edit` needs a
+read whose content still matches the file on disk.
+
+### A background command shows `interrupted`
+
+Apex Code exited while the command was running. The command may still be running in the
+operating system, so check it yourself. Apex Code does not report it as completed.
+
+### Usage or cost stops recording after a downgrade
+
+Version 0.7.0 moves `state.sqlite` to schema version 5. Earlier versions report the database as
+newer than they support and stop recording usage and cost. Upgrade again to resume recording. A
+downgrade does not delete any data.
 
 ## Developing Apex Code
 
