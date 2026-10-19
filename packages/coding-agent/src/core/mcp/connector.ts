@@ -6,10 +6,13 @@
  * the boundary where an external protocol becomes an internal type.
  */
 
+import { createWriteStream, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import type { Stream } from "node:stream";
 import type { CredentialStore } from "@earendil-works/pi-ai";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/client/stdio";
-import { APP_NAME, VERSION } from "../../config.ts";
+import { APP_NAME, getAgentDir, VERSION } from "../../config.ts";
 import { resolveConfigValue } from "../resolve-config-value.ts";
 import type { FetchLike } from "./oauth/discover.ts";
 import { authRequired, ensureFreshServerToken } from "./oauth/mcp-token.ts";
@@ -49,6 +52,19 @@ export function buildStdioEnvironment(configured: Record<string, string>): Recor
 	return { ...getDefaultEnvironment(), ...resolved };
 }
 
+/**
+ * A stdio server's stderr is its own diagnostics channel. Inherited, it writes straight
+ * onto the terminal the TUI is drawing on and corrupts the screen, so it goes to a
+ * per-server log under the agent directory instead.
+ */
+function keepStderrInLog(serverName: string, stderr: Stream): void {
+	const logDir = join(getAgentDir(), "mcp", "logs");
+	mkdirSync(logDir, { recursive: true });
+	const log = createWriteStream(join(logDir, `${serverName.replace(/[^A-Za-z0-9._-]/g, "_")}.log`), { flags: "a" });
+	log.on("error", () => {});
+	stderr.pipe(log);
+}
+
 function createTransport(server: McpServerConfig, oauthAuthorization?: string) {
 	if (server.transport.kind === "stdio") {
 		return new StdioClientTransport({
@@ -56,6 +72,7 @@ function createTransport(server: McpServerConfig, oauthAuthorization?: string) {
 			args: server.transport.args,
 			env: buildStdioEnvironment(server.transport.env),
 			cwd: server.transport.cwd,
+			stderr: "pipe",
 		});
 	}
 
@@ -89,8 +106,10 @@ function toCallResult(raw: unknown): McpCallResult {
 
 export async function connectMcpServer(server: McpServerConfig, oauthAuthorization?: string): Promise<McpConnection> {
 	const client = new Client({ name: APP_NAME, version: VERSION });
+	const transport = createTransport(server, oauthAuthorization);
+	if (transport instanceof StdioClientTransport && transport.stderr) keepStderrInLog(server.name, transport.stderr);
 	try {
-		await client.connect(createTransport(server, oauthAuthorization));
+		await client.connect(transport);
 	} catch (error) {
 		if (server.transport.kind !== "stdio") throw error;
 		const message = error instanceof Error ? error.message : String(error);
