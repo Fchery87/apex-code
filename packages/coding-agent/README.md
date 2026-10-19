@@ -6,29 +6,32 @@ a broader tool surface, delegation, durable execution, evidence, and cost visibi
 
 ## Install
 
-`latest` names the newest stable release and a plain install resolves
-it. It requires Node.js 22.19 or newer. It installs the same way with npm, pnpm, Yarn, or
-Bun — all resolve it from the same npm registry:
+`latest` names the newest stable release and a plain install resolves it. It requires
+Node.js 22.19 or newer. It installs the same way with npm, pnpm, Yarn, or Bun, which all
+resolve it from the same npm registry:
 
 ```bash
-npm install --global apex-code      # npm
-pnpm add --global apex-code         # pnpm
-yarn global add apex-code           # Yarn
-bun add --global apex-code          # Bun
+npm install --global apex-code
+pnpm add --global apex-code
+yarn global add apex-code
+bun add --global apex-code
 
 apex-code --version
 apex-code
 ```
 
-Apex Code does not operate a separate shell/curl installer or a standalone binary
-release channel — a package manager install is the only distribution channel. Update
-it the same way:
+Standalone archives for macOS, Linux, and Windows need no Node.js. The curl installer downloads
+the matching archive from GitHub Releases, checks it against that release's SHA-256 manifest,
+and installs it for your user account:
 
 ```bash
-npm install --global apex-code
-# or, from an existing installation:
-apex-code update --self
+curl -fsSL https://raw.githubusercontent.com/Fchery87/apex-code/main/install.sh | bash
 ```
+
+On PowerShell, run `irm https://raw.githubusercontent.com/Fchery87/apex-code/main/install.ps1 | iex`.
+
+To update an npm installation, run `npm install --global apex-code` or `apex-code update --self`.
+The standalone channel does not update itself. Re-run the installer to choose a newer release.
 
 ## First run
 
@@ -55,6 +58,11 @@ same way.
 Built-in capabilities include file/search tools, shell execution, web tools, user
 questions, planning, and bounded subagent delegation.
 
+Reads outside the session's workspace ask. Credential locations such as `~/.ssh` and `~/.aws` ask before any read. With no one to
+answer, they are refused. Managed policy can grant them, and you can approve a single call. A project's `.env` files ask. Read-only shell commands
+run without a prompt, and `write` and `edit` need a prior read of the file. The
+[safety model](https://github.com/Fchery87/apex-code#safety-model) describes each rule and its limits.
+
 ## Network and privacy
 
 Apex Code sends no install or update telemetry to this project. At startup it may make
@@ -67,6 +75,12 @@ Bundled model catalogs work without a hosted catalog. A remote overlay is contac
 when `APEX_CODE_MODEL_CATALOG_URL` names one. `/share` asks before uploading the complete
 HTML session to a secret (unlisted, not private) GitHub Gist; it returns the Gist URL and
 adds a preview link only when `APEX_CODE_SHARE_VIEWER_URL` names a viewer.
+
+`web_fetch` fetches only the URLs the model requests, after the usual permission check. It refuses
+loopback, private, link-local, and unique-local addresses after DNS resolution unless
+`webFetch.allowPrivateNetwork` is set in user settings. With an HTTP proxy configured, it refuses
+unless `webFetch.allowProxiedFetch` is set in user settings. Redirects to another host are returned
+for a separate permission-checked fetch rather than followed.
 
 ## Environment compatibility
 
@@ -184,11 +198,11 @@ Type `/` in the editor to trigger commands. [Extensions](#extensions) can regist
 | `/export [file]` | Export session to HTML or JSONL file |
 | `/import <file>` | Import and resume a session from a JSONL file |
 | `/share` | Upload as private GitHub gist with shareable HTML link |
-| `/bug [description]` | Report a bug to the Pi developers; see [Sessions](docs/sessions.md#reporting-bugs) |
+| `/bug [description]` | Report a bug in Apex Code; see [Sessions](docs/sessions.md#reporting-bugs) |
 | `/reload` | Reload keybindings, extensions, skills, prompts, themes, and context files |
 | `/hotkeys` | Show all keyboard shortcuts |
 | `/changelog` | Display version history |
-| `/quit` | Quit pi |
+| `/quit` | Quit Apex Code |
 
 ### Keyboard Shortcuts
 
@@ -256,7 +270,7 @@ Submit messages while the agent is working:
 - **Escape** aborts and restores queued messages to editor
 - **Alt+Up** retrieves queued messages back to editor
 
-On Windows Terminal, `Alt+Enter` is fullscreen by default. Remap it in [docs/terminal-setup.md](docs/terminal-setup.md) so pi can receive the follow-up shortcut.
+On Windows Terminal, `Alt+Enter` is fullscreen by default. Remap it in [docs/terminal-setup.md](docs/terminal-setup.md) so Apex Code can receive the follow-up shortcut.
 
 Configure delivery in [settings](docs/settings.md): `steeringMode` and `followUpMode` can be `"one-at-a-time"` (default, waits for response) or `"all"` (delivers all queued at once). `transport` selects provider transport preference (`"sse"`, `"websocket"`, or `"auto"`) for providers that support multiple transports.
 
@@ -268,7 +282,10 @@ Sessions are stored as JSONL files with a tree structure. Each entry has an `id`
 
 ### Management
 
-Sessions auto-save to `~/.apex-code/agent/sessions/` organized by working directory.
+Sessions auto-save to `~/.apex-code/agent/sessions/` organized by working directory. Session files
+are readable only by your user. Usage and cost records, background command records, and session
+leases live in `~/.apex-code/agent/state.sqlite`. That database moved to schema version 5 in 0.7.0,
+and earlier versions stop recording usage and cost until upgraded.
 
 ```bash
 apex-code -c                  # Continue most recent session
@@ -330,11 +347,21 @@ Use `/settings` to modify common options, or edit JSON files directly:
 
 See [docs/settings.md](docs/settings.md) for all options.
 
+Settings added or changed in 0.7.0:
+
+| Setting | Where | Effect |
+|---------|-------|--------|
+| `defaultTools` | settings | Replaces the default tool set for new sessions. A saved list still wins. |
+| `webFetch.allowPrivateNetwork` | user settings | Lets `web_fetch` reach loopback and private addresses. Default off. |
+| `webFetch.allowProxiedFetch` | user settings | Lets `web_fetch` run through a configured HTTP proxy. Default off. |
+| `mcpStartupDiscovery` | settings | Starts lazy MCP servers at startup to list their tools. Default on. |
+| `compaction.outputReserveFraction` | settings | Caps the output-limit part of the compaction reserve at this share of the context window. Default one third. |
+
 ### Project Trust
 
-On interactive startup, pi asks before trusting a project folder that contains project-local settings, resources, or project `.agents/skills` and has no saved decision for the folder or a parent folder in `~/.apex-code/agent/trust.json`. Trusting a project allows pi to load `.apex-code/settings.json` and `.pi` resources, install missing project packages, and execute project extensions.
+On interactive startup, Apex Code asks before trusting a project folder that contains project-local settings, resources, or project `.agents/skills` and has no saved decision for the folder or a parent folder in `~/.apex-code/agent/trust.json`. Trusting a project allows Apex Code to load `.apex-code/settings.json` and `.apex-code` resources, install missing project packages, and execute project extensions.
 
-Before the trust decision, pi loads only context files, user/global extensions, and CLI `-e` extensions so they can handle the `project_trust` event. Project-local extensions, project package-managed extensions, and project settings are loaded only after the project is trusted. This split also applies when switching to a session from a different cwd whose trust has not been resolved in the current process.
+Before the trust decision, Apex Code loads only context files, user/global extensions, and CLI `-e` extensions so they can handle the `project_trust` event. Project-local extensions, project package-managed extensions, and project settings are loaded only after the project is trusted. This split also applies when switching to a session from a different cwd whose trust has not been resolved in the current process.
 
 Non-interactive modes (`-p`, `--mode json`, and `--mode rpc`) do not show a trust prompt. Without an applicable saved trust decision, they use `defaultProjectTrust` from global settings: `ask` (default) and `never` ignore those project resources, while `always` trusts them. Pass `--approve`/`-a` or `--no-approve`/`-na` to override project trust for one run.
 
@@ -355,12 +382,12 @@ network operations.
 
 ## Context Files
 
-Pi loads `AGENTS.md` (or `CLAUDE.md`) at startup from:
+Apex Code loads `AGENTS.md` (or `CLAUDE.md`) at startup from:
 - `~/.apex-code/agent/AGENTS.md` (global)
 - Parent directories (walking up from cwd)
 - Current directory
 
-If a directory contains `AGENTS.override.md`, Pi loads it instead of `AGENTS.md` or `CLAUDE.md` from that directory. Context files from other directories are still concatenated.
+If a directory contains `AGENTS.override.md`, Apex Code loads it instead of `AGENTS.md` or `CLAUDE.md` from that directory. Context files from other directories are still concatenated.
 
 Use for project instructions (`AGENTS.md`/`CLAUDE.md`), conventions, common commands. All matching files are concatenated.
 
@@ -461,6 +488,15 @@ The default export can also be `async`. pi waits for async extension factories b
 
 Place in `~/.apex-code/agent/extensions/`, `.apex-code/extensions/`, or a [pi package](#pi-packages) to share with others. See [docs/extensions.md](docs/extensions.md) and [examples/extensions/](examples/extensions/).
 
+### Subagents
+
+`delegate` runs a subagent with its own context. Two built-in types ship: `explore`, which can
+read, search, and list files, and `general`, which has the default file and shell tools and cannot
+delegate further. Define your own in `~/.apex-code/agent/agents/<name>.md`, or in
+`.apex-code/agents/<name>.md` for a trusted project. A definition with the same name replaces a
+built-in. Its frontmatter takes `name`, `description`, `tools` as a list or a comma-separated string,
+and an optional `model`. Press `Escape` to interrupt a foreground subagent.
+
 ### Themes
 
 Built-in: `dark`, `light`. Themes hot-reload: modify the active theme file and pi immediately applies changes.
@@ -525,7 +561,7 @@ See [docs/packages.md](docs/packages.md).
 ### SDK
 
 ```typescript
-import { createAgentSession, ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, ModelRuntime, SessionManager } from "apex-code";
 
 const modelRuntime = await ModelRuntime.create();
 const { session } = await createAgentSession({
@@ -554,22 +590,15 @@ See [docs/rpc.md](docs/rpc.md) for the protocol.
 
 ---
 
-## Philosophy
+## Design notes
 
-Pi is aggressively extensible so it doesn't have to dictate your workflow. Features that other tools bake in can be built with [extensions](#extensions), [skills](#skills), or installed from third-party [pi packages](#pi-packages). This keeps the core minimal while letting you shape pi to fit how you work.
+Apex Code is built to stay visible and controllable. It ships built-in MCP support, bounded subagents
+through `delegate`, a permission gate that asks through the session, an opt-in task list, and background
+commands that are journaled. Its extension points are [extensions](#extensions) and [skills](#skills).
+The [safety model](https://github.com/Fchery87/apex-code#safety-model) describes what each of these can
+and cannot reach.
 
-**No MCP.** Build CLI tools with READMEs (see [Skills](#skills)), or build an extension that adds MCP support. [Why?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/)
-
-**No sub-agents.** There's many ways to do this. Spawn pi instances via tmux, or build your own with [extensions](#extensions), or install a package that does it your way.
-
-**No permission popups.** Run in a container, or build your own confirmation flow with [extensions](#extensions) inline with your environment and security requirements.
-
-**Plan mode.** Apex Code supports a session permission mode for planning and an interactive [plan approval flow](#plan-approval). Approval selects the edit policy for the running session.
-
-**No built-in to-dos.** They confuse models. Use a TODO.md file, or build your own with [extensions](#extensions).
-
-**No background bash.** Use tmux. Full observability, direct interaction.
-
+Apex Code forks Pi. Pi's design rationale is at [mariozechner.at](https://mariozechner.at/posts/2025-11-30-pi-coding-agent/).
 Read the [blog post](https://mariozechner.at/posts/2025-11-30-pi-coding-agent/) for the full rationale.
 
 ---
@@ -586,12 +615,12 @@ apex-code [options] [--] [@files...] [messages...]
 apex-code install <source> [-l]     # Install package, -l for project-local
 apex-code remove <source> [-l]      # Remove package
 apex-code uninstall <source> [-l]   # Alias for remove
-apex-code update [source|self|pi]   # Update pi only, or one package source
-apex-code update --all              # Update pi and packages
+apex-code update [source|self|apex-code]   # Update Apex Code only, or one package source
+apex-code update --all              # Update Apex Code and packages
 apex-code update --extensions       # Update packages only
 apex-code update --models           # Refresh model catalogs only
-apex-code update --self             # Update pi only
-apex-code update --self --force     # Reinstall pi even if current
+apex-code update --self             # Update Apex Code only
+apex-code update --self --force     # Reinstall Apex Code even if current
 apex-code update --extension <src>  # Update one package
 apex-code list                      # List installed packages
 apex-code config                    # Enable/disable package resources
@@ -734,26 +763,29 @@ apex-code --thinking high "Solve this complex problem"
 
 | Variable | Description |
 |----------|-------------|
-| `AI_AGENT` | Set to `pi` by the CLI and RPC entry points so generic tooling can attribute child processes to Pi |
-| `PI_CODING_AGENT` | Set to `true` by the CLI and RPC entry points so child processes can detect that they run inside Pi |
-| `PI_CODING_AGENT_DIR` | Override config directory (default: `~/.apex-code/agent`) |
-| `PI_CODING_AGENT_SESSION_DIR` | Override session storage directory (overridden by `--session-dir`) |
-| `PI_PACKAGE_DIR` | Override package directory (useful for Nix/Guix where store paths tokenize poorly) |
-| `PI_OFFLINE` | Disable startup network operations, including update checks, package update checks, and install/update telemetry |
-| `PI_SKIP_VERSION_CHECK` | Skip the Pi version update check at startup. This prevents the `pi.dev` latest-version request |
-| `PI_TELEMETRY` | Override install/update telemetry and provider attribution headers. Use `1`/`true`/`yes` to enable or `0`/`false`/`no` to disable. This does not disable update checks |
-| `PI_CACHE_RETENTION` | Set to `long` for extended prompt cache (Anthropic: 1h, OpenAI: 24h) |
+| `AI_AGENT` | Set to `apex-code` by the CLI and RPC entry points so generic tooling can attribute child processes |
+| `APEX_CODE_CODING_AGENT` | Set to `true` by the CLI and RPC entry points so child processes can detect that they run inside Apex Code |
+| `APEX_CODE_CODING_AGENT_DIR` | Override config directory (default: `~/.apex-code/agent`) |
+| `APEX_CODE_CODING_AGENT_SESSION_DIR` | Override session storage directory (overridden by `--session-dir`) |
+| `APEX_CODE_PACKAGE_DIR` | Override package directory (useful for Nix/Guix where store paths tokenize poorly) |
+| `APEX_CODE_OFFLINE` | Disable startup network operations, including update checks and package update checks |
+| `APEX_CODE_SKIP_VERSION_CHECK` | Skip the npm version check at startup |
+| `PI_CACHE_RETENTION` | Set to `long` for extended prompt cache (Anthropic: 1h, OpenAI: 24h). This is the name the provider layer reads. |
 | `VISUAL`, `EDITOR` | Fallback external editor for Ctrl+G when `externalEditor` is unset; defaults to Notepad on Windows and `nano` elsewhere |
+
+`APEX_CODE_OFFLINE`, `APEX_CODE_SKIP_VERSION_CHECK`, and `APEX_CODE_PACKAGE_DIR` also accept their
+earlier `PI_*` names. The two directory overrides accept only their `APEX_CODE_*` names. When both
+names are set, the `APEX_CODE_*` value wins.
 
 Commands run by the LLM-callable `bash` and `powershell` tools also receive current session metadata:
 
 | Variable | Description |
 |----------|-------------|
-| `PI_SESSION_ID` | Current session ID |
-| `PI_SESSION_FILE` | Absolute session JSONL path; unset for ephemeral sessions |
-| `PI_PROVIDER` | Currently selected model provider |
-| `PI_MODEL` | Currently selected model ID |
-| `PI_REASONING_LEVEL` | Current effective reasoning level |
+| `APEX_CODE_SESSION_ID` | Current session ID |
+| `APEX_CODE_SESSION_FILE` | Absolute session JSONL path; unset for ephemeral sessions |
+| `APEX_CODE_PROVIDER` | Currently selected model provider |
+| `APEX_CODE_MODEL` | Currently selected model ID |
+| `APEX_CODE_REASONING_LEVEL` | Current effective reasoning level |
 
 These values are resolved when each command starts. See [Environment Variables](docs/environment-variables.md#shell-tool-session-environment) for semantics, examples, and custom-tool opt-out.
 
