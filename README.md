@@ -367,8 +367,9 @@ outside the workspace counts as outside.
 
 **Credential locations are protected.** `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gcloud`,
 `~/.kube`, `~/.docker/config.json`, `~/.netrc`, `~/.npmrc`, and Apex Code's own `auth.json`
-are refused in every mode. Only the machine owner's managed policy can grant them. No user
-or project rule can.
+are protected in every mode. A read of one asks first, and with no one to answer, it is refused.
+The machine owner's managed policy can grant them, and the interactive responder can approve an
+individual call. No user or project rule can grant them.
 
 **Sensitive files ask.** A project's `.env` and `.env.<suffix>` files ask by default. Only
 a rule that names the file grants one, such as `**/.env`. A rule for its directory does not.
