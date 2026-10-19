@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-18
+
 ### Added
 
 - New sessions activate the read-only search tools (`grep`, `find`, `ls`), `web_fetch`, and `delegate` by default. Each still asks through its own permission rule. A saved `defaultTools` setting still wins.
@@ -30,6 +32,13 @@
 - Aborting a parent session interrupts the foreground subagent it is waiting on. Background subagents continue.
 - `--exclude-tools` help names `ask_user`, the tool's actual name. `/bug` describes Apex Code.
 - Changelog links to this project's files and releases point to its own repository. Links to upstream history still point to Pi's repository.
+
+- Background commands are recorded in the durable state database before they start. A command that cannot be recorded is refused rather than run unrecorded. When the process that started a background command exits, the next session marks that command `interrupted` instead of leaving it shown as running.
+- The durable state database moves to schema version 5. Apex Code 0.6.1 and earlier log that the database is newer than they support, and they stop recording usage and cost until they are upgraded. Downgrading keeps the data.
+
+### Fixed
+
+- The usage database is no longer held open between operations, so session cleanup on Windows no longer fails with a file-busy error.
 
 ### Removed
 
