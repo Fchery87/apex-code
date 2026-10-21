@@ -6,7 +6,7 @@
  * the boundary where an external protocol becomes an internal type.
  */
 
-import { createWriteStream, mkdirSync } from "node:fs";
+import { chmodSync, createWriteStream, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Stream } from "node:stream";
 import type { CredentialStore } from "@earendil-works/pi-ai";
@@ -59,10 +59,27 @@ export function buildStdioEnvironment(configured: Record<string, string>): Recor
  */
 function keepStderrInLog(serverName: string, stderr: Stream): void {
 	const logDir = join(getAgentDir(), "mcp", "logs");
-	mkdirSync(logDir, { recursive: true });
-	const log = createWriteStream(join(logDir, `${serverName.replace(/[^A-Za-z0-9._-]/g, "_")}.log`), { flags: "a" });
-	log.on("error", () => {});
-	stderr.pipe(log);
+	try {
+		mkdirSync(logDir, { recursive: true, mode: 0o700 });
+		chmodSync(logDir, 0o700);
+		const logPath = join(logDir, `${serverName.replace(/[^A-Za-z0-9._-]/g, "_")}.log`);
+		const log = createWriteStream(logPath, { flags: "a", mode: 0o600 });
+		log.on("error", () => {});
+		log.on("open", () => {
+			try {
+				chmodSync(logPath, 0o600);
+			} catch {
+				// An existing file we cannot tighten still receives the stream.
+			}
+		});
+		stderr.pipe(log);
+	} catch {
+		// Logging must not stop the server. Drop the diagnostics rather than
+		// letting them reach the terminal.
+		const source = stderr as NodeJS.EventEmitter & { resume?: () => void };
+		if (typeof source.resume === "function") source.resume();
+		else source.on("data", () => {});
+	}
 }
 
 function createTransport(server: McpServerConfig, oauthAuthorization?: string) {

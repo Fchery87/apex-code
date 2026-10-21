@@ -1,5 +1,14 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -16,7 +25,7 @@ const PROBE = "APEX-STDERR-PROBE-7c1e";
  * child process, so the test can capture what that child's stderr receives. Asserts the
  * child exited cleanly, so a harness that fails to start cannot pass by writing nothing.
  */
-function connectToNoisyServer(): { stderr: string; agentDir: string } {
+function connectToNoisyServer(prepare?: (agentDir: string) => void): { stderr: string; agentDir: string } {
 	const scratch = mkdtempSync(join(tmpdir(), "apex-mcp-stderr-"));
 	const agentDir = join(scratch, "agent");
 	const serverScript = join(scratch, "noisy-server.cjs");
@@ -37,6 +46,7 @@ await connectMcpServer(server).catch(() => undefined);
 await new Promise((resolve) => setTimeout(resolve, 500));
 `,
 	);
+	prepare?.(agentDir);
 	const result = spawnSync(process.execPath, ["--import", tsxLoader, harness], {
 		cwd: scratch,
 		env: { ...process.env, APEX_CODE_CODING_AGENT_DIR: agentDir, APEX_CODE_OFFLINE: "1" },
@@ -61,5 +71,29 @@ describe("MCP stdio server stderr", () => {
 			.map((file) => readFileSync(join(logDir, file), "utf8"))
 			.join("");
 		expect(logged).toContain(PROBE);
+	});
+
+	it("keeps the log directory and file readable by the owner only", async () => {
+		const { agentDir } = connectToNoisyServer();
+		const logDir = join(agentDir, "mcp", "logs");
+		const [file] = readdirSync(logDir);
+		const logPath = join(logDir, file);
+		const deadline = Date.now() + 2_000;
+		while ((statSync(logPath).mode & 0o077) !== 0 && Date.now() < deadline) {
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		}
+		expect(statSync(logDir).mode & 0o077).toBe(0);
+		expect(statSync(logPath).mode & 0o077).toBe(0);
+	});
+
+	it("still connects when the log directory cannot be created", () => {
+		const { stderr } = connectToNoisyServer((agentDir) => {
+			const logs = join(agentDir, "mcp", "logs");
+			mkdirSync(join(agentDir, "mcp"), { recursive: true });
+			writeFileSync(logs, "not a directory\n");
+			chmodSync(logs, 0o600);
+		});
+		expect(stderr).not.toContain(PROBE);
+		expect(stderr).not.toMatch(/EEXIST|ENOTDIR|EACCES/);
 	});
 });
