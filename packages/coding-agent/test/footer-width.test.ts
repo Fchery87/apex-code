@@ -517,6 +517,16 @@ describe("FooterComponent width handling", () => {
 		expect(rendered).toContain("…");
 	});
 
+	it("keeps the compaction prompt beside a shortened working state", () => {
+		const footer = new FooterComponent(createSession({ sessionName: "s", percent: 88 }), createFooterData(1));
+		footer.setAutoCompactEnabled(false);
+		footer.setActivity({ render: () => ["Working on a long task (esc to interrupt)"], invalidate() {} });
+		const rendered = stripAnsi(footer.render(64).join("\n"));
+		expect(rendered).toContain("/compact soon");
+		expect(rendered).toMatch(/Working|esc/);
+		expect(rendered).toContain("88.0%");
+	});
+
 	it("offers compaction only when pressure is high and nothing will compact on its own", () => {
 		const pressured = new FooterComponent(createSession({ sessionName: "s", percent: 88 }), createFooterData(1));
 		pressured.setAutoCompactEnabled(false);

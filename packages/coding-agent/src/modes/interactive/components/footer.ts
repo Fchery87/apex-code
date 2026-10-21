@@ -397,14 +397,15 @@ export class FooterComponent implements Component {
 			// complete context reading. Drop it only when even that will not fit.
 			if (!fits([...left, right]) && activityLine) {
 				const reserved =
-					visibleWidth(joinSegments(safetyFirst())) +
+					visibleWidth(joinSegments(safetyFirst(compactPrompt))) +
 					visibleWidth(separator) +
 					visibleWidth(separator) +
 					visibleWidth(right);
 				const room = width - reserved;
 				const shortened = room >= 8 ? truncateToWidth(activityLine, room, "…") : "";
-				if (shortened && fits([...safetyFirst(shortened), right])) {
-					left = safetyFirst(shortened);
+				const withPrompt = compactPrompt ? safetyFirst(compactPrompt, shortened) : safetyFirst(shortened);
+				if (shortened && fits([...withPrompt, right])) {
+					left = withPrompt;
 				}
 			}
 

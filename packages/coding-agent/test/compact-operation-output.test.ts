@@ -266,6 +266,17 @@ describe("compact operation coverage", () => {
 			rmSync(scratch, { recursive: true, force: true, maxRetries: 3 });
 		}
 	});
+	it("keeps an error diagnostic when a result renderer draws nothing", () => {
+		const component = tool("warned", {
+			renderCall: () => new Text("deploy service\nretrying the last attempt", 0, 0),
+			renderResult: () => ({ render: () => [], invalidate() {} }),
+		});
+		component.updateResult({ content: [{ type: "text", text: "Error: connection refused" }], isError: true });
+		const row = stripAnsi(component.render(160)[0]);
+		expect(row).toContain("connection refused");
+		expect(row).not.toContain("retrying");
+	});
+
 	it("keeps an error diagnostic when the call renderer also prints a warning", () => {
 		const component = tool("warned", {
 			renderCall: () => new Text("deploy service\nretrying the last attempt", 0, 0),

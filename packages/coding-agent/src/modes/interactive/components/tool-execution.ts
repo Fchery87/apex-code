@@ -415,12 +415,14 @@ export class ToolExecutionComponent extends Container {
 			const args = this.args as Record<string, unknown> | undefined;
 			const target = args?.path ?? args?.file_path ?? args?.command ?? args?.pattern;
 			const fallbackLabel = `${this.toolName}${typeof target === "string" ? ` ${target}` : ""}`;
-			const output = resultHidden
-				? ""
-				: (this.result?.content
-						.filter((block) => block.type === "text")
-						.map((block) => block.text ?? "")
-						.join("\n") ?? "");
+			const rawOutput =
+				this.result?.content
+					.filter((block) => block.type === "text")
+					.map((block) => block.text ?? "")
+					.join("\n") ?? "";
+			// A renderer that draws nothing is hiding a successful result. An error
+			// still has to name itself, so its text stays available.
+			const output = resultHidden && !this.result?.isError ? "" : rawOutput;
 			const outputLines = countOutputLines(output);
 			const images = resultHidden ? 0 : (this.result?.content.filter((block) => block.type === "image").length ?? 0);
 			const countedOutput = [
@@ -429,14 +431,11 @@ export class ToolExecutionComponent extends Container {
 			]
 				.filter(Boolean)
 				.join(", ");
-			// A result renderer that draws nothing has already put its outcome on the
-			// call, as edit does for a mismatch. Any other error names itself.
+			// An error names itself, including when the result renderer draws
+			// nothing. A later call line is the outcome only when there is no
+			// error text, which is how an edit reports a mismatch.
 			const summary =
-				callOutcome && resultHidden
-					? callOutcome
-					: this.result?.isError && output
-						? summarizeOperationError(output)
-						: callOutcome || countedOutput;
+				this.result?.isError && output ? summarizeOperationError(output) : callOutcome || countedOutput;
 			const label = stripAnsi(visibleCall ?? fallbackLabel).replace(
 				` (${keyText("app.tools.expand")} to expand)`,
 				"",
