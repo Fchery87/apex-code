@@ -9,8 +9,9 @@ import {
 describe("provider login guidance", () => {
 	it("names the next command before it names a documentation path", () => {
 		const help = getProviderLoginHelp();
-		expect(help).toContain("/login");
-		expect(help.indexOf("/login")).toBeLessThan(help.indexOf("providers.md"));
+		expect(help).toContain("providers.md");
+		expect(help).toContain("models.md");
+		expect(help).not.toContain("/login");
 		expect(help).not.toMatch(/^\s*\//m);
 	});
 

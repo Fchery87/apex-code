@@ -1,10 +1,7 @@
 const UNKNOWN_PROVIDER = "unknown";
 
 export function getProviderLoginHelp(): string {
-	return [
-		"Run /login to connect a provider with OAuth or an API key.",
-		"Details: providers.md and models.md, under the Apex Code docs directory.",
-	].join("\n");
+	return "Provider setup is documented in providers.md and models.md, under the Apex Code docs directory.";
 }
 
 export function formatNoModelsAvailableMessage(): string {
