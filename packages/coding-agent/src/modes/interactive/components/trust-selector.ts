@@ -68,6 +68,18 @@ export class TrustSelectorComponent extends Container {
 			new Text(theme.fg("muted", `Current session: ${options.projectTrusted ? "trusted" : "untrusted"}`), 0, 0),
 		);
 		this.addChild(new Spacer(1));
+		this.addChild(new Spacer(1));
+		this.addChild(
+			new Text(
+				theme.fg(
+					"text",
+					"Trusting loads this folder's settings and resources, installs its packages, runs its extensions, and starts its language servers. A parent decision covers every folder inside it. Trust does not isolate the process. Restart apex-code before a saved decision takes effect.",
+				),
+				0,
+				0,
+			),
+		);
+		this.addChild(new Spacer(1));
 
 		this.listContainer = new Container();
 		this.addChild(this.listContainer);

@@ -30,6 +30,10 @@ describe("TrustSelectorComponent", () => {
 		let output = stripAnsi(selector.render(120).join("\n"));
 		expect(output).toContain(`Saved decision: trusted (${project})`);
 		expect(output).toContain("Current session: trusted");
+		expect(output).toContain("settings and resources");
+		expect(output).toContain("does not isolate");
+		expect(output).toContain("Restart");
+		expect(output.indexOf("does not isolate")).toBeLessThan(output.indexOf("→ ✓ Trust"));
 		expect(output).toContain("→ ✓ Trust");
 
 		selector.handleInput("\x1b[B");
