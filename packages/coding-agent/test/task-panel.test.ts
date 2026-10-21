@@ -74,6 +74,22 @@ describe("pinned task panel", () => {
 		expect(rows.some((row) => row.startsWith("+"))).toBe(true);
 		expect(rows).toHaveLength(6);
 	});
+	it("keeps the first tasks when nothing is in progress and the last tasks when the current one is last", () => {
+		const { manager, panel } = setup();
+		const pending = Array.from({ length: 7 }, (_, i) => ({ content: `Pending ${i}`, status: "pending" as const }));
+		manager.appendCustomEntry("todo", pending);
+		panel.toggle();
+		expect(panel.render(80)[0]).toContain("Pending 0");
+		expect(panel.render(80).at(-1)).toBe("+2 more");
+		const ending = [
+			...Array.from({ length: 6 }, (_, i) => ({ content: `Done ${i}`, status: "completed" as const })),
+			{ content: "Last task", status: "in_progress" as const },
+		];
+		manager.appendCustomEntry("todo", ending);
+		const rows = panel.render(80);
+		expect(rows.at(-1)).toContain("Last task");
+		expect(rows[0]).toContain("earlier");
+	});
 	it("gates actual loadout and caches branch snapshots between frames", () => {
 		const { manager, panel, setActive } = setup();
 		manager.appendCustomEntry("todo", tasks);

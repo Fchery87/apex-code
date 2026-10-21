@@ -210,6 +210,71 @@ describe("compact operation coverage", () => {
 			rmSync(scratch, { recursive: true, force: true, maxRetries: 3 });
 		}
 	});
+	it("keeps a failed edit readable at a narrow width and counts two edits", async () => {
+		const scratch = mkdtempSync(join(tmpdir(), "compact-edit-narrow-"));
+		try {
+			const path = join(scratch, "greeting.ts");
+			writeFileSync(path, 'const greeting = "hello";\nconst name = "ada";\n');
+			const definition = createEditToolDefinition(scratch);
+			const changed = {
+				path,
+				edits: [
+					{ oldText: '"hello"', newText: '"welcome"' },
+					{ oldText: '"ada"', newText: '"grace"' },
+				],
+			};
+			const success = new ToolExecutionComponent("edit", "edit-two", changed, {}, definition, ui, scratch);
+			success.setChatDetail("overview");
+			success.setArgsComplete();
+			const result = await createEditTool(scratch).execute("edit-two", changed);
+			success.updateResult({ ...result, isError: false });
+			const wide = stripAnsi(success.render(160)[0]);
+			expect(wide).toContain("+2");
+			expect(wide).toContain("-2");
+			const narrow = success.render(48);
+			expect(narrow).toHaveLength(1);
+			expect(visibleWidth(narrow[0])).toBeLessThanOrEqual(48);
+			success.dispose();
+
+			const failed = new ToolExecutionComponent(
+				"edit",
+				"edit-narrow-fail",
+				{ path, edits: [{ oldText: '"missing"', newText: '"nope"' }] },
+				{},
+				definition,
+				ui,
+				scratch,
+			);
+			failed.setChatDetail("overview");
+			failed.setArgsComplete();
+			let message = "edit failed";
+			try {
+				await createEditTool(scratch).execute("edit-narrow-fail", {
+					path,
+					edits: [{ oldText: '"missing"', newText: '"nope"' }],
+				});
+			} catch (error) {
+				message = error instanceof Error ? error.message : String(error);
+			}
+			failed.updateResult({ content: [{ type: "text", text: message }], isError: true });
+			const row = stripAnsi(failed.render(48)[0]).toLowerCase();
+			expect(failed.render(48)).toHaveLength(1);
+			expect(visibleWidth(failed.render(48)[0])).toBeLessThanOrEqual(48);
+			expect(row).toMatch(/could not|not found|error/);
+			failed.dispose();
+		} finally {
+			rmSync(scratch, { recursive: true, force: true, maxRetries: 3 });
+		}
+	});
+	it("keeps an error diagnostic when the call renderer also prints a warning", () => {
+		const component = tool("warned", {
+			renderCall: () => new Text("deploy service\nretrying the last attempt", 0, 0),
+		});
+		component.updateResult({ content: [{ type: "text", text: "Error: connection refused" }], isError: true });
+		const row = stripAnsi(component.render(160)[0]);
+		expect(row).toContain("connection refused");
+		expect(row).not.toContain("retrying");
+	});
 	it("keeps running and cancelled user shells bounded", () => {
 		const component = new BashExecutionComponent("echo 世界\nlong command", ui, false, "ascii");
 		component.setChatDetail("overview");

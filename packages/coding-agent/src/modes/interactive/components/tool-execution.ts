@@ -429,14 +429,14 @@ export class ToolExecutionComponent extends Container {
 			]
 				.filter(Boolean)
 				.join(", ");
-			// The call renderer may put the outcome on a later line than the target,
-			// as edit does with its counts and its failure reason. The overview row
-			// has room for one summary, so that outcome wins over a raw line count.
-			const summary = callOutcome
-				? callOutcome
-				: this.result?.isError && output
-					? summarizeOperationError(output)
-					: countedOutput;
+			// A result renderer that draws nothing has already put its outcome on the
+			// call, as edit does for a mismatch. Any other error names itself.
+			const summary =
+				callOutcome && resultHidden
+					? callOutcome
+					: this.result?.isError && output
+						? summarizeOperationError(output)
+						: callOutcome || countedOutput;
 			const label = stripAnsi(visibleCall ?? fallbackLabel).replace(
 				` (${keyText("app.tools.expand")} to expand)`,
 				"",
