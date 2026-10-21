@@ -174,9 +174,37 @@ describe("compact operation coverage", () => {
 			component.setArgsComplete();
 			const result = await createEditTool(scratch).execute("edit", args);
 			component.updateResult({ ...result, isError: false });
+			const overview = stripAnsi(component.render(200)[0]);
 			expect(component.render(200)).toHaveLength(1);
+			expect(overview).toContain("+1");
+			expect(overview).toContain("-1");
 			click(component);
 			await vi.waitFor(() => expect(stripAnsi(component.render(200).join("\n"))).toContain('"welcome"'));
+			component.dispose();
+		} finally {
+			rmSync(scratch, { recursive: true, force: true, maxRetries: 3 });
+		}
+	});
+	it("names why an edit failed without opening the row", async () => {
+		const scratch = mkdtempSync(join(tmpdir(), "compact-edit-fail-"));
+		try {
+			const path = join(scratch, "greeting.ts");
+			writeFileSync(path, 'const greeting = "hello";\n');
+			const definition = createEditToolDefinition(scratch);
+			const args = { path, edits: [{ oldText: '"missing"', newText: '"welcome"' }] };
+			const component = new ToolExecutionComponent("edit", "edit-fail", args, {}, definition, ui, scratch);
+			component.setChatDetail("overview");
+			component.setArgsComplete();
+			let message = "edit failed";
+			try {
+				await createEditTool(scratch).execute("edit-fail", args);
+			} catch (error) {
+				message = error instanceof Error ? error.message : String(error);
+			}
+			component.updateResult({ content: [{ type: "text", text: message }], isError: true });
+			const overview = stripAnsi(component.render(120).join("\n"));
+			expect(component.render(120)).toHaveLength(1);
+			expect(overview.toLowerCase()).toMatch(/not found|did not match|no match|could not/);
 			component.dispose();
 		} finally {
 			rmSync(scratch, { recursive: true, force: true, maxRetries: 3 });

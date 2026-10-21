@@ -60,6 +60,20 @@ describe("pinned task panel", () => {
 		expect(settings.getTaskPanelExpanded()).toBe(true);
 		expect(panel.render(80)).toEqual(["✓ Read", "› Implement", "○ Task 0", "○ Task 1", "○ Task 2", "+1 more"]);
 	});
+	it("keeps a later in-progress task visible when the list is expanded", () => {
+		const { manager, panel } = setup();
+		const later = [
+			...Array.from({ length: 5 }, (_, i) => ({ content: `Done ${i}`, status: "completed" as const })),
+			{ content: "Current work", status: "in_progress" as const },
+			{ content: "Still ahead", status: "pending" as const },
+		];
+		manager.appendCustomEntry("todo", later);
+		panel.toggle();
+		const rows = panel.render(80);
+		expect(rows.some((row) => row.includes("Current work"))).toBe(true);
+		expect(rows.some((row) => row.startsWith("+"))).toBe(true);
+		expect(rows).toHaveLength(6);
+	});
 	it("gates actual loadout and caches branch snapshots between frames", () => {
 		const { manager, panel, setActive } = setup();
 		manager.appendCustomEntry("todo", tasks);

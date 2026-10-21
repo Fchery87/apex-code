@@ -84,9 +84,16 @@ export class TaskPanelComponent implements Component {
 		if (width <= 0 || !tasks.length || !session.getActiveToolNames().includes("todo_write")) return [];
 		if (tasks.every((task) => task.status === "completed") && !this.retainComplete) return [];
 		if (this.options.getSettings().getTaskPanelExpanded()) {
+			const limit = 5;
+			const current = tasks.findIndex((task) => task.status === "in_progress");
+			const start = current < 0 ? 0 : Math.min(Math.max(0, current - 1), Math.max(0, tasks.length - limit));
+			const shown = tasks.slice(start, start + limit);
+			const before = start;
+			const after = tasks.length - (start + shown.length);
 			return [
-				...taskRows(tasks, width, 5),
-				...(tasks.length > 5 ? [truncateTaskText(`+${tasks.length - 5} more`, width)] : []),
+				...(before > 0 ? [truncateTaskText(`+${before} earlier`, width)] : []),
+				...taskRows(shown, width),
+				...(after > 0 ? [truncateTaskText(`+${after} more`, width)] : []),
 			];
 		}
 		const current = tasks.find((task) => task.status === "in_progress");

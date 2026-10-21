@@ -405,7 +405,11 @@ export class ToolExecutionComponent extends Container {
 		if (!content || content.version !== this.displayVersion) {
 			// Inspect each renderer once per display update, not on every elapsed-time tick.
 			const callLines = this.callRendererComponent?.render(400);
-			const visibleCall = callLines?.find((line) => stripAnsi(line).trim().length > 0);
+			const visibleCallLines = (callLines ?? [])
+				.map((line) => stripAnsi(line).trim())
+				.filter((line) => line.length > 0);
+			const visibleCall = visibleCallLines[0];
+			const callOutcome = visibleCallLines.slice(1).join(" · ");
 			const resultLines = this.resultRendererComponent?.render(400);
 			const resultHidden = !!this.resultRendererComponent && resultLines?.length === 0;
 			const args = this.args as Record<string, unknown> | undefined;
@@ -419,15 +423,20 @@ export class ToolExecutionComponent extends Container {
 						.join("\n") ?? "");
 			const outputLines = countOutputLines(output);
 			const images = resultHidden ? 0 : (this.result?.content.filter((block) => block.type === "image").length ?? 0);
-			const summary =
-				this.result?.isError && output
+			const countedOutput = [
+				outputLines ? `${outputLines} output line${outputLines === 1 ? "" : "s"}` : "",
+				images ? `${images} image${images === 1 ? "" : "s"}` : "",
+			]
+				.filter(Boolean)
+				.join(", ");
+			// The call renderer may put the outcome on a later line than the target,
+			// as edit does with its counts and its failure reason. The overview row
+			// has room for one summary, so that outcome wins over a raw line count.
+			const summary = callOutcome
+				? callOutcome
+				: this.result?.isError && output
 					? summarizeOperationError(output)
-					: [
-							outputLines ? `${outputLines} output line${outputLines === 1 ? "" : "s"}` : "",
-							images ? `${images} image${images === 1 ? "" : "s"}` : "",
-						]
-							.filter(Boolean)
-							.join(", ");
+					: countedOutput;
 			const label = stripAnsi(visibleCall ?? fallbackLabel).replace(
 				` (${keyText("app.tools.expand")} to expand)`,
 				"",
