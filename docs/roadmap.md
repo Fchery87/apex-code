@@ -88,7 +88,7 @@ capable and measurably worse.
 | 3 | Context engineering | **landed** — eviction + deferred schemas verified against the replay corpus · `72a2fefe4` | [spec](specs/2026-08-13-context-engineering.md) | — |
 | 4 | Tool surface | **landed** — all 7 tasks (4.1–4.7) done, budget fixed at 2,150/2,300 tokens · `faffaa79e` | [spec](specs/2026-08-13-tool-surface.md) | — |
 | 5 | Delegation & multi-agent | **landed** — 7 of 7 tasks · `be00e1ab0` | [spec](specs/2026-08-14-delegation-and-multi-agent.md) | — |
-| 6 | Durable state & daemon | **partly met** (2026-10-18: background commands are journaled and recovered after a SIGKILL of the owner; two-client attach is not yet tested) · `baf5e5302`. The daemon was removed in HR.25 (2026-10-16) because nothing constructed it. The SQLite sidecar, the command journal, and session leases remain: `apex-code cost` and the usage store use the sidecar, and session leases are test-verified in `packages/coding-agent/test/durable-state/`. | [spec](specs/2026-08-15-durable-state-and-daemon.md) | — |
+| 6 | Durable state & daemon | **partly met** (2026-10-21: background commands recover after a SIGKILL of the owner; a second CLI in the same working tree is refused, and `--allow-concurrent` is the override. Two clients writing one session file is not what the product does, and is not tested.) · `baf5e5302`. The daemon was removed in HR.25 (2026-10-16) because nothing constructed it. The SQLite sidecar, the command journal, and session leases remain: `apex-code cost` and the usage store use the sidecar, and session leases are test-verified in `packages/coding-agent/test/durable-state/`. | [spec](specs/2026-08-15-durable-state-and-daemon.md) | — |
 | 7 | Evidence & verification | **landed** — 7 of 7 tasks · `c82584312` (clean Node 22 verification) | [spec](specs/2026-08-16-evidence-and-verification.md) | — |
 | 8 | Observability & cost | **landed** — 7 of 7 tasks, exit criterion amended before implementation · `9c7c9e9aa` | [spec](specs/2026-08-15-observability-and-cost.md) | — |
 | 9 | Release hardening | **landed** — 6 of 6 tasks · `a0be145d7` | [spec](specs/2026-08-16-release-hardening.md) | — |
@@ -1000,8 +1000,11 @@ write a durable journal record before their process starts (`durable-state/comma
 `tools/bash.ts`). When the owning process is killed, a restart marks its unfinished commands
 `interrupted`, and never `completed` (`test/durable-state/command-journal-ownership.test.ts`).
 Ownership is checked by PID plus the Linux start token, so a reused PID is not mistaken for the
-owner. Not yet demonstrated: two clients attaching through the same session path. The tests cover
-only multiple shared leases for one `sessionId` (`sqlite-store.test.ts`).
+owner. A second CLI in the same working tree is refused unless the operator passes
+`--allow-concurrent`, proven with two real processes in
+`test/startup-concurrent-session.test.ts`. That gate is per working tree, not per
+session file. The SQLite sidecar still only proves that several shared leases can name one
+`sessionId` (`sqlite-store.test.ts`), and nothing attaches two writers to one JSONL.
 
 ---
 

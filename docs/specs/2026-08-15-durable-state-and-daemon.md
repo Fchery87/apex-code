@@ -15,8 +15,13 @@ clause that says "a test kills the daemon" therefore refers to the owning CLI pr
   A restart marks unfinished commands whose owner has exited as `interrupted`, and never as `completed`.
   The SIGKILL test is in `test/durable-state/command-journal-ownership.test.ts`.
 - The sidecar opens in WAL mode with a busy timeout, so several CLI processes can share it.
-- Still not demonstrated: two clients attaching to one session through the same path. The lease tests
-  cover multiple shared leases for one `sessionId` only.
+- A second CLI in the same working tree is refused, and `--allow-concurrent` is the override.
+  Two real processes prove it (`test/startup-concurrent-session.test.ts`). The lease is one file
+  per process under the session directory, keyed by working tree, and it is advisory: it does not
+  lock a session file.
+- Still not demonstrated: two writers appending to one session JSONL. The sidecar lease tests
+  cover multiple shared leases for one `sessionId` only, and the product does not offer that
+  attachment.
 
 ## Metadata
 
