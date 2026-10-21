@@ -14,6 +14,7 @@ export interface TrustSelectorOptions {
 	cwd: string;
 	savedDecision: ProjectTrustStoreEntry | null;
 	projectTrusted: boolean;
+	symbolPreset?: "unicode" | "ascii";
 	onSelect: (selection: TrustSelection) => void;
 	onCancel: () => void;
 }
@@ -34,6 +35,7 @@ export class TrustSelectorComponent extends Container {
 	private readonly listContainer: Container;
 	private readonly trustOptions: ProjectTrustOption[];
 	private readonly savedDecision: ProjectTrustStoreEntry | null;
+	private readonly symbolPreset: "unicode" | "ascii";
 	private readonly onSelectCallback: (selection: TrustSelection) => void;
 	private readonly onCancelCallback: () => void;
 
@@ -41,6 +43,7 @@ export class TrustSelectorComponent extends Container {
 		super();
 
 		this.savedDecision = options.savedDecision;
+		this.symbolPreset = options.symbolPreset ?? "unicode";
 		this.trustOptions = getProjectTrustOptions(options.cwd);
 		this.selectedIndex = Math.max(
 			0,
@@ -119,8 +122,10 @@ export class TrustSelectorComponent extends Container {
 
 			const isSelected = i === this.selectedIndex;
 			const isCurrent = this.isSavedOption(option);
-			const currentMarker = isCurrent ? theme.fg("accent", "✓ ") : "  ";
-			const prefix = isSelected ? theme.fg("accent", "→ ") : "  ";
+			const saved = this.symbolPreset === "ascii" ? "*" : "✓";
+			const pointer = this.symbolPreset === "ascii" ? ">" : "→";
+			const currentMarker = isCurrent ? theme.fg("accent", `${saved} `) : "  ";
+			const prefix = isSelected ? theme.fg("accent", `${pointer} `) : "  ";
 			const label = isSelected ? theme.fg("accent", option.label) : theme.fg("text", option.label);
 			this.listContainer.addChild(new Text(`${prefix}${currentMarker}${label}`, 0, 0));
 		}

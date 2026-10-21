@@ -43,6 +43,21 @@ describe("TrustSelectorComponent", () => {
 		expect(output).not.toContain("✓ Do not trust");
 	});
 
+	it("uses ascii markers when the symbol preset asks for them", () => {
+		const selector = new TrustSelectorComponent({
+			cwd: project,
+			savedDecision: { path: project, decision: true },
+			projectTrusted: true,
+			symbolPreset: "ascii",
+			onSelect: () => {},
+			onCancel: () => {},
+		});
+		const output = stripAnsi(selector.render(120).join("\n"));
+		expect(output).toContain("> * Trust");
+		expect(output).not.toContain("✓");
+		expect(output).not.toContain("→");
+	});
+
 	it("selects a trust decision", () => {
 		const onSelect = vi.fn();
 		const selector = new TrustSelectorComponent({
