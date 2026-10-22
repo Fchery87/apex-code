@@ -5760,6 +5760,7 @@ export class InteractiveMode {
 				cwd,
 				savedDecision,
 				projectTrusted: this.settingsManager.isProjectTrusted(),
+				symbolPreset: this.settingsManager.getSymbolPreset(),
 				onSelect: (selection) => {
 					trustStore.setMany(selection.updates);
 					done();

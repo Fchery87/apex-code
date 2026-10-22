@@ -392,9 +392,23 @@ export class FooterComponent implements Component {
 				right = contextFull;
 			}
 
-			// Activity is operational, so it outranks every optional segment below.
-			// It still yields to the safety posture and to the pressure reading,
-			// which are the two things the tray must never lose.
+			// Activity outranks decoration. When the full line does not fit, keep a
+			// shortened working state beside the spelled-out permission mode and the
+			// complete context reading. Drop it only when even that will not fit.
+			if (!fits([...left, right]) && activityLine) {
+				const reserved =
+					visibleWidth(joinSegments(safetyFirst(compactPrompt))) +
+					visibleWidth(separator) +
+					visibleWidth(separator) +
+					visibleWidth(right);
+				const room = width - reserved;
+				const shortened = room >= 8 ? truncateToWidth(activityLine, room, "…") : "";
+				const withPrompt = compactPrompt ? safetyFirst(compactPrompt, shortened) : safetyFirst(shortened);
+				if (shortened && fits([...withPrompt, right])) {
+					left = withPrompt;
+				}
+			}
+
 			if (!fits([...left, right])) {
 				left = safetyFirst(compactPrompt);
 			}

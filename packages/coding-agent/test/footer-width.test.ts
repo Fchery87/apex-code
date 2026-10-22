@@ -493,6 +493,18 @@ describe("FooterComponent width handling", () => {
 		}
 	});
 
+	it("keeps a short working state beside permission and context at 48 columns", () => {
+		const session = createSession({ sessionName: "s", percent: 12 });
+		const footer = new FooterComponent(session, createFooterData(1));
+		footer.setActivity({ render: () => ["Working (esc to interrupt)"], invalidate() {} });
+
+		const rendered = stripAnsi(footer.render(48).join("\n"));
+
+		expect(rendered).toContain("default");
+		expect(rendered).toMatch(/Working|esc/);
+		expect(rendered).toContain("12.0%");
+	});
+
 	it("drops activity before it drops the spelled-out permission mode", () => {
 		const session = createSession({ sessionName: "s", percent: 12 });
 		const footer = new FooterComponent(session, createFooterData(1));
@@ -501,7 +513,18 @@ describe("FooterComponent width handling", () => {
 		const rendered = stripAnsi(footer.render(40).join("\n"));
 
 		expect(rendered).toContain("default");
-		expect(rendered).not.toContain("xxxxx");
+		expect(rendered).toContain("12.0%");
+		expect(rendered).toContain("…");
+	});
+
+	it("keeps the compaction prompt beside a shortened working state", () => {
+		const footer = new FooterComponent(createSession({ sessionName: "s", percent: 88 }), createFooterData(1));
+		footer.setAutoCompactEnabled(false);
+		footer.setActivity({ render: () => ["Working on a long task (esc to interrupt)"], invalidate() {} });
+		const rendered = stripAnsi(footer.render(64).join("\n"));
+		expect(rendered).toContain("/compact soon");
+		expect(rendered).toMatch(/Working|esc/);
+		expect(rendered).toContain("88.0%");
 	});
 
 	it("offers compaction only when pressure is high and nothing will compact on its own", () => {

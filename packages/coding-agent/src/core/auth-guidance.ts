@@ -1,25 +1,18 @@
-import { join } from "node:path";
-import { getDocsPath } from "../config.ts";
-
 const UNKNOWN_PROVIDER = "unknown";
 
 export function getProviderLoginHelp(): string {
-	return [
-		"Use /login to log into a provider via OAuth or API key. See:",
-		`  ${join(getDocsPath(), "providers.md")}`,
-		`  ${join(getDocsPath(), "models.md")}`,
-	].join("\n");
+	return "Provider setup is documented in providers.md and models.md, under the Apex Code docs directory.";
 }
 
 export function formatNoModelsAvailableMessage(): string {
-	return `No models available. ${getProviderLoginHelp()}`;
+	return `No models available. Run /login to connect a provider.\n\n${getProviderLoginHelp()}`;
 }
 
 export function formatNoModelSelectedMessage(): string {
-	return `No model selected.\n\n${getProviderLoginHelp()}\n\nThen use /model to select a model.`;
+	return `No model selected. Run /login to connect a provider, then /model to choose one.\n\n${getProviderLoginHelp()}`;
 }
 
 export function formatNoApiKeyFoundMessage(provider: string): string {
 	const providerDisplay = provider === UNKNOWN_PROVIDER ? "the selected model" : provider;
-	return `No API key found for ${providerDisplay}.\n\n${getProviderLoginHelp()}`;
+	return `No API key found for ${providerDisplay}. Run /login to connect one.\n\n${getProviderLoginHelp()}`;
 }

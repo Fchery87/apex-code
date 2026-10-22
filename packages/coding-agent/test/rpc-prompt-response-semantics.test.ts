@@ -382,9 +382,7 @@ describe("RPC prompt response semantics", () => {
 					type: "response",
 					command: "prompt",
 					success: false,
-					error: expect.stringContaining(
-						"No API key found for fake-provider.\n\nUse /login to log into a provider via OAuth or API key. See:",
-					),
+					error: expect.stringContaining("No API key found for fake-provider. Run /login to connect one."),
 				});
 			});
 		} finally {

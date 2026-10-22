@@ -405,29 +405,37 @@ export class ToolExecutionComponent extends Container {
 		if (!content || content.version !== this.displayVersion) {
 			// Inspect each renderer once per display update, not on every elapsed-time tick.
 			const callLines = this.callRendererComponent?.render(400);
-			const visibleCall = callLines?.find((line) => stripAnsi(line).trim().length > 0);
+			const visibleCallLines = (callLines ?? [])
+				.map((line) => stripAnsi(line).trim())
+				.filter((line) => line.length > 0);
+			const visibleCall = visibleCallLines[0];
+			const callOutcome = visibleCallLines.slice(1).join(" · ");
 			const resultLines = this.resultRendererComponent?.render(400);
 			const resultHidden = !!this.resultRendererComponent && resultLines?.length === 0;
 			const args = this.args as Record<string, unknown> | undefined;
 			const target = args?.path ?? args?.file_path ?? args?.command ?? args?.pattern;
 			const fallbackLabel = `${this.toolName}${typeof target === "string" ? ` ${target}` : ""}`;
-			const output = resultHidden
-				? ""
-				: (this.result?.content
-						.filter((block) => block.type === "text")
-						.map((block) => block.text ?? "")
-						.join("\n") ?? "");
+			const rawOutput =
+				this.result?.content
+					.filter((block) => block.type === "text")
+					.map((block) => block.text ?? "")
+					.join("\n") ?? "";
+			// A renderer that draws nothing is hiding a successful result. An error
+			// still has to name itself, so its text stays available.
+			const output = resultHidden && !this.result?.isError ? "" : rawOutput;
 			const outputLines = countOutputLines(output);
 			const images = resultHidden ? 0 : (this.result?.content.filter((block) => block.type === "image").length ?? 0);
+			const countedOutput = [
+				outputLines ? `${outputLines} output line${outputLines === 1 ? "" : "s"}` : "",
+				images ? `${images} image${images === 1 ? "" : "s"}` : "",
+			]
+				.filter(Boolean)
+				.join(", ");
+			// An error names itself, including when the result renderer draws
+			// nothing. A later call line is the outcome only when there is no
+			// error text, which is how an edit reports a mismatch.
 			const summary =
-				this.result?.isError && output
-					? summarizeOperationError(output)
-					: [
-							outputLines ? `${outputLines} output line${outputLines === 1 ? "" : "s"}` : "",
-							images ? `${images} image${images === 1 ? "" : "s"}` : "",
-						]
-							.filter(Boolean)
-							.join(", ");
+				this.result?.isError && output ? summarizeOperationError(output) : callOutcome || countedOutput;
 			const label = stripAnsi(visibleCall ?? fallbackLabel).replace(
 				` (${keyText("app.tools.expand")} to expand)`,
 				"",
