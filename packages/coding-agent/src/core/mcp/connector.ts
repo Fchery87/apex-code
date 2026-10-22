@@ -83,7 +83,11 @@ function keepStderrInLog(serverName: string, stderr: Stream): void {
 			return;
 		}
 		const log = createWriteStream(logPath, { flags: "a", mode: 0o600 });
-		log.on("error", drop);
+		const stop = () => {
+			log.end();
+			drop();
+		};
+		log.on("error", stop);
 		log.on("open", () => {
 			try {
 				chmodSync(logPath, 0o600);
@@ -97,7 +101,10 @@ function keepStderrInLog(serverName: string, stderr: Stream): void {
 			const room = STDERR_LOG_LIMIT - written;
 			log.write(bytes.length <= room ? bytes : bytes.subarray(0, room));
 			written += Math.min(bytes.length, room);
+			if (written >= STDERR_LOG_LIMIT) log.end();
 		});
+		stderr.on("end", () => log.end());
+		stderr.on("error", stop);
 	} catch {
 		// Logging must not stop the server. Drop the diagnostics rather than
 		// letting them reach the terminal.
