@@ -7,23 +7,34 @@ import { acceptFilePathAlias } from "../src/core/tools/path-arguments.ts";
 import { createReadToolDefinition } from "../src/core/tools/read.ts";
 import { createWriteToolDefinition } from "../src/core/tools/write.ts";
 
-describe("file_path alias", () => {
-	it("renames file_path to path and leaves a real path alone", () => {
-		expect(acceptFilePathAlias({ file_path: "README.md", offset: 1 })).toEqual({ path: "README.md", offset: 1 });
+const tools = [
+	["read", createReadToolDefinition],
+	["write", createWriteToolDefinition],
+	["edit", createEditToolDefinition],
+	["grep", createGrepToolDefinition],
+	["find", createFindToolDefinition],
+	["ls", createLsToolDefinition],
+] as const;
+
+const aliases = ["file_path", "filePath", "filepath", "directory", "dir"] as const;
+
+describe("path argument aliases", () => {
+	it("copies the first alias into path and leaves a set path alone", () => {
+		expect(acceptFilePathAlias({ file_path: "README.md", offset: 1 })).toEqual({
+			file_path: "README.md",
+			offset: 1,
+			path: "README.md",
+		});
 		const own = { path: "README.md", file_path: "other.md" };
 		expect(acceptFilePathAlias(own)).toBe(own);
 		expect(acceptFilePathAlias(null)).toBe(null);
+		expect(acceptFilePathAlias({ pattern: "*.ts" })).toEqual({ pattern: "*.ts" });
 	});
 
-	it.each([
-		["read", createReadToolDefinition],
-		["write", createWriteToolDefinition],
-		["edit", createEditToolDefinition],
-		["grep", createGrepToolDefinition],
-		["find", createFindToolDefinition],
-		["ls", createLsToolDefinition],
-	] as const)("renames file_path before %s validates its arguments", (_name, create) => {
+	it.each(tools)("prepares %s from every path alias", (_name, create) => {
 		const definition = create(process.cwd());
-		expect(definition.prepareArguments?.({ file_path: "README.md" })).toMatchObject({ path: "README.md" });
+		for (const alias of aliases) {
+			expect(definition.prepareArguments?.({ [alias]: "README.md" })).toMatchObject({ path: "README.md" });
+		}
 	});
 });
