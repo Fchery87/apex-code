@@ -7,6 +7,7 @@ import { ensureTool } from "../../utils/tools-manager.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
 import { getPreparedPathOperation } from "../permissions/operations.ts";
 import type { ApexToolDefinition } from "./contract.ts";
+import { acceptFilePathAlias } from "./path-arguments.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
 import { pathExists, resolveToCwd } from "./path-utils.ts";
 import { findRenderers } from "./renderers/find.ts";
@@ -81,6 +82,7 @@ export function createFindToolDefinition(
 		description: `Search for files by glob pattern. Returns matching file paths relative to the search directory. Respects .gitignore. Output is truncated to ${DEFAULT_LIMIT} results or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first).`,
 		promptSnippet: findToolSystemPromptContribution.snippet,
 		parameters: findSchema,
+		prepareArguments: (args) => acceptFilePathAlias(args) as FindToolInput,
 		contract: {
 			capabilities: new Set(["fs.read"]),
 			permission: createPathPermissionSpec({

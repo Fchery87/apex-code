@@ -62,6 +62,11 @@ describe("turn summary", () => {
 		expect(stripAnsi(new TurnSummaryComponent(12000, "aborted").render(120).join("\n")).trim()).toBe(
 			"Interrupted after 12s",
 		);
+		expect(
+			stripAnsi(
+				new TurnSummaryComponent(12000, "completed", { files: 2, added: 4, removed: 1 }).render(120).join("\n"),
+			).trim(),
+		).toBe("2 files +4 -1 · worked for 12s");
 	});
 
 	test("renders one dim completed duration from the first step and preserves previous lines", async () => {

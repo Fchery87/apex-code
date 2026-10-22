@@ -7,6 +7,7 @@ import {
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { hintRow } from "./keybinding-hints.ts";
+import { uiGlyph } from "./ui-glyphs.ts";
 
 export type TrustSelection = Pick<ProjectTrustOption, "trusted" | "updates">;
 
@@ -122,8 +123,8 @@ export class TrustSelectorComponent extends Container {
 
 			const isSelected = i === this.selectedIndex;
 			const isCurrent = this.isSavedOption(option);
-			const saved = this.symbolPreset === "ascii" ? "*" : "✓";
-			const pointer = this.symbolPreset === "ascii" ? ">" : "→";
+			const saved = uiGlyph("check", this.symbolPreset).trimEnd();
+			const pointer = uiGlyph("cursor", this.symbolPreset).trimEnd();
 			const currentMarker = isCurrent ? theme.fg("accent", `${saved} `) : "  ";
 			const prefix = isSelected ? theme.fg("accent", `${pointer} `) : "  ";
 			const label = isSelected ? theme.fg("accent", option.label) : theme.fg("text", option.label);

@@ -57,6 +57,37 @@ describe("SettingsSelectorComponent", () => {
 		expect(onCopyOnSelectChange.mock.calls.flat()).toEqual([false, true]);
 	});
 
+	it("lists the symbol, color, and token settings and applies each", () => {
+		const onSymbolPresetChange = vi.fn();
+		const onColorBlindModeChange = vi.fn();
+		const onTokenUsageDisplayChange = vi.fn();
+		const config = {
+			symbolPreset: "unicode",
+			colorBlindMode: false,
+			tokenUsageDisplay: "compact",
+			warnings: {},
+			availableDefaultModels: [],
+			availableThinkingLevels: [],
+			availableThemes: [],
+		} as unknown as SettingsConfig;
+		const cycle = (label: string) => {
+			const list = new SettingsSelectorComponent(config, {
+				onSymbolPresetChange,
+				onColorBlindModeChange,
+				onTokenUsageDisplayChange,
+			} as unknown as SettingsCallbacks).getSettingsList();
+			for (const character of label) list.handleInput(character);
+			list.handleInput("\r");
+		};
+
+		cycle("Symbol preset");
+		expect(onSymbolPresetChange.mock.calls.flat()).toEqual(["ascii"]);
+		cycle("Color blind mode");
+		expect(onColorBlindModeChange.mock.calls.flat()).toEqual([true]);
+		cycle("Token usage");
+		expect(onTokenUsageDisplayChange.mock.calls.flat()).toEqual(["full"]);
+	});
+
 	it("cycles the remembered conversation detail level", () => {
 		const onChatDetailChange = vi.fn();
 		const config = {

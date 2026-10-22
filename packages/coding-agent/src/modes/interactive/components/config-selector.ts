@@ -23,6 +23,7 @@ import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { hintRow } from "./keybinding-hints.ts";
 import { PromptInput } from "./prompt-input.ts";
+import { selectionCursor } from "./ui-glyphs.ts";
 
 type ResourceType = "extensions" | "skills" | "prompts" | "themes";
 type ConfigWriteScope = "global" | "project";
@@ -433,7 +434,7 @@ class ResourceList implements Component, Focusable {
 			} else {
 				// Resource item (cursor only on items)
 				const item = entry.item;
-				const cursor = isSelected ? "→ " : "  ";
+				const cursor = selectionCursor(isSelected);
 				const dimmed = this.isDimmedItem(item);
 				const nameText = isSelected && !dimmed ? theme.bold(item.displayName) : item.displayName;
 				const name = dimmed ? theme.fg("dim", nameText) : nameText;

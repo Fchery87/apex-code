@@ -34,6 +34,7 @@ import {
 	type TrailingSegment,
 } from "./model-row.ts";
 import { PromptInput } from "./prompt-input.ts";
+import { savedMark, uiGlyph } from "./ui-glyphs.ts";
 
 interface ModelItem {
 	provider: string;
@@ -497,9 +498,9 @@ export class ModelSelectorComponent extends Container implements Focusable {
 	}
 
 	private renderProviderRow(row: Extract<Row, { kind: "provider" }>, isSelected: boolean): string {
-		const prefix = isSelected ? "→ " : "  ";
+		const prefix = isSelected ? uiGlyph("cursor") : "  ";
 		const count = theme.fg("muted", ` (${row.count} model${row.count === 1 ? "" : "s"})`);
-		const checkmark = row.hasCurrent ? theme.fg("success", " ✓") : "";
+		const checkmark = row.hasCurrent ? ` ${savedMark(true).trimEnd()}` : "";
 		const composed = `${prefix}${row.provider}${count}${checkmark}`;
 		return isSelected ? paintSelectedRow(composed) : composed;
 	}

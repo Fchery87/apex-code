@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeError } from "../src/modes/interactive/components/error-summary.ts";
+import { summarizeError, summarizeOperationError } from "../src/modes/interactive/components/error-summary.ts";
 
 describe("summarizeError", () => {
 	it("has nothing to fold in a one-line error", () => {
@@ -33,5 +33,22 @@ describe("summarizeError", () => {
 
 	it("reads carriage returns as line breaks", () => {
 		expect(summarizeError("first\r\nsecond")).toBe("first");
+	});
+});
+
+describe("summarizeOperationError", () => {
+	it("keeps the reason after a tool validation headline", () => {
+		const message = [
+			'Validation failed for tool "read":',
+			"  - path: Expected required property",
+			"",
+			"Received arguments:",
+			"{",
+			'  "file_path": "README.md"',
+			"}",
+		].join("\n");
+		expect(summarizeOperationError(message)).toBe(
+			'Validation failed for tool "read": path: Expected required property',
+		);
 	});
 });

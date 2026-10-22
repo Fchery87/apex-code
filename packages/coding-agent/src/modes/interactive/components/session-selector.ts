@@ -21,6 +21,7 @@ import { DynamicBorder } from "./dynamic-border.ts";
 import { hintRow, keyText } from "./keybinding-hints.ts";
 import { PromptInput } from "./prompt-input.ts";
 import { filterAndSortSessions, hasSessionName, type NameFilter, type SortMode } from "./session-selector-search.ts";
+import { selectionCursor } from "./ui-glyphs.ts";
 
 type SessionScope = "current" | "all";
 
@@ -484,7 +485,7 @@ class SessionList implements Component, Focusable {
 			}
 
 			// Cursor
-			const cursor = isSelected ? theme.fg("accent", "› ") : "  ";
+			const cursor = selectionCursor(isSelected);
 
 			// Calculate available width for message
 			const prefixWidth = visibleWidth(prefix);
