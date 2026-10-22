@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | Destination check and its unit tests | done | `08f093658` |
 | Tool definition, contract, and injected-operation tests | done | `e42b292e3` |
-| Registry opt-in, absent unless configured | not started | |
+| Registry opt-in, absent unless configured | done | `e87b588b5` |
 
 ## Order
 
