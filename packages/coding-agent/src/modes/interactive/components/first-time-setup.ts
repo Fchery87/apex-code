@@ -5,19 +5,21 @@ import { type TerminalTheme, theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { hintRow } from "./keybinding-hints.ts";
 import { paintBrandMark } from "./splash-header.ts";
+import { selectionCursor } from "./ui-glyphs.ts";
 
 export interface FirstTimeSetupResult {
-	theme: TerminalTheme;
+	theme: string;
 }
 
 export interface FirstTimeSetupOptions {
 	detectedTheme: TerminalTheme;
-	onThemePreview: (themeName: TerminalTheme) => void;
+	onThemePreview: (themeName: string) => void;
 	onSubmit: (result: FirstTimeSetupResult) => void;
 	onCancel: () => void;
 }
 
-const THEME_OPTIONS: Array<{ value: TerminalTheme; label: string }> = [
+const THEME_OPTIONS: Array<{ value: string; label: string }> = [
+	{ value: "apex", label: "Apex" },
 	{ value: "dark", label: "Dark" },
 	{ value: "light", label: "Light" },
 ];
@@ -30,9 +32,10 @@ export class FirstTimeSetupComponent extends Container {
 	constructor(options: FirstTimeSetupOptions) {
 		super();
 		this.options = options;
+		const initial = options.detectedTheme === "light" ? "light" : "apex";
 		this.themeIndex = Math.max(
 			0,
-			THEME_OPTIONS.findIndex((option) => option.value === options.detectedTheme),
+			THEME_OPTIONS.findIndex((option) => option.value === initial),
 		);
 		this.update();
 	}
@@ -79,7 +82,7 @@ export class FirstTimeSetupComponent extends Container {
 	private addOptionList(labels: string[], selectedIndex: number): void {
 		for (let i = 0; i < labels.length; i++) {
 			const isSelected = i === selectedIndex;
-			const prefix = isSelected ? theme.fg("accent", "→ ") : "  ";
+			const prefix = selectionCursor(isSelected);
 			const label = isSelected ? theme.fg("accent", labels[i]) : theme.fg("text", labels[i]);
 			this.addChild(new Text(`${prefix}${label}`, 1, 0));
 		}

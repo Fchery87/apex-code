@@ -1,5 +1,5 @@
 {
-	"$schema": "https://raw.githubusercontent.com/earendil-works/pi/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
+	"$schema": "./theme-schema.json",
 	"name": "dark",
 	"vars": {
 		"cyan": "#00d7ff",
@@ -17,12 +17,13 @@
 		"toolPendingBg": "#282832",
 		"toolSuccessBg": "#283228",
 		"toolErrorBg": "#3c2828",
-		"customMsgBg": "#2d2838"
+		"customMsgBg": "#2d2838",
+		"warning": "#c6a052"
 	},
 	"colors": {
 		"accent": "accent",
-		"border": "blue",
-		"borderAccent": "cyan",
+		"border": "accent",
+		"borderAccent": "accent",
 		"borderMuted": "darkGray",
 		"success": "green",
 		"error": "red",

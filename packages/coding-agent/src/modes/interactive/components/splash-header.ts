@@ -231,6 +231,11 @@ export class ApexSplashHeader implements Component {
 		return lines;
 	}
 
+	private modelLabel(): string {
+		const model = this.getModelId();
+		return model && model !== "unknown" ? model : "not connected";
+	}
+
 	private buildMetadata(valueWidth: number): string[] {
 		const labelled = (label: string, value: string) =>
 			theme.fg("dim", label.padEnd(LABEL_WIDTH)) + theme.fg("muted", truncateToWidth(value, valueWidth));
@@ -238,7 +243,7 @@ export class ApexSplashHeader implements Component {
 		const cwd = formatCwdForFooter(this.getCwd(), process.env.HOME || process.env.USERPROFILE);
 		return [
 			labelled("version", `v${this.version}`),
-			labelled("model", this.getModelId() ?? "—"),
+			labelled("model", this.modelLabel()),
 			theme.fg("dim", "cwd".padEnd(LABEL_WIDTH)) + theme.fg("muted", truncatePathTail(cwd, valueWidth)),
 			...(this.options.getExtraMetadata?.() ?? []).map((line) => labelled(line.label, line.value)),
 		];

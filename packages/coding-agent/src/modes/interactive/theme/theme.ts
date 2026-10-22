@@ -16,6 +16,7 @@ import type { SourceInfo } from "../../../core/source-info.ts";
 import { closeWatcher, watchWithErrorHandler } from "../../../utils/fs-watch.ts";
 import { highlight, supportsLanguage } from "../../../utils/syntax-highlight.ts";
 import { stripBom } from "../../../utils/text.ts";
+import { uiGlyph } from "../components/ui-glyphs.ts";
 
 // ============================================================================
 // Types & Schema
@@ -1306,7 +1307,7 @@ export function getSettingsListTheme(): SettingsListTheme {
 		label: (text: string, selected: boolean) => (selected ? theme.fg("accent", text) : text),
 		value: (text: string, selected: boolean) => (selected ? theme.fg("accent", text) : theme.fg("muted", text)),
 		description: (text: string) => theme.fg("dim", text),
-		cursor: theme.fg("accent", "→ "),
+		cursor: theme.fg("accent", uiGlyph("cursor")),
 		hint: (text: string) => theme.fg("dim", text),
 	};
 }

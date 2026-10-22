@@ -18,6 +18,7 @@ import { CountdownTimer } from "./countdown-timer.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { hintRow } from "./keybinding-hints.ts";
 import { PromptInput } from "./prompt-input.ts";
+import { uiGlyph } from "./ui-glyphs.ts";
 
 export interface ExtensionSelectorOptions {
 	tui?: TUI;
@@ -117,7 +118,7 @@ export class ExtensionSelectorComponent extends Container {
 		for (let i = 0; i < this.filteredOptions.length; i++) {
 			const isSelected = i === this.selectedIndex;
 			const text = isSelected
-				? paintSelectedRow(`→ ${this.filteredOptions[i]}`)
+				? paintSelectedRow(`${uiGlyph("cursor")}${this.filteredOptions[i]}`)
 				: `  ${theme.fg("text", this.filteredOptions[i])}`;
 			this.listContainer.addChild(new Text(text, 0, 0));
 		}

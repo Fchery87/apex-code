@@ -11,6 +11,7 @@ import {
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { PromptInput } from "./prompt-input.ts";
+import { selectionCursor, uiGlyph } from "./ui-glyphs.ts";
 
 export type AuthSelectorProvider = {
 	id: string;
@@ -134,7 +135,7 @@ export class OAuthSelectorComponent extends Container implements Focusable {
 				: "";
 			let line = "";
 			if (isSelected) {
-				const prefix = theme.fg("accent", "→ ");
+				const prefix = selectionCursor(true);
 				const text = theme.fg("accent", provider.name);
 				line = prefix + text + authTypeLabel + statusIndicator;
 			} else {
@@ -163,22 +164,22 @@ export class OAuthSelectorComponent extends Container implements Focusable {
 	}
 
 	private formatStatusIndicator(provider: AuthSelectorProvider): string {
-		if (!provider.status) return theme.fg("muted", " • unconfigured");
+		if (!provider.status) return theme.fg("muted", ` ${uiGlyph("bullet").trimEnd()} unconfigured`);
 		if (provider.status.type !== provider.authType) {
 			const label = provider.status.type === "oauth" ? "subscription configured" : "API key configured";
-			return theme.fg("muted", " • ") + theme.fg("warning", label);
+			return theme.fg("muted", ` ${uiGlyph("bullet").trimEnd()} `) + theme.fg("warning", label);
 		}
 		if (
 			!provider.status.source ||
 			provider.status.source === "OAuth" ||
 			provider.status.source === "stored credential"
 		) {
-			return theme.fg("success", " ✓ configured");
+			return theme.fg("success", ` ${uiGlyph("check").trimEnd()} configured`);
 		}
 		const source = /^[A-Z][A-Z0-9_]*(?:, [A-Z][A-Z0-9_]*)*$/.test(provider.status.source)
 			? `env: ${provider.status.source}`
 			: provider.status.source;
-		return theme.fg("success", ` ✓ ${source}`);
+		return theme.fg("success", ` ${uiGlyph("check").trimEnd()} ${source}`);
 	}
 
 	handleInput(keyData: string): void {

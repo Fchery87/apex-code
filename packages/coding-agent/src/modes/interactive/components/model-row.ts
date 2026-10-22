@@ -11,6 +11,7 @@
 import type { ModelCost, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { type ThemeColor, theme } from "../theme/theme.ts";
+import { uiGlyph } from "./ui-glyphs.ts";
 
 /** Columns the cursor cell occupies at the head of every row. */
 const CURSOR_WIDTH = 2;
@@ -206,7 +207,7 @@ export function composeModelRow(options: ModelRowOptions): string {
 	const { name, levels, effort, trailingSegments, selected, layout, width } = options;
 	// Selection is carried by the background step alone, so the cursor stays
 	// uncoloured: the accent means "Apex owns this" everywhere else on screen.
-	const cursor = selected ? "→ " : "  ";
+	const cursor = selected ? uiGlyph("cursor") : "  ";
 	const inner = Math.max(1, width - CURSOR_WIDTH);
 	const trailing = renderTrailing(trailingSegments, width);
 	const trailingWidth = visibleWidth(trailing);
@@ -217,8 +218,8 @@ export function composeModelRow(options: ModelRowOptions): string {
 		const gap = " ".repeat(layout.gap);
 		// The arrows are the affordance for left/right, so they appear only on the
 		// row they would act on. Their columns are reserved on every row regardless.
-		const leftArrow = selected ? theme.fg("dim", "←") : " ";
-		const rightArrow = selected ? theme.fg("dim", "→") : " ";
+		const leftArrow = selected ? theme.fg("dim", uiGlyph("left").trimEnd()) : " ";
+		const rightArrow = selected ? theme.fg("dim", uiGlyph("right").trimEnd()) : " ";
 		const squares = renderEffortSquares(levels, effort, layout.squareSlots, selected);
 		const label = layout.showLabel ? ` ${theme.fg("muted", effort.padEnd(layout.labelWidth))}` : "";
 		primary = `${nameCell}${gap}${leftArrow} ${squares} ${rightArrow}${label}`;

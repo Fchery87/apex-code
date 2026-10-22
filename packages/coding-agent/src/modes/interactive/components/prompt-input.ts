@@ -1,13 +1,15 @@
 import { Input } from "@earendil-works/pi-tui";
 import { theme } from "../theme/theme.ts";
+import { uiGlyph } from "./ui-glyphs.ts";
 
 /**
- * Swap `pi-tui`'s `> ` input prompt for the composer's `›`. Both are two columns, so the
+ * Swap `pi-tui`'s `> ` input prompt for the composer's prompt. Both are two columns, so the
  * cursor column is unchanged. `Input` draws the prompt as the first two characters of its
- * first line, before any styling.
+ * first line, before any styling. The ASCII preset keeps `>`, which is what `pi-tui` drew.
  */
 export function withComposerPrompt(line: string): string {
-	return line.startsWith("> ") ? `${theme.fg("accent", "›")} ${line.slice(2)}` : line;
+	const prompt = uiGlyph("prompt");
+	return line.startsWith("> ") ? `${theme.fg("accent", prompt)}${line.slice(2)}` : line;
 }
 
 /** An `Input` that uses the composer's prompt glyph, so every text field in Apex reads alike. */

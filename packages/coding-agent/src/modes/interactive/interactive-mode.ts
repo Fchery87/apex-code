@@ -188,6 +188,7 @@ import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
 import { TrustSelectorComponent } from "./components/trust-selector.ts";
 import { TurnSummaryComponent, type TurnSummaryOutcome } from "./components/turn-summary.ts";
+import { setUiSymbolPreset, uiGlyph } from "./components/ui-glyphs.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.ts";
 import { editInExternalEditor } from "./external-editor.ts";
@@ -638,6 +639,8 @@ export class InteractiveMode {
 	/** Set when the user presses Escape during a retry wait, which is the only way to cancel one. */
 	private retryCancelled = false;
 	private turnStartedAt?: number;
+	/** Files this turn changed, counted from edit and write results that succeeded. */
+	private turnChange = { files: 0, added: 0, removed: 0 };
 
 	// Messages queued while compaction is running
 	private compactionQueuedMessages: CompactionQueuedMessage[] = [];
@@ -750,18 +753,22 @@ export class InteractiveMode {
 		this.widgetContainerBelow = new Container();
 		this.keybindings = KeybindingsManager.create();
 		setKeybindings(this.keybindings);
+		setUiSymbolPreset(this.settingsManager.getSymbolPreset());
 		const editorPaddingX = this.settingsManager.getEditorPaddingX();
 		const autocompleteMaxVisible = this.settingsManager.getAutocompleteMaxVisible();
 		this.defaultEditor = new CustomEditor(this.ui, getEditorTheme(), this.keybindings, {
 			paddingX: editorPaddingX,
 			autocompleteMaxVisible,
-			promptPrefix: "› ",
+			promptPrefix: uiGlyph("prompt"),
 			promptColor: (text) => theme.fg("accent", text),
 			// Bash mode changes the glyph as well as the hue, so the mode is still
 			// readable on a monochrome terminal. Same cell count, so nothing shifts.
 			bashPromptPrefix: "! ",
 			bashPromptColor: (text) => theme.fg("bashMode", text),
-			placeholder: "Ask anything",
+			placeholder:
+				this.session.state.model && !isUnknownModel(this.session.state.model)
+					? "Ask anything"
+					: "No provider connected. Run /login",
 			placeholderColor: (text) => theme.fg("dim", text),
 			commandColor: (text) => theme.fg("accent", text),
 			surfaceColor: (text) => theme.bg("userMessageBg", text),
@@ -3642,6 +3649,7 @@ export class InteractiveMode {
 
 			case "turn_start":
 				this.turnStartedAt ??= Date.now();
+				if (this.turnStartedAt === Date.now()) this.turnChange = { files: 0, added: 0, removed: 0 };
 				if (this.settingsManager.getShowTerminalProgress()) {
 					this.ui.terminal.setProgress(true);
 				}
@@ -3864,6 +3872,7 @@ export class InteractiveMode {
 
 			case "tool_execution_end": {
 				if (event.toolName === "plan_present" && !event.isError) await this.refreshFooterPermissionMode();
+				this.recordTurnChange(event.toolName, event.isError, event.result);
 				const component = this.pendingTools.get(event.toolCallId);
 				if (component) {
 					component.updateResult({ ...event.result, isError: event.isError });
@@ -4045,10 +4054,33 @@ export class InteractiveMode {
 	private finishTurnSummary(outcome: TurnSummaryOutcome | undefined): void {
 		const startedAt = this.turnStartedAt;
 		this.turnStartedAt = undefined;
+		const change = this.turnChange;
+		this.turnChange = { files: 0, added: 0, removed: 0 };
 		if (startedAt === undefined || outcome === undefined) return;
 		const elapsedMs = Date.now() - startedAt;
 		if (elapsedMs < 1000) return;
-		this.chatContainer.addChild(new TurnSummaryComponent(elapsedMs, outcome));
+		this.chatContainer.addChild(new TurnSummaryComponent(elapsedMs, outcome, change));
+	}
+
+	/**
+	 * Count a file change only from a result that succeeded. An edit reports its
+	 * lines in the diff it already computed; a write reports the file and no lines.
+	 */
+	private recordTurnChange(toolName: string, isError: boolean, result: { details?: { diff?: unknown } }): void {
+		if (isError || (toolName !== "edit" && toolName !== "write")) return;
+		const diff = typeof result.details?.diff === "string" ? result.details.diff : "";
+		let added = 0;
+		let removed = 0;
+		for (const line of diff.split("\n")) {
+			if (line.startsWith("+++") || line.startsWith("---")) continue;
+			if (line.startsWith("+")) added += 1;
+			else if (line.startsWith("-")) removed += 1;
+		}
+		this.turnChange = {
+			files: this.turnChange.files + 1,
+			added: this.turnChange.added + added,
+			removed: this.turnChange.removed + removed,
+		};
 	}
 
 	/** Extract text content from a user message */
@@ -4903,17 +4935,25 @@ export class InteractiveMode {
 
 	private toggleThinkingBlockVisibility(): void {
 		this.offerFirstUseHint("thinking");
-		if (this.chatDetail === "overview") {
+		const thinking = this.chatDetail === undefined ? "preference" : chatDetailView(this.chatDetail).thinking;
+		if (thinking === "collapsed") {
 			// Overview hides thinking regardless of the preference. Treat the toggle as a request to show it.
 			this.hideThinkingBlock = false;
 			this.settingsManager.setHideThinkingBlock(false);
+			this.chooseChatDetail("details");
+		} else if (thinking === "revealed") {
+			// `all` reveals thinking regardless of the preference, so announcing a hide here would
+			// describe a screen the user does not get. Leave that rung for the one that honors it.
+			this.hideThinkingBlock = true;
+			this.settingsManager.setHideThinkingBlock(true);
 			this.chooseChatDetail("details");
 		} else {
 			this.hideThinkingBlock = !this.hideThinkingBlock;
 			this.settingsManager.setHideThinkingBlock(this.hideThinkingBlock);
 		}
 		this.updateThinkingBlockVisibility();
-		this.showStatus(`Thinking blocks: ${this.hideThinkingBlock ? "hidden" : "visible"}`);
+		const hidden = this.chatDetail === "all" ? false : this.hideThinkingBlock;
+		this.showStatus(`Thinking blocks: ${hidden ? "hidden" : "visible"}`);
 	}
 
 	private async handleOpenExternalEditor(): Promise<void> {
@@ -5366,6 +5406,9 @@ export class InteractiveMode {
 					doubleEscapeAction: this.settingsManager.getDoubleEscapeAction(),
 					treeFilterMode: this.settingsManager.getTreeFilterMode(),
 					showHardwareCursor: this.settingsManager.getShowHardwareCursor(),
+					symbolPreset: this.settingsManager.getSymbolPreset(),
+					colorBlindMode: this.settingsManager.getColorBlindMode(),
+					tokenUsageDisplay: this.settingsManager.getTokenUsageDisplay(),
 					showCacheMissNotices: this.settingsManager.getShowCacheMissNotices(),
 					defaultProjectTrust: this.settingsManager.getDefaultProjectTrust(),
 					permissionMode,
@@ -5498,6 +5541,19 @@ export class InteractiveMode {
 					onShowHardwareCursorChange: (enabled) => {
 						this.settingsManager.setShowHardwareCursor(enabled);
 						this.ui.setShowHardwareCursor(enabled);
+					},
+					onSymbolPresetChange: (preset) => {
+						this.settingsManager.setSymbolPreset(preset);
+						setUiSymbolPreset(preset);
+						this.ui.requestRender();
+					},
+					onColorBlindModeChange: (enabled) => {
+						this.settingsManager.setColorBlindMode(enabled);
+						this.footer.invalidate();
+					},
+					onTokenUsageDisplayChange: (display) => {
+						this.settingsManager.setTokenUsageDisplay(display);
+						this.footer.invalidate();
 					},
 					onEditorPaddingXChange: (padding) => {
 						this.settingsManager.setEditorPaddingX(padding);
@@ -7428,13 +7484,24 @@ export class InteractiveMode {
 	 */
 	private handleHelpCommand(): void {
 		const commands = this.collectSessionCommands();
-		const rows = commands
-			.map((command) => {
-				const invocation = command.argumentHint ? `/${command.name} ${command.argumentHint}` : `/${command.name}`;
-				return `| \`${invocation}\` | ${command.description ?? ""} |`;
-			})
-			.join("\n");
-		const help = `| Command | Description |\n|---------|-------------|\n${rows}\n\nType \`/\` to filter these, or \`/hotkeys\` for keyboard shortcuts.`;
+		const common = ["login", "model", "settings", "help", "trust", "resources"];
+		const row = (command: (typeof commands)[number]) => {
+			const invocation = command.argumentHint ? `/${command.name} ${command.argumentHint}` : `/${command.name}`;
+			return `| \`${invocation}\` | ${command.description ?? ""} |`;
+		};
+		const table = (heading: string, rows: string[]) =>
+			rows.length === 0
+				? ""
+				: `**${heading}**\n\n| Command | Description |\n|---------|-------------|\n${rows.join("\n")}`;
+		const first = common.flatMap((name) => commands.filter((command) => command.name === name)).map(row);
+		const rest = commands.filter((command) => !common.includes(command.name)).map(row);
+		const help = [
+			table("Common", first),
+			table("All commands", rest),
+			"Type `/` to filter these, or `/hotkeys` for keyboard shortcuts.",
+		]
+			.filter((section) => section.length > 0)
+			.join("\n\n");
 
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new DynamicBorder());
@@ -7453,7 +7520,9 @@ export class InteractiveMode {
 				return;
 			}
 			this.chatContainer.addChild(new Spacer(1));
-			this.chatContainer.addChild(new Text(`${theme.fg("accent", "✓ New session started")}`, 1, 1));
+			this.chatContainer.addChild(
+				new Text(`${theme.fg("accent", `${uiGlyph("check").trimEnd()} New session started`)}`, 1, 1),
+			);
 			this.ui.requestRender();
 		} catch (error: unknown) {
 			await this.handleFatalRuntimeError("Failed to create session", error);
@@ -7488,7 +7557,11 @@ export class InteractiveMode {
 
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(
-			new Text(`${theme.fg("accent", "✓ Debug log written")}\n${theme.fg("muted", debugLogPath)}`, 1, 1),
+			new Text(
+				`${theme.fg("accent", `${uiGlyph("check").trimEnd()} Debug log written`)}\n${theme.fg("muted", debugLogPath)}`,
+				1,
+				1,
+			),
 		);
 		this.ui.requestRender();
 	}

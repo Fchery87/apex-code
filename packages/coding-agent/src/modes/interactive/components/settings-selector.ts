@@ -31,6 +31,7 @@ import { DynamicBorder } from "./dynamic-border.ts";
 import { hintRow, keyDisplayText } from "./keybinding-hints.ts";
 import { withComposerPrompt } from "./prompt-input.ts";
 import { SelectSubmenu, SteppedSubmenu, type SteppedSubmenuStep } from "./settings-submenu.ts";
+import { uiGlyph } from "./ui-glyphs.ts";
 
 /** The two hint rows `pi-tui`'s settings list writes, with and without search. */
 const SETTINGS_LIST_HINT_ROWS = new Set([
@@ -153,6 +154,9 @@ export interface SettingsConfig {
 	doubleEscapeAction: "fork" | "tree" | "none";
 	treeFilterMode: "default" | "no-tools" | "user-only" | "labeled-only" | "all";
 	showHardwareCursor: boolean;
+	symbolPreset: "unicode" | "ascii";
+	colorBlindMode: boolean;
+	tokenUsageDisplay: "off" | "compact" | "full";
 	editorPaddingX: number;
 	outputPad: 0 | 1;
 	autocompleteMaxVisible: number;
@@ -195,6 +199,9 @@ export interface SettingsCallbacks {
 	onDoubleEscapeActionChange: (action: "fork" | "tree" | "none") => void;
 	onTreeFilterModeChange: (mode: "default" | "no-tools" | "user-only" | "labeled-only" | "all") => void;
 	onShowHardwareCursorChange: (enabled: boolean) => void;
+	onSymbolPresetChange: (preset: "unicode" | "ascii") => void;
+	onColorBlindModeChange: (enabled: boolean) => void;
+	onTokenUsageDisplayChange: (display: "off" | "compact" | "full") => void;
 	onEditorPaddingXChange: (padding: number) => void;
 	onOutputPadChange: (padding: 0 | 1) => void;
 	onAutocompleteMaxVisibleChange: (maxVisible: number) => void;
@@ -375,7 +382,7 @@ class PermissionModeSubmenu extends Container {
 function themeItems(availableThemes: string[], currentTheme: string): SelectItem[] {
 	return availableThemes.map((name) => ({
 		value: name,
-		label: `${name === currentTheme ? "✓ " : "  "}${name}`,
+		label: `${name === currentTheme ? uiGlyph("check") : "  "}${name}`,
 	}));
 }
 
@@ -830,7 +837,7 @@ export class SettingsSelectorComponent extends Container {
 								const activeLevel = currentModelThinkingLevels[ctx.model];
 								const items: SelectItem[] = levels.map((level) => ({
 									value: level,
-									label: `${level === activeLevel ? "✓ " : "  "}${level}`,
+									label: `${level === activeLevel ? uiGlyph("check") : "  "}${level}`,
 									description: THINKING_DESCRIPTIONS[level],
 								}));
 								if (currentModelThinkingLevels[ctx.model] !== undefined) {
@@ -960,13 +967,38 @@ export class SettingsSelectorComponent extends Container {
 
 		// Hardware cursor toggle (insert after skill-commands)
 		const skillCommandsIndex = items.findIndex((item) => item.id === "skill-commands");
-		items.splice(skillCommandsIndex + 1, 0, {
-			id: "show-hardware-cursor",
-			label: "Show hardware cursor",
-			description: "Show the terminal cursor while still positioning it for IME support",
-			currentValue: config.showHardwareCursor ? "true" : "false",
-			values: ["true", "false"],
-		});
+		items.splice(
+			skillCommandsIndex + 1,
+			0,
+			{
+				id: "symbol-preset",
+				label: "Symbol preset",
+				description: "Unicode glyphs, or ASCII for terminals that draw them badly",
+				currentValue: config.symbolPreset ?? "unicode",
+				values: ["unicode", "ascii"],
+			},
+			{
+				id: "color-blind-mode",
+				label: "Color blind mode",
+				description: "Adjust the footer palette. State is still written out in text either way",
+				currentValue: config.colorBlindMode ? "true" : "false",
+				values: ["true", "false"],
+			},
+			{
+				id: "token-usage-display",
+				label: "Token usage",
+				description: "How much token and cost detail the footer shows",
+				currentValue: config.tokenUsageDisplay ?? "compact",
+				values: ["off", "compact", "full"],
+			},
+			{
+				id: "show-hardware-cursor",
+				label: "Show hardware cursor",
+				description: "Show the terminal cursor while still positioning it for IME support",
+				currentValue: config.showHardwareCursor ? "true" : "false",
+				values: ["true", "false"],
+			},
+		);
 
 		// Editor padding toggle (insert after show-hardware-cursor)
 		const hardwareCursorIndex = items.findIndex((item) => item.id === "show-hardware-cursor");
@@ -1118,6 +1150,15 @@ export class SettingsSelectorComponent extends Container {
 						break;
 					case "show-hardware-cursor":
 						callbacks.onShowHardwareCursorChange(newValue === "true");
+						break;
+					case "symbol-preset":
+						callbacks.onSymbolPresetChange(newValue as "unicode" | "ascii");
+						break;
+					case "color-blind-mode":
+						callbacks.onColorBlindModeChange(newValue === "true");
+						break;
+					case "token-usage-display":
+						callbacks.onTokenUsageDisplayChange(newValue as "off" | "compact" | "full");
 						break;
 					case "editor-padding":
 						callbacks.onEditorPaddingXChange(parseInt(newValue, 10));

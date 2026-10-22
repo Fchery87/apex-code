@@ -1,5 +1,5 @@
 {
-	"$schema": "https://raw.githubusercontent.com/earendil-works/pi/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
+	"$schema": "./theme-schema.json",
 	"name": "light",
 	"vars": {
 		"teal": "#0d9488",
@@ -20,7 +20,7 @@
 	},
 	"colors": {
 		"accent": "teal",
-		"border": "blue",
+		"border": "teal",
 		"borderAccent": "teal",
 		"borderMuted": "lightGray",
 		"success": "green",

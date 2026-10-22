@@ -141,7 +141,7 @@ describe("ApexSplashHeader", () => {
 				{ getSymbolPreset: () => "unicode" },
 			);
 
-			expect(header.render(100).map(plain).join("\n")).toContain("—");
+			expect(header.render(100).map(plain).join("\n")).toContain("not connected");
 
 			model = "claude-opus-5";
 			expect(header.render(100).map(plain).join("\n")).toContain("claude-opus-5");

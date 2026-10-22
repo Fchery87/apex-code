@@ -1638,6 +1638,33 @@ export class SettingsManager {
 		return this.settings.terminal?.tokenUsageDisplay ?? "compact";
 	}
 
+	setSymbolPreset(preset: "unicode" | "ascii"): void {
+		if (!this.globalSettings.terminal) {
+			this.globalSettings.terminal = {};
+		}
+		this.globalSettings.terminal.symbolPreset = preset;
+		this.markModified("terminal", "symbolPreset");
+		this.save();
+	}
+
+	setColorBlindMode(enabled: boolean): void {
+		if (!this.globalSettings.terminal) {
+			this.globalSettings.terminal = {};
+		}
+		this.globalSettings.terminal.colorBlindMode = enabled;
+		this.markModified("terminal", "colorBlindMode");
+		this.save();
+	}
+
+	setTokenUsageDisplay(display: "off" | "compact" | "full"): void {
+		if (!this.globalSettings.terminal) {
+			this.globalSettings.terminal = {};
+		}
+		this.globalSettings.terminal.tokenUsageDisplay = display;
+		this.markModified("terminal", "tokenUsageDisplay");
+		this.save();
+	}
+
 	getClearOnShrink(): boolean {
 		// Settings takes precedence, then env var, then default false
 		if (this.settings.terminal?.clearOnShrink !== undefined) {

@@ -15,6 +15,7 @@ import { getSelectListTheme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { hintRow, keyDisplayText } from "./keybinding-hints.ts";
 import { PromptInput } from "./prompt-input.ts";
+import { uiGlyph } from "./ui-glyphs.ts";
 
 const THINKING_SELECT_LIST_LAYOUT: SelectListLayoutOptions = {
 	minPrimaryColumnWidth: 12,
@@ -68,7 +69,7 @@ export class ThinkingSelectorComponent extends Container implements Focusable {
 
 		this.allItems = availableLevels.map((level) => ({
 			value: level,
-			label: `${level === currentLevel ? "✓ " : "  "}${level}`,
+			label: `${level === currentLevel ? uiGlyph("check") : "  "}${level}`,
 			description:
 				level === defaultThinkingLevel ? `${LEVEL_DESCRIPTIONS[level]} · default` : LEVEL_DESCRIPTIONS[level],
 		}));
