@@ -12,6 +12,7 @@ import type { DiagnosticsOperations, DiagnosticsOutcome } from "./diagnostics.ts
 import { diagnosticEvidenceForPath, formatDiagnosticsOutcome } from "./diagnostics.ts";
 import { type FileReadLedger, readTextIfExists } from "./file-ledger.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
+import { acceptFilePathAlias } from "./path-arguments.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
 import { readPreparedPath, resolveToCwd, writePathAtomically, writePreparedPath } from "./path-utils.ts";
 import { writeRenderers } from "./renderers/write.ts";
@@ -165,6 +166,7 @@ export function createWriteToolDefinition(
 			},
 		},
 		constrainedSampling: getExperimentalToolSampling() ?? { type: "json_schema", strict: "prefer" },
+		prepareArguments: (args) => acceptFilePathAlias(args) as WriteToolInput,
 		async execute(
 			_toolCallId,
 			input: { path: string; content: string },

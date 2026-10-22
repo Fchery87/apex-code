@@ -35,6 +35,14 @@ export function summarizeOperationError(text: string): string | undefined {
 	const lines = nonEmptyLines(text);
 	const traceback = lines.findIndex((line) => line.startsWith("Traceback ") || line.startsWith("Error: Traceback "));
 	if (traceback >= 0) return summarizeError(lines.slice(traceback).join("\n"));
+	const validation = lines.findIndex((line) => line.startsWith("Validation failed for tool "));
+	if (validation >= 0) {
+		const reasons = lines.slice(validation + 1).filter((line) => line.trimStart().startsWith("- "));
+		const headline = lines[validation].replace(/:$/, "");
+		return reasons.length > 0
+			? `${headline}: ${reasons.map((line) => line.trim().replace(/^- /, "")).join("; ")}`
+			: headline;
+	}
 	const diagnostic =
 		lines.find((line) => /(?:^|\s)(?:[\w.]*Error|Exception|fatal):/i.test(line)) ??
 		lines.find((line) => /\b(?:error|failed|failure|fail|denied|exception|fatal)\b/i.test(line));

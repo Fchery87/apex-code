@@ -10,6 +10,7 @@ import type { ExtensionContext } from "../extensions/types.ts";
 import { getPreparedPathOperation } from "../permissions/operations.ts";
 import type { ApexToolDefinition } from "./contract.ts";
 import type { FileReadLedger } from "./file-ledger.ts";
+import { acceptFilePathAlias } from "./path-arguments.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
 import { readPreparedPath, resolveReadPathAsync } from "./path-utils.ts";
 import { readRenderers } from "./renderers/read.ts";
@@ -97,6 +98,7 @@ export function createReadToolDefinition(
 			evidence: { emits: new Set(), capture: () => [] },
 		},
 		constrainedSampling: getExperimentalToolSampling() ?? { type: "json_schema", strict: "prefer" },
+		prepareArguments: (args) => acceptFilePathAlias(args) as ReadToolInput,
 		async execute(
 			_toolCallId,
 			input: { path: string; offset?: number; limit?: number },

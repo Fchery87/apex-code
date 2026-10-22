@@ -5,6 +5,7 @@ import { type Static, Type } from "typebox";
 import type { ExtensionContext } from "../extensions/types.ts";
 import { getPreparedPathOperation } from "../permissions/operations.ts";
 import type { ApexToolDefinition } from "./contract.ts";
+import { acceptFilePathAlias } from "./path-arguments.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
 import { pathExists, resolveToCwd } from "./path-utils.ts";
 import { lsRenderers } from "./renderers/ls.ts";
@@ -67,6 +68,7 @@ export function createLsToolDefinition(
 		description: `List directory contents. Returns entries sorted alphabetically, with '/' suffix for directories. Includes dotfiles. Output is truncated to ${DEFAULT_LIMIT} entries or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first).`,
 		promptSnippet: lsToolSystemPromptContribution.snippet,
 		parameters: lsSchema,
+		prepareArguments: (args) => acceptFilePathAlias(args) as LsToolInput,
 		contract: {
 			capabilities: new Set(["fs.read"]),
 			permission: createPathPermissionSpec({

@@ -23,6 +23,7 @@ import {
 } from "./edit-diff.ts";
 import type { FileReadLedger } from "./file-ledger.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
+import { acceptFilePathAlias } from "./path-arguments.ts";
 import { createPathPermissionSpec } from "./path-permission.ts";
 import { readPreparedPath, resolveToCwd, writePathAtomically, writePreparedPath } from "./path-utils.ts";
 import { type EditRenderState, editRenderers } from "./renderers/edit.ts";
@@ -175,7 +176,7 @@ function prepareEditArguments(input: unknown): EditToolInput {
 		return input as EditToolInput;
 	}
 
-	const args = input as Record<string, unknown>;
+	const args = acceptFilePathAlias(input) as Record<string, unknown>;
 
 	// Some models (Opus 4.6, GLM-5.1) send edits as a JSON string instead of an array.
 	// Others send a single edit object instead of a one-element edits array.
