@@ -144,6 +144,7 @@ capable and measurably worse.
 | Compact operation output | **landed**. Uniform compact rows, individual disclosure, and preserved detail views. Independent review and Linux, macOS, and Windows CI passed in [PR #168](https://github.com/Fchery87/apex-code/pull/168). | [spec](specs/2026-10-04-compact-operation-output.md) | — |
 | Harness review remediation | **landed** — all 32 tasks. Three-OS CI and the first CodeQL run were green at `9aa1088b7`. Merged to `main` as [PR #173](https://github.com/Fchery87/apex-code/pull/173) at `8e050a67e`. | [spec](specs/2026-10-16-harness-review-remediation.md) | — |
 | Decisions settled after the remediation | **landed** at `f9586cdf4`. Full suite and three-OS CI pass on [PR #176](https://github.com/Fchery87/apex-code/pull/176). Proxy opt-in for `web_fetch`, capped compaction reserve, startup MCP discovery setting, and four glossary terms. | [spec](specs/2026-10-17-grill-decisions.md) | — |
+| Completion check | **draft.** One verification policy can start another turn after a failed check. Decision function only. | [spec](specs/2026-10-22-completion-check.md) | [plan](plans/2026-10-22-completion-check.md) |
 
 ---
 
