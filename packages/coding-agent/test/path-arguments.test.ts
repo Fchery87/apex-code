@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { createEditToolDefinition } from "../src/core/tools/edit.ts";
+import { createFindToolDefinition } from "../src/core/tools/find.ts";
+import { createGrepToolDefinition } from "../src/core/tools/grep.ts";
+import { createLsToolDefinition } from "../src/core/tools/ls.ts";
 import { acceptFilePathAlias } from "../src/core/tools/path-arguments.ts";
 import { createReadToolDefinition } from "../src/core/tools/read.ts";
+import { createWriteToolDefinition } from "../src/core/tools/write.ts";
 
 describe("file_path alias", () => {
 	it("renames file_path to path and leaves a real path alone", () => {
@@ -10,11 +15,15 @@ describe("file_path alias", () => {
 		expect(acceptFilePathAlias(null)).toBe(null);
 	});
 
-	it("is what the read tool prepares before validation", () => {
-		const definition = createReadToolDefinition(process.cwd());
-		expect(definition.prepareArguments?.({ file_path: "README.md", limit: 10 })).toEqual({
-			path: "README.md",
-			limit: 10,
-		});
+	it.each([
+		["read", createReadToolDefinition],
+		["write", createWriteToolDefinition],
+		["edit", createEditToolDefinition],
+		["grep", createGrepToolDefinition],
+		["find", createFindToolDefinition],
+		["ls", createLsToolDefinition],
+	] as const)("renames file_path before %s validates its arguments", (_name, create) => {
+		const definition = create(process.cwd());
+		expect(definition.prepareArguments?.({ file_path: "README.md" })).toMatchObject({ path: "README.md" });
 	});
 });
