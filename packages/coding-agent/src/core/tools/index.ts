@@ -11,6 +11,15 @@ export {
 	createLocalBashOperations,
 } from "./bash.ts";
 export {
+	type BrowserDetails,
+	type BrowserInput,
+	type BrowserOperations,
+	type BrowserPage,
+	type BrowserToolOptions,
+	createBrowserTool,
+	createBrowserToolDefinition,
+} from "./browser.ts";
+export {
 	createDelegateTool,
 	createDelegateToolDefinition,
 	type DelegateDetails,
@@ -158,6 +167,7 @@ import type { DelegationRuntimeOptions } from "../delegation/runtime.ts";
 import { createMcpTool, createMcpToolDefinition, type McpToolOptions } from "../mcp/mcp-tool.ts";
 import { createAskUserTool, createAskUserToolDefinition } from "./ask-user.ts";
 import { type BashToolOptions, createBashTool, createBashToolDefinition } from "./bash.ts";
+import { type BrowserToolOptions, createBrowserTool, createBrowserToolDefinition } from "./browser.ts";
 import type { ApexToolDefinition } from "./contract.ts";
 import { createDelegateTool, createDelegateToolDefinition } from "./delegate.ts";
 import { createEditTool, createEditToolDefinition, type EditToolOptions } from "./edit.ts";
@@ -232,6 +242,12 @@ export interface ToolsOptions {
 	web_fetch?: WebFetchToolOptions;
 	delegate?: { runtime?: DelegationRuntimeOptions };
 	test?: TestToolOptions;
+	/**
+	 * The `browser` tool. Undefined by default. The registry includes it only when this
+	 * is set, so a session that did not opt in keeps its tool list and prompt prefix.
+	 */
+	browser?: BrowserToolOptions;
+
 	/**
 	 * The `lsp` navigation tool (LSP.5). Undefined by default -- the registry-building
 	 * functions below include the `lsp` key only when this is provided, which is what
@@ -383,7 +399,7 @@ const emptySkillSearchResolver: SkillSearchResolver = {
 export function createAllToolDefinitions(
 	cwd: string,
 	options?: ToolsOptions,
-): Record<ToolName, ToolDef> & { lsp?: ToolDef; mcp?: ToolDef } {
+): Record<ToolName, ToolDef> & { browser?: ToolDef; lsp?: ToolDef; mcp?: ToolDef } {
 	const definitions = {
 		read: createReadToolDefinition(cwd, options?.read),
 		bash: createBashToolDefinition(cwd, options?.bash),
@@ -411,6 +427,7 @@ export function createAllToolDefinitions(
 		test: createTestToolDefinition(cwd, options?.test),
 		// Registered only when configured (LSP.5): an unconfigured session's registry,
 		// and therefore its static prompt prefix, is unaffected by this subsystem.
+		...(options?.browser ? { browser: createBrowserToolDefinition(options.browser) } : {}),
 		...(options?.lsp ? { lsp: createLspToolDefinition(cwd, options.lsp) } : {}),
 		...(options?.mcp ? { mcp: createMcpToolDefinition(options.mcp) } : {}),
 	};
@@ -437,7 +454,7 @@ export function createReadOnlyTools(cwd: string, options?: ToolsOptions): Tool[]
 export function createAllTools(
 	cwd: string,
 	options?: ToolsOptions,
-): Record<ToolName, Tool> & { lsp?: Tool; mcp?: Tool } {
+): Record<ToolName, Tool> & { browser?: Tool; lsp?: Tool; mcp?: Tool } {
 	const definitions = createAllToolDefinitions(cwd, options);
 	const resolver = options?.tool_schema?.resolver ?? {
 		getTool: (name: string) => definitions[name as ToolName],
@@ -461,6 +478,7 @@ export function createAllTools(
 		plan_present: createPlanPresentTool(),
 		delegate: createDelegateTool(options?.delegate?.runtime ?? noopDelegationRuntime),
 		test: createTestTool(cwd, options?.test),
+		...(options?.browser ? { browser: createBrowserTool(options.browser) } : {}),
 		...(options?.lsp ? { lsp: createLspTool(cwd, options.lsp) } : {}),
 		...(options?.mcp ? { mcp: createMcpTool(options.mcp) } : {}),
 	};

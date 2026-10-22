@@ -6,8 +6,8 @@
 
 | Task | State | Commit |
 | --- | --- | --- |
-| Destination check and its unit tests | not started | |
-| Tool definition, contract, and injected-operation tests | not started | |
+| Destination check and its unit tests | done | `08f093658` |
+| Tool definition, contract, and injected-operation tests | done | `e42b292e3` |
 | Registry opt-in, absent unless configured | not started | |
 
 ## Order
