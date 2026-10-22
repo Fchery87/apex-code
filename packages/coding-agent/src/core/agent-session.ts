@@ -76,6 +76,13 @@ import {
 	prepareCompaction,
 	shouldCompact,
 } from "./compaction/index.ts";
+import {
+	type CompletionCheckDecision,
+	type CompletionCondition,
+	DEFAULT_COMPLETION_MAX_TURNS,
+	decideCompletionCheck,
+	evidenceDetail,
+} from "./completion-condition.ts";
 import { evictionBudget, installContextPipeline, isDefaultStreamFunction } from "./context/pipeline.ts";
 import { configuredDefaultToolNames } from "./default-tool-names.ts";
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVEL_OPTIONS } from "./defaults.ts";
@@ -556,6 +563,9 @@ export class AgentSession {
 	private _steeringMessages: string[] = [];
 	/** Tracks pending follow-up messages for UI display. Removed when delivered. */
 	private _followUpMessages: string[] = [];
+	/** One user-set verification policy that can start another turn. Absent until set. */
+	private _completionCondition: CompletionCondition | undefined;
+	private _completionContinuationsUsed = 0;
 	/** Messages queued to be included with the next user prompt as context ("asides"). */
 	private _pendingNextTurnMessages: CustomMessage[] = [];
 	/** Context-only custom messages queued during a run, flushed once the current turn's tool results are in. */
@@ -2395,7 +2405,54 @@ export class AgentSession {
 
 		// The low-level loop drains both queues before agent_end. Messages queued by
 		// agent_end handlers require a fresh run before pre-settlement handlers fire.
+		if (!this._agentRunAbortRequested) await this._applyCompletionCondition();
 		return !this._agentRunAbortRequested && this.agent.hasQueuedMessages();
+	}
+
+	getCompletionCondition(): CompletionCondition | undefined {
+		return this._completionCondition;
+	}
+
+	setCompletionCondition(condition: { policyId: string; maxTurns?: number } | undefined): void {
+		if (condition === undefined) {
+			this._completionCondition = undefined;
+			this._completionContinuationsUsed = 0;
+			return;
+		}
+		this._completionCondition = {
+			policyId: condition.policyId,
+			maxTurns: condition.maxTurns ?? DEFAULT_COMPLETION_MAX_TURNS,
+		};
+		this._completionContinuationsUsed = 0;
+	}
+
+	/**
+	 * Run the active completion policy after the model stops. A failure queues
+	 * one follow-up so the existing restart loop starts another turn. The
+	 * prompt carries status and exit code only.
+	 */
+	private async _applyCompletionCondition(): Promise<CompletionCheckDecision | undefined> {
+		const condition = this._completionCondition;
+		if (condition === undefined || this._agentRunAbortRequested) return undefined;
+		const status = await this.requestVerification({ policyId: condition.policyId });
+		const evidence = this._verificationTracker
+			?.latest()
+			?.evidence.find((entry) => entry.policyId === condition.policyId);
+		const decision = decideCompletionCheck({
+			policyId: condition.policyId,
+			status,
+			continuationsUsed: this._completionContinuationsUsed,
+			maxTurns: condition.maxTurns,
+			...evidenceDetail(evidence),
+		});
+		if (decision.type === "continue") {
+			this._completionContinuationsUsed += 1;
+			await this.followUp(decision.prompt);
+			return decision;
+		}
+		this._completionCondition = undefined;
+		this._completionContinuationsUsed = 0;
+		return decision;
 	}
 
 	private async _runBeforeSettleBoundary(): Promise<boolean> {

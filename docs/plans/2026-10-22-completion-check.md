@@ -7,8 +7,8 @@ Spec: `docs/specs/2026-10-22-completion-check.md`
 | Task | State | Commit |
 | --- | --- | --- |
 | Decision function and unit tests | done | `b93728acb` |
-| Apply the decision after a user turn | not started | |
-| `/goal` slash command | not started | |
+| Apply the decision after a user turn | done, this commit | |
+| `/goal` slash command | done, this commit | |
 
 ## Order
 

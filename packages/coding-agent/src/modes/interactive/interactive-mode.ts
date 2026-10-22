@@ -3531,6 +3531,11 @@ export class InteractiveMode {
 				await this.handleCompactCommand(customInstructions);
 				return;
 			}
+			if (text === "/goal" || text.startsWith("/goal ")) {
+				this.editor.setText("");
+				this.handleGoalCommand(text.startsWith("/goal ") ? text.slice(6).trim() : "");
+				return;
+			}
 			if (text === "/reload") {
 				this.editor.setText("");
 				await this.handleReloadCommand();
@@ -7716,6 +7721,21 @@ export class InteractiveMode {
 		} catch {
 			// Ignore, will be emitted as an event
 		}
+	}
+
+	private handleGoalCommand(argument: string): void {
+		if (argument === "") {
+			const current = this.session.getCompletionCondition();
+			this.showStatus(current === undefined ? "No completion check" : `Completion check: ${current.policyId}`);
+			return;
+		}
+		if (argument === "clear") {
+			this.session.setCompletionCondition(undefined);
+			this.showStatus("Completion check cleared");
+			return;
+		}
+		this.session.setCompletionCondition({ policyId: argument });
+		this.showStatus(`Completion check set to ${argument}`);
 	}
 
 	stop(fullscreenExitOutput = this.settingsManager.getFullscreenExitOutput()): void {
