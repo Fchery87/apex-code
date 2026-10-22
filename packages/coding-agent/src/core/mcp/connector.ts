@@ -6,7 +6,7 @@
  * the boundary where an external protocol becomes an internal type.
  */
 
-import { chmodSync, createWriteStream, mkdirSync } from "node:fs";
+import { chmodSync, createWriteStream, mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Stream } from "node:stream";
 import type { CredentialStore } from "@earendil-works/pi-ai";
@@ -52,19 +52,38 @@ export function buildStdioEnvironment(configured: Record<string, string>): Recor
 	return { ...getDefaultEnvironment(), ...resolved };
 }
 
+/** One server's diagnostics stay bounded. Past this, later bytes are dropped. */
+const STDERR_LOG_LIMIT = 1024 * 1024;
+
 /**
  * A stdio server's stderr is its own diagnostics channel. Inherited, it writes straight
  * onto the terminal the TUI is drawing on and corrupts the screen, so it goes to a
- * per-server log under the agent directory instead.
+ * per-server log under the agent directory instead. The log stops at
+ * {@link STDERR_LOG_LIMIT}; the server keeps running either way.
  */
 function keepStderrInLog(serverName: string, stderr: Stream): void {
+	const drop = () => {
+		const source = stderr as NodeJS.EventEmitter & { resume?: () => void };
+		if (typeof source.resume === "function") source.resume();
+		else source.on("data", () => {});
+	};
 	const logDir = join(getAgentDir(), "mcp", "logs");
 	try {
 		mkdirSync(logDir, { recursive: true, mode: 0o700 });
 		chmodSync(logDir, 0o700);
 		const logPath = join(logDir, `${serverName.replace(/[^A-Za-z0-9._-]/g, "_")}.log`);
+		let written = 0;
+		try {
+			written = statSync(logPath).size;
+		} catch {
+			written = 0;
+		}
+		if (written >= STDERR_LOG_LIMIT) {
+			drop();
+			return;
+		}
 		const log = createWriteStream(logPath, { flags: "a", mode: 0o600 });
-		log.on("error", () => {});
+		log.on("error", drop);
 		log.on("open", () => {
 			try {
 				chmodSync(logPath, 0o600);
@@ -72,13 +91,17 @@ function keepStderrInLog(serverName: string, stderr: Stream): void {
 				// An existing file we cannot tighten still receives the stream.
 			}
 		});
-		stderr.pipe(log);
+		stderr.on("data", (chunk: Buffer | string) => {
+			const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+			if (written >= STDERR_LOG_LIMIT) return;
+			const room = STDERR_LOG_LIMIT - written;
+			log.write(bytes.length <= room ? bytes : bytes.subarray(0, room));
+			written += Math.min(bytes.length, room);
+		});
 	} catch {
 		// Logging must not stop the server. Drop the diagnostics rather than
 		// letting them reach the terminal.
-		const source = stderr as NodeJS.EventEmitter & { resume?: () => void };
-		if (typeof source.resume === "function") source.resume();
-		else source.on("data", () => {});
+		drop();
 	}
 }
 

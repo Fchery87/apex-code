@@ -20,21 +20,42 @@ const require = createRequire(import.meta.url);
 const tsxLoader = pathToFileURL(require.resolve("tsx/esm")).href;
 const PROBE = "APEX-STDERR-PROBE-7c1e";
 
+const HANDSHAKE = `const readline = require("node:readline");
+process.stderr.write(${JSON.stringify(`${PROBE}\n`)});
+const lines = readline.createInterface({ input: process.stdin });
+lines.on("line", (line) => {
+	const message = JSON.parse(line);
+	if (message.method === "initialize") {
+		process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { protocolVersion: "2025-03-26", capabilities: {}, serverInfo: { name: "probe", version: "0" } } }) + "\\n");
+	} else if (message.id !== undefined) {
+		process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: {} }) + "\\n");
+	}
+});
+`;
+
 /**
- * Connects to a stdio server that writes PROBE to stderr and exits. The connect runs in a
- * child process, so the test can capture what that child's stderr receives. Asserts the
- * child exited cleanly, so a harness that fails to start cannot pass by writing nothing.
+ * Connects to a stdio server that writes PROBE to stderr. The connect runs in a child
+ * process, so the test can capture what that child's stderr receives. Asserts the child
+ * exited cleanly, so a harness that fails to start cannot pass by writing nothing.
+ * `requireConnected` makes the harness fail unless the MCP handshake completes.
  */
-function connectToNoisyServer(prepare?: (agentDir: string) => void): { stderr: string; agentDir: string } {
+function connectToNoisyServer(
+	prepare?: (agentDir: string) => void,
+	requireConnected = false,
+): { stderr: string; agentDir: string } {
 	const scratch = mkdtempSync(join(tmpdir(), "apex-mcp-stderr-"));
 	const agentDir = join(scratch, "agent");
 	const serverScript = join(scratch, "noisy-server.cjs");
 	const harness = join(scratch, "harness.mts");
 	const connectorUrl = pathToFileURL(join(packageRoot, "src", "core", "mcp", "connector.ts")).href;
-	writeFileSync(serverScript, `process.stderr.write(${JSON.stringify(`${PROBE}\n`)});\nprocess.exit(1);\n`);
+	writeFileSync(
+		serverScript,
+		requireConnected ? HANDSHAKE : `process.stderr.write(${JSON.stringify(`${PROBE}\n`)});\nprocess.exit(1);\n`,
+	);
 	writeFileSync(
 		harness,
-		`import { connectMcpServer } from ${JSON.stringify(connectorUrl)};
+		`import { writeFileSync } from "node:fs";
+import { connectMcpServer } from ${JSON.stringify(connectorUrl)};
 const server = {
 	name: "probe",
 	transport: { kind: "stdio", command: process.execPath, args: [${JSON.stringify(serverScript)}], env: {}, cwd: undefined },
@@ -42,7 +63,14 @@ const server = {
 	lifecycle: "lazy",
 	idleTimeoutMinutes: 10,
 };
-await connectMcpServer(server).catch(() => undefined);
+try {
+	const connection = await connectMcpServer(server);
+	writeFileSync(${JSON.stringify(join(scratch, "result.txt"))}, "connected\\n");
+	await connection.close();
+} catch (error) {
+	writeFileSync(${JSON.stringify(join(scratch, "result.txt"))}, "rejected: " + (error instanceof Error ? error.stack : String(error)));
+	if (${requireConnected}) process.exitCode = 1;
+}
 await new Promise((resolve) => setTimeout(resolve, 500));
 `,
 	);
@@ -53,7 +81,10 @@ await new Promise((resolve) => setTimeout(resolve, 500));
 		encoding: "utf8",
 		timeout: 60_000,
 	});
-	if (result.status !== 0) throw new Error(`harness failed (status ${result.status}): ${result.stderr}`);
+	if (result.status !== 0) {
+		const recorded = existsSync(join(scratch, "result.txt")) ? readFileSync(join(scratch, "result.txt"), "utf8") : "";
+		throw new Error(`harness failed (status ${result.status}): ${result.stderr}\n${recorded}`);
+	}
 	return { stderr: result.stderr, agentDir };
 }
 
@@ -93,8 +124,17 @@ describe("MCP stdio server stderr", () => {
 			mkdirSync(join(agentDir, "mcp"), { recursive: true });
 			writeFileSync(logs, "not a directory\n");
 			chmodSync(logs, 0o600);
-		});
+		}, true);
 		expect(stderr).not.toContain(PROBE);
 		expect(stderr).not.toMatch(/EEXIST|ENOTDIR|EACCES/);
+	});
+
+	it("stops appending once the log reaches its limit", () => {
+		const { agentDir } = connectToNoisyServer((agentDir) => {
+			const logDir = join(agentDir, "mcp", "logs");
+			mkdirSync(logDir, { recursive: true });
+			writeFileSync(join(logDir, "probe.log"), Buffer.alloc(1024 * 1024, "x"));
+		}, true);
+		expect(statSync(join(agentDir, "mcp", "logs", "probe.log")).size).toBe(1024 * 1024);
 	});
 });
