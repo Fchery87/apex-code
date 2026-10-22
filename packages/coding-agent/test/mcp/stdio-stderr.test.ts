@@ -73,7 +73,8 @@ describe("MCP stdio server stderr", () => {
 		expect(logged).toContain(PROBE);
 	});
 
-	it("keeps the log directory and file readable by the owner only", async () => {
+	// Node on Windows reports file type bits, not the Unix mode chmod set.
+	it.skipIf(process.platform === "win32")("keeps the log directory and file readable by the owner only", async () => {
 		const { agentDir } = connectToNoisyServer();
 		const logDir = join(agentDir, "mcp", "logs");
 		const [file] = readdirSync(logDir);
