@@ -3872,7 +3872,7 @@ export class InteractiveMode {
 
 			case "tool_execution_end": {
 				if (event.toolName === "plan_present" && !event.isError) await this.refreshFooterPermissionMode();
-				this.recordTurnChange(event.toolName, event.isError, event.result);
+				this.recordTurnChange?.(event.toolName, event.isError, event.result);
 				const component = this.pendingTools.get(event.toolCallId);
 				if (component) {
 					component.updateResult({ ...event.result, isError: event.isError });
