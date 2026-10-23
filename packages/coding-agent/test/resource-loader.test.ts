@@ -1153,5 +1153,18 @@ export default function(pi: ExtensionAPI) {
 
 			expect(files.map((f) => f.content)).toEqual(["repo instructions", "src instructions"]);
 		});
+
+		it("appends accepted memory notes and skips the inbox", () => {
+			const repo = join(tempDir, "notes");
+			mkdirSync(join(repo, ".apex-code", "memory", "inbox"), { recursive: true });
+			mkdirSync(join(repo, ".apex-code", "memory", "accepted"), { recursive: true });
+			writeFileSync(join(repo, ".apex-code", "memory", "inbox", "pending.md"), "# Pending\n\nnot yet\n");
+			writeFileSync(join(repo, ".apex-code", "memory", "accepted", "kept.md"), "# Kept\n\nuse tabs\n");
+
+			const files = loadProjectContextFiles({ cwd: repo, agentDir, projectTrusted: true });
+
+			expect(files.map((f) => f.content).join("\n")).toContain("use tabs");
+			expect(files.map((f) => f.content).join("\n")).not.toContain("not yet");
+		});
 	});
 });

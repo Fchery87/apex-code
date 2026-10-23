@@ -18,6 +18,7 @@ import {
 } from "./extensions/loader.ts";
 import type { Extension, ExtensionRuntime, InlineExtension, LoadExtensionsResult } from "./extensions/types.ts";
 import { findGitPaths } from "./footer-data-provider.ts";
+import { loadAcceptedMemoryNotes } from "./memory-notes.ts";
 import { DefaultPackageManager, type PathMetadata, type ResolvedResource } from "./package-manager.ts";
 import { PROJECT_INSTRUCTION_FILES } from "./project-resources.ts";
 import type { PromptTemplate } from "./prompt-templates.ts";
@@ -162,6 +163,14 @@ export function loadProjectContextFiles(options: {
 	}
 
 	contextFiles.push(...ancestorContextFiles);
+
+	const notes = loadAcceptedMemoryNotes(resolvedCwd, { projectTrusted: true });
+	if (notes.text) {
+		contextFiles.push({
+			path: "accepted-memory-notes",
+			content: notes.cut ? `${notes.text}\n[notes cut at ${notes.cut}]` : notes.text,
+		});
+	}
 
 	return contextFiles;
 }
