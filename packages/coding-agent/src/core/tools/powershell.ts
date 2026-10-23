@@ -17,7 +17,9 @@ const UTF8_OUTPUT_PREFIX = "try { [Console]::OutputEncoding=[System.Text.Encodin
 
 export const powershellToolSystemPromptContribution = {
 	snippet: "Execute PowerShell commands",
-	guidelines: ["You can inspect PI_* environment variables for current model and session details."],
+	guidelines: [
+		"Commands you run can read APEX_CODE_SESSION_ID, APEX_CODE_PROVIDER, APEX_CODE_MODEL, and APEX_CODE_REASONING_LEVEL.",
+	],
 } as const;
 
 export type PowerShellOperations = BashOperations;

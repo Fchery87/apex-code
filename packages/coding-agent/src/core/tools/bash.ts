@@ -88,8 +88,10 @@ const bashSchema = toolUnion(
 );
 
 export const bashToolSystemPromptContribution = {
-	snippet: "Execute bash commands (ls, grep, find, etc.)",
-	guidelines: ["You can inspect PI_* environment variables for current model and session details."],
+	snippet: "Execute a bash command. Use read, grep, find, and ls instead when they can do the job.",
+	guidelines: [
+		"Commands you run can read APEX_CODE_SESSION_ID, APEX_CODE_PROVIDER, APEX_CODE_MODEL, and APEX_CODE_REASONING_LEVEL.",
+	],
 } as const;
 
 export type BashToolInput = Static<typeof bashSchema>;

@@ -35,6 +35,9 @@ export function createToolSchemaToolDefinition(resolver: ToolSchemaResolver): Ap
 		name: "tool_schema",
 		label: "tool_schema",
 		description: "Load the full parameter schema for an active tool before calling it.",
+		promptGuidelines: [
+			"A tool announced with no parameters has a deferred schema. Call tool_schema with its name before calling it.",
+		],
 		parameters: toolSchema,
 		contract: {
 			capabilities: new Set(),

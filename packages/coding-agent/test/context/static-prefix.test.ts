@@ -131,8 +131,14 @@ const LARGE_SKILL_LIBRARY: Skill[] = Array.from({ length: 200 }, (_, i) => synth
  * worst-case enforced prefix is 3,989 tokens. The budget is raised to 4,210, a
  * 221-token margin over that measured value, preserving the historical calibration
  * approach while covering the schema's added branch.
+ *
+ * Re-measured after the system prompt stopped naming the old PI_* session variables,
+ * stopped listing every Apex Code doc, and gained the todo_write, commit, and em dash
+ * rules. The worst case with a skill library loaded is 4,334 tokens. The budget is
+ * raised to 4,580, a ~5.5% margin over that measured value, the same proportional
+ * margin every prior revision of this budget used.
  */
-const ENFORCED_PRODUCTION_PREFIX_BUDGET = 4_210;
+const ENFORCED_PRODUCTION_PREFIX_BUDGET = 4_580;
 
 function lspToolOptions() {
 	return { lsp: { operations: { request: async () => [] } } };

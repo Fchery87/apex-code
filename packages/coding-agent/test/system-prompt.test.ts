@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { getDocsPath } from "../src/config.ts";
 import type { Skill } from "../src/core/skills.ts";
 import { createSyntheticSourceInfo } from "../src/core/source-info.ts";
 import { buildSystemPrompt } from "../src/core/system-prompt.ts";
@@ -108,17 +109,16 @@ describe("buildSystemPrompt", () => {
 			expect(prompt).toContain(expected);
 		});
 
-		test("instructs models to resolve Apex Code docs and examples under absolute base paths", () => {
+		test("points at the Apex Code docs by absolute path and only when asked about Apex Code", () => {
 			const prompt = buildSystemPrompt({
 				contextFiles: [],
 				skills: [],
 				cwd: process.cwd(),
 			});
 
-			expect(prompt).toContain(
-				"- When reading Apex Code docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory",
-			);
-			expect(prompt).toContain("environment variables (docs/environment-variables.md)");
+			expect(prompt).toContain("Read these only when the user asks about Apex Code itself:");
+			expect(prompt).toContain(`- Docs: ${getDocsPath()}`);
+			expect(prompt).not.toContain("docs/environment-variables.md");
 		});
 	});
 

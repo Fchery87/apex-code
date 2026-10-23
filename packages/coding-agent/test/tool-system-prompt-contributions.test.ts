@@ -9,6 +9,7 @@ import {
 	powershellToolSystemPromptContribution,
 } from "../src/core/tools/powershell.ts";
 import { createReadToolDefinition, readToolSystemPromptContribution } from "../src/core/tools/read.ts";
+import { createToolSchemaToolDefinition } from "../src/core/tools/tool-schema.ts";
 import { createWriteToolDefinition, writeToolSystemPromptContribution } from "../src/core/tools/write.ts";
 
 const cases = [
@@ -40,5 +41,15 @@ describe("built-in tool system prompt contributions", () => {
 		const definition = createDefinition("/workspace", { exposeSessionEnvironment: false });
 
 		expect(definition.promptGuidelines).toBeUndefined();
+	});
+
+	test("tells the model to load a deferred tool's schema before calling it", () => {
+		const definition = createToolSchemaToolDefinition({
+			getTool: () => undefined,
+			markLoaded: () => {},
+		});
+
+		expect(definition.promptGuidelines?.join(" ")).toMatch(/tool_schema/);
+		expect(definition.promptGuidelines?.join(" ")).toMatch(/before calling/i);
 	});
 });
