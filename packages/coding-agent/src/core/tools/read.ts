@@ -7,6 +7,7 @@ import { processImage } from "../../utils/image-process.ts";
 import { detectSupportedImageMimeType, detectSupportedImageMimeTypeFromFile } from "../../utils/mime.ts";
 import { getExperimentalToolSampling } from "../experimental.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
+import { matchingPathRules } from "../path-rules.ts";
 import { getPreparedPathOperation } from "../permissions/operations.ts";
 import type { ApexToolDefinition } from "./contract.ts";
 import type { FileReadLedger } from "./file-ledger.ts";
@@ -215,6 +216,13 @@ export function createReadToolDefinition(
 									outputText = truncation.content;
 								}
 								content = [{ type: "text", text: outputText }];
+								const rules = matchingPathRules(cwd, path);
+								if (rules.length > 0) {
+									content.push({
+										type: "text",
+										text: `Path rules:\n${rules.map((rule) => rule.body).join("\n\n")}`,
+									});
+								}
 							}
 
 							if (aborted) return;

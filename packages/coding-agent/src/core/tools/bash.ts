@@ -255,6 +255,8 @@ export interface BashOperations {
 			signal?: AbortSignal;
 			timeout?: number;
 			env?: NodeJS.ProcessEnv;
+			/** When set, the backend runs this argv instead of the shell command. */
+			argv?: string[];
 		},
 	) => Promise<{ exitCode: number | null; executable?: string; argv?: string[] }>;
 	/**
@@ -281,7 +283,7 @@ export interface BashBackgroundProcess {
 /** Shared process execution used by the built-in shell tools. */
 export function createLocalShellOperations(shellName: string, resolveShellConfig: () => ShellConfig): BashOperations {
 	return {
-		exec: async (command, cwd, { onData, signal, timeout, env }) => {
+		exec: async (command, cwd, { onData, signal, timeout, env, argv }) => {
 			const timeoutMs = resolveTimeoutMs(timeout);
 			if (signal?.aborted) {
 				throw new Error("aborted");
@@ -293,8 +295,10 @@ export function createLocalShellOperations(shellName: string, resolveShellConfig
 				throw new Error(`Working directory does not exist: ${cwd}\nCannot execute ${shellName} commands.`);
 			}
 
-			const commandFromStdin = shellConfig.commandTransport === "stdin";
-			const child = spawn(shellConfig.shell, commandFromStdin ? shellConfig.args : [...shellConfig.args, command], {
+			const commandFromStdin = !argv && shellConfig.commandTransport === "stdin";
+			const spawnFile = argv?.[0] ?? shellConfig.shell;
+			const spawnArgs = argv ? argv.slice(1) : commandFromStdin ? shellConfig.args : [...shellConfig.args, command];
+			const child = spawn(spawnFile, spawnArgs, {
 				cwd,
 				detached: process.platform !== "win32",
 				env: env ?? getShellEnv(),
@@ -564,6 +568,7 @@ export function createShellToolDefinition(
 				exposeSessionEnvironment,
 				ctx,
 			);
+			let confinedArgv: string[] | undefined;
 			if (confinement) {
 				const helperPath = findBashConfinementHelper();
 				const decision = confineBash({
@@ -578,6 +583,7 @@ export function createShellToolDefinition(
 						details: undefined,
 					};
 				}
+				confinedArgv = decision.argv;
 			}
 
 			if (background) {
@@ -726,6 +732,7 @@ export function createShellToolDefinition(
 						// backend silently had no default at all.
 						timeout: timeout ?? DEFAULT_BASH_TIMEOUT_SECONDS,
 						env: spawnContext.env,
+						argv: confinedArgv,
 					});
 					exitCode = result.exitCode;
 					execution = {

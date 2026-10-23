@@ -64,8 +64,8 @@ describe("bash confinement", () => {
 			const tool = createBashToolDefinition(root, {
 				confinement: true,
 				operations: {
-					exec: async (command) => {
-						ranCommand = command;
+					exec: async (command, _cwd, options) => {
+						ranCommand = options.argv ? options.argv.join(" ") : command;
 						return { exitCode: 0 };
 					},
 				},
@@ -73,7 +73,8 @@ describe("bash confinement", () => {
 			await tool.execute("call-1", { command: "echo hi" }, undefined, undefined, {
 				sessionManager: { getSessionId: () => "test", getSessionFile: () => undefined },
 			} as never);
-			expect(ranCommand).toBe("echo hi");
+			expect(ranCommand.startsWith(join(bin, "bwrap"))).toBe(true);
+			expect(ranCommand).toContain("echo hi");
 		} finally {
 			process.env.PATH = previous;
 		}
