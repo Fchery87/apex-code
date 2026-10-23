@@ -390,5 +390,6 @@ export async function createAgentSessionFromServices(
 		webSearchOperations,
 		webFetchAllowPrivateNetwork: settingsManager.getWebFetchAllowPrivateNetwork(),
 		webFetchAllowProxiedFetch: settingsManager.getWebFetchAllowProxiedFetch(),
+		browserEnabled: settingsManager.getBrowserSettings().enabled,
 	});
 }

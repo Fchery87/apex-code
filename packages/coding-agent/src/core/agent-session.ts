@@ -174,6 +174,7 @@ import {
 } from "./system-prompt.ts";
 import type { BackgroundShellRegistry } from "./tools/background-shell.ts";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
+import { createChromeBrowser } from "./tools/browser-chrome.ts";
 import type { ApexToolDefinition, EvidenceSink } from "./tools/contract.ts";
 import {
 	buildToolContractSnapshot,
@@ -394,6 +395,8 @@ export interface AgentSessionConfig {
 	webFetchAllowPrivateNetwork?: boolean;
 	/** Passed to the web_fetch tool: fetches are allowed while a proxy is configured (Q4). */
 	webFetchAllowProxiedFetch?: boolean;
+	/** Turns on the loopback browser tool. Off unless the user set it. */
+	browserEnabled?: boolean;
 	/**
 	 * Git-backed worktree checkpoints. Absent, or present with `enabled` unset, captures
 	 * nothing and runs no `git` subprocess.
@@ -678,6 +681,7 @@ export class AgentSession {
 	private _webSearchOperations?: WebSearchOperations;
 	private _webFetchAllowPrivateNetwork: boolean;
 	private _webFetchAllowProxiedFetch: boolean;
+	private _browserEnabled: boolean;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionMode: ExtensionMode = "print";
 	private _extensionCommandContextActions?: ExtensionCommandContextActions;
@@ -753,6 +757,7 @@ export class AgentSession {
 		this._webSearchOperations = config.webSearchOperations;
 		this._webFetchAllowPrivateNetwork = config.webFetchAllowPrivateNetwork === true;
 		this._webFetchAllowProxiedFetch = config.webFetchAllowProxiedFetch === true;
+		this._browserEnabled = config.browserEnabled === true;
 		this._checkpoints = createSessionCheckpoints({
 			workspace: this._cwd,
 			sessionId: this.sessionManager.getSessionId(),
@@ -4623,6 +4628,7 @@ export class AgentSession {
 						allowPrivateNetwork: this._webFetchAllowPrivateNetwork,
 						allowProxiedFetch: this._webFetchAllowProxiedFetch,
 					},
+					...(this._browserEnabled ? { browser: { operations: createChromeBrowser() } } : {}),
 				});
 		baseToolDefinitions.tool_schema = createToolSchemaToolDefinition({
 			getTool: (name) => {
@@ -4695,6 +4701,7 @@ export class AgentSession {
 		// The web_fetch opt-ins are read at construction. Refresh them here so a reload applies a removed opt-in.
 		this._webFetchAllowPrivateNetwork = this.settingsManager.getWebFetchAllowPrivateNetwork();
 		this._webFetchAllowProxiedFetch = this.settingsManager.getWebFetchAllowProxiedFetch();
+		this._browserEnabled = this.settingsManager.getBrowserSettings().enabled === true;
 		this.syncQueueModesFromSettings();
 		resetApiProviders();
 		await this._resourceLoader.reload();

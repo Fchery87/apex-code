@@ -222,6 +222,13 @@ export interface WebFetchSettings {
 	allowProxiedFetch?: boolean;
 }
 
+/** Turns on the loopback browser tool. Read from user settings only. Off unless set. */
+export interface BrowserSettings {
+	enabled?: boolean;
+	/** Path to a Chrome or Chromium binary. Defaults to `chrome` on PATH. */
+	binary?: string;
+}
+
 export interface WebSearchSettings {
 	provider?: "exa";
 	apiKey?: string; // default: the provider's own env var, e.g. "$EXA_API_KEY"
@@ -293,6 +300,7 @@ export interface Settings {
 	lsp?: LspSettings;
 	webSearch?: WebSearchSettings;
 	webFetch?: WebFetchSettings;
+	browser?: BrowserSettings;
 	/** Start lazy MCP servers at startup to list their tools (default on, Q7). */
 	mcpStartupDiscovery?: boolean;
 	/**
@@ -1221,6 +1229,14 @@ export class SettingsManager {
 
 	getWebFetchAllowProxiedFetch(): boolean {
 		return this.globalSettings.webFetch?.allowProxiedFetch === true;
+	}
+
+	/** Read from user settings only. A project settings file must not turn the browser on. */
+	getBrowserSettings(): BrowserSettings {
+		return {
+			enabled: this.globalSettings.browser?.enabled === true,
+			...(this.globalSettings.browser?.binary ? { binary: this.globalSettings.browser.binary } : {}),
+		};
 	}
 
 	getWebSearchSettings(): WebSearchSettings | undefined {

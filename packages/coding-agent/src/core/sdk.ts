@@ -185,6 +185,7 @@ export interface CreateAgentSessionOptions {
 	webSearchOperations?: AgentSessionConfig["webSearchOperations"];
 	webFetchAllowPrivateNetwork?: AgentSessionConfig["webFetchAllowPrivateNetwork"];
 	webFetchAllowProxiedFetch?: AgentSessionConfig["webFetchAllowProxiedFetch"];
+	browserEnabled?: AgentSessionConfig["browserEnabled"];
 	/**
 	 * Delegation entry point (roadmap Phase 5, ADR 0008). When set, `delegate`
 	 * executes real child sessions through `resolveAgent`, with the child's
@@ -1040,6 +1041,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		webSearchOperations: options.webSearchOperations,
 		webFetchAllowPrivateNetwork: options.webFetchAllowPrivateNetwork,
 		webFetchAllowProxiedFetch: options.webFetchAllowProxiedFetch,
+		browserEnabled: options.browserEnabled,
 		mcpRuntime,
 		checkpointSettings: settingsManager.getCheckpointSettings(),
 		// Declarative hooks (spec 2026-08-31-declarative-hooks): assembled from the
