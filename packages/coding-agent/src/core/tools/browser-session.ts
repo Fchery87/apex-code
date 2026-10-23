@@ -54,13 +54,20 @@ export async function openPage(connection: DevToolsConnection, url: string): Pro
 		loaded = collect((await connection.request("Page.getFrameTree")).events);
 	}
 	await Promise.all(blocks);
+	const location = (await connection.request("Runtime.evaluate", { expression: "location.href" })).result as {
+		result?: { value?: string };
+	};
+	const finalUrl = location.result?.value || url;
+	if (browserDestinationRefusal(finalUrl)) {
+		return { title: browserDestinationRefusal(finalUrl) ?? "", finalUrl, console: consoleLines };
+	}
 	const title = (await connection.request("Runtime.evaluate", { expression: "document.title" })).result as {
 		result?: { value?: string };
 	};
 	const shot = (await connection.request("Page.captureScreenshot", { format: "png" })).result as { data?: string };
 	return {
 		title: title.result?.value ?? "",
-		finalUrl: url,
+		finalUrl,
 		console: consoleLines,
 		screenshot: shot.data ? new Uint8Array(Buffer.from(shot.data, "base64")) : undefined,
 	};

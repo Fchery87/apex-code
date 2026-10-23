@@ -54,4 +54,12 @@ describe("throwaway Chrome process", () => {
 		expect(existsSync(recorded.profile)).toBe(false);
 		expect(() => process.kill(recorded.pid, 0)).toThrow();
 	});
+
+	it("returns a page naming the missing binary instead of throwing", async () => {
+		const browser = createChromeBrowser({ binary: "/no/such/chrome" });
+		const page = await browser.open("http://127.0.0.1:9/");
+		expect(page.title).toContain("/no/such/chrome");
+		expect(page.title).toContain("ENOENT");
+		expect(page.screenshot).toBeUndefined();
+	});
 });

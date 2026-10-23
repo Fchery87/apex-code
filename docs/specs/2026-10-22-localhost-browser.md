@@ -46,8 +46,8 @@ A UI change has no check the agent can run. `web_fetch` returns the server's HTM
 - [x] Tests of the tool definition drive it through an injected browser. They do not launch a real browser and they do not listen on a network port.
 - [x] With the tool opted in and no injected operation, a call starts one headless Chrome or Chromium from the machine, with a new empty temporary profile and a DevTools port. The process test checks the flags. The connection to that port is injected, not exercised.
 - [x] The process is killed and the temporary profile is removed when the call returns. A thrown error takes the same `finally` path. Abort and timeout have no test.
-- [x] The page's own requests to a host other than `localhost`, `127.0.0.1`, or `::1` are blocked. The session test blocks `https://example.com/tracker.js`. A redirect of the page itself is not tested.
-- [ ] A missing Chrome or Chromium binary returns tool text naming the miss. The call does not attach to a running browser and does not download one. A missing binary throws today.
+- [x] The page's own requests to a host other than `localhost`, `127.0.0.1`, or `::1` are blocked, and a page that lands on another host returns the refusal and no screenshot. The session test covers both.
+- [x] A missing Chrome or Chromium binary returns a page naming the binary and the `ENOENT` code. The call does not attach to a running browser and does not download one.
 
 ## Non-goals
 

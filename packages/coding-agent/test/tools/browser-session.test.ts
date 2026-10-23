@@ -24,6 +24,9 @@ describe("browser DevTools session", () => {
 									{ method: "Page.loadEventFired" },
 								]
 							: [];
+					if (method === "Runtime.evaluate" && JSON.stringify(params).includes("location.href")) {
+						return { result: { result: { value: "http://127.0.0.1:3000/" } }, events };
+					}
 					if (method === "Runtime.evaluate") return { result: { result: { value: "Inbox" } }, events };
 					if (method === "Page.captureScreenshot") {
 						return { result: { data: Buffer.from([1, 2, 3]).toString("base64") }, events };
@@ -39,5 +42,24 @@ describe("browser DevTools session", () => {
 		expect(page.title).toBe("Inbox");
 		expect(page.console).toContain("app ready");
 		expect(page.screenshot).toEqual(new Uint8Array([1, 2, 3]));
+	});
+
+	it("returns no screenshot when the loaded page left loopback", async () => {
+		const page = await openPage(
+			{
+				request: async (method, params) => {
+					if (method === "Page.navigate") return { result: {}, events: [{ method: "Page.loadEventFired" }] };
+					if (method === "Runtime.evaluate" && JSON.stringify(params).includes("location.href")) {
+						return { result: { result: { value: "https://example.com/landed" } }, events: [] };
+					}
+					return { result: {}, events: [] };
+				},
+			},
+			"http://127.0.0.1:3000/",
+		);
+
+		expect(page.finalUrl).toBe("https://example.com/landed");
+		expect(page.screenshot).toBeUndefined();
+		expect(page.title).toMatch(/refused/);
 	});
 });

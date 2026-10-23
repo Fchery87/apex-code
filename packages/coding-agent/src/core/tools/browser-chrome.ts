@@ -4,6 +4,8 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrowserOperations, BrowserPage } from "./browser.ts";
+import { connectDevTools } from "./browser-connection.ts";
+import { openPage } from "./browser-session.ts";
 
 export interface ChromeBrowserOptions {
 	/** Executable to spawn. Defaults to `chrome` on PATH. */
@@ -34,7 +36,7 @@ function freePort(): Promise<number> {
 
 export function createChromeBrowser(options: ChromeBrowserOptions = {}): BrowserOperations {
 	const binary = options.binary ?? "chrome";
-	const connect = options.connect ?? (async () => ({ title: "", finalUrl: "", console: [] }));
+	const connect = options.connect ?? (async (port: number, url: string) => openPage(await connectDevTools(port), url));
 	return {
 		async open(url) {
 			const profile = await mkdtemp(join(tmpdir(), "apex-browser-"));
@@ -47,13 +49,22 @@ export function createChromeBrowser(options: ChromeBrowserOptions = {}): Browser
 				profile,
 			];
 			const child = spawn(binary, args, { env: { ...process.env, ...options.env }, stdio: "ignore" });
+			const failed = new Promise<NodeJS.ErrnoException>((resolve) => child.once("error", resolve));
+			const started = options.ready?.() ?? new Promise<void>((resolve) => setTimeout(resolve, 50));
 			const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
 			try {
-				await options.ready?.();
+				const spawnError = await Promise.race([failed, started.then(() => undefined)]);
+				if (spawnError) {
+					return {
+						title: `browser could not start ${binary}: ${spawnError.code ?? "not found"}`,
+						finalUrl: url,
+						console: [],
+					};
+				}
 				return await connect(port, url);
 			} finally {
 				child.kill();
-				await exited;
+				await Promise.race([exited, failed.then(() => undefined)]);
 				await rm(profile, { force: true, recursive: true });
 			}
 		},
