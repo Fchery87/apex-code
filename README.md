@@ -184,6 +184,14 @@ cd path/to/your/project
 apex-code
 ```
 
+Two sessions in one checkout overwrite each other's edits. Start the second one in its own worktree:
+
+```bash
+apex-code --worktree <name>
+```
+
+The flag creates `.apex-code/worktrees/<name>` on branch `apex-session-<name>` and starts the session there. On exit, a clean tree is removed. A dirty tree is kept, and the message names its path. The name has to be one path component. `..` and a leading dash are refused. The flag does not copy gitignored files such as `.env`, and it does not block a command whose path points at the parent checkout.
+
 Give Apex Code an initial task directly on the command line, or start the session and
 write it in the editor:
 
@@ -250,7 +258,10 @@ normal turn follows this shape:
    context files such as `AGENTS.md`, the current request, enabled tools, and relevant
    extension state. A project's own `AGENTS.md` or `CLAUDE.md` is instruction the
    repository supplies, so it loads only once you have trusted that project; the one in
-   your agent directory is yours and always loads.
+   your agent directory is yours and always loads. `apex-code instructions audit` reads
+   `AGENTS.md` and `CLAUDE.md`, prints a path that does not exist, a command that is not on
+   `PATH`, and the same command with two different argument lists, and writes no file. It
+   exits 1 when it finds one.
 2. **Select a model.** The configured provider/model and reasoning level determine which
    upstream `pi-ai` adapter receives the request.
 3. **Ask for the next action.** The model can answer directly or request a tool call.
@@ -273,10 +284,26 @@ the same permission and session machinery rather than bypassing it.
 ### Built-in tools and subagents
 
 A new session starts with these tools active: `read`, `bash`, `edit`, `write`, `grep`,
-`find`, `ls`, `web_fetch`, and `delegate`. Search and fetch are on by default, and each
+`find`, `ls`, `web_fetch`, `delegate`, and `memory_note`. Search and fetch are on by default, and each
 still asks through its own permission rule. `lsp`, `web_search`, and `mcp` join when they
-are configured. `todo_write` (the task list) and `ask_user` stay opt-in. Turn the task list
+are configured. `browser` joins when `browser.enabled` is true in the user settings file.
+A project settings file cannot turn it on. `todo_write` (the task list) and `ask_user` stay opt-in. Turn the task list
 on in `/settings`. A saved `defaultTools` setting replaces the default set.
+
+`memory_note` appends a markdown note to `.apex-code/memory/inbox/`. The next session does not
+load that note. Accepting it moves the file to `.apex-code/memory/accepted/`, and only accepted
+notes load, after you trust the project. Loading stops at 200 lines or 25 KB. A note whose body
+contains `api_key=`, `token=`, `password=`, or a PEM private key is refused and not written.
+Every worktree of one git repo reads the same notes.
+
+A file under `.apex-code/rules/` with a `paths` glob in its frontmatter is not loaded at startup.
+`read`, `edit`, and `write` append its body when the path matches.
+
+`browser` opens one `http` or `https` URL on `localhost`, `127.0.0.1`, or `::1`. It returns the
+page title, the console, and one screenshot. Any other host is refused before a browser starts.
+The tool does not click, type, or follow a second URL. It launches a headless Chrome or Chromium
+already on the machine, with an empty temporary profile, and it does not attach to the browser
+you have open. A missing binary returns the path and `ENOENT`.
 
 `delegate` runs a subagent with its own context. Two built-in types ship:
 
@@ -418,9 +445,11 @@ reason. `examples/extensions/gondolin/` re-creates the file tools as well and is
 closer model. Either way the container is what actually holds; see
 [`docs/containerization.md`](packages/coding-agent/docs/containerization.md).
 
-`bash.confinement: "on"` in the user settings file is a smaller option. It wraps
+`bashConfinement` set to `"on"` in the user settings file is a smaller option. It wraps
 `bash` with `bwrap` on Linux and refuses the call when `bwrap` is missing. It does
-not wrap `read`, `grep`, `find`, `ls`, `edit`, `write`, or extensions. It does not
+not wrap `read`, `grep`, `find`, `ls`, `edit`, `write`, or extensions. With `bwrap` present,
+the command runs with `--unshare-net`, so it has no network, including loopback. There is
+no host allowlist. macOS `sandbox-exec` is not implemented. It does not
 replace the container for an untrusted repo. A project settings file cannot turn it
 on or off. See [ADR 0038](docs/adr/0038-optional-bash-confinement.md).
 
