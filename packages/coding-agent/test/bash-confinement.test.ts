@@ -51,6 +51,34 @@ describe("bash confinement", () => {
 		}
 	});
 
+	it("runs the original command when bwrap is on PATH", async () => {
+		const root = mkdtempSync(join(tmpdir(), "apex-confinement-helper-"));
+		directories.push(root);
+		const bin = join(root, "bin");
+		mkdirSync(bin, { recursive: true });
+		writeFileSync(join(bin, "bwrap"), "");
+		const previous = process.env.PATH;
+		process.env.PATH = bin;
+		let ranCommand = "";
+		try {
+			const tool = createBashToolDefinition(root, {
+				confinement: true,
+				operations: {
+					exec: async (command) => {
+						ranCommand = command;
+						return { exitCode: 0 };
+					},
+				},
+			});
+			await tool.execute("call-1", { command: "echo hi" }, undefined, undefined, {
+				sessionManager: { getSessionId: () => "test", getSessionFile: () => undefined },
+			} as never);
+			expect(ranCommand).toBe("echo hi");
+		} finally {
+			process.env.PATH = previous;
+		}
+	});
+
 	it("stays off unless the user file turns it on, and a project file cannot", () => {
 		const root = mkdtempSync(join(tmpdir(), "apex-confinement-settings-"));
 		directories.push(root);
