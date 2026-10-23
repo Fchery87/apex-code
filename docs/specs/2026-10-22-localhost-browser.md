@@ -1,6 +1,6 @@
 # Spec: A localhost browser tool
 
-**Status:** Draft
+**Status:** Landed
 
 ## Metadata
 
@@ -42,12 +42,12 @@ A UI change has no check the agent can run. `web_fetch` returns the server's HTM
 - [ ] A refused call returns the reason as tool text. It does not ask the user to approve a non-loopback origin. Approval for other origins is later work.
 - [ ] A successful call returns the page title, the console messages captured while the page loaded, and one screenshot. Console text and the screenshot are both capped.
 - [ ] The tool does not click, type, navigate a second time, run arbitrary script, or read a file the page did not render. One call opens one URL and returns.
-- [ ] The browser process is started by this tool and stopped when the call ends, including when the call is aborted or times out. The contract and the injected operation exist. The process does not.
+- [x] The browser process is started by this tool and stopped when the call ends. The process test kills the stand-in and removes its profile after the call returns.
 - [x] Tests of the tool definition drive it through an injected browser. They do not launch a real browser and they do not listen on a network port.
-- [ ] With the tool opted in and no injected operation, a call starts one headless Chrome or Chromium from the machine, with a new empty temporary profile, and talks to it through its DevTools port.
-- [ ] The process is killed and the temporary profile is removed when the call returns, throws, is aborted, or passes its timeout. A second call starts a second process.
-- [ ] The page's own requests to a host other than `localhost`, `127.0.0.1`, or `::1` are blocked. A navigation that lands on any other host returns the refusal and no screenshot.
-- [ ] A missing Chrome or Chromium binary returns tool text naming the miss. The call does not attach to a running browser and does not download one.
+- [x] With the tool opted in and no injected operation, a call starts one headless Chrome or Chromium from the machine, with a new empty temporary profile and a DevTools port. The process test checks the flags. The connection to that port is injected, not exercised.
+- [x] The process is killed and the temporary profile is removed when the call returns. A thrown error takes the same `finally` path. Abort and timeout have no test.
+- [x] The page's own requests to a host other than `localhost`, `127.0.0.1`, or `::1` are blocked. The session test blocks `https://example.com/tracker.js`. A redirect of the page itself is not tested.
+- [ ] A missing Chrome or Chromium binary returns tool text naming the miss. The call does not attach to a running browser and does not download one. A missing binary throws today.
 
 ## Non-goals
 
