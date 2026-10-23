@@ -175,6 +175,7 @@ import { createFindTool, createFindToolDefinition, type FindToolOptions } from "
 import { createGrepTool, createGrepToolDefinition, type GrepToolOptions } from "./grep.ts";
 import { createLsTool, createLsToolDefinition, type LsToolOptions } from "./ls.ts";
 import { createLspTool, createLspToolDefinition, type LspToolOptions } from "./lsp.ts";
+import { createMemoryNoteTool, createMemoryNoteToolDefinition } from "./memory-note.ts";
 import { createPlanPresentTool, createPlanPresentToolDefinition } from "./plan-present.ts";
 import { createPowerShellTool, createPowerShellToolDefinition, type PowerShellToolOptions } from "./powershell.ts";
 import { createReadTool, createReadToolDefinition, type ReadToolOptions } from "./read.ts";
@@ -205,7 +206,8 @@ export type ToolName =
 	| "plan_present"
 	| "delegate"
 	| "test"
-	| "skill_search";
+	| "skill_search"
+	| "memory_note";
 export const allToolNames: Set<ToolName> = new Set([
 	"read",
 	"bash",
@@ -218,6 +220,7 @@ export const allToolNames: Set<ToolName> = new Set([
 	"tool_schema",
 	"todo_write",
 	"skill_search",
+	"memory_note",
 	"web_search",
 	"web_fetch",
 	"ask_user",
@@ -322,6 +325,8 @@ export function createToolDefinition(toolName: ToolName, cwd: string, options?: 
 			return createDelegateToolDefinition(options?.delegate?.runtime ?? noopDelegationRuntime);
 		case "test":
 			return createTestToolDefinition(cwd, options?.test);
+		case "memory_note":
+			return createMemoryNoteToolDefinition(cwd);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -363,6 +368,8 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 			return createDelegateTool(options?.delegate?.runtime ?? noopDelegationRuntime);
 		case "test":
 			return createTestTool(cwd, options?.test);
+		case "memory_note":
+			return createMemoryNoteTool(cwd);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -425,6 +432,7 @@ export function createAllToolDefinitions(
 		plan_present: createPlanPresentToolDefinition(),
 		delegate: createDelegateToolDefinition(options?.delegate?.runtime ?? noopDelegationRuntime),
 		test: createTestToolDefinition(cwd, options?.test),
+		memory_note: createMemoryNoteToolDefinition(cwd),
 		// Registered only when configured (LSP.5): an unconfigured session's registry,
 		// and therefore its static prompt prefix, is unaffected by this subsystem.
 		...(options?.browser ? { browser: createBrowserToolDefinition(options.browser) } : {}),
@@ -478,6 +486,7 @@ export function createAllTools(
 		plan_present: createPlanPresentTool(),
 		delegate: createDelegateTool(options?.delegate?.runtime ?? noopDelegationRuntime),
 		test: createTestTool(cwd, options?.test),
+		memory_note: createMemoryNoteTool(cwd),
 		...(options?.browser ? { browser: createBrowserTool(options.browser) } : {}),
 		...(options?.lsp ? { lsp: createLspTool(cwd, options.lsp) } : {}),
 		...(options?.mcp ? { mcp: createMcpTool(options.mcp) } : {}),

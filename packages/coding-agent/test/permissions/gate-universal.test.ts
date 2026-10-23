@@ -43,6 +43,7 @@ const REPRESENTATIVE_PARAMS: Record<ToolName, JsonObject> = {
 	plan_present: { plan: "1. Do a thing" },
 	delegate: { agentType: "explore", task: "find the config loader" },
 	test: { executable: "npm", args: ["test", "--", "unit"] },
+	memory_note: { title: "Tabs", body: "Indent with tabs." },
 };
 
 let scratch: string;
