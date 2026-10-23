@@ -418,6 +418,12 @@ reason. `examples/extensions/gondolin/` re-creates the file tools as well and is
 closer model. Either way the container is what actually holds; see
 [`docs/containerization.md`](packages/coding-agent/docs/containerization.md).
 
+`bash.confinement: "on"` in the user settings file is a smaller option. It wraps
+`bash` with `bwrap` on Linux and refuses the call when `bwrap` is missing. It does
+not wrap `read`, `grep`, `find`, `ls`, `edit`, `write`, or extensions. It does not
+replace the container for an untrusted repo. A project settings file cannot turn it
+on or off. See [ADR 0038](docs/adr/0038-optional-bash-confinement.md).
+
 Read [`SECURITY.md`](SECURITY.md) before relying on Apex Code for higher-risk work.
 
 ### Verification and formatter policies

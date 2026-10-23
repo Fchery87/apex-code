@@ -1,6 +1,6 @@
 # Spec: A worktree for the session the user is in
 
-**Status:** Draft
+**Status:** Landed
 
 ## Metadata
 
@@ -38,13 +38,13 @@ Two sessions in one checkout overwrite each other's edits. The product already k
 
 ## Goals
 
-- [ ] `apex-code --worktree <name>` creates a linked worktree at `<repo>/.apex-code/worktrees/<name>` and starts the session with that directory as its cwd.
-- [ ] `<name>` uses the same safe-component rule the owner already uses for a session id. A name with `..`, a slash, or a leading dash is refused before git runs.
-- [ ] The worktree is on a new branch named `apex-session-<short name>`. The owner does not reuse `apex-child-`, so a user tree and a child tree cannot collide on the branch name.
-- [ ] Outside a git repository, or when git is missing, the flag exits with a message and does not start a session.
-- [ ] On exit, a clean worktree is removed. A dirty worktree is kept, and the exit message names its path. Nothing is force-removed, and nothing is merged.
-- [ ] The concurrent-session refusal names `apex-code --worktree <name>` and still names `--allow-concurrent`.
-- [ ] Tests drive the owner and the flag parser. They use a temporary git repository. They do not touch the repo that contains the test.
+- [x] `apex-code --worktree <name>` creates a linked worktree at `<repo>/.apex-code/worktrees/<name>` and starts the session with that directory as its cwd.
+- [x] `<name>` uses the same safe-component rule the owner already uses for a session id. A name with `..`, a slash, or a leading dash is refused before git runs.
+- [x] The worktree is on a new branch named `apex-session-<short name>`. The owner does not reuse `apex-child-`, so a user tree and a child tree cannot collide on the branch name.
+- [x] Outside a git repository, or when git is missing, the flag exits with a message and does not start a session.
+- [x] On exit, a clean worktree is removed. A dirty worktree is kept, and the exit message names its path. Nothing is force-removed, and nothing is merged.
+- [x] The concurrent-session refusal names `apex-code --worktree <name>` and still names `--allow-concurrent`.
+- [x] Tests drive the owner and the flag parser. They use a temporary git repository. They do not touch the repo that contains the test.
 
 ## Non-goals
 

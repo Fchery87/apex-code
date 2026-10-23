@@ -33,6 +33,16 @@ describe("instruction audit", () => {
 		expect(findings.some((finding) => finding.kind === "contradiction")).toBe(true);
 	});
 
+	it("reports a command that is not on PATH", () => {
+		const dir = mkdtempSync(join(tmpdir(), "apex-audit-"));
+		directories.push(dir);
+		writeFileSync(join(dir, "AGENTS.md"), "Run `apex-code-missing-command` after a change.\n");
+		const findings = auditInstructions(dir);
+		expect(
+			findings.some((finding) => finding.kind === "missing-command" && finding.text === "apex-code-missing-command"),
+		).toBe(true);
+	});
+
 	it("writes no file", () => {
 		const dir = mkdtempSync(join(tmpdir(), "apex-audit-"));
 		directories.push(dir);

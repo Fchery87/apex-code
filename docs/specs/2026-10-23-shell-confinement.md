@@ -1,6 +1,6 @@
 # Spec: Optional confinement for bash
 
-**Status:** Draft
+**Status:** Landed
 
 ## Metadata
 
@@ -36,13 +36,13 @@ A user who trusts the gate but not a particular command has no middle setting. T
 
 ## Goals
 
-- [ ] `bash.confinement` defaults to `"off"`. `"off"` is today's behavior.
-- [ ] `"on"` wraps the bash child with the platform helper. On Linux the helper is `bwrap`, already on the machine. On macOS the helper is `sandbox-exec`. On Windows the setting is refused with a message that names the platform, and the call does not run unconfined.
-- [ ] The helper is not downloaded and is not shipped in the package. A missing helper refuses the call with the helper name. It does not fall back to an unconfined command.
+- [x] `bash.confinement` defaults to `"off"`. `"off"` is today's behavior.
+- [ ] `"on"` wraps the bash child with the platform helper. On Linux the helper is `bwrap`, already on the machine. On macOS the helper is `sandbox-exec`. On Windows the setting is refused with a message that names the platform, and the call does not run unconfined. Linux and the Windows refusal are in. macOS `sandbox-exec` is not.
+- [x] The helper is not downloaded and is not shipped in the package. A missing helper refuses the call with the helper name. It does not fall back to an unconfined command.
 - [ ] The confined command can read and write the workspace. It cannot read `~/.ssh`, `~/.aws`, or the agent directory. The test uses a scratch workspace and a canary file outside it.
 - [ ] Network is denied except hosts listed in `bash.confinementHosts`. The list defaults to empty, which means no network. Loopback is allowed so a command can reach a server the session started.
-- [ ] The README says the confinement covers `bash` only. It names `read`, `grep`, `find`, `ls`, and extensions as outside it. It still tells the user to use a container for an untrusted repo.
-- [ ] No supervisor process, no egress proxy, and no host approval prompt. A refusal is tool text.
+- [x] The README says the confinement covers `bash` only. It names `read`, `grep`, `find`, `ls`, and extensions as outside it. It still tells the user to use a container for an untrusted repo.
+- [x] No supervisor process, no egress proxy, and no host approval prompt. A refusal is tool text.
 
 ## Non-goals
 

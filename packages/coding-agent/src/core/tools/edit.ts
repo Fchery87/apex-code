@@ -6,6 +6,7 @@ import { type Static, Type } from "typebox";
 import { splitBom } from "../../utils/text.ts";
 import { getExperimentalToolSampling } from "../experimental.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
+import { pathRuleText } from "../path-rules.ts";
 import { getPreparedPathOperation, type PreparedPathOperation } from "../permissions/operations.ts";
 import type { PermissionPreview } from "../permissions/responder.ts";
 import type { ApexToolDefinition, EvidenceRecord } from "./contract.ts";
@@ -309,17 +310,24 @@ export function createEditToolDefinition(
 				const diffResult = generateDiffString(baseContent, newContent);
 				const patch = generateUnifiedPatch(path, baseContent, newContent);
 				const successText = `Successfully replaced ${edits.length} block(s) in ${path}.`;
+				const ruleText = pathRuleText(cwd, path);
+				const textWithRules = (text: string) => (ruleText ? `${text}\n\n${ruleText}` : text);
 
 				if (diagnosticsOperations) {
 					const diagnostics = await diagnosticsOperations.afterMutation(absolutePath, signal);
 					return {
-						content: [{ type: "text", text: `${successText}\n\n${formatDiagnosticsOutcome(diagnostics)}` }],
+						content: [
+							{
+								type: "text",
+								text: textWithRules(`${successText}\n\n${formatDiagnosticsOutcome(diagnostics)}`),
+							},
+						],
 						details: { diff: diffResult.diff, patch, firstChangedLine: diffResult.firstChangedLine, diagnostics },
 					};
 				}
 
 				return {
-					content: [{ type: "text", text: successText }],
+					content: [{ type: "text", text: textWithRules(successText) }],
 					details: { diff: diffResult.diff, patch, firstChangedLine: diffResult.firstChangedLine },
 				};
 			});

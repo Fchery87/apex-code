@@ -146,9 +146,9 @@ capable and measurably worse.
 | Decisions settled after the remediation | **landed** at `f9586cdf4`. Full suite and three-OS CI pass on [PR #176](https://github.com/Fchery87/apex-code/pull/176). Proxy opt-in for `web_fetch`, capped compaction reserve, startup MCP discovery setting, and four glossary terms. | [spec](specs/2026-10-17-grill-decisions.md) | — |
 | Completion check | **landed** at `fb16df534`. One verification policy can start another turn after a failed check. | [spec](specs/2026-10-22-completion-check.md) | — |
 | Localhost browser | **landed** at `96971e87d`. Opt-in tool, loopback check, one throwaway headless Chrome per call. A missing binary and a redirect off loopback return text. The DevTools connection is tested against a local stand-in. No test drives a real Chrome. | [spec](specs/2026-10-22-localhost-browser.md) | — |
-| Session worktree | **draft.** `--worktree <name>` starts the user's session in a linked worktree. | [spec](specs/2026-10-23-session-worktree.md) | — |
-| Reviewed memory | **draft.** Inbox notes, path-scoped rules, and an instruction audit that writes nothing. | [spec](specs/2026-10-23-reviewed-memory.md) | — |
-| Optional bash confinement | **draft.** Off by default. Covers `bash` only. Does not restore the sandbox ADR 0032 removed. | [spec](specs/2026-10-23-shell-confinement.md) | — |
+| Session worktree | **landed** at `3af94e8d6`. `--worktree <name>` starts the session in `.apex-code/worktrees/<name>`. A clean tree is removed on exit. A dirty tree is kept. Edits aimed at the parent checkout are not blocked. | [spec](specs/2026-10-23-session-worktree.md) | — |
+| Reviewed memory | **landed** at `6999944ab`. Inbox notes load only after acceptance. A path rule is appended on read, edit, and write. `apex-code instructions audit` writes nothing and reports a missing path, a command that is not on PATH, and two commands that disagree. | [spec](specs/2026-10-23-reviewed-memory.md) | — |
+| Optional bash confinement | **landed** at `6999944ab`. Off by default. The user file is the only switch. A present `bwrap` runs the helper argv. A missing helper refuses the call. No host allowlist. See [ADR 0038](adr/0038-optional-bash-confinement.md). | [spec](specs/2026-10-23-shell-confinement.md) | — |
 
 ---
 
@@ -1398,6 +1398,7 @@ takes the next free number instead of a reserved one.
 | 0035 | `bash` applies a one-hour default wall-clock timeout, derived from recorded suite runs | follow-up | ✅ |
 | 0036 | vitest is raised in the forked workspaces; the five frozen ones wait for upstream, and a root override cannot substitute | follow-up | ✅ |
 | 0037 | A permission mode chosen inside a running interactive session governs that session, ranks above `flag`, changes the mode only, and is never persisted | follow-up | ✅ |
+| 0038 | Optional bash confinement covers `bash` only, is off unless the user file turns it on, and does not restore the sandbox | follow-up | ✅ |
 
 ## Cross-phase contracts
 

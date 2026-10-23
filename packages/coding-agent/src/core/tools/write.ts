@@ -5,6 +5,7 @@ import { dirname } from "path";
 import { type Static, Type } from "typebox";
 import { getExperimentalToolSampling } from "../experimental.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
+import { pathRuleText } from "../path-rules.ts";
 import { getPreparedPathOperation, type PreparedPathOperation } from "../permissions/operations.ts";
 import type { PermissionPreview } from "../permissions/responder.ts";
 import type { ApexToolDefinition, EvidenceRecord } from "./contract.ts";
@@ -211,17 +212,24 @@ export function createWriteToolDefinition(
 				ledger?.recordWrite(absolutePath, content);
 
 				const successText = `Successfully wrote to ${path}`;
+				const ruleText = pathRuleText(cwd, path);
+				const textWithRules = (text: string) => (ruleText ? `${text}\n\n${ruleText}` : text);
 
 				if (diagnosticsOperations) {
 					const diagnostics = await diagnosticsOperations.afterMutation(absolutePath, signal);
 					return {
-						content: [{ type: "text", text: `${successText}\n\n${formatDiagnosticsOutcome(diagnostics)}` }],
+						content: [
+							{
+								type: "text",
+								text: textWithRules(`${successText}\n\n${formatDiagnosticsOutcome(diagnostics)}`),
+							},
+						],
 						details: { byteCount: Buffer.byteLength(content), contentHash: sha256(content), diagnostics },
 					};
 				}
 
 				return {
-					content: [{ type: "text", text: successText }],
+					content: [{ type: "text", text: textWithRules(successText) }],
 					details: { byteCount: Buffer.byteLength(content), contentHash: sha256(content) },
 				};
 			});

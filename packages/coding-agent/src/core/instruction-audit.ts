@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
@@ -53,6 +54,10 @@ export function auditInstructions(cwd: string): InstructionFinding[] {
 				});
 			} else if (!prior) {
 				commands.set(name, { args, path: relative(cwd, path) });
+				const found = spawnSync("which", [name], { encoding: "utf-8" });
+				if (found.status !== 0) {
+					findings.push({ kind: "missing-command", text: name, path: relative(cwd, path) });
+				}
 			}
 		}
 	}

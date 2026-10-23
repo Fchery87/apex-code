@@ -1,6 +1,6 @@
 # Spec: Notes the agent writes, reviewed before they load
 
-**Status:** Draft
+**Status:** Landed
 
 ## Metadata
 
@@ -38,14 +38,14 @@ A correction the user gives in one session is gone in the next. The only way to 
 
 ## Goals
 
-- [ ] The agent can append one note to `<repo>/.apex-code/memory/inbox/`. The file is markdown. The note is not added to the system prompt.
-- [ ] Accepting a note moves it to `<repo>/.apex-code/memory/accepted/`. Only accepted notes load, and only after project trust.
-- [ ] Loaded accepted notes stop at 200 lines or 25 KB, whichever comes first. The cut is reported. Notes past the cut stay on disk and do not load.
-- [ ] The store is one directory per git repository, at the repository root. A linked worktree of that repo reads the same notes. A directory that is not a git repo stores notes under the cwd and says so.
-- [ ] A note that matches a known secret shape is refused and not written. The first shapes are an `api_key`, a `token`, a `password`, and a PEM block. The check is a literal scan, not a model call.
-- [ ] A path-scoped rule is a markdown file under `.apex-code/rules/` with a `paths` glob in its frontmatter. It is not loaded at session start. It is appended when a `read`, `edit`, or `write` path matches the glob.
-- [ ] `apex-code instructions audit` prints contradictions, paths named in instructions that do not exist, and commands named in instructions that are not on `PATH`. It writes no file.
-- [ ] Tests use a scratch directory. They do not write into this repo's `.apex-code/`.
+- [x] The agent can append one note to `<repo>/.apex-code/memory/inbox/`. The file is markdown. The note is not added to the system prompt.
+- [x] Accepting a note moves it to `<repo>/.apex-code/memory/accepted/`. Only accepted notes load, and only after project trust.
+- [x] Loaded accepted notes stop at 200 lines or 25 KB, whichever comes first. The cut is reported. Notes past the cut stay on disk and do not load.
+- [x] The store is one directory per git repository, at the repository root. A linked worktree of that repo reads the same notes. A directory that is not a git repo stores notes under the cwd and says so.
+- [x] A note that matches a known secret shape is refused and not written. The first shapes are an `api_key`, a `token`, a `password`, and a PEM block. The check is a literal scan, not a model call.
+- [x] A path-scoped rule is a markdown file under `.apex-code/rules/` with a `paths` glob in its frontmatter. It is not loaded at session start. It is appended when a `read`, `edit`, or `write` path matches the glob.
+- [x] `apex-code instructions audit` prints contradictions, paths named in instructions that do not exist, and commands named in instructions that are not on `PATH`. It writes no file.
+- [x] Tests use a scratch directory. They do not write into this repo's `.apex-code/`.
 
 ## Non-goals
 

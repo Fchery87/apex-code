@@ -36,3 +36,10 @@ export function matchingPathRules(cwd: string, target: string): PathRule[] {
 	}
 	return rules;
 }
+
+/** Text to append after a read, edit, or write when a rule matches. Empty when none match. */
+export function pathRuleText(cwd: string, target: string): string {
+	const rules = matchingPathRules(cwd, target);
+	if (rules.length === 0) return "";
+	return `Path rules:\n${rules.map((rule) => rule.body).join("\n\n")}`;
+}
