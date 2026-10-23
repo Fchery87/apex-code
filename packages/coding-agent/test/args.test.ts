@@ -60,6 +60,19 @@ describe("parseArgs", () => {
 		});
 	});
 
+	describe("--worktree flag", () => {
+		test("parses --worktree name", () => {
+			const result = parseArgs(["--worktree", "demo"]);
+			expect(result.worktree).toBe("demo");
+		});
+
+		test("requires a value", () => {
+			const result = parseArgs(["--worktree"]);
+			expect(result.worktree).toBeUndefined();
+			expect(result.diagnostics).toContainEqual({ type: "error", message: "--worktree requires a value" });
+		});
+	});
+
 	describe("--continue flag", () => {
 		test("parses --continue flag", () => {
 			const result = parseArgs(["--continue"]);

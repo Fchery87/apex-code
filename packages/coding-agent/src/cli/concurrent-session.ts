@@ -8,6 +8,6 @@ export function reportConcurrentSessionRefusal(liveSessions: readonly SessionLea
 	}
 	console.error(chalk.dim(`  ${cwd}\n`));
 	console.error("Two sessions in one working tree overwrite each other's edits and commits.\n");
-	console.error(chalk.dim("  git worktree add ../<name> -b <branch>   work in an isolated tree"));
+	console.error(chalk.dim("  apex-code --worktree <name>         start in a new linked worktree"));
 	console.error(chalk.dim("  apex-code --allow-concurrent             proceed anyway\n"));
 }

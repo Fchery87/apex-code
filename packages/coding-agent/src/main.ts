@@ -78,6 +78,7 @@ import { SettingsManager } from "./core/settings-manager.ts";
 import { printTimings, resetTimings, time } from "./core/timings.ts";
 import { unclassifiedToolNames } from "./core/tools/contract-snapshot.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "./core/trust-manager.ts";
+import { prepareSessionWorktree, releaseSessionWorktreeSync } from "./core/workspace/session-worktree.ts";
 import { builtInExtensions } from "./extensions/index.ts";
 import { runMigrations, showDeprecationWarnings } from "./migrations.ts";
 import type { AcpServer } from "./modes/acp/server.ts";
@@ -608,7 +609,7 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 	cleanupManagedInstall();
 
-	const cwd = process.cwd();
+	let cwd = process.cwd();
 	const agentDir = getAgentDir();
 	const bootstrapSettingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: false });
 	applyHttpProxySettings(bootstrapSettingsManager.getGlobalSettings().httpProxy);
@@ -647,6 +648,26 @@ export async function main(args: string[], options?: MainOptions) {
 		}
 	}
 	time("parseArgs");
+
+	if (parsed.worktree) {
+		const parent = cwd;
+		const name = parsed.worktree;
+		try {
+			const prepared = await prepareSessionWorktree(parent, name);
+			process.chdir(prepared.path);
+			cwd = prepared.path;
+			process.once("exit", () => {
+				const released = releaseSessionWorktreeSync(parent, name);
+				if (!released.removed && released.path) {
+					console.error(`Kept worktree ${released.path}`);
+				}
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			console.error(chalk.red(`Error: ${message}`));
+			process.exit(1);
+		}
+	}
 
 	if (parsed.version) {
 		console.log(VERSION);

@@ -44,6 +44,8 @@ export interface Args {
 	name?: string;
 	noSession?: boolean;
 	allowConcurrent?: boolean;
+	/** Start this session inside a new linked worktree named by the user. */
+	worktree?: string;
 	session?: string;
 	sessionId?: string;
 	fork?: string;
@@ -248,6 +250,14 @@ export function parseArgs(args: readonly string[]): Args {
 			result.noSession = true;
 		} else if (arg === "--allow-concurrent") {
 			result.allowConcurrent = true;
+		} else if (arg === "--worktree") {
+			const name = args[i + 1];
+			if (name === undefined || name.startsWith("-")) {
+				result.diagnostics.push({ type: "error", message: "--worktree requires a value" });
+			} else {
+				i++;
+				result.worktree = name;
+			}
 		} else if (arg === "--session" && i + 1 < args.length) {
 			result.session = args[++i];
 		} else if (arg === "--session-id" && i + 1 < args.length) {
@@ -438,6 +448,7 @@ ${chalk.bold("Options:")}
   --append-system-prompt <text>  Append text or file contents to the system prompt (can be used multiple times)
   --mode <mode>                  Output mode: text (default), json, rpc, or acp
   --allow-concurrent             Start even if another session holds this directory
+  --worktree <name>              Start in a new linked worktree named <name>
   --print, -p                    Non-interactive mode: process prompt and exit
   --permission-mode <mode>       default, plan, acceptEdits, bypassPermissions, or dontAsk.
                                   Required for non-interactive sessions (--print, json, or rpc mode).
