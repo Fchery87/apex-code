@@ -2,7 +2,7 @@
 
 *A provider-agnostic agentic harness forked from Pi.*
 
-**Status:** Active — Phases 0 through 12 landed · **Created:** 2026-08-08 · **Last updated:** 2026-10-18
+**Status:** Active — Phases 0 through 12 landed · **Created:** 2026-08-08 · **Last updated:** 2026-10-23
 
 > **Name settled: `apex-code`.** Binary `apex-code`, config directory
 > `~/.apex-code/`, session paths, and the npm package name. Task 0.1 verified the npm
@@ -144,8 +144,11 @@ capable and measurably worse.
 | Compact operation output | **landed**. Uniform compact rows, individual disclosure, and preserved detail views. Independent review and Linux, macOS, and Windows CI passed in [PR #168](https://github.com/Fchery87/apex-code/pull/168). | [spec](specs/2026-10-04-compact-operation-output.md) | — |
 | Harness review remediation | **landed** — all 32 tasks. Three-OS CI and the first CodeQL run were green at `9aa1088b7`. Merged to `main` as [PR #173](https://github.com/Fchery87/apex-code/pull/173) at `8e050a67e`. | [spec](specs/2026-10-16-harness-review-remediation.md) | — |
 | Decisions settled after the remediation | **landed** at `f9586cdf4`. Full suite and three-OS CI pass on [PR #176](https://github.com/Fchery87/apex-code/pull/176). Proxy opt-in for `web_fetch`, capped compaction reserve, startup MCP discovery setting, and four glossary terms. | [spec](specs/2026-10-17-grill-decisions.md) | — |
-| Completion check | **draft.** One verification policy can start another turn after a failed check. Decision function only. | [spec](specs/2026-10-22-completion-check.md) | [plan](plans/2026-10-22-completion-check.md) |
-| Localhost browser | **landed** at `7fc24d48d`. Opt-in tool, loopback check, one throwaway headless Chrome per call. A missing binary returns text. No test drives a real Chrome. | [spec](specs/2026-10-22-localhost-browser.md) | — |
+| Completion check | **landed** at `fb16df534`. One verification policy can start another turn after a failed check. | [spec](specs/2026-10-22-completion-check.md) | — |
+| Localhost browser | **landed** at `96971e87d`. Opt-in tool, loopback check, one throwaway headless Chrome per call. A missing binary and a redirect off loopback return text. The DevTools connection is tested against a local stand-in. No test drives a real Chrome. | [spec](specs/2026-10-22-localhost-browser.md) | — |
+| Session worktree | **draft.** `--worktree <name>` starts the user's session in a linked worktree. | [spec](specs/2026-10-23-session-worktree.md) | — |
+| Reviewed memory | **draft.** Inbox notes, path-scoped rules, and an instruction audit that writes nothing. | [spec](specs/2026-10-23-reviewed-memory.md) | — |
+| Optional bash confinement | **draft.** Off by default. Covers `bash` only. Does not restore the sandbox ADR 0032 removed. | [spec](specs/2026-10-23-shell-confinement.md) | — |
 
 ---
 

@@ -1,6 +1,6 @@
 # Spec: A completion check that starts another turn
 
-**Status:** Draft
+**Status:** Landed
 
 ## Metadata
 
