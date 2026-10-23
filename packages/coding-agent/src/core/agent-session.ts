@@ -4618,6 +4618,7 @@ export class AgentSession {
 						commandPrefix: shellCommandPrefix,
 						shellPath,
 						backgroundRegistry: this._backgroundShellRegistry,
+						confinement: this.settingsManager.getBashConfinement(),
 					},
 					edit: { diagnosticsOperations: this._diagnosticsOperations, ledger: this._fileLedger },
 					write: { diagnosticsOperations: this._diagnosticsOperations, ledger: this._fileLedger },

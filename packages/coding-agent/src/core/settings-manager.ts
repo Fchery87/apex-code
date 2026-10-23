@@ -257,6 +257,8 @@ export interface Settings {
 	showCacheMissNotices?: boolean; // default: false - show cache cost and provider recovery notices
 	externalEditor?: string; // Command for Ctrl+G external editor; takes precedence over VISUAL/EDITOR
 	shellPath?: string; // Custom shell path (e.g., for Cygwin users on Windows); supports leading ~ expansion
+	/** User setting only. "on" refuses a bash call when the helper is missing. A project file cannot set this. */
+	bashConfinement?: "off" | "on";
 	quietStartup?: boolean;
 	defaultProjectTrust?: DefaultProjectTrust; // default: "ask"; global setting only
 	shellCommandPrefix?: string; // Prefix prepended to every bash command (e.g., "shopt -s expand_aliases" for alias support)
@@ -1418,6 +1420,11 @@ export class SettingsManager {
 	getShellPath(): string | undefined {
 		const shellPath = this.settings.shellPath;
 		return shellPath ? normalizePath(shellPath) : shellPath;
+	}
+
+	/** True only when the user settings file sets bashConfinement to "on". Project settings cannot. */
+	getBashConfinement(): boolean {
+		return this.globalSettings.bashConfinement === "on";
 	}
 
 	setShellPath(path: string | undefined): void {

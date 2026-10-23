@@ -1,6 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { SettingsManager } from "../src/core/settings-manager.ts";
 import { createBashToolDefinition } from "../src/core/tools/bash.ts";
 import { confineBash } from "../src/core/tools/bash-confinement.ts";
+
+const directories: string[] = [];
+
+afterEach(() => {
+	for (const dir of directories.splice(0)) {
+		rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+	}
+});
 
 describe("bash confinement", () => {
 	it("does nothing when the setting is off", () => {
@@ -37,5 +49,23 @@ describe("bash confinement", () => {
 		} finally {
 			process.env.PATH = previous;
 		}
+	});
+
+	it("stays off unless the user file turns it on, and a project file cannot", () => {
+		const root = mkdtempSync(join(tmpdir(), "apex-confinement-settings-"));
+		directories.push(root);
+		const agentDir = join(root, "agent");
+		const projectDir = join(root, "project");
+		mkdirSync(agentDir, { recursive: true });
+		mkdirSync(join(projectDir, ".apex-code"), { recursive: true });
+		writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ bashConfinement: "off" }));
+		writeFileSync(join(projectDir, ".apex-code", "settings.json"), JSON.stringify({ bashConfinement: "on" }));
+		const fromProject = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
+		expect(fromProject.getBashConfinement()).toBe(false);
+
+		writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ bashConfinement: "on" }));
+		writeFileSync(join(projectDir, ".apex-code", "settings.json"), JSON.stringify({ bashConfinement: "off" }));
+		const fromUser = SettingsManager.create(projectDir, agentDir, { projectTrusted: true });
+		expect(fromUser.getBashConfinement()).toBe(true);
 	});
 });
