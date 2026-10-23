@@ -6,7 +6,7 @@
 
 | Task | State | Commit |
 | --- | --- | --- |
-| DevTools session, tested against a fake socket | not started | |
+| DevTools session, tested against a fake connection | done | `ab1443d4c` |
 | Chrome process, tested with a stand-in binary | not started | |
 | `browser.enabled` setting wires the process into the session | not started | |
 
