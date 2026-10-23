@@ -8,7 +8,7 @@
 | --- | --- |
 | Author | Apex Code maintainers |
 | Created | 2026-10-22 |
-| Last updated | 2026-10-22 |
+| Last updated | 2026-10-23 |
 | Roadmap phase | Product-surface follow-up |
 | Tracking issue/PR | none |
 | Compatibility posture | Preserves compatibility. The tool is absent from the default tool list. Sessions that do not opt in keep the same tool names and the same prompt prefix. `web_fetch` keeps refusing loopback unless `webFetch.allowPrivateNetwork` is set. |
@@ -23,12 +23,13 @@ Apex Code can fetch a public URL as text. It cannot open the app the user is bui
 - `packages/coding-agent/src/core/tools/web-fetch.ts` already classifies loopback, private, and link-local addresses, and refuses them unless `webFetch.allowPrivateNetwork` is set. `browser` is the tool that is allowed to open loopback. `web_fetch` does not gain that permission.
 - `docs/architecture/contracts.md` § 1 and ADR 0010 require every tool to declare capabilities, permission, context, and evidence. `lsp` is the existing pattern for a tool that is registered only when configured, so an unconfigured session's tool list and prompt prefix stay unchanged.
 - `docs/adr/0013-no-unowned-hosted-service-defaults.md` forbids a default dependency on a hosted service Apex Code does not run. The browser is a local process. It does not call a hosted browser service.
+- Checked on 2026-10-22, the other CLIs start a page in three ways. Claude Code attaches to a running Chrome through the Claude in Chrome extension and a native messaging host, and the tab shares the user's logins. Gemini CLI bundles `chrome-devtools-mcp`, launches Chrome 144 or newer, and keeps a profile at `~/.gemini/cli-browser-profile/` unless the user picks an isolated or existing session. Codex 0.162.0 has no built-in browser tool. Apex Code takes none of those. It launches the Chrome or Chromium already installed on the machine, one throwaway process per call, with an empty temporary profile, and it does not attach to the user's open browser.
 
 ## Current state
 
 `web_fetch` returns text for an http or https URL. It refuses a host that resolves to a loopback, private, or link-local address unless the user has set `webFetch.allowPrivateNetwork`. It does not run JavaScript, read a console, or return an image.
 
-No tool in `packages/coding-agent/src/core/tools/` launches a browser. The default registry in `createAllToolDefinitions` includes `web_fetch` and `web_search` unconditionally, and includes `lsp` and `mcp` only when their options are set.
+The destination check, the tool definition, and the registry opt-in are in. `createBrowserToolDefinition` takes an injected `BrowserOperations`. `createAllToolDefinitions` adds `browser` only when `options.browser` is set. Nothing in the session sets that option, and no code starts a browser process.
 
 ## The problem
 
@@ -41,8 +42,12 @@ A UI change has no check the agent can run. `web_fetch` returns the server's HTM
 - [ ] A refused call returns the reason as tool text. It does not ask the user to approve a non-loopback origin. Approval for other origins is later work.
 - [ ] A successful call returns the page title, the console messages captured while the page loaded, and one screenshot. Console text and the screenshot are both capped.
 - [ ] The tool does not click, type, navigate a second time, run arbitrary script, or read a file the page did not render. One call opens one URL and returns.
-- [ ] The browser process is started by this tool and stopped when the call ends, including when the call is aborted or times out.
-- [ ] Tests drive the tool through an injected browser. They do not launch a real browser and they do not listen on a network port.
+- [ ] The browser process is started by this tool and stopped when the call ends, including when the call is aborted or times out. The contract and the injected operation exist. The process does not.
+- [x] Tests of the tool definition drive it through an injected browser. They do not launch a real browser and they do not listen on a network port.
+- [ ] With the tool opted in and no injected operation, a call starts one headless Chrome or Chromium from the machine, with a new empty temporary profile, and talks to it through its DevTools port.
+- [ ] The process is killed and the temporary profile is removed when the call returns, throws, is aborted, or passes its timeout. A second call starts a second process.
+- [ ] The page's own requests to a host other than `localhost`, `127.0.0.1`, or `::1` are blocked. A navigation that lands on any other host returns the refusal and no screenshot.
+- [ ] A missing Chrome or Chromium binary returns tool text naming the miss. The call does not attach to a running browser and does not download one.
 
 ## Non-goals
 
@@ -60,9 +65,12 @@ A UI change has no check the agent can run. `web_fetch` returns the server's HTM
 | Tool | `createBrowserToolDefinition` takes an injected browser operation. The default operation is absent in this spec's first slice. The contract, the destination check, and the result assembly are testable without it. | `packages/coding-agent/src/core/tools/browser.ts` |
 | Contract | Capabilities `{net}`. Default permission behavior `ask`. `matches` compares the URL's host and path with a glob, the same shape `web_fetch` uses. `resultRecoverable` is false, because a console and a screenshot are a moment in a running app. `deferSchema` is true. Evidence emits nothing. | same file |
 | Result | Text content carries the title, the final URL, and the capped console. One image content block carries the screenshot when the operation returned one. Missing screenshot is reported as text, not as a failed tool call, when the page itself loaded. | same file |
-| Opt-in | `ToolsOptions.browser` is optional. `createAllToolDefinitions` and `createAllTools` add `browser` only when it is set, following `lsp`. Wiring that option from a setting is a later task in the plan. | `packages/coding-agent/src/core/tools/index.ts` |
+| Opt-in | `ToolsOptions.browser` is optional. `createAllToolDefinitions` and `createAllTools` add `browser` only when it is set, following `lsp`. | `packages/coding-agent/src/core/tools/index.ts` |
+| DevTools session | Opens the URL, collects console events, takes one screenshot, blocks a request whose host is not one of the three loopback hosts, and stops if the final URL is not one of them. Tested against a fake socket. | `packages/coding-agent/src/core/tools/browser-session.ts` |
+| Process | Finds `chrome` or `chromium` on `PATH`, or a setting path. Spawns it headless with a fresh temporary profile and a DevTools port. Kills it and removes the profile in a `finally`. A missing binary returns tool text. | `packages/coding-agent/src/core/tools/browser-chrome.ts` |
+| Session wiring | `browser.enabled` defaults off. When on, the session passes the Chrome operation as `options.browser`. An injected operation still wins, so tests never spawn Chrome. | `packages/coding-agent/src/core/settings-manager.ts`, `packages/coding-agent/src/core/agent-session.ts` |
 
-The first implementation slice stops at the tool definition, the destination check, and tests with an injected operation. Launching a real browser is a later task, because it needs a browser binary the repo does not ship and a decision about which local binary to run.
+The destination check, the tool, and the registry opt-in landed in `08f093658`, `e42b292e3`, and `e87b588b5`. The DevTools session, the Chrome process, and the setting are the remaining work, in that order, under `docs/plans/2026-10-23-browser-chrome.md`.
 
 ## Deletion inventory
 
@@ -83,11 +91,13 @@ An injected operation that ignores the destination check would make the unit tes
 - A tool test with an injected operation returns the title, console text, and an image block for an allowed URL.
 - A tool test for a rejected URL returns the refusal and does not call the operation.
 - A registry test shows `browser` absent from `createAllToolDefinitions` when `options.browser` is unset, and present when it is set.
+- A DevTools session test, against a fake socket, returns the title, the console text, and the screenshot bytes, and blocks a request to `https://example.com/`.
+- A process test spawns a stand-in binary instead of Chrome. It asserts the arguments include a temporary profile and a DevTools port, and that the process is killed and the profile removed after the call.
 
 No roadmap phase gate applies. This is a product-surface follow-up.
 
 ## Rollout
 
-Needs `docs/plans/2026-10-22-localhost-browser.md`. The destination check, the tool definition, and the registry opt-in should land as separate commits. A real browser process is not part of the first plan.
+The first plan, `docs/plans/2026-10-22-localhost-browser.md`, is done. The Chrome process continues in `docs/plans/2026-10-23-browser-chrome.md`.
 
 No ADR. The tool uses the existing contract, the existing permission gate, and no hosted service.
