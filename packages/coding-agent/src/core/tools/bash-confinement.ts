@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { delimiter, join } from "node:path";
+
 export interface ConfineBashInput {
 	enabled: boolean;
 	command: string;
@@ -15,6 +18,17 @@ export interface ConfineBashResult {
 }
 
 const HELPER = "bwrap";
+
+/** First `bwrap` on PATH, or undefined. Does not download one. */
+export function findBashConfinementHelper(): string | undefined {
+	const path = process.env.PATH ?? "";
+	for (const dir of path.split(delimiter)) {
+		if (!dir) continue;
+		const candidate = join(dir, HELPER);
+		if (existsSync(candidate)) return candidate;
+	}
+	return undefined;
+}
 
 /**
  * Decide how a bash call runs. Off means the command is unchanged. On with no

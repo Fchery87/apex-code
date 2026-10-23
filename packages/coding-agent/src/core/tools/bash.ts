@@ -18,6 +18,7 @@ import { getExperimentalToolSampling } from "../experimental.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
 import { type BackgroundShellRegistry, createBackgroundShellRegistry } from "./background-shell.ts";
 import { classifyBashCommand } from "./bash-command-segments.ts";
+import { confineBash, findBashConfinementHelper } from "./bash-confinement.ts";
 import { isReadOnlyCommand } from "./bash-readonly.ts";
 import { type ApexToolDefinition, type PermissionSpec, toolUnion } from "./contract.ts";
 import { OutputAccumulator } from "./output-accumulator.ts";
@@ -440,6 +441,11 @@ export interface BashToolOptions {
 	 * children are killed when the session disposes.
 	 */
 	backgroundRegistry?: BackgroundShellRegistry;
+	/**
+	 * When true, a bash call runs only if the confinement helper exists.
+	 * A missing helper returns a refusal and does not run the command.
+	 */
+	confinement?: boolean;
 }
 
 /**
@@ -468,6 +474,7 @@ export function createShellToolDefinition(
 	const exposeSessionEnvironment = options?.exposeSessionEnvironment ?? true;
 	const spawnHook = options?.spawnHook;
 	const registry = options?.backgroundRegistry ?? createBackgroundShellRegistry();
+	const confinement = options?.confinement ?? false;
 
 	// Background handle calls (retrieve and kill) never touch the foreground
 	// execution path, so the post-hoc escalation offer below is unreachable from
@@ -557,6 +564,21 @@ export function createShellToolDefinition(
 				exposeSessionEnvironment,
 				ctx,
 			);
+			if (confinement) {
+				const helperPath = findBashConfinementHelper();
+				const decision = confineBash({
+					enabled: true,
+					command: spawnContext.command,
+					cwd: spawnContext.cwd,
+					helperPath,
+				});
+				if (!decision.run) {
+					return {
+						content: [{ type: "text", text: decision.refusal ?? "Bash confinement refused the command." }],
+						details: undefined,
+					};
+				}
+			}
 
 			if (background) {
 				const spawnBg = ops.spawnBackground;
