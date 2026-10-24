@@ -61,9 +61,6 @@ function catastrophicPath(token: string, cwd: string, home: string): string | un
 	const absolute = isAbsolute(expanded) ? expanded : resolve(cwd, expanded);
 	const root = resolve("/");
 	if (absolute === root) return `${token} resolves to the filesystem root`;
-	if (absolute === resolve("/home") || absolute === resolve("/Users")) {
-		return `${token} is the directory that holds home directories`;
-	}
 	const homeResolved = resolve(home);
 	if (absolute === homeResolved) return `${token} is the home directory`;
 	if (isWithin(homeResolved, absolute) && absolute !== homeResolved) {

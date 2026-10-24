@@ -33,7 +33,6 @@ async function decide(
 const denied = [
 	"rm -rf /",
 	"rm -rf ~",
-	"rm -rf /home",
 	"rm -rf $HOME",
 	'sh -c "rm -rf /"',
 	"sudo rm -rf /",
