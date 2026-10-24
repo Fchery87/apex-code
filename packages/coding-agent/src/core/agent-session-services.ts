@@ -83,6 +83,8 @@ export interface CreateAgentSessionFromServicesOptions {
 	permissionGate?: Omit<PermissionGateOptions, "getContract">;
 	/** Optional headless permission bridge (ACP, spec 2026-08-31-acp-adapter.md). */
 	permissionResponderFactory?: () => PermissionResponder | undefined;
+	/** Parent checkout for a --worktree session. Writes there are denied. */
+	parentCheckout?: string;
 }
 
 /**
@@ -391,5 +393,6 @@ export async function createAgentSessionFromServices(
 		webFetchAllowPrivateNetwork: settingsManager.getWebFetchAllowPrivateNetwork(),
 		webFetchAllowProxiedFetch: settingsManager.getWebFetchAllowProxiedFetch(),
 		browserEnabled: settingsManager.getBrowserSettings().enabled,
+		parentCheckout: options.parentCheckout,
 	});
 }

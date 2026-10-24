@@ -44,6 +44,7 @@ const REPRESENTATIVE_PARAMS: Record<ToolName, JsonObject> = {
 	delegate: { agentType: "explore", task: "find the config loader" },
 	test: { executable: "npm", args: ["test", "--", "unit"] },
 	memory_note: { title: "Tabs", body: "Indent with tabs." },
+	apply_patch: { patches: [{ path: "file.txt", oldText: "a", newText: "b" }] },
 };
 
 let scratch: string;

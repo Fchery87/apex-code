@@ -165,6 +165,7 @@ export {
 import type { AgentTool } from "apex-code-agent-core";
 import type { DelegationRuntimeOptions } from "../delegation/runtime.ts";
 import { createMcpTool, createMcpToolDefinition, type McpToolOptions } from "../mcp/mcp-tool.ts";
+import { createApplyPatchTool, createApplyPatchToolDefinition } from "./apply-patch.ts";
 import { createAskUserTool, createAskUserToolDefinition } from "./ask-user.ts";
 import { type BashToolOptions, createBashTool, createBashToolDefinition } from "./bash.ts";
 import { type BrowserToolOptions, createBrowserTool, createBrowserToolDefinition } from "./browser.ts";
@@ -207,7 +208,8 @@ export type ToolName =
 	| "delegate"
 	| "test"
 	| "skill_search"
-	| "memory_note";
+	| "memory_note"
+	| "apply_patch";
 export const allToolNames: Set<ToolName> = new Set([
 	"read",
 	"bash",
@@ -221,6 +223,7 @@ export const allToolNames: Set<ToolName> = new Set([
 	"todo_write",
 	"skill_search",
 	"memory_note",
+	"apply_patch",
 	"web_search",
 	"web_fetch",
 	"ask_user",
@@ -245,6 +248,7 @@ export interface ToolsOptions {
 	web_fetch?: WebFetchToolOptions;
 	delegate?: { runtime?: DelegationRuntimeOptions };
 	test?: TestToolOptions;
+	apply_patch?: { denyInside?: string };
 	/**
 	 * The `browser` tool. Undefined by default. The registry includes it only when this
 	 * is set, so a session that did not opt in keeps its tool list and prompt prefix.
@@ -327,6 +331,8 @@ export function createToolDefinition(toolName: ToolName, cwd: string, options?: 
 			return createTestToolDefinition(cwd, options?.test);
 		case "memory_note":
 			return createMemoryNoteToolDefinition(cwd);
+		case "apply_patch":
+			return createApplyPatchToolDefinition(cwd, options?.apply_patch);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -370,6 +376,8 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 			return createTestTool(cwd, options?.test);
 		case "memory_note":
 			return createMemoryNoteTool(cwd);
+		case "apply_patch":
+			return createApplyPatchTool(cwd, options?.apply_patch);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -433,6 +441,7 @@ export function createAllToolDefinitions(
 		delegate: createDelegateToolDefinition(options?.delegate?.runtime ?? noopDelegationRuntime),
 		test: createTestToolDefinition(cwd, options?.test),
 		memory_note: createMemoryNoteToolDefinition(cwd),
+		apply_patch: createApplyPatchToolDefinition(cwd, options?.apply_patch),
 		// Registered only when configured (LSP.5): an unconfigured session's registry,
 		// and therefore its static prompt prefix, is unaffected by this subsystem.
 		...(options?.browser ? { browser: createBrowserToolDefinition(options.browser) } : {}),
@@ -487,6 +496,7 @@ export function createAllTools(
 		delegate: createDelegateTool(options?.delegate?.runtime ?? noopDelegationRuntime),
 		test: createTestTool(cwd, options?.test),
 		memory_note: createMemoryNoteTool(cwd),
+		apply_patch: createApplyPatchTool(cwd, options?.apply_patch),
 		...(options?.browser ? { browser: createBrowserTool(options.browser) } : {}),
 		...(options?.lsp ? { lsp: createLspTool(cwd, options.lsp) } : {}),
 		...(options?.mcp ? { mcp: createMcpTool(options.mcp) } : {}),

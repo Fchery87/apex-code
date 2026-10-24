@@ -23,6 +23,19 @@ describe("built-in agent types (HR.9)", () => {
 		expect(explore?.tools).not.toContain("bash");
 	});
 
+	it("resolves debugger without write or delegate", () => {
+		const debuggerAgent = resolverFor(join(scratch, "empty-agent"))("debugger");
+		expect(debuggerAgent?.tools).toEqual(["read", "grep", "find", "ls", "bash"]);
+		expect(debuggerAgent?.tools).not.toContain("write");
+		expect(debuggerAgent?.tools).not.toContain("delegate");
+	});
+
+	it("resolves verifier to read plus test, with no write", () => {
+		const verifier = resolverFor(join(scratch, "empty-agent"))("verifier");
+		expect(verifier?.tools).toEqual(["read", "grep", "find", "ls", "test"]);
+		expect(verifier?.tools).not.toContain("write");
+	});
+
 	it("resolves general to the default tools, never delegate", () => {
 		const general = resolverFor(join(scratch, "empty-agent"))("general");
 		expect(general?.tools).toEqual(expect.arrayContaining(["read", "bash", "edit", "write"]));

@@ -77,6 +77,8 @@ export interface WriteToolOptions {
 	 * `GrepOperations`' injection pattern (`test.ts:28`, `grep.ts:58`).
 	 */
 	diagnosticsOperations?: DiagnosticsOperations;
+	/** Parent checkout. A target inside it, and outside cwd, is denied. */
+	denyInside?: string;
 }
 
 const WRITE_PREVIEW_MAX_BYTES = 512 * 1024;
@@ -143,6 +145,7 @@ export function createWriteToolDefinition(
 				cwd,
 				defaultBehavior: "ask",
 				verb: "Write",
+				denyInside: options?.denyInside,
 				getPath: (params) => params.path,
 				previewCall: (params) => previewWrite(params as { path: string; content: string }),
 			}),

@@ -663,6 +663,7 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 	time("parseArgs");
 
+	let worktreeParent: string | undefined;
 	if (parsed.worktree) {
 		const parent = cwd;
 		const name = parsed.worktree;
@@ -670,6 +671,7 @@ export async function main(args: string[], options?: MainOptions) {
 			const prepared = await prepareSessionWorktree(parent, name);
 			process.chdir(prepared.path);
 			cwd = prepared.path;
+			worktreeParent = parent;
 			process.once("exit", () => {
 				const released = releaseSessionWorktreeSync(parent, name);
 				if (!released.removed && released.path) {
@@ -946,6 +948,7 @@ export async function main(args: string[], options?: MainOptions) {
 			excludeTools: sessionOptions.excludeTools,
 			noTools: sessionOptions.noTools,
 			customTools: sessionOptions.customTools,
+			parentCheckout: worktreeParent,
 			// ACP bridge (spec 2026-08-31-acp-adapter.md): permission asks route to
 			// the ACP client through the server created by runAcpMode; absent
 			// server (non-ACP modes) leaves today's fail-closed behavior.

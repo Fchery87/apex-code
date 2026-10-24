@@ -8,6 +8,12 @@ const todoStatus = Type.Union([Type.Literal("pending"), Type.Literal("in_progres
 const todoItemSchema = Type.Object({
 	content: Type.String({ description: "Short description of the task." }),
 	status: todoStatus,
+	check: Type.Optional(
+		Type.String({
+			description:
+				"The command or observation that shows this item is done, and its result. Required before a completed list can end the turn.",
+		}),
+	),
 });
 
 const todoWriteSchema = Type.Object({
