@@ -58,7 +58,7 @@ describe("offline session replay", () => {
 		// decide whether to raise it, so both the tool description and the timeout field now
 		// carry it. That is 9 tokens on every request. It was 24 before the same sentence was
 		// cut from appearing in both places.
-		expect(result.metrics.contextTokensByTurn[0]).toBe(1211);
+		expect(result.metrics.contextTokensByTurn[0]).toBe(1230);
 		const [turnContext] = result.contextsByTurn;
 		expect(
 			turnContext?.some(
@@ -91,7 +91,7 @@ describe("offline session replay", () => {
 		expect(result.metrics.contextTokensByTurn).toHaveLength(22);
 		expect(result.metrics.contextTokensByTurn[18]).toBeLessThan(result.metrics.contextTokensByTurn[17]);
 		// Lock the measured v0.86 schema baseline after upstream's tool-message changes.
-		expect(result.metrics.contextTokensByTurn.slice(18)).toEqual([1197, 1215, 1233, 1251]);
+		expect(result.metrics.contextTokensByTurn.slice(18)).toEqual([1216, 1234, 1252, 1270]);
 	});
 
 	it("evicts stale recoverable tool results from the outbound context by turn 20 (long-tool-heavy)", async () => {
@@ -247,8 +247,8 @@ describe("offline session replay", () => {
 
 		expect(JSON.stringify(second)).toBe(JSON.stringify(first));
 		expect(first.metrics).toEqual({
-			contextTokensByTurn: [1222],
-			systemPromptTokens: 1170,
+			contextTokensByTurn: [1241],
+			systemPromptTokens: 1189,
 			cacheHitRate: 0,
 			toolCallsByName: { read: 2 },
 			wallTimeMs: 0,

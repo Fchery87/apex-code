@@ -79,6 +79,7 @@ describe("regression #3592: no-builtin-tools keeps extension tools enabled", () 
 				.map((tool) => tool.name)
 				.sort(),
 		).toEqual([
+			"apply_patch",
 			"ask_user",
 			"bash",
 			"delegate",
@@ -87,6 +88,7 @@ describe("regression #3592: no-builtin-tools keeps extension tools enabled", () 
 			"find",
 			"grep",
 			"ls",
+			"memory_note",
 			"plan_present",
 			"powershell",
 			"read",
