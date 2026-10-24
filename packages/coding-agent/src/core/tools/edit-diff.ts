@@ -493,6 +493,23 @@ function appendEditDiagnostics(error: Error, diagnostics: EditFailureDiagnostics
 	return error;
 }
 
+/** Line where the text matches after trimming each line, or undefined. Does not apply. */
+export function indentMismatchLine(content: string, oldText: string): number | undefined {
+	const target = oldText.split("\n");
+	if (target.length === 0 || target.every((line) => line.trim() === "")) return undefined;
+	const lines = content.split("\n");
+	for (let i = 0; i <= lines.length - target.length; i++) {
+		const window = lines.slice(i, i + target.length);
+		if (
+			window.every((line, index) => line.trim() === target[index].trim()) &&
+			window.join("\n") !== target.join("\n")
+		) {
+			return i + 1;
+		}
+	}
+	return undefined;
+}
+
 function getNotFoundError(path: string, editIndex: number, totalEdits: number): Error {
 	if (totalEdits === 1) {
 		return new Error(
@@ -568,10 +585,15 @@ export function applyEditsToNormalizedContent(
 			// Advisory only: candidates name near-miss locations but never supply a
 			// replacement. Matching above remains the only apply path.
 			const diagnosticTarget = usedFuzzyMatch ? normalizeForFuzzyMatch(edit.oldText) : edit.oldText;
-			throw appendEditDiagnostics(
+			const error = appendEditDiagnostics(
 				getNotFoundError(path, i, normalizedEdits.length),
 				scanMissingMatchCandidates(replacementBaseContent, diagnosticTarget),
 			);
+			const indentLine = indentMismatchLine(replacementBaseContent, diagnosticTarget);
+			if (indentLine !== undefined) {
+				error.message += `\n\nThe same lines match after trimming whitespace around line ${indentLine}. The edit was not applied. Copy the exact whitespace from the file.`;
+			}
+			throw error;
 		}
 
 		const occurrences = countOccurrences(replacementBaseContent, edit.oldText);

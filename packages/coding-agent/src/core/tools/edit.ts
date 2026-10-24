@@ -134,6 +134,8 @@ export interface EditToolOptions {
 	 * `GrepOperations`' injection pattern (`test.ts:28`, `grep.ts:58`).
 	 */
 	diagnosticsOperations?: DiagnosticsOperations;
+	/** Parent checkout. A target inside it, and outside cwd, is denied. */
+	denyInside?: string;
 }
 
 /** A preview is a courtesy, so it never costs more than a screen or two of reading. */
@@ -233,6 +235,7 @@ export function createEditToolDefinition(
 				cwd,
 				defaultBehavior: "ask",
 				verb: "Edit",
+				denyInside: options?.denyInside,
 				getPath: (params) => params.path,
 				previewCall: (params) => previewEdit(params as EditToolInput),
 			}),

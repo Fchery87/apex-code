@@ -51,8 +51,10 @@ export function createPathPermissionSpec<TParams extends TSchema>(options: {
 	 * means the path is a file and its directory is the scope (read).
 	 */
 	outsideWorkspace?: "target" | "parent";
+	/** A target inside this directory is denied. A worktree session sets the parent checkout. */
+	denyInside?: string;
 }): PermissionSpec<TParams> {
-	const { cwd, defaultBehavior, verb, getPath, previewCall, outsideWorkspace } = options;
+	const { cwd, defaultBehavior, verb, getPath, previewCall, outsideWorkspace, denyInside } = options;
 
 	const normalize = (path: string | undefined): string => {
 		const canonical = resolveToCwd(path?.trim() ? path : ".", cwd);
@@ -71,6 +73,10 @@ export function createPathPermissionSpec<TParams extends TSchema>(options: {
 	return {
 		defaultBehavior,
 		defaultBehaviorFor(params: Static<TParams>) {
+			if (denyInside) {
+				const target = resolveToCwd(getPath(params)?.trim() ? (getPath(params) as string) : ".", cwd);
+				if (resolvesInsideDirectory(target, denyInside) && !resolvesInsideDirectory(target, cwd)) return "deny";
+			}
 			if (isSensitive(params)) return "ask";
 			if (outsideWorkspace && isOutside(params)) return "ask";
 			return undefined;

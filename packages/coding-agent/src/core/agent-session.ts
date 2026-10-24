@@ -62,6 +62,7 @@ import { generateBugReportSummary } from "./bug-report.ts";
 import type { CacheWarmer, CacheWarmingStatus } from "./cache-warmer.ts";
 import type { CheckpointSettings, GitCheckpoint, GitCheckpoints } from "./checkpoints/git-checkpoints.ts";
 import { createSessionCheckpoints, type SessionCheckpoints } from "./checkpoints/session-checkpoints.ts";
+import { compactionFacts } from "./compaction/facts.ts";
 import {
 	type CompactionPreparation,
 	type CompactionResult,
@@ -139,6 +140,7 @@ import type { HookRuntime } from "./hooks/types.ts";
 import type { McpRuntime } from "./mcp/runtime.ts";
 import { type BashExecutionMessage, type CustomMessage, convertToLlm } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
+import { modelForRole } from "./model-role.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
 import { evaluateToolCall, type PermissionGateOptions } from "./permissions/gate.ts";
 import { isPlanModeDenied } from "./permissions/modes.ts";
@@ -150,12 +152,14 @@ import type { PermissionMode } from "./permissions/store.ts";
 import { loadPolicyConfiguration } from "./policy-loader.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
+import { recoveryForTurn } from "./response-recovery.ts";
 import { exportSessionToJsonl } from "./session-export.ts";
 import {
 	type BranchSummaryEntry,
 	type CompactionEntry,
 	type ContextEditEntry,
 	getLatestCompactionEntry,
+	getLatestTodos,
 	type SessionEntry,
 	SessionManager,
 	TODO_CUSTOM_ENTRY_TYPE,
@@ -172,6 +176,7 @@ import {
 	type NormalizedBuildSystemPromptOptions,
 	normalizeBuildSystemPromptOptions,
 } from "./system-prompt.ts";
+import { decideTodoGate } from "./todo-gate.ts";
 import type { BackgroundShellRegistry } from "./tools/background-shell.ts";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
 import { createChromeBrowser } from "./tools/browser-chrome.ts";
@@ -192,6 +197,7 @@ import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapp
 import { createToolSchemaToolDefinition } from "./tools/tool-schema.ts";
 import type { WebSearchOperations } from "./tools/web-search.ts";
 import { addUsageToTotals, createUsageTotals } from "./usage-totals.ts";
+import { decideVerificationContinue, turnMutated } from "./verification-continue.ts";
 import type { VerificationBoundary } from "./verification-lifecycle.ts";
 import {
 	type VerificationCompletionStatus,
@@ -332,6 +338,8 @@ export interface AgentSessionConfig {
 	sessionManager: SessionManager;
 	settingsManager: SettingsManager;
 	cwd: string;
+	/** Parent checkout when this session was started with --worktree. Writes there are denied. */
+	parentCheckout?: string;
 	/** Models to cycle through with Ctrl+P (from --models flag) */
 	scopedModels?: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
 	/** Resource loader for extensions, skills, prompts, themes, context files, and system prompt */
@@ -569,6 +577,10 @@ export class AgentSession {
 	/** One user-set verification policy that can start another turn. Absent until set. */
 	private _completionCondition: CompletionCondition | undefined;
 	private _completionContinuationsUsed = 0;
+	private _emptyRecoveryUsed = 0;
+	private _markupRecoveryUsed = 0;
+	private _todoGateUsed = 0;
+	private _verificationContinueUsed = 0;
 	/** Messages queued to be included with the next user prompt as context ("asides"). */
 	private _pendingNextTurnMessages: CustomMessage[] = [];
 	/** Context-only custom messages queued during a run, flushed once the current turn's tool results are in. */
@@ -608,6 +620,8 @@ export class AgentSession {
 	private _customTools: ToolDefinition[];
 	private _baseToolDefinitions: Map<string, ToolDefinition> = new Map();
 	private _cwd: string;
+	private _parentCheckout?: string;
+	private _lastFailure?: { command: string; exitCode: number };
 	/**
 	 * Workspace observation adapter for compaction capture (WS.4). Injectable
 	 * so tests can force capture outcomes without a real repository.
@@ -717,6 +731,7 @@ export class AgentSession {
 		this.settingsManager = config.settingsManager;
 		this._scopedModels = config.scopedModels ?? [];
 		this._resourceLoader = config.resourceLoader;
+		this._parentCheckout = config.parentCheckout;
 		this._customTools = config.customTools ?? [];
 		this._cwd = config.cwd;
 		this._modelRuntime = config.modelRuntime;
@@ -963,6 +978,7 @@ export class AgentSession {
 		};
 
 		this.agent.afterToolCall = async ({ toolCall, args, result, isError }) => {
+			this._rememberFailure(toolCall.name, args, result);
 			const definition = this.getToolDefinition(toolCall.name) as Partial<ApexToolDefinition> | undefined;
 			if (this._evidenceSink && definition?.contract) {
 				try {
@@ -1065,10 +1081,15 @@ export class AgentSession {
 				},
 				signal,
 			);
+			const sessionModel = previous?.model ?? this.agent.state.model;
+			const model =
+				this._planToolMode === "plan" && sessionModel
+					? modelForRole(sessionModel, this._modelRuntime.resolveModelRoles().roles, "plan")
+					: sessionModel;
 			return {
 				...previous,
 				context: previous?.context ?? canonicalContext,
-				model: previous?.model ?? this.agent.state.model,
+				model,
 				thinkingLevel: previous?.thinkingLevel ?? this.agent.state.thinkingLevel,
 			};
 		};
@@ -1122,6 +1143,9 @@ export class AgentSession {
 			const previousDecision = await previousFinishTurn?.(turn, signal);
 			if (previousDecision?.action === "end") return previousDecision;
 			if (extensionContinue || previousDecision?.action === "continue") return { action: "continue" };
+			if (await this._applyResponseRecovery(turn)) return { action: "continue" };
+			if (await this._applyTodoGate()) return { action: "continue" };
+			if (await this._applyVerificationContinue(turn)) return { action: "continue" };
 			return undefined;
 		};
 	}
@@ -2432,6 +2456,95 @@ export class AgentSession {
 	}
 
 	/**
+	 * Slice 1. A turn with no executable tool call can continue once for an
+	 * empty reply after tool results, or once for tool-call text that was not a
+	 * real call. Length stops stay on the existing compact-and-retry path, so
+	 * this method does not count them. Caps live in the decision.
+	 */
+	/** Slice 8. The last command that exited non-zero, so compaction can paste it. */
+	private _rememberFailure(toolName: string, args: unknown, result: { details?: unknown }): void {
+		if (toolName !== "bash" && toolName !== "test" && toolName !== "powershell") return;
+		const details = result.details as
+			| { execution?: { exitCode?: number | null }; exitCode?: number | null }
+			| undefined;
+		const exitCode = details?.execution?.exitCode ?? details?.exitCode;
+		if (typeof exitCode !== "number" || exitCode === 0) return;
+		const record = args as { command?: unknown; executable?: unknown; args?: unknown } | undefined;
+		const command =
+			toolName === "test"
+				? `${String(record?.executable ?? "test")} ${Array.isArray(record?.args) ? record.args.join(" ") : ""}`.trim()
+				: String(record?.command ?? toolName);
+		this._lastFailure = { command: command.slice(0, 200), exitCode };
+	}
+
+	private async _applyResponseRecovery(turn: {
+		message: AssistantMessage;
+		toolResults: ToolResultMessage[];
+		context: AgentContext;
+	}): Promise<boolean> {
+		const messages = turn.context.messages;
+		const prior = messages.length >= 2 ? messages[messages.length - 2] : undefined;
+		const decision = recoveryForTurn(
+			{
+				stopReason: turn.message.stopReason,
+				visibleText: contentText(turn.message.content, ""),
+				priorRole: prior?.role,
+				hasToolCalls: turn.message.content.some((block) => block.type === "toolCall"),
+				hasToolResults: turn.toolResults.length > 0,
+			},
+			{ empty: this._emptyRecoveryUsed, markup: this._markupRecoveryUsed },
+		);
+		if (decision.type !== "continue") return false;
+		if (decision.kind === "empty") this._emptyRecoveryUsed += 1;
+		if (decision.kind === "markup") this._markupRecoveryUsed += 1;
+		await this.followUp(decision.prompt);
+		return true;
+	}
+
+	/**
+	 * Slice 2. One continuation when every todo is completed and at least one
+	 * has no recorded check. A session that already has a /goal condition does
+	 * not get a second continuation from this gate.
+	 */
+	private async _applyTodoGate(): Promise<boolean> {
+		if (this._completionCondition !== undefined) return false;
+		const decision = decideTodoGate({
+			todos: getLatestTodos(this.sessionManager.getBranch()),
+			continuationsUsed: this._todoGateUsed,
+		});
+		if (decision.type !== "continue") return false;
+		this._todoGateUsed += 1;
+		await this.followUp(decision.prompt);
+		return true;
+	}
+
+	/**
+	 * Slice 3. A mutating turn with a configured policy runs it once. A failure
+	 * queues one repair. A /goal condition already owns continuation, so this
+	 * stays out of its way. A read-only turn does not run the policy.
+	 */
+	private async _applyVerificationContinue(turn: { toolResults: ToolResultMessage[] }): Promise<boolean> {
+		if (this._completionCondition !== undefined) return false;
+		const first = decideVerificationContinue({
+			policyIds: this.verificationPolicyIds(),
+			mutated: turnMutated(turn.toolResults),
+			continuationsUsed: this._verificationContinueUsed,
+		});
+		if (first.type !== "run") return false;
+		const status = await this.requestVerification({ policyId: first.policyId });
+		const second = decideVerificationContinue({
+			policyIds: this.verificationPolicyIds(),
+			mutated: true,
+			continuationsUsed: this._verificationContinueUsed,
+			status,
+		});
+		if (second.type !== "continue") return false;
+		this._verificationContinueUsed += 1;
+		await this.followUp(second.prompt);
+		return true;
+	}
+
+	/**
 	 * Run the active completion policy after the model stops. A failure queues
 	 * one follow-up so the existing restart loop starts another turn. The
 	 * prompt carries status and exit code only.
@@ -3659,9 +3772,10 @@ export class AgentSession {
 		// recorded on the run's budget for observability and never consumes
 		// maxProviderRequests.
 		this.agent.recordMaintenanceRequest();
-		return compact(
+		const summaryModel = modelForRole(requestModel, this._modelRuntime.resolveModelRoles().roles, "tiny");
+		const result = await compact(
 			preparation,
-			requestModel,
+			summaryModel,
 			apiKey,
 			headers,
 			customInstructions,
@@ -3673,6 +3787,8 @@ export class AgentSession {
 			this._summarizationRetryCallbacks({ source: "compaction", reason }),
 			undefined, // sessionId
 		);
+		result.summary += await compactionFacts(this._cwd, this._lastFailure);
+		return result;
 	}
 
 	private _clearManualCompactionState(): void {
@@ -4620,8 +4736,17 @@ export class AgentSession {
 						backgroundRegistry: this._backgroundShellRegistry,
 						confinement: this.settingsManager.getBashConfinement(),
 					},
-					edit: { diagnosticsOperations: this._diagnosticsOperations, ledger: this._fileLedger },
-					write: { diagnosticsOperations: this._diagnosticsOperations, ledger: this._fileLedger },
+					edit: {
+						diagnosticsOperations: this._diagnosticsOperations,
+						ledger: this._fileLedger,
+						denyInside: this._parentCheckout,
+					},
+					write: {
+						diagnosticsOperations: this._diagnosticsOperations,
+						ledger: this._fileLedger,
+						denyInside: this._parentCheckout,
+					},
+					apply_patch: { denyInside: this._parentCheckout },
 					...(this._lspOperations ? { lsp: { operations: this._lspOperations } } : {}),
 					...(this._mcpRuntime ? { mcp: this._mcpRuntime } : {}),
 					...(this._webSearchOperations ? { web_search: { operations: this._webSearchOperations } } : {}),

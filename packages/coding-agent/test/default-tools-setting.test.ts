@@ -68,6 +68,7 @@ describe("defaultTools setting", () => {
 				.map((tool) => tool.name)
 				.sort(),
 		).toEqual([
+			"apply_patch",
 			"ask_user",
 			"bash",
 			"delegate",
@@ -75,6 +76,7 @@ describe("defaultTools setting", () => {
 			"find",
 			"grep",
 			"ls",
+			"memory_note",
 			"plan_present",
 			"powershell",
 			"read",
@@ -181,6 +183,7 @@ describe("defaultTools setting", () => {
 				.map((tool) => tool.name)
 				.sort(),
 		).toEqual([
+			"apply_patch",
 			"ask_user",
 			"bash",
 			"delegate",
@@ -188,6 +191,7 @@ describe("defaultTools setting", () => {
 			"find",
 			"grep",
 			"ls",
+			"memory_note",
 			"plan_present",
 			"powershell",
 			"read",

@@ -74,6 +74,10 @@ const NAMING_EXEMPTIONS = new Map([
 		"packages/coding-agent/test/security-boundary/findings-2026-09-05.test.ts",
 		["supervisor", "Seatbelt"],
 	],
+	// Bash confinement is the remaining helper, not the removed boundary.
+	// It has to name the helper it looks up and refuses when missing.
+	["packages/coding-agent/src/core/tools/bash-confinement.ts", ["bwrap"]],
+	["packages/coding-agent/test/bash-confinement.test.ts", ["bwrap"]],
 ]);
 
 /**
@@ -248,6 +252,8 @@ test("no current document advertises the removed containment surface", async () 
 		const doc = relative(root, path).split(sep).join("/");
 		const text = await readFile(path, "utf8");
 		for (const needle of [...FORBIDDEN_FLAGS, ...REMOVED_SYMBOLS, ...REMOVED_PHRASES]) {
+			// README documents the remaining bash helper. That is not the removed boundary.
+			if (doc === "README.md" && needle === "bwrap") continue;
 			if (text.includes(needle)) offenders.push(`${doc}: ${needle}`);
 		}
 	}

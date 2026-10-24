@@ -163,7 +163,7 @@ export function buildSystemPromptSections(input: BuildSystemPromptOptions): Syst
 		promptSections.preamble = customPrompt;
 	} else {
 		promptSections.preamble =
-			"You are an expert coding assistant operating inside Apex Code, a provider-agnostic coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.";
+			"You are an expert coding assistant operating inside Apex Code, a provider-agnostic coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.\n\nWork in this order: search before reading whole files, read a file before you edit it, make the smallest change that satisfies the failure, run the relevant check, and report its real output. Stop when the check is green, or say why it cannot be.";
 		const visibleTools = selectedTools.filter((name) => !!toolSnippets[name]);
 		const tools =
 			visibleTools.length > 0 ? visibleTools.map((name) => `- ${name}: ${toolSnippets[name]}`).join("\n") : "(none)";

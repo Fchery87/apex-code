@@ -110,6 +110,20 @@ export const BUILT_IN_AGENT_DEFINITIONS: readonly AgentDefinition[] = [
 			"You search and read code to answer a question. You cannot change files or run commands. Report the file paths and line numbers that answer the question, and say plainly when the answer is not in the workspace.",
 	},
 	{
+		name: "debugger",
+		description: "Find why something fails. Can read and run commands. Cannot edit files or delegate.",
+		tools: ["read", "grep", "find", "ls", "bash"],
+		systemPrompt:
+			"You find the cause of a failure. Search before reading whole files. Run the failing command and report the file, the line, and the real output. You cannot edit files.",
+	},
+	{
+		name: "verifier",
+		description: "Run the check and report its real result. Can read and run the test tool. Cannot edit files.",
+		tools: ["read", "grep", "find", "ls", "test"],
+		systemPrompt:
+			"You run the check the task names. Report the command, the exit, and the real output. You cannot edit files. If the check fails, say the first failure and stop.",
+	},
+	{
 		name: "general",
 		description: "General-purpose helper with the default file and shell tools. Cannot delegate further.",
 		tools: ["read", "bash", "edit", "write", "grep", "find", "ls"],

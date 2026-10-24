@@ -26,6 +26,7 @@ const REPRESENTATIVE_PARAMS: Record<string, unknown> = {
 	read: { path: "src/index.ts" },
 	write: { path: "src/generated.ts", content: "export const x = 1;\n" },
 	edit: { path: "src/index.ts", edits: [{ oldText: "a", newText: "b" }] },
+	apply_patch: { patches: [{ path: "src/index.ts", oldText: "a", newText: "b" }] },
 	grep: { pattern: "TODO", path: "src" },
 	find: { pattern: "**/*.ts", path: "src" },
 	ls: { path: "src" },
@@ -41,6 +42,7 @@ const REPRESENTATIVE_PARAMS: Record<string, unknown> = {
 	plan_present: { plan: "1. Do a thing" },
 	delegate: { agentType: "explore", task: "find the config loader" },
 	test: { executable: "npm", args: ["test"] },
+	memory_note: { title: "A fact", body: "The loader reads notes after the user accepts them." },
 	lsp: { operation: "definition", path: "src/index.ts", line: 1, character: 1 },
 };
 

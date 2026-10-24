@@ -330,3 +330,16 @@ describe("edit failure diagnostics", () => {
 		expect(failure.message).toContain("lines 4-6");
 	});
 });
+
+describe("indent mismatch hint", () => {
+	it("names the line when only indentation differs and does not write", async () => {
+		const directory = scratchDirectory();
+		const file = join(directory, "indent.ts");
+		writeFileSync(file, "function greet() {\n\treturn 1;\n}\n");
+		const tool = createTool(directory);
+		await expect(
+			tool.execute("indent", { path: file, edits: [{ oldText: "    return 1;", newText: "    return 2;" }] }),
+		).rejects.toThrow(/around line 2/);
+		expect(readFileSync(file, "utf8")).toBe("function greet() {\n\treturn 1;\n}\n");
+	});
+});

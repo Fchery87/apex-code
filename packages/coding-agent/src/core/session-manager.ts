@@ -457,8 +457,10 @@ function buildSessionPath(
 	}
 
 	const path: SessionEntry[] = [];
+	const seen = new Set<string>();
 	let current: SessionEntry | undefined = leaf;
-	while (current) {
+	while (current && !seen.has(current.id)) {
+		seen.add(current.id);
 		path.push(current);
 		current = current.parentId ? index.get(current.parentId) : undefined;
 	}

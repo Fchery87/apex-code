@@ -72,6 +72,8 @@ export interface CreateAgentSessionOptions {
 	childRunRegistry?: AgentSessionConfig["childRunRegistry"];
 	/** Working directory for project-local discovery. Default: process.cwd() */
 	cwd?: string;
+	/** Parent checkout for a --worktree session. Writes there are denied. */
+	parentCheckout?: string;
 	/** Global config directory. Default: ~/.apex-code/agent */
 	agentDir?: string;
 
@@ -974,6 +976,14 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 						// required verification boundary and verification did not pass.
 						// Use the session's canonical tracker rather than introducing
 						// a second child-only verifier.
+						if (definition.name === "general") {
+							try {
+								await requireVerifiedTurn();
+							} catch (error) {
+								const reason = error instanceof Error ? error.message : String(error);
+								await start(`Verification failed: ${reason} Fix the failure and leave the policy passing.`);
+							}
+						}
 						await requireVerifiedTurn();
 						return { output: extractFinalAssistantText(childSession) };
 					},
@@ -1022,6 +1032,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		sessionManager,
 		settingsManager,
 		cwd,
+		parentCheckout: options.parentCheckout,
 		scopedModels: options.scopedModels,
 		resourceLoader,
 		customTools,
