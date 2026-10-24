@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { SessionEntry } from "./session-manager.ts";
 
@@ -35,6 +36,43 @@ export interface RequestShape {
 	systemHash: string;
 	toolsHash: string;
 	messageHashes: readonly string[];
+}
+
+interface ShapeMessage {
+	role: string;
+	content?: unknown;
+	sections?: unknown;
+}
+
+interface ShapeTool {
+	name: string;
+	parameters?: unknown;
+}
+
+function shapeHash(value: unknown): string {
+	return createHash("sha256")
+		.update(JSON.stringify(value) ?? "null")
+		.digest("hex")
+		.slice(0, 16);
+}
+
+/**
+ * The cached shape of one request. The system hash covers system messages only.
+ * The message hashes cover the transcript in order. The tool hash covers names and
+ * parameter schemas, not descriptions, so a wording edit does not look like a tool change.
+ */
+export function requestShape(messages: readonly ShapeMessage[], tools: readonly ShapeTool[] = []): RequestShape {
+	const system = messages
+		.filter((message) => message.role === "system")
+		.map((message) => ({
+			content: message.content,
+			sections: message.sections,
+		}));
+	return {
+		systemHash: shapeHash(system),
+		toolsHash: shapeHash(tools.map((tool) => ({ name: tool.name, parameters: tool.parameters ?? null }))),
+		messageHashes: messages.map((message) => shapeHash({ role: message.role, content: message.content })),
+	};
 }
 
 export interface CacheWasteTotals {

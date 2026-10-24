@@ -59,6 +59,7 @@ import { normalizeToolResultImages } from "../utils/tool-result-images.ts";
 import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from "./auth-guidance.ts";
 import { type BashResult, executeBashWithOperations } from "./bash-executor.ts";
 import { generateBugReportSummary } from "./bug-report.ts";
+import { requestShape } from "./cache-stats.ts";
 import type { CacheWarmer, CacheWarmingStatus } from "./cache-warmer.ts";
 import type { CheckpointSettings, GitCheckpoint, GitCheckpoints } from "./checkpoints/git-checkpoints.ts";
 import { createSessionCheckpoints, type SessionCheckpoints } from "./checkpoints/session-checkpoints.ts";
@@ -1464,6 +1465,12 @@ export class AgentSession {
 
 		// Handle session persistence
 		if (event.type === "message_end") {
+			if (event.message.role === "assistant") {
+				const transcript = this.agent.state.messages.filter((message) => message !== event.message);
+				Object.assign(event.message, {
+					requestShape: requestShape(transcript, this.agent.state.tools),
+				});
+			}
 			let entryId: string | undefined;
 			// Check if this is a custom message from extensions
 			if (event.message.role === "custom") {
@@ -2836,6 +2843,10 @@ export class AgentSession {
 		}
 
 		preflightResult?.(true);
+		this._emptyRecoveryUsed = 0;
+		this._markupRecoveryUsed = 0;
+		this._todoGateUsed = 0;
+		this._verificationContinueUsed = 0;
 		await this._runWorkspaceComparisonBoundary();
 		await this._runAgentPrompt(messages);
 		if (this.lifecycle === "closed" || this.lifecycle === "interrupted") return;

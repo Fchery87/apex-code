@@ -55,7 +55,7 @@ A change to the system prompt, the tool list, or an earlier message invalidates 
 
 The hash is SHA-256 of the canonical JSON of each part, truncated to 16 hex characters. It is not reversible to the prompt text. A message with no recorded shape contributes nothing, and the comparison is skipped.
 
-**Landed scope (2026-10-24).** The comparison and the notice label are in. The hash is read from an optional `requestShape` on the assistant message. Nothing writes that field yet. `model-runtime.ts` records usage after the provider returns, and the message it sees is the provider's message, which does not carry the request. Writing the hash at the stream boundary without a tested construction site would mark every turn or none. Until a writer lands, every real session takes the no-shape path and the notice is unchanged. The test supplies the shape directly, which is what pins the comparison.
+**Writer (2026-10-24, second slice).** `requestShape` hashes the system messages, the tool names and parameter schemas, and each transcript message. `AgentSession` assigns it to an assistant message in the `message_end` handler, using the agent transcript with that reply removed, before `appendMessage`. A probe of that filter recorded the same system hash as hashing the transcript directly, and a different hash after the system text changed. The earlier note that nothing writes the field is superseded.
 
 ## Deletion inventory
 

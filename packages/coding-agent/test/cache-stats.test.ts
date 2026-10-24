@@ -5,6 +5,7 @@ import {
 	computeCacheWaste,
 	detectCacheMiss,
 	type ModelPriceSource,
+	requestShape,
 } from "../src/core/cache-stats.ts";
 import type { SessionEntry } from "../src/core/session-manager.ts";
 
@@ -74,6 +75,28 @@ const turn2 = assistant({
 	cacheWrite: 5_000,
 	cost: { cacheRead: 0.03, cacheWrite: 0.019 },
 	timestamp: 60_000,
+});
+
+describe("requestShape", () => {
+	it("changes the system hash when the system message changes and leaves the tool hash", () => {
+		const first = requestShape(
+			[
+				{ role: "system", content: "one" },
+				{ role: "user", content: "go" },
+			],
+			[{ name: "bash", parameters: { type: "object" } }],
+		);
+		const second = requestShape(
+			[
+				{ role: "system", content: "two" },
+				{ role: "user", content: "go" },
+			],
+			[{ name: "bash", parameters: { type: "object" } }],
+		);
+		expect(first.systemHash).not.toBe(second.systemHash);
+		expect(first.toolsHash).toBe(second.toolsHash);
+		expect(first.messageHashes[1]).toBe(second.messageHashes[1]);
+	});
 });
 
 describe("computeCacheWaste", () => {
