@@ -17,6 +17,7 @@ import { setApexEnvironment } from "../environment.ts";
 import { getExperimentalToolSampling } from "../experimental.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
 import { type BackgroundShellRegistry, createBackgroundShellRegistry } from "./background-shell.ts";
+import { bashCatastrophicReason } from "./bash-catastrophic.ts";
 import { classifyBashCommand } from "./bash-command-segments.ts";
 import { confineBash, findBashConfinementHelper } from "./bash-confinement.ts";
 import { isReadOnlyCommand } from "./bash-readonly.ts";
@@ -144,10 +145,21 @@ function segmentMatchesRule(segment: string, ruleContent: string): boolean {
  */
 const BACKGROUND_HANDLE_RULE = "background-handle";
 
-export function createBashPermissionSpec(): PermissionSpec<typeof bashSchema> {
+export function createBashPermissionSpec(cwd: string = process.cwd()): PermissionSpec<typeof bashSchema> {
+	const catastrophic = (params: Static<typeof bashSchema>): string | undefined => {
+		const parsed = parseShellOperation(params);
+		if (!parsed.ok) {
+			return "command" in params && typeof params.command === "string"
+				? bashCatastrophicReason(params.command, cwd)
+				: undefined;
+		}
+		if (parsed.operation.kind !== "run") return undefined;
+		return bashCatastrophicReason(parsed.operation.command, cwd);
+	};
 	return {
 		defaultBehavior: "ask",
 		defaultBehaviorFor(params) {
+			if (catastrophic(params)) return "deny";
 			const parsed = parseShellOperation(params);
 			if (!parsed.ok) return undefined;
 			if (parsed.operation.kind !== "run") return "allow";
@@ -181,9 +193,16 @@ export function createBashPermissionSpec(): PermissionSpec<typeof bashSchema> {
 			);
 		},
 		isUnknown(params) {
+			if (catastrophic(params)) return false;
 			const parsed = parseShellOperation(params);
 			if (!parsed.ok) return true;
 			return parsed.operation.kind === "run" && classifyBashCommand(parsed.operation.command).type !== "segments";
+		},
+		protectedTarget(params) {
+			return catastrophic(params);
+		},
+		allowRuleGrants(_ruleContent, params) {
+			return catastrophic(params) === undefined;
 		},
 		describe(ruleContent) {
 			if (ruleContent === BACKGROUND_HANDLE_RULE) {
@@ -536,7 +555,7 @@ export function createShellToolDefinition(
 		parameters: bashSchema,
 		contract: {
 			capabilities: new Set(["exec"]),
-			permission: createBashPermissionSpec(),
+			permission: createBashPermissionSpec(cwd),
 			context: { resultRecoverable: false, deferSchema: false },
 			evidence: {
 				emits: new Set(["command"]),

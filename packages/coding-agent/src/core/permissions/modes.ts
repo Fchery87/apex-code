@@ -60,6 +60,9 @@ export function resolveWithMode(
 	// everything else, so a rule a repository can write cannot and neither can a mode.
 	// `ask` rather than `deny`: the owner of the credential may legitimately want it read,
 	// and a session with no responder turns this into a refusal anyway.
+	if (protectedTarget !== undefined && ruleResolution.behavior === "deny") {
+		return { behavior: "deny" };
+	}
 	if (protectedTarget !== undefined) {
 		return { behavior: "ask" };
 	}

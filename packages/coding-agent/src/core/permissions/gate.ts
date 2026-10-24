@@ -109,7 +109,12 @@ export async function evaluateToolCall(
 	if (resolution.behavior === "allow") return { block: false };
 
 	if (resolution.behavior === "deny") {
-		return { block: true, reason: describeDecision(contract, toolName, resolution.rule?.ruleContent) };
+		return {
+			block: true,
+			reason: protectedTarget
+				? `${toolName} was refused: ${protectedTarget}. No rule can grant this command.`
+				: describeDecision(contract, toolName, resolution.rule?.ruleContent),
+		};
 	}
 
 	// ask
