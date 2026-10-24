@@ -23,7 +23,7 @@ describe("bash confinement", () => {
 	it("refuses when the setting is on and the helper is missing", () => {
 		const result = confineBash({ enabled: true, command: "echo hi", cwd: "/work", helperPath: undefined });
 		expect(result.run).toBe(false);
-		expect(result.refusal).toMatch(/bwrap/);
+		expect(result.refusal).toMatch(process.platform === "win32" ? /not available on Windows/ : /bwrap/);
 	});
 
 	it("does not run the command when bash confinement is on and bwrap is absent", async () => {
@@ -44,14 +44,14 @@ describe("bash confinement", () => {
 				sessionManager: { getSessionId: () => "test", getSessionFile: () => undefined },
 			} as never);
 			const text = result.content.map((block) => (block.type === "text" ? block.text : "")).join("\n");
-			expect(text).toMatch(/bwrap/);
+			expect(text).toMatch(process.platform === "win32" ? /not available on Windows/ : /bwrap/);
 			expect(ran).toBe(false);
 		} finally {
 			process.env.PATH = previous;
 		}
 	});
 
-	it("runs the original command when bwrap is on PATH", async () => {
+	it.skipIf(process.platform === "win32")("runs the original command when bwrap is on PATH", async () => {
 		const root = mkdtempSync(join(tmpdir(), "apex-confinement-helper-"));
 		directories.push(root);
 		const bin = join(root, "bin");
