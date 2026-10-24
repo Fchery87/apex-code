@@ -46,7 +46,7 @@ The model can end a turn with no visible answer after tools ran, or with a todo 
 
 - [ ] Copying Jcode's system prompt. "Be maximally helpful and persist" is not a coding procedure.
 - [ ] A second model that judges whether the task is done. The judge is a command exit code or a recorded check on the todo list.
-- [ ] Restoring the OS sandbox removed by ADR 0032.
+- [ ] Restoring the boundary removed by ADR 0032.
 - [ ] A shared-checkout swarm that notifies peers when a file shifts. Parallel work stays on worktrees until a later spec names the notice.
 - [ ] Self-modification of the Apex Code binary.
 - [ ] Changing the meaning of `/goal` for a session that already set one.
