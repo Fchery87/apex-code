@@ -174,4 +174,28 @@ describe("detectCacheMiss", () => {
 	it("returns undefined for the first turn of a session", () => {
 		expect(detectCacheMiss([], turn1, models)).toBeUndefined();
 	});
+
+	it("names a system prompt change that the token totals hide", () => {
+		const sameTokens = assistant({
+			cacheRead: 105_000,
+			cost: { cacheRead: 0.0315 },
+			timestamp: 120_000,
+		});
+		const changed = {
+			...sameTokens,
+			requestShape: { systemHash: "b", toolsHash: "tools", messageHashes: ["m1", "m2"] },
+		} as AssistantMessage;
+		const previous: SessionEntry = {
+			type: "message",
+			id: "prev",
+			parentId: null,
+			timestamp: "",
+			message: {
+				...turn2,
+				requestShape: { systemHash: "a", toolsHash: "tools", messageHashes: ["m1"] },
+			},
+		} as SessionEntry;
+		const miss = detectCacheMiss([entry(turn1), previous], changed, models);
+		expect(miss?.cause).toBe("system");
+	});
 });

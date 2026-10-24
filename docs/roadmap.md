@@ -150,6 +150,7 @@ capable and measurably worse.
 | Reviewed memory | **landed** at `6999944ab`. Inbox notes load only after acceptance. A path rule is appended on read, edit, and write. `apex-code instructions audit` writes nothing and reports a missing path, a command that is not on PATH, and two commands that disagree. | [spec](specs/2026-10-23-reviewed-memory.md) | — |
 | Optional bash confinement | **landed** at `6999944ab`. Off by default. The user file is the only switch. A present `bwrap` runs the helper argv. A missing helper refuses the call. No host allowlist. See [ADR 0038](adr/0038-optional-bash-confinement.md). | [spec](specs/2026-10-23-shell-confinement.md) | — |
 | Bash catastrophic deny | **active** — a bash command whose target is the filesystem root, the home directory, or a credential location is denied. An allow rule and `bypassPermissions` do not lift it. | [spec](specs/2026-10-24-bash-catastrophic-deny.md) | — |
+| Cache miss causes | **active** — a miss names a system prompt, tool list, or earlier-message change when both requests recorded a shape. Nothing records the shape yet, so a real session keeps today's notice. | [spec](specs/2026-10-24-cache-miss-causes.md) | — |
 | Coding-turn quality | **active** — slices 1, 2, 3, 5, and 7 are in the tree and locally tested. Slice 6 has the indent hint only. Slices 4, 8, 9, and 10 are not started. | [spec](specs/2026-10-23-coding-turn-quality.md) | [plan](plans/2026-10-23-coding-turn-quality.md) |
 
 ---

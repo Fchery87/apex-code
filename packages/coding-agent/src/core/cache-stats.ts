@@ -20,6 +20,21 @@ export interface CacheMiss {
 	idleMs: number;
 	/** True when the model changed relative to the previous request. */
 	modelChanged: boolean;
+	/**
+	 * Why the harness invalidated the prefix, when both requests recorded a shape.
+	 * Absent for sessions written before shapes existed, and for misses the shape cannot explain.
+	 */
+	cause?: CacheMissCause;
+}
+
+/** A harness-caused invalidation. `system` outranks `tools`, which outranks `prefix`. */
+export type CacheMissCause = "system" | "tools" | "prefix";
+
+/** Hashes of the parts of a request the provider caches, recorded on the assistant message. */
+export interface RequestShape {
+	systemHash: string;
+	toolsHash: string;
+	messageHashes: readonly string[];
 }
 
 export interface CacheWasteTotals {
@@ -45,6 +60,27 @@ interface PreviousRequest {
 	 * writes unreported) from a provider that never reports caching at all.
 	 */
 	reportedCache: boolean;
+	shape?: RequestShape;
+}
+
+function requestShapeOf(message: AssistantMessage): RequestShape | undefined {
+	const shape = (message as AssistantMessage & { requestShape?: RequestShape }).requestShape;
+	if (!shape) return undefined;
+	if (typeof shape.systemHash !== "string" || typeof shape.toolsHash !== "string") return undefined;
+	if (!Array.isArray(shape.messageHashes)) return undefined;
+	return shape;
+}
+
+/** `system` outranks `tools`, which outranks an edited earlier message. */
+function causeFor(previous: RequestShape | undefined, current: RequestShape | undefined): CacheMissCause | undefined {
+	if (!previous || !current) return undefined;
+	if (previous.systemHash !== current.systemHash) return "system";
+	if (previous.toolsHash !== current.toolsHash) return "tools";
+	const shared = Math.min(previous.messageHashes.length, current.messageHashes.length);
+	for (let i = 0; i < shared; i++) {
+		if (previous.messageHashes[i] !== current.messageHashes[i]) return "prefix";
+	}
+	return undefined;
 }
 
 /**
@@ -68,7 +104,8 @@ function detectMiss(
 	}
 
 	const missedTokens = Math.min(prev.promptTokens, promptTokens) - usage.cacheRead;
-	if (missedTokens <= NOISE_FLOOR_TOKENS) return undefined;
+	const cause = causeFor(prev.shape, requestShapeOf(message));
+	if (missedTokens <= NOISE_FLOOR_TOKENS && cause === undefined) return undefined;
 
 	// Extra cost = missed tokens billed at the actual paid rate (input/cacheWrite,
 	// incl. write premium) instead of the cache-read rate. Missed tokens can only
@@ -86,6 +123,7 @@ function detectMiss(
 		missedCost: missedTokens * Math.max(0, paidPerToken - readPerToken),
 		idleMs: Math.max(0, message.timestamp - prev.timestamp),
 		modelChanged: `${message.provider}/${message.model}` !== prev.modelKey,
+		...(cause ? { cause } : {}),
 	};
 }
 
@@ -98,6 +136,7 @@ function asPreviousRequest(message: AssistantMessage, reportedCache: boolean): P
 		modelKey: `${message.provider}/${message.model}`,
 		timestamp: message.timestamp,
 		reportedCache: reportedCache || usage.cacheRead + usage.cacheWrite > 0,
+		shape: requestShapeOf(message),
 	};
 }
 
