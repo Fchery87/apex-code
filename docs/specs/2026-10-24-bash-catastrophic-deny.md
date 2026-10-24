@@ -20,7 +20,7 @@
 ## Context and motivation
 
 - `docs/adr/0032-no-built-in-sandbox.md` removed the OS boundary. Isolation is the operator's container. The permission gate stayed, and it is policy, not containment.
-- `docs/adr/0038-optional-bash-confinement.md` wraps `bash` in `bwrap` only when the user settings file turns that on. It is off by default and does not cover this case.
+- `docs/adr/0038-optional-bash-confinement.md` wraps `bash` only when the user settings file turns that on. It is off by default and does not cover this case.
 - `packages/coding-agent/src/core/permissions/protected-paths.ts` already refuses credential paths for the path-shaped tools. The bash spec does not declare `protectedTarget`, so that protection never runs for a shell command.
 - Jcode's `jcode-command-risk` crate classifies shell commands by blast radius and treats destruction of home, root, or credentials as a deny no model justification can unlock. This spec records that behavior. It does not copy that crate's types, parser, or wording.
 
@@ -47,7 +47,7 @@ A saved allow rule, or one mode flag, turns a command that deletes the filesyste
 - [ ] A general destructive-command taxonomy. `git reset --hard`, `git push --force`, and `git clean -f` stay on the existing prompt and the system-prompt warning. Classifying every destructive git verb is a different spec.
 - [ ] Refusing writes inside the workspace. `rm` of a project file remains an ordinary bash decision.
 - [ ] Parsing redirections, command substitution, or globs. Those already return unparseable and ask. This spec does not start authorizing them.
-- [ ] Restoring the OS sandbox. ADR 0032 stands. A determined `python -c` that deletes a file still runs when the gate allows `python`. The deny covers the commands whose target the existing segment parser can see, plus the unparseable forms that name `/`, `~`, or a home path as text.
+- [ ] Restoring the boundary ADR 0032 removed. A determined `python -c` that deletes a file still runs when the gate allows `python`. The deny covers the commands whose target the existing segment parser can see, plus the unparseable forms that name `/`, `~`, or a home path as text.
 - [ ] Changing `read`, `grep`, `find`, `ls`, `edit`, or `write`. Their protected-target behavior already holds.
 
 ## Proposed solution
