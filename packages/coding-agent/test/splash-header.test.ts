@@ -274,6 +274,16 @@ describe("ApexSplashHeader", () => {
 				}
 			}
 		});
+
+		it("drops a shortcut hint whole instead of cutting it mid-word", () => {
+			const shortcuts = "/ commands    ! bash    @ files    escape interrupt";
+			const row = render(40, { shortcuts })
+				.map(plain)
+				.find((line) => line.includes("/"));
+			expect(row).toBeDefined();
+			expect(row).not.toMatch(/inte$/);
+			expect(row?.trim()).toBe("/ commands    ! bash    @ files");
+		});
 	});
 
 	describe("verbose instructions", () => {
