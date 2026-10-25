@@ -104,11 +104,11 @@ To install one specific release rather than the latest GitHub Release, set the v
 in the receiving shell:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Fchery87/apex-code/main/install.sh | APEX_CODE_INSTALL_VERSION=0.7.0 bash
+curl -fsSL https://raw.githubusercontent.com/Fchery87/apex-code/main/install.sh | APEX_CODE_INSTALL_VERSION=0.8.0 bash
 ```
 
 ```powershell
-$env:APEX_CODE_INSTALL_VERSION = "0.7.0"; irm https://raw.githubusercontent.com/Fchery87/apex-code/main/install.ps1 | iex
+$env:APEX_CODE_INSTALL_VERSION = "0.8.0"; irm https://raw.githubusercontent.com/Fchery87/apex-code/main/install.ps1 | iex
 ```
 
 The standalone channel does not require Node.js and does not update itself; re-run the

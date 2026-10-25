@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Added
+
+- `/diff` shows the working tree and the session's own edits. `/context` shows the context window. `/rewind` restores a checkpoint and the files it covers.
+- `/config` opens settings. `/clone` matches `/fork`.
+- Settings list checkpoints, the run budget, and bash confinement.
+- A coding turn that stopped early can continue. A completion check can start another turn.
+- `memory_note` writes a note the project can load later. `--worktree` starts the session in a worktree.
+- An optional browser tool drives one throwaway Chrome when the user turns it on.
+- Bash confinement can be turned on from the user settings file. A confined call is refused when `bwrap` is missing, and the refusal names the helper.
+
+### Fixed
+
+- A startup shortcut that does not fit is dropped whole instead of cut mid-glyph.
+- The settings list stays in the consumed terminal package.
+- A session path that points at itself is no longer walked.
+- Path tools accept `file_path`. Stdio MCP logs stay private, bounded, and out of the transcript.
+- Trust is explained before the choice is saved. The symbol preset is honored on that choice. An error outranks a second call line in the overview.
+
 ## [0.7.0] - 2026-10-18
 
 ### Added

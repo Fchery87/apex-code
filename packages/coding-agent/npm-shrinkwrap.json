@@ -1,12 +1,12 @@
 {
 	"name": "apex-code",
-	"version": "0.7.0",
+	"version": "0.8.0",
 	"lockfileVersion": 3,
 	"requires": true,
 	"packages": {
 		"": {
 			"name": "apex-code",
-			"version": "0.7.0",
+			"version": "0.8.0",
 			"license": "MIT",
 			"dependencies": {
 				"@earendil-works/chord": "^0.87.1",
@@ -16,7 +16,7 @@
 				"@modelcontextprotocol/client": "2.3.1",
 				"@modelcontextprotocol/core": "2.3.1",
 				"@silvia-odwyer/photon-node": "0.3.4",
-				"apex-code-agent-core": "0.7.0",
+				"apex-code-agent-core": "0.8.0",
 				"chalk": "6.0.0",
 				"cross-spawn": "7.0.6",
 				"diff": "8.0.4",
@@ -1331,8 +1331,8 @@
 			}
 		},
 		"node_modules/apex-code-agent-core": {
-			"version": "0.7.0",
-			"resolved": "https://registry.npmjs.org/apex-code-agent-core/-/apex-code-agent-core-0.7.0.tgz",
+			"version": "0.8.0",
+			"resolved": "https://registry.npmjs.org/apex-code-agent-core/-/apex-code-agent-core-0.8.0.tgz",
 			"license": "MIT",
 			"dependencies": {
 				"@earendil-works/chord": "^0.87.1",
