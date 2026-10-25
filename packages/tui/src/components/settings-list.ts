@@ -7,6 +7,8 @@ import { Input } from "./input.ts";
 export interface SettingItem {
 	/** Unique identifier for this setting */
 	id: string;
+	/** Page this row belongs to. Absent rows stay visible on every page. */
+	page?: string;
 	/** Display label (left side) */
 	label: string;
 	/** Optional description shown when selected */
@@ -38,6 +40,8 @@ export interface SettingsListOptions {
 export class SettingsList implements Component {
 	private items: SettingItem[];
 	private filteredItems: SettingItem[];
+	private page: string | undefined;
+	private onPageChange?: (page: string) => void;
 	private theme: SettingsListTheme;
 	private selectedIndex = 0;
 	private mousePressedIndex: number | undefined;
@@ -72,6 +76,18 @@ export class SettingsList implements Component {
 		}
 	}
 
+	/** Called with the page name when left or right switches pages. */
+	setOnPageChange(handler: (page: string) => void): void {
+		this.onPageChange = handler;
+	}
+
+	/** Show only rows on this page. Rows with no page stay visible. */
+	showPage(page: string | undefined): void {
+		this.page = page;
+		this.selectedIndex = 0;
+		this.applyFilter(this.searchInput?.getValue() ?? "");
+	}
+
 	/** Update an item's currentValue */
 	updateValue(id: string, newValue: string): void {
 		const item = this.items.find((i) => i.id === id);
@@ -82,11 +98,11 @@ export class SettingsList implements Component {
 
 	/** Move selection to the item with the given id (no-op if not found). */
 	selectItem(id: string): void {
-		const items = this.searchEnabled ? this.filteredItems : this.items;
-		const index = items.findIndex((i) => i.id === id);
-		if (index !== -1) {
-			this.selectedIndex = index;
-		}
+		const target = this.items.find((item) => item.id === id);
+		if (target?.page && target.page !== this.page) this.showPage(target.page);
+		const items = this.getDisplayItems();
+		const index = items.findIndex((item) => item.id === id);
+		if (index !== -1) this.selectedIndex = index;
 	}
 
 	invalidate(): void {
@@ -149,7 +165,7 @@ export class SettingsList implements Component {
 			const usedWidth = prefixWidth + maxLabelWidth + visibleWidth(separator);
 			const valueMaxWidth = width - usedWidth - 2;
 
-			const valueText = this.theme.value(truncateToWidth(item.currentValue, valueMaxWidth, ""), isSelected);
+			const valueText = this.theme.value(truncateToWidth(item.currentValue ?? "", valueMaxWidth, ""), isSelected);
 
 			lines.push(truncateToWidth(prefix + labelText + separator + valueText, width));
 		}
@@ -229,6 +245,16 @@ export class SettingsList implements Component {
 
 		// Main list input handling
 		const kb = getKeybindings();
+		const pages = [...new Set(this.items.flatMap((item) => (item.page ? [item.page] : [])))];
+		if (this.page && pages.length > 1 && (this.searchInput?.getValue().length ?? 0) === 0) {
+			const step = kb.matches(data, "tui.editor.cursorLeft") ? -1 : kb.matches(data, "tui.editor.cursorRight") ? 1 : 0;
+			if (step !== 0) {
+				const next = pages[(pages.indexOf(this.page) + step + pages.length) % pages.length]!;
+				this.showPage(next);
+				this.onPageChange?.(next);
+				return;
+			}
+		}
 		const displayItems = this.getDisplayItems();
 		if (kb.matches(data, "tui.select.up")) {
 			if (displayItems.length === 0) return;
@@ -250,7 +276,9 @@ export class SettingsList implements Component {
 	}
 
 	private getDisplayItems(): SettingItem[] {
-		return this.searchEnabled ? this.filteredItems : this.items;
+		const searching = this.searchEnabled && (this.searchInput?.getValue().length ?? 0) > 0;
+		if (searching) return this.filteredItems;
+		return this.page ? this.items.filter((item) => !item.page || item.page === this.page) : this.items;
 	}
 
 	private getVisibleRange(displayItems: readonly SettingItem[]): { startIndex: number; endIndex: number } {
@@ -308,7 +336,13 @@ export class SettingsList implements Component {
 	}
 
 	private applyFilter(query: string): void {
-		this.filteredItems = fuzzyFilter(this.items, query, (item) => item.label);
+		// A query searches every page. The page only narrows the list you browse.
+		const source = query ? this.items : this.page ? this.items.filter((item) => !item.page || item.page === this.page) : this.items;
+		this.filteredItems = fuzzyFilter(source, query, (item) => item.label).sort((a, b) => {
+			const q = query.toLowerCase();
+			const rank = (label: string) => (label.toLowerCase().startsWith(q) ? 0 : 1);
+			return rank(a.label) - rank(b.label);
+		});
 		this.selectedIndex = 0;
 	}
 

@@ -5,7 +5,10 @@ describe("built-in slash commands", () => {
 	it("exposes the configuration index", () => {
 		expect(BUILTIN_SLASH_COMMANDS).toContainEqual({
 			name: "config",
-			description: "Open the configuration index",
+			description: "Open settings",
 		});
+		expect(BUILTIN_SLASH_COMMANDS.map((command) => command.name)).toEqual(
+			expect.arrayContaining(["diff", "context", "rewind"]),
+		);
 	});
 });

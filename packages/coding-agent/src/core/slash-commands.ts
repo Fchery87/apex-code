@@ -18,7 +18,7 @@ export interface BuiltinSlashCommand {
 
 export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "help", description: "Show every command available in this session" },
-	{ name: "config", description: "Open the configuration index" },
+	{ name: "config", description: "Open settings" },
 	{ name: "tasks", description: "Expand or collapse the task panel" },
 	{ name: "settings", description: "Open settings menu" },
 	{ name: "model", description: "Pick a provider, then a model", argumentHint: "<provider/model>" },
@@ -30,13 +30,15 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "share", description: "Share session as a secret GitHub gist" },
 	{ name: "bug", description: "Report a bug in Apex Code", argumentHint: "<description>" },
 	{ name: "copy", description: "Copy last agent message to clipboard" },
+	{ name: "diff", description: "Show the working tree, including untracked files" },
 	{ name: "name", description: "Set session display name" },
 	{ name: "session", description: "Show session info and stats" },
+	{ name: "context", description: "Show context window, cache, and cost" },
 	{ name: "changelog", description: "Show changelog entries" },
 	{ name: "hotkeys", description: "Show all keyboard shortcuts" },
 	{ name: "resources", description: "List loaded skills, extensions, prompts, and any conflicts" },
 	{ name: "fork", description: "Create a new fork from a previous user message" },
-	{ name: "clone", description: "Duplicate the current session at the current position" },
+	{ name: "clone", description: "Branch the session, same as /fork" },
 	{ name: "trust", description: "Save project trust decision for future sessions" },
 	{ name: "login", description: "Configure provider authentication", argumentHint: "<provider>" },
 	{ name: "logout", description: "Remove provider authentication" },
@@ -45,6 +47,7 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "compact", description: "Manually compact the session context" },
 	{ name: "goal", description: "Keep working until a verification policy passes", argumentHint: "<policy-id>" },
 	{ name: "resume", description: "Resume a different session" },
+	{ name: "rewind", description: "Restore the working tree to a checkpoint" },
 	{ name: "reload", description: "Reload keybindings, extensions, skills, prompts, themes, and context files" },
 	{ name: "quit", description: `Quit ${APP_NAME}` },
 ];
