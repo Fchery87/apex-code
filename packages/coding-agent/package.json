@@ -1,6 +1,6 @@
 {
 	"name": "apex-code",
-	"version": "0.7.0",
+	"version": "0.8.0",
 	"description": "Coding agent CLI with read, bash, edit, write tools and session management",
 	"type": "module",
 	"piConfig": {
@@ -49,7 +49,7 @@
 		"@modelcontextprotocol/client": "2.3.1",
 		"@modelcontextprotocol/core": "2.3.1",
 		"@silvia-odwyer/photon-node": "0.3.4",
-		"apex-code-agent-core": "0.7.0",
+		"apex-code-agent-core": "0.8.0",
 		"chalk": "6.0.0",
 		"cross-spawn": "7.0.6",
 		"diff": "8.0.4",
