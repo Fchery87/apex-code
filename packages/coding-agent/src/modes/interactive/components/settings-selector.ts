@@ -171,6 +171,9 @@ export interface SettingsConfig {
 	fullscreenScrollbar: ScrollViewScrollbar;
 	fullscreenCopyOnSelect: boolean;
 	warnings: WarningSettings;
+	checkpoints: boolean;
+	runBudget: string;
+	bashConfinement: boolean;
 }
 
 export interface SettingsCallbacks {
@@ -215,6 +218,9 @@ export interface SettingsCallbacks {
 	onFullscreenScrollbarChange: (mode: ScrollViewScrollbar) => void;
 	onFullscreenCopyOnSelectChange: (enabled: boolean) => void;
 	onWarningsChange: (warnings: WarningSettings) => void;
+	onCheckpointsChange?: (enabled: boolean) => void;
+	onRunBudgetChange?: (budget: string) => void;
+	onBashConfinementChange?: (enabled: boolean) => void;
 	onCancel: () => void;
 }
 
@@ -647,6 +653,27 @@ export class SettingsSelectorComponent extends Container {
 
 		const items: SettingItem[] = [
 			{
+				id: "checkpoints",
+				label: "Checkpoints",
+				description: "Save the working tree before each change, so /rewind can restore it",
+				currentValue: config.checkpoints ? "on" : "off",
+				values: ["on", "off"],
+			},
+			{
+				id: "run-budget",
+				label: "Run budget",
+				description: "Stop a run after this many model requests. Unlimited never stops for count",
+				currentValue: config.runBudget,
+				values: ["50", "200", "1000", "unlimited"],
+			},
+			{
+				id: "bash-confinement",
+				label: "Bash confinement",
+				description: "Off unless you turn it on. On refuses a bash call when the helper is missing",
+				currentValue: config.bashConfinement ? "on" : "off",
+				values: ["off", "on"],
+			},
+			{
 				id: "autocompact",
 				label: "Auto-compact",
 				description: "Automatically compact context when it gets too large",
@@ -1077,6 +1104,15 @@ export class SettingsSelectorComponent extends Container {
 						break;
 					case "autocompact":
 						callbacks.onAutoCompactChange(newValue === "true");
+						break;
+					case "checkpoints":
+						callbacks.onCheckpointsChange?.(newValue === "on");
+						break;
+					case "run-budget":
+						callbacks.onRunBudgetChange?.(newValue);
+						break;
+					case "bash-confinement":
+						callbacks.onBashConfinementChange?.(newValue === "on");
 						break;
 					case "show-images":
 						callbacks.onShowImagesChange(newValue === "true");

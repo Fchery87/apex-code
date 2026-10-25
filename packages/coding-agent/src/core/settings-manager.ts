@@ -1427,6 +1427,31 @@ export class SettingsManager {
 		return this.globalSettings.bashConfinement === "on";
 	}
 
+	setBashConfinement(enabled: boolean): void {
+		this.globalSettings.bashConfinement = enabled ? "on" : "off";
+		this.markModified("bashConfinement");
+		this.save();
+	}
+
+	setCheckpointsEnabled(enabled: boolean): void {
+		this.globalSettings.checkpoints = { ...this.globalSettings.checkpoints, enabled };
+		this.markModified("checkpoints");
+		this.save();
+	}
+
+	/** The request cap the menu offers. Undefined means the default, which is not unlimited. */
+	getRunBudgetChoice(): string {
+		const value = this.globalSettings.runBudget?.maxProviderRequests;
+		return value === undefined ? "200" : value === "unlimited" ? "unlimited" : String(value);
+	}
+
+	setRunBudgetChoice(choice: string): void {
+		const maxProviderRequests = choice === "unlimited" ? ("unlimited" as const) : Number(choice);
+		this.globalSettings.runBudget = { ...this.globalSettings.runBudget, maxProviderRequests };
+		this.markModified("runBudget");
+		this.save();
+	}
+
 	setShellPath(path: string | undefined): void {
 		this.globalSettings.shellPath = path;
 		this.markModified("shellPath");
