@@ -20,7 +20,7 @@ The October 24 command and settings audit compared Apex with the current command
 
 ## Settings
 
-The settings menu splits into Session, Appearance, and Advanced pages. Checkpoints, the run budget, and bash confinement get a row each. Checkpoints and the run budget already have runtime behavior. Bash confinement stays off unless the user turns it on, and the row says that a missing helper refuses the call.
+The settings list is a consumed component, so this change does not split it into pages. Checkpoints, the run budget, and bash confinement get a row each at the top of the existing list.
 
 ## /rewind
 
