@@ -1,6 +1,11 @@
 # Apex Code changelog
 
-## [Unreleased]
+## [0.8.1] - 2026-10-25
+
+### Fixed
+
+- Bump undici to 8.12.2 so the packed release audit can pass.
+
 
 ### Added
 

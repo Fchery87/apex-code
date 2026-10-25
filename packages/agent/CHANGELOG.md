@@ -1,6 +1,11 @@
 # Changelog
 
-## [Unreleased]
+## [0.8.1] - 2026-10-25
+
+### Fixed
+
+- Bump undici to 8.12.2 so the packed release audit can pass.
+
 
 ## [0.7.0] - 2026-10-18
 
