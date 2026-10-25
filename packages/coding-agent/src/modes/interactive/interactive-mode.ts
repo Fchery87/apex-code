@@ -191,6 +191,7 @@ import { TurnSummaryComponent, type TurnSummaryOutcome } from "./components/turn
 import { setUiSymbolPreset, uiGlyph } from "./components/ui-glyphs.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.ts";
+import { contextReport } from "./context-report.ts";
 import { editInExternalEditor } from "./external-editor.ts";
 import { refreshModelCatalogs } from "./model-catalog-refresh.ts";
 import { getModelSearchText } from "./model-search.ts";
@@ -209,6 +210,7 @@ import {
 } from "./theme/theme.ts";
 import { InteractiveThemeController } from "./theme/theme-controller.ts";
 import { createInteractiveTui, createInteractiveTuiReference } from "./tui-renderer.ts";
+import { workingTreeReport } from "./working-tree.ts";
 
 export { createInteractiveTui, createInteractiveTuiReference } from "./tui-renderer.ts";
 
@@ -248,6 +250,14 @@ export function chatDetailView(detail: ChatDetail): ChatDetailView {
 		editDiffsExpanded: detail !== "overview",
 		thinking: detail === "overview" ? "collapsed" : detail === "details" ? "preference" : "revealed",
 	};
+}
+
+/** Where a typed command goes. Undefined for anything that is not one of these. */
+export function slashCommandTarget(text: string): "settings" | "branch" | "diff" | undefined {
+	if (text === "/config") return "settings";
+	if (text === "/clone" || text === "/fork") return "branch";
+	if (text === "/diff") return "diff";
+	return undefined;
 }
 
 /** Interface for components that can be expanded/collapsed */
@@ -2886,62 +2896,6 @@ export class InteractiveMode {
 		this.ui.requestRender();
 	}
 
-	private async showConfigurationIndex(): Promise<void> {
-		const choice = await this.showExtensionSelector(
-			"Configuration",
-			[
-				"Settings",
-				"Model",
-				"Model cycling",
-				"Provider login",
-				"Provider logout",
-				"Project trust",
-				"Resources, extensions, and MCP adapters",
-			],
-			undefined,
-			true,
-		);
-		switch (choice) {
-			case "Settings":
-				await this.showSettingsSelector();
-				break;
-			case "Model":
-				this.showModelSelector();
-				break;
-			case "Model cycling":
-				await this.showModelsSelector();
-				break;
-			case "Provider login":
-				await this.handleLoginCommand();
-				break;
-			case "Provider logout":
-				this.showOAuthSelector("logout");
-				break;
-			case "Project trust":
-				this.showTrustSelector();
-				break;
-			case "Resources, extensions, and MCP adapters":
-				this.showStatus(this.describeMcpServers());
-				break;
-		}
-	}
-
-	/**
-	 * Report configured MCP servers and their live connection state. Replaces a string
-	 * that offered MCP management from `apex-code config`, which manages package
-	 * resources and has never been able to configure a server.
-	 */
-	private describeMcpServers(): string {
-		const runtime = this.session.mcpRuntime;
-		const servers = runtime ? [...runtime.servers.keys()] : [];
-		if (servers.length === 0) {
-			return "Run apex-code config to manage resources and extensions. No MCP server is configured; add one to .mcp.json.";
-		}
-
-		const states = servers.map((name) => `${name} (${runtime?.manager.state(name).kind ?? "disconnected"})`);
-		return `Run apex-code config to manage resources and extensions. MCP servers: ${states.join(", ")}.`;
-	}
-
 	/**
 	 * Show a confirmation dialog for extensions.
 	 */
@@ -3395,9 +3349,9 @@ export class InteractiveMode {
 			}
 
 			// Handle commands
-			if (text === "/config") {
+			if (slashCommandTarget(text) === "settings") {
 				this.editor.setText("");
-				await this.showConfigurationIndex();
+				await this.showSettingsSelector();
 				return;
 			}
 			if (text === "/tasks") {
@@ -3453,6 +3407,11 @@ export class InteractiveMode {
 				this.editor.setText("");
 				return;
 			}
+			if (slashCommandTarget(text) === "diff") {
+				await this.handleDiffCommand();
+				this.editor.setText("");
+				return;
+			}
 			if (text === "/name" || text.startsWith("/name ")) {
 				this.handleNameCommand(text);
 				this.editor.setText("");
@@ -3460,6 +3419,11 @@ export class InteractiveMode {
 			}
 			if (text === "/session") {
 				await this.handleSessionCommand();
+				this.editor.setText("");
+				return;
+			}
+			if (text === "/context") {
+				this.handleContextCommand();
 				this.editor.setText("");
 				return;
 			}
@@ -3483,14 +3447,9 @@ export class InteractiveMode {
 				this.editor.setText("");
 				return;
 			}
-			if (text === "/fork") {
+			if (slashCommandTarget(text) === "branch") {
 				this.showUserMessageSelector();
 				this.editor.setText("");
-				return;
-			}
-			if (text === "/clone") {
-				this.editor.setText("");
-				await this.handleCloneCommand();
 				return;
 			}
 			if (text === "/tree") {
@@ -3553,6 +3512,11 @@ export class InteractiveMode {
 			}
 			if (text === "/dementedelves") {
 				this.handleDementedDelves();
+				this.editor.setText("");
+				return;
+			}
+			if (text === "/rewind") {
+				await this.handleRewindCommand();
 				this.editor.setText("");
 				return;
 			}
@@ -5385,6 +5349,9 @@ export class InteractiveMode {
 			selector = new SettingsSelectorComponent(
 				{
 					autoCompact: this.session.autoCompactionEnabled,
+					checkpoints: this.settingsManager.getCheckpointSettings()?.enabled !== false,
+					runBudget: this.settingsManager.getRunBudgetChoice(),
+					bashConfinement: this.settingsManager.getBashConfinement(),
 					taskListTool: {
 						enabled: (
 							this.settingsManager.getDefaultTools() ?? this.session.getImplicitDefaultToolNames()
@@ -5438,6 +5405,9 @@ export class InteractiveMode {
 				},
 				{
 					onTaskListToolChange: (enabled) => this.setTaskListToolDefault(enabled),
+					onCheckpointsChange: (enabled) => this.settingsManager.setCheckpointsEnabled(enabled),
+					onRunBudgetChange: (choice) => this.settingsManager.setRunBudgetChoice(choice),
+					onBashConfinementChange: (enabled) => this.settingsManager.setBashConfinement(enabled),
 					onAutoCompactChange: (enabled) => {
 						this.session.setAutoCompactionEnabled(enabled);
 						this.footer.setAutoCompactEnabled(enabled);
@@ -6048,27 +6018,6 @@ export class InteractiveMode {
 			);
 			return { component: selector, focus: selector.getMessageList() };
 		});
-	}
-
-	private async handleCloneCommand(): Promise<void> {
-		const leafId = this.sessionManager.getLeafId();
-		if (!leafId) {
-			this.showStatus("Nothing to clone yet");
-			return;
-		}
-
-		try {
-			const result = await this.runtimeHost.fork(leafId, { position: "at" });
-			if (result.cancelled) {
-				this.ui.requestRender();
-				return;
-			}
-
-			this.editor.setText("");
-			this.showStatus("Cloned to new session");
-		} catch (error: unknown) {
-			this.showError(error instanceof Error ? error.message : String(error));
-		}
 	}
 
 	private showTreeSelector(initialSelectedId?: string): void {
@@ -7178,6 +7127,15 @@ export class InteractiveMode {
 		);
 	}
 
+	private async handleDiffCommand(): Promise<void> {
+		const report = await workingTreeReport(this.sessionManager.getCwd());
+		this.chatContainer.addChild(new Spacer(1));
+		this.chatContainer.addChild(new Text(theme.bold(theme.fg("accent", "Working tree")), 1, 0));
+		this.chatContainer.addChild(new Spacer(1));
+		this.chatContainer.addChild(new Markdown(`\`\`\`\n${report}\n\`\`\``, 1, 1, this.getMarkdownThemeWithSettings()));
+		this.ui.requestRender();
+	}
+
 	private async handleCopyCommand(
 		options: { flashConfirmation?: boolean; preferSelection?: boolean } = {},
 	): Promise<void> {
@@ -7230,6 +7188,39 @@ export class InteractiveMode {
 		}
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new Text(theme.fg("dim", `Session name set: ${sessionName ?? name}`), 1, 0));
+		this.ui.requestRender();
+	}
+
+	private async handleRewindCommand(): Promise<void> {
+		const engine = await this.session.checkpoints.engine();
+		const checkpoints = (await engine?.list()) ?? [];
+		if (checkpoints.length === 0) {
+			this.showStatus("No checkpoints yet");
+			return;
+		}
+		const choice = await this.showExtensionSelector(
+			"Restore working tree",
+			checkpoints.map((checkpoint) => checkpoint.entryId),
+			{
+				preview: {
+					kind: "summary",
+					lines: ["Restoring writes the working tree. The current state is kept, so /rewind again returns to it."],
+				},
+			},
+		);
+		if (!choice) return;
+		const checkpoint = checkpoints.find((candidate) => candidate.entryId === choice);
+		const restored = checkpoint ? await engine?.restore(checkpoint) : undefined;
+		this.showStatus(restored ? `Restored ${choice}` : `Could not restore ${choice}`);
+	}
+
+	private handleContextCommand(): void {
+		const stats = this.session.getSessionStats();
+		const report = contextReport({ usage: this.session.getContextUsage(), stats });
+		this.chatContainer.addChild(new Spacer(1));
+		this.chatContainer.addChild(new Text(theme.bold(theme.fg("accent", "Context")), 1, 0));
+		this.chatContainer.addChild(new Spacer(1));
+		this.chatContainer.addChild(new Text(report, 1, 0));
 		this.ui.requestRender();
 	}
 

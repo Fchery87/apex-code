@@ -151,6 +151,7 @@ capable and measurably worse.
 | Optional bash confinement | **landed** at `6999944ab`. Off by default. The user file is the only switch. A present `bwrap` runs the helper argv. A missing helper refuses the call. No host allowlist. See [ADR 0038](adr/0038-optional-bash-confinement.md). | [spec](specs/2026-10-23-shell-confinement.md) | — |
 | Bash catastrophic deny | **active** — a bash command whose target is the filesystem root, the home directory, or a credential location is denied. An allow rule and `bypassPermissions` do not lift it. | [spec](specs/2026-10-24-bash-catastrophic-deny.md) | — |
 | Cache miss causes | **active** — a miss names a system prompt, tool list, or earlier-message change. The session records the request shape on each assistant message before persisting it. | [spec](specs/2026-10-24-cache-miss-causes.md) | — |
+| Session commands and settings | **active**. `/diff`, command aliases, `/context`, grouped settings, and `/rewind`. | [spec](specs/2026-10-24-session-commands-and-settings.md) | — |
 | Coding-turn quality | **active** — slices 1, 2, 3, 5, and 7 are in the tree and locally tested. Slice 6 has the indent hint only. Slices 4, 8, 9, and 10 are not started. | [spec](specs/2026-10-23-coding-turn-quality.md) | [plan](plans/2026-10-23-coding-turn-quality.md) |
 
 ---

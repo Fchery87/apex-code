@@ -68,6 +68,26 @@ const MIN_VALUE_WIDTH = 8;
 const MIN_RULE_WIDTH = 12;
 
 /**
+ * Keep as many whole shortcut hints as fit. Cutting one mid-word leaves an
+ * instruction that names nothing, so a hint that does not fit is dropped.
+ * A single hint wider than the row is still clipped, because dropping it
+ * would leave the row blank.
+ */
+export function fitShortcutRow(shortcuts: string, width: number): string {
+	if (visibleWidth(shortcuts) <= width) return shortcuts;
+	const parts = shortcuts.split(/(\s{2,})/);
+	let kept = "";
+	for (let index = 0; index < parts.length; index += 2) {
+		const hint = parts[index] ?? "";
+		const separator = index === 0 ? "" : (parts[index - 1] ?? "");
+		const next = kept + separator + hint;
+		if (visibleWidth(next) > width) break;
+		kept = next;
+	}
+	return kept || truncateToWidth(shortcuts, width, "");
+}
+
+/**
  * Keep the rightmost path segments that fit, so the leaf directory stays visible.
  *
  * `truncateToWidth` clips the tail, which for a path hides the part that
@@ -218,7 +238,7 @@ export class ApexSplashHeader implements Component {
 		const shortcuts = this.options.getShortcuts?.();
 		if (shortcuts) {
 			lines.push(this.padLine("", safeWidth, paddingX));
-			lines.push(this.padLine(truncateToWidth(shortcuts, contentWidth, ""), safeWidth, paddingX));
+			lines.push(this.padLine(fitShortcutRow(shortcuts, contentWidth), safeWidth, paddingX));
 		}
 
 		if (this.verboseInstructions) {
