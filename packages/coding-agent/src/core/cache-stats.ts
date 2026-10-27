@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { SessionEntry } from "./session-manager.ts";
 
@@ -20,6 +21,58 @@ export interface CacheMiss {
 	idleMs: number;
 	/** True when the model changed relative to the previous request. */
 	modelChanged: boolean;
+	/**
+	 * Why the harness invalidated the prefix, when both requests recorded a shape.
+	 * Absent for sessions written before shapes existed, and for misses the shape cannot explain.
+	 */
+	cause?: CacheMissCause;
+}
+
+/** A harness-caused invalidation. `system` outranks `tools`, which outranks `prefix`. */
+export type CacheMissCause = "system" | "tools" | "prefix";
+
+/** Hashes of the parts of a request the provider caches, recorded on the assistant message. */
+export interface RequestShape {
+	systemHash: string;
+	toolsHash: string;
+	messageHashes: readonly string[];
+}
+
+interface ShapeMessage {
+	role: string;
+	content?: unknown;
+	sections?: unknown;
+}
+
+interface ShapeTool {
+	name: string;
+	parameters?: unknown;
+}
+
+function shapeHash(value: unknown): string {
+	return createHash("sha256")
+		.update(JSON.stringify(value) ?? "null")
+		.digest("hex")
+		.slice(0, 16);
+}
+
+/**
+ * The cached shape of one request. The system hash covers system messages only.
+ * The message hashes cover the transcript in order. The tool hash covers names and
+ * parameter schemas, not descriptions, so a wording edit does not look like a tool change.
+ */
+export function requestShape(messages: readonly ShapeMessage[], tools: readonly ShapeTool[] = []): RequestShape {
+	const system = messages
+		.filter((message) => message.role === "system")
+		.map((message) => ({
+			content: message.content,
+			sections: message.sections,
+		}));
+	return {
+		systemHash: shapeHash(system),
+		toolsHash: shapeHash(tools.map((tool) => ({ name: tool.name, parameters: tool.parameters ?? null }))),
+		messageHashes: messages.map((message) => shapeHash({ role: message.role, content: message.content })),
+	};
 }
 
 export interface CacheWasteTotals {
@@ -45,6 +98,27 @@ interface PreviousRequest {
 	 * writes unreported) from a provider that never reports caching at all.
 	 */
 	reportedCache: boolean;
+	shape?: RequestShape;
+}
+
+function requestShapeOf(message: AssistantMessage): RequestShape | undefined {
+	const shape = (message as AssistantMessage & { requestShape?: RequestShape }).requestShape;
+	if (!shape) return undefined;
+	if (typeof shape.systemHash !== "string" || typeof shape.toolsHash !== "string") return undefined;
+	if (!Array.isArray(shape.messageHashes)) return undefined;
+	return shape;
+}
+
+/** `system` outranks `tools`, which outranks an edited earlier message. */
+function causeFor(previous: RequestShape | undefined, current: RequestShape | undefined): CacheMissCause | undefined {
+	if (!previous || !current) return undefined;
+	if (previous.systemHash !== current.systemHash) return "system";
+	if (previous.toolsHash !== current.toolsHash) return "tools";
+	const shared = Math.min(previous.messageHashes.length, current.messageHashes.length);
+	for (let i = 0; i < shared; i++) {
+		if (previous.messageHashes[i] !== current.messageHashes[i]) return "prefix";
+	}
+	return undefined;
 }
 
 /**
@@ -68,7 +142,8 @@ function detectMiss(
 	}
 
 	const missedTokens = Math.min(prev.promptTokens, promptTokens) - usage.cacheRead;
-	if (missedTokens <= NOISE_FLOOR_TOKENS) return undefined;
+	const cause = causeFor(prev.shape, requestShapeOf(message));
+	if (missedTokens <= NOISE_FLOOR_TOKENS && cause === undefined) return undefined;
 
 	// Extra cost = missed tokens billed at the actual paid rate (input/cacheWrite,
 	// incl. write premium) instead of the cache-read rate. Missed tokens can only
@@ -86,6 +161,7 @@ function detectMiss(
 		missedCost: missedTokens * Math.max(0, paidPerToken - readPerToken),
 		idleMs: Math.max(0, message.timestamp - prev.timestamp),
 		modelChanged: `${message.provider}/${message.model}` !== prev.modelKey,
+		...(cause ? { cause } : {}),
 	};
 }
 
@@ -98,6 +174,7 @@ function asPreviousRequest(message: AssistantMessage, reportedCache: boolean): P
 		modelKey: `${message.provider}/${message.model}`,
 		timestamp: message.timestamp,
 		reportedCache: reportedCache || usage.cacheRead + usage.cacheWrite > 0,
+		shape: requestShapeOf(message),
 	};
 }
 

@@ -5,6 +5,7 @@ import {
 	computeCacheWaste,
 	detectCacheMiss,
 	type ModelPriceSource,
+	requestShape,
 } from "../src/core/cache-stats.ts";
 import type { SessionEntry } from "../src/core/session-manager.ts";
 
@@ -74,6 +75,28 @@ const turn2 = assistant({
 	cacheWrite: 5_000,
 	cost: { cacheRead: 0.03, cacheWrite: 0.019 },
 	timestamp: 60_000,
+});
+
+describe("requestShape", () => {
+	it("changes the system hash when the system message changes and leaves the tool hash", () => {
+		const first = requestShape(
+			[
+				{ role: "system", content: "one" },
+				{ role: "user", content: "go" },
+			],
+			[{ name: "bash", parameters: { type: "object" } }],
+		);
+		const second = requestShape(
+			[
+				{ role: "system", content: "two" },
+				{ role: "user", content: "go" },
+			],
+			[{ name: "bash", parameters: { type: "object" } }],
+		);
+		expect(first.systemHash).not.toBe(second.systemHash);
+		expect(first.toolsHash).toBe(second.toolsHash);
+		expect(first.messageHashes[1]).toBe(second.messageHashes[1]);
+	});
 });
 
 describe("computeCacheWaste", () => {
@@ -173,5 +196,29 @@ describe("detectCacheMiss", () => {
 
 	it("returns undefined for the first turn of a session", () => {
 		expect(detectCacheMiss([], turn1, models)).toBeUndefined();
+	});
+
+	it("names a system prompt change that the token totals hide", () => {
+		const sameTokens = assistant({
+			cacheRead: 105_000,
+			cost: { cacheRead: 0.0315 },
+			timestamp: 120_000,
+		});
+		const changed = {
+			...sameTokens,
+			requestShape: { systemHash: "b", toolsHash: "tools", messageHashes: ["m1", "m2"] },
+		} as AssistantMessage;
+		const previous: SessionEntry = {
+			type: "message",
+			id: "prev",
+			parentId: null,
+			timestamp: "",
+			message: {
+				...turn2,
+				requestShape: { systemHash: "a", toolsHash: "tools", messageHashes: ["m1"] },
+			},
+		} as SessionEntry;
+		const miss = detectCacheMiss([entry(turn1), previous], changed, models);
+		expect(miss?.cause).toBe("system");
 	});
 });

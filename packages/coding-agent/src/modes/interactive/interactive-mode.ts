@@ -4440,7 +4440,13 @@ export class InteractiveMode {
 		const cost = miss.missedCost >= 0.01 ? ` (~$${miss.missedCost.toFixed(2)})` : "";
 		const reBilled = `${formatTokens(miss.missedTokens)} tokens re-billed${cost}`;
 		let label = "Cache miss";
-		if (miss.modelChanged) {
+		if (miss.cause === "system") {
+			label = "Cache miss after system prompt change";
+		} else if (miss.cause === "tools") {
+			label = "Cache miss after tool list change";
+		} else if (miss.cause === "prefix") {
+			label = "Cache miss after an earlier message changed";
+		} else if (miss.modelChanged) {
 			label = "Cache miss after model switch";
 		} else if (miss.idleMs >= CACHE_TTL_MS) {
 			label = `Cache miss after ${Math.round(miss.idleMs / 60_000)}m idle`;
