@@ -216,6 +216,11 @@ export function hasTrustRequiringProjectResources(cwd: string): boolean {
 		if (agentsSkillsDir !== userAgentsSkillsDir && existsSync(agentsSkillsDir)) {
 			return true;
 		}
+		// The home directory is the user's own scope. A project under it must not
+		// inherit trust from anything above it, including ~/.agents/skills.
+		if (currentDir === homeDir) {
+			return false;
+		}
 
 		const parentDir = dirname(currentDir);
 		if (parentDir === currentDir) {

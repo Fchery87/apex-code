@@ -470,6 +470,28 @@ Content`,
 			expect(result.skills.some((r) => r.path === deeplyNestedMarkdownSkill && r.enabled)).toBe(true);
 		});
 
+		it("does not report skills above the home directory as the project's when cwd is under home", async () => {
+			const previousHome = process.env.HOME;
+			const home = join(tempDir, "home");
+			process.env.HOME = home;
+
+			try {
+				const aboveHome = join(tempDir, ".agents", "skills", "above-home", "SKILL.md");
+				mkdirSync(join(tempDir, ".agents", "skills", "above-home"), { recursive: true });
+				writeFileSync(aboveHome, "---\nname: above-home\ndescription: above\n---\n");
+
+				const cwd = join(home, "scratch", "run");
+				mkdirSync(cwd, { recursive: true });
+				const pm = new DefaultPackageManager({ cwd, agentDir, settingsManager });
+
+				const result = await pm.resolve();
+				expect(result.skills.some((r) => r.path === aboveHome)).toBe(false);
+			} finally {
+				if (previousHome === undefined) delete process.env.HOME;
+				else process.env.HOME = previousHome;
+			}
+		});
+
 		it("should keep ~/.agents/skills user-scoped when cwd is under home in a non-git directory", async () => {
 			const previousHome = process.env.HOME;
 			process.env.HOME = tempDir;

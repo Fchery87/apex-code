@@ -464,9 +464,14 @@ function collectAncestorAgentsSkillDirs(startDir: string): string[] {
 	const skillDirs: string[] = [];
 	const resolvedStartDir = resolve(startDir);
 	const gitRepoRoot = findGitRepoRoot(resolvedStartDir);
+	// A directory under the home directory that is not itself a git repo would
+	// otherwise climb through ~/.agents/skills and report the user's own skills
+	// as the project's. The home directory is the user's, loaded separately.
+	const homeDir = resolve(getHomeDir());
 
 	let dir = resolvedStartDir;
 	while (true) {
+		if (dir === homeDir && dir !== resolvedStartDir) break;
 		skillDirs.push(join(dir, ".agents", "skills"));
 		if (gitRepoRoot && dir === gitRepoRoot) {
 			break;
