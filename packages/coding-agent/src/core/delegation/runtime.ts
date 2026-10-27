@@ -1826,6 +1826,10 @@ export async function runDelegation(
 		registry.own(child);
 		const handleId = sessionId;
 		const promise = child.run(task).then(({ output }) => ({ agentType, task, output }));
+		// The registry reads this promise later, from its own settlement handler.
+		// Without a handler attached now, a child that rejects becomes an
+		// unhandled rejection and can fail a sibling worker started in the same tick.
+		promise.catch(() => {});
 		// register() observes the turn's settlement: it records the handle's latest
 		// result (retrieval follows that, not this promise) and persists the run's
 		// terminal status, so no separate settlement hook is needed here. The

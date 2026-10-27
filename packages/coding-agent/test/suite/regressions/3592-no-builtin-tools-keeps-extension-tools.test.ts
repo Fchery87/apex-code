@@ -97,6 +97,7 @@ describe("regression #3592: no-builtin-tools keeps extension tools enabled", () 
 			"todo_write",
 			"web_fetch",
 			"web_search",
+			"workflow",
 			"write",
 		]);
 		expect(session.getActiveToolNames()).toEqual(["dynamic_tool"]);

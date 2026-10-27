@@ -151,6 +151,7 @@ capable and measurably worse.
 | Optional bash confinement | **landed** at `6999944ab`. Off by default. The user file is the only switch. A present `bwrap` runs the helper argv. A missing helper refuses the call. No host allowlist. See [ADR 0038](adr/0038-optional-bash-confinement.md). | [spec](specs/2026-10-23-shell-confinement.md) | — |
 | Session commands and settings | **active**. `/diff`, command aliases, `/context`, grouped settings, and `/rewind`. | [spec](specs/2026-10-24-session-commands-and-settings.md) | — |
 | Coding-turn quality | **active** — slices 1, 2, 3, 5, and 7 are in the tree and locally tested. Slice 6 has the indent hint only. Slices 4, 8, 9, and 10 are not started. | [spec](specs/2026-10-23-coding-turn-quality.md) | [plan](plans/2026-10-23-coding-turn-quality.md) |
+| Workflow orchestration | **landed** 2026-10-27. Runner, tool, loader, `/<name>`, `phase()`, the 100-call cap, and the untrusted-project ask. Phase counts are on the tool result, not `agent list`. | [spec](specs/2026-10-26-workflow-orchestration.md) | — |
 
 ---
 

@@ -154,6 +154,12 @@ export {
 	type WebSearchToolOptions,
 } from "./web-search.ts";
 export {
+	createWorkflowTool,
+	createWorkflowToolDefinition,
+	type WorkflowDetails,
+	type WorkflowInput,
+} from "./workflow.ts";
+export {
 	createWriteTool,
 	createWriteToolDefinition,
 	type WriteOperations,
@@ -186,6 +192,7 @@ import { createTodoWriteTool, createTodoWriteToolDefinition, type TodoWriteStore
 import { createToolSchemaTool, createToolSchemaToolDefinition, type ToolSchemaResolver } from "./tool-schema.ts";
 import { createWebFetchTool, createWebFetchToolDefinition, type WebFetchToolOptions } from "./web-fetch.ts";
 import { createWebSearchTool, createWebSearchToolDefinition, type WebSearchToolOptions } from "./web-search.ts";
+import { createWorkflowTool, createWorkflowToolDefinition } from "./workflow.ts";
 import { createWriteTool, createWriteToolDefinition, type WriteToolOptions } from "./write.ts";
 
 export type Tool = AgentTool<any>;
@@ -206,6 +213,7 @@ export type ToolName =
 	| "ask_user"
 	| "plan_present"
 	| "delegate"
+	| "workflow"
 	| "test"
 	| "skill_search"
 	| "memory_note"
@@ -229,6 +237,7 @@ export const allToolNames: Set<ToolName> = new Set([
 	"ask_user",
 	"plan_present",
 	"delegate",
+	"workflow",
 	"test",
 ]);
 
@@ -327,6 +336,8 @@ export function createToolDefinition(toolName: ToolName, cwd: string, options?: 
 			return createPlanPresentToolDefinition();
 		case "delegate":
 			return createDelegateToolDefinition(options?.delegate?.runtime ?? noopDelegationRuntime);
+		case "workflow":
+			return createWorkflowToolDefinition(options?.delegate?.runtime ?? noopDelegationRuntime);
 		case "test":
 			return createTestToolDefinition(cwd, options?.test);
 		case "memory_note":
@@ -372,6 +383,8 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 			return createPlanPresentTool();
 		case "delegate":
 			return createDelegateTool(options?.delegate?.runtime ?? noopDelegationRuntime);
+		case "workflow":
+			return createWorkflowTool(options?.delegate?.runtime ?? noopDelegationRuntime);
 		case "test":
 			return createTestTool(cwd, options?.test);
 		case "memory_note":
@@ -439,6 +452,7 @@ export function createAllToolDefinitions(
 		ask_user: createAskUserToolDefinition(),
 		plan_present: createPlanPresentToolDefinition(),
 		delegate: createDelegateToolDefinition(options?.delegate?.runtime ?? noopDelegationRuntime),
+		workflow: createWorkflowToolDefinition(options?.delegate?.runtime ?? noopDelegationRuntime),
 		test: createTestToolDefinition(cwd, options?.test),
 		memory_note: createMemoryNoteToolDefinition(cwd),
 		apply_patch: createApplyPatchToolDefinition(cwd, options?.apply_patch),
@@ -494,6 +508,7 @@ export function createAllTools(
 		ask_user: createAskUserTool(),
 		plan_present: createPlanPresentTool(),
 		delegate: createDelegateTool(options?.delegate?.runtime ?? noopDelegationRuntime),
+		workflow: createWorkflowTool(options?.delegate?.runtime ?? noopDelegationRuntime),
 		test: createTestTool(cwd, options?.test),
 		memory_note: createMemoryNoteTool(cwd),
 		apply_patch: createApplyPatchTool(cwd, options?.apply_patch),

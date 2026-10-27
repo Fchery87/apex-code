@@ -14,7 +14,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, relative } from "node:path";
+import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import { contentText, getCurrentSystemMessage, retryDelayMs } from "@earendil-works/pi-ai";
 import type {
 	AssistantMessage,
@@ -101,6 +101,7 @@ import type {
 	DelegationRuntimeOptions,
 } from "./delegation/runtime.ts";
 import { RESUME_CHILD_PROMPT, runDelegation } from "./delegation/runtime.ts";
+import { loadWorkflowScripts } from "./delegation/workflow-files.ts";
 import { SessionEvidenceSink } from "./evidence.ts";
 import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.ts";
 import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
@@ -2690,6 +2691,14 @@ export class AgentSession {
 					preflightResult?.(true);
 					return;
 				}
+				if (!handled) {
+					const workflow = await this._tryRunWorkflowCommand(text);
+					if (workflow === true) {
+						preflightResult?.(true);
+						return;
+					}
+					if (typeof workflow === "string") text = workflow;
+				}
 			}
 
 			if (this._compactionAbortController !== undefined) {
@@ -2843,10 +2852,55 @@ export class AgentSession {
 	}
 
 	/**
-	 * Try to execute an extension command. Returns true if command was found and executed.
+	 * Run /<name> when <name> is a saved workflow script. The call goes through
+	 * the same permission gate as a model tool call, then the tool runs the script.
+	 * An unknown name returns false so the text stays a normal prompt.
 	 */
+	private async _tryRunWorkflowCommand(text: string): Promise<boolean | string> {
+		const spaceIndex = text.indexOf(" ");
+		const name = spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex);
+		if (!name || name.includes(":") || name.includes("/")) return false;
+		const loaded = loadWorkflowScripts(join(this._cwd, ".apex-code", "workflows"));
+		const script = loaded.scripts.find((entry) => entry.name === name);
+		if (!script) return false;
+		const definition = this.getToolDefinition("workflow") as ApexToolDefinition | undefined;
+		if (!definition?.execute) return false;
+		const argsText = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1).trim();
+		let args: unknown;
+		if (argsText) {
+			try {
+				args = JSON.parse(argsText);
+			} catch {
+				args = argsText;
+			}
+		}
+		const params = { script: script.body, name: script.name, args, runId: script.name };
+		if (this._permissionGate) {
+			const decision = await evaluateToolCall("workflow", params, {
+				...this._permissionGate,
+				getContract: (toolName) => {
+					const contract = (this.getToolDefinition(toolName) as Partial<ApexToolDefinition> | undefined)?.contract;
+					if (toolName !== "workflow" || this.settingsManager.isProjectTrusted() || !contract) return contract;
+					return { ...contract, permission: { ...contract.permission, allowRuleGrants: () => false } };
+				},
+			});
+			if (decision.block) {
+				this._extensionRunner.emitError({
+					extensionPath: script.path,
+					event: "workflow",
+					error: decision.reason ?? "workflow denied",
+				});
+				return true;
+			}
+		}
+		const result = await definition.execute("workflow-command", params, undefined, undefined, {
+			hasUI: this._extensionUIContext !== undefined,
+		} as ExtensionContext);
+		const output = (result as { content?: { text?: string }[] }).content?.[0]?.text ?? "";
+		return `Workflow "${script.name}" returned: ${output}`;
+	}
+
 	private async _tryExecuteExtensionCommand(text: string): Promise<boolean> {
-		// Parse command name and args
 		const spaceIndex = text.indexOf(" ");
 		const commandName = spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex);
 		const args = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1);

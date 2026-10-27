@@ -57,6 +57,7 @@ import {
 	createPowerShellTool,
 	createReadOnlyTools,
 	createReadTool,
+	createWorkflowToolDefinition,
 	createWriteTool,
 	type ToolName,
 	withFileMutationQueue,
@@ -1015,6 +1016,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				? (resolveAgent as AgentDefinitionCatalogResolver).list()
 				: [];
 		customTools.push(createDelegateToolDefinition(delegationRuntime, agentCatalog) as ToolDefinition<any, any>);
+		customTools.push(createWorkflowToolDefinition(delegationRuntime) as ToolDefinition<any, any>);
 		// Historical resume (restart reconstruction) reattaches a persisted child
 		// through THIS runtime's buildChildSession seam. Wiring it here -- not only
 		// at the first delegation -- is what makes resume work on a freshly
