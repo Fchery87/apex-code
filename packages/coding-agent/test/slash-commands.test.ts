@@ -8,7 +8,7 @@ describe("built-in slash commands", () => {
 			description: "Open settings",
 		});
 		expect(BUILTIN_SLASH_COMMANDS.map((command) => command.name)).toEqual(
-			expect.arrayContaining(["diff", "context", "rewind"]),
+			expect.arrayContaining(["diff", "context", "rewind", "workflow"]),
 		);
 	});
 });

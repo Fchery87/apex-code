@@ -42,6 +42,7 @@ const REPRESENTATIVE_PARAMS: Record<ToolName, JsonObject> = {
 	ask_user: { question: "Which approach?", options: ["a", "b"] },
 	plan_present: { plan: "1. Do a thing" },
 	delegate: { agentType: "explore", task: "find the config loader" },
+	workflow: { script: "return 1" },
 	test: { executable: "npm", args: ["test", "--", "unit"] },
 	memory_note: { title: "Tabs", body: "Indent with tabs." },
 	apply_patch: { patches: [{ path: "file.txt", oldText: "a", newText: "b" }] },
@@ -224,7 +225,7 @@ describe("permission gate — plan mode (task 4.3: state stays callable, mutatio
 		expect(result.toolExecuted).toBe(true);
 	});
 
-	it.each(["write", "bash", "delegate"] as const)(
+	it.each(["write", "bash", "delegate", "workflow"] as const)(
 		"still denies %s under plan mode's hard floor, through the real registry contract",
 		async (toolName) => {
 			const store = new FilePermissionRuleStore({

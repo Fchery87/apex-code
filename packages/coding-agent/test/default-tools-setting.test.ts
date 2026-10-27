@@ -86,6 +86,7 @@ describe("defaultTools setting", () => {
 			"tool_schema",
 			"web_fetch",
 			"web_search",
+			"workflow",
 			"write",
 		]);
 		expect(session.getActiveToolNames()).toEqual(["grep", "find", "tool_schema"]);
@@ -201,6 +202,7 @@ describe("defaultTools setting", () => {
 			"tool_schema",
 			"web_fetch",
 			"web_search",
+			"workflow",
 			"write",
 		]);
 		expect(session.getActiveToolNames()).toEqual(["ls", "tool_schema"]);

@@ -41,6 +41,7 @@ const REPRESENTATIVE_PARAMS: Record<string, unknown> = {
 	ask_user: { question: "Which approach?", options: ["a", "b"] },
 	plan_present: { plan: "1. Do a thing" },
 	delegate: { agentType: "explore", task: "find the config loader" },
+	workflow: { script: "return 1", name: "audit" },
 	test: { executable: "npm", args: ["test"] },
 	memory_note: { title: "A fact", body: "The loader reads notes after the user accepts them." },
 	lsp: { operation: "definition", path: "src/index.ts", line: 1, character: 1 },

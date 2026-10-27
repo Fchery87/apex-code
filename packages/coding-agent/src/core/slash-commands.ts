@@ -20,6 +20,7 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "help", description: "Show every command available in this session" },
 	{ name: "config", description: "Open settings" },
 	{ name: "tasks", description: "Expand or collapse the task panel" },
+	{ name: "workflow", description: "Run a saved workflow script", argumentHint: "<name>" },
 	{ name: "settings", description: "Open settings menu" },
 	{ name: "model", description: "Pick a provider, then a model", argumentHint: "<provider/model>" },
 	{ name: "tree", description: "Navigate session tree (switch branches)" },
