@@ -58,7 +58,7 @@
 		"build:native:win32": "npm --prefix packages/tui run build:native:win32"
 	},
 	"devDependencies": {
-		"@anthropic-ai/sandbox-runtime": "0.0.76",
+		"@anthropic-ai/sandbox-runtime": "0.0.81",
 		"@biomejs/biome": "2.5.14",
 		"@types/node": "22.19.19",
 		"@typescript/native-preview": "7.0.0-dev.20260120.1",
