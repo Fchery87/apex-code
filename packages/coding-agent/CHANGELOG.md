@@ -1,5 +1,11 @@
 # Apex Code changelog
 
+## [Unreleased]
+
+### Added
+
+- `workflow` runs a script that starts subagents through the existing delegation runtime. The script calls `worker()`, `parallel()`, `pipeline()`, and `phase()`, and it cannot read files, run commands, or check the clock itself. A run stops at 100 worker calls and warns past 25. `/<name>` runs a saved script from `.apex-code/workflows/`, and an untrusted project asks even when a user rule allows the name.
+
 ## [0.8.1] - 2026-10-25
 
 ### Fixed
