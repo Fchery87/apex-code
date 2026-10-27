@@ -52,7 +52,7 @@
 		"apex-code-agent-core": "0.8.2",
 		"chalk": "6.0.0",
 		"cross-spawn": "7.0.6",
-		"diff": "8.0.4",
+		"diff": "9.0.0",
 		"grok-mermaid": "0.2.3",
 		"highlight.js": "11.12.0",
 		"hosted-git-info": "10.1.1",
