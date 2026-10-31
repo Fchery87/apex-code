@@ -164,6 +164,21 @@ describe("project resource registry", () => {
 		expect(hasTrustRequiringProjectResources(cwd)).toBe(true);
 	});
 
+	it("does not require trust for a project under home because of skills above home", () => {
+		const previousHome = process.env.HOME;
+		const home = join(tempDir, "home");
+		process.env.HOME = home;
+		try {
+			mkdirSync(join(tempDir, ".agents", "skills"), { recursive: true });
+			const nested = join(home, "scratch", "run");
+			mkdirSync(nested, { recursive: true });
+			expect(hasTrustRequiringProjectResources(nested)).toBe(false);
+		} finally {
+			if (previousHome === undefined) delete process.env.HOME;
+			else process.env.HOME = previousHome;
+		}
+	});
+
 	it("keeps the ancestor .agents/skills walk and its user-level exclusion", () => {
 		const nested = join(cwd, "packages", "inner");
 		mkdirSync(nested, { recursive: true });
