@@ -31,7 +31,7 @@ Do not launch a wholesale rewrite or a feature-count competition with Claude Cod
 - Ran four existing workflow test files and additional harmless probes against the public `runWorkflow` and workflow tool boundaries. Probe children were local stubs. No model requests, real editing workers, credential reads, remote writes, or browser sessions were used.
 - Probes changed directory into scratch before creating session artifacts. No production implementation files were modified.
 - Used public first-party documentation fetched on October 31. Live documentation is a snapshot of what was advertised when read, not proof of a release's behavior on every platform. Dated sources are identified below.
-- This is not an exhaustive security audit, benchmark, dependency-vulnerability audit, or complete end-to-end certification. Existing tests passing does not establish production safety. No full `npm test`, typecheck, real-browser test, or live-model quality benchmark was run for this review.
+- This is not an exhaustive security audit, benchmark, dependency-vulnerability audit, or complete end-to-end certification. Existing tests passing does not establish production safety. No full `npm test`, real-browser test, or live-model quality benchmark was run for this review. The commit hook subsequently ran the full `npm run check`, including `tsgo --noEmit`, successfully.
 - No leaked or unlicensed source was accessed.
 
 ## 1. What Apex already has
@@ -313,6 +313,17 @@ Documentation lifecycle validation passed.
 ```
 
 ### Revision references
+
+The report's first commit also ran `npm run check` through the repository hook. It completed successfully, including lint, documentation and dependency checks, typechecking, and the browser-bundle smoke check. That smoke check is not a real browser interaction test. Key output:
+
+```text
+Checked 1290 files in 12s. No fixes applied.
+Documentation lifecycle validation passed.
+Every process-spawning test retries its recursive scratch cleanup.
+packages/coding-agent/npm-shrinkwrap.json is up to date.
+packages/coding-agent/install-lock is up to date.
+All pre-commit checks passed!
+```
 
 Both `git cat-file -t f58925532` and `git cat-file -t e8dd0157f` returned `commit`. The latter is the October 27 workflow implementation commit. The worktree was clean before this research report was written.
 
