@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
@@ -244,6 +245,16 @@ describe("interactive session permission mode", () => {
 	});
 
 	it("enforces the override at configured verification commands", async () => {
+		const git = spawnSync("git", ["init", "-b", "main"], { cwd, encoding: "utf8" });
+		expect(git.status, git.stderr).toBe(0);
+		const commit = spawnSync(
+			"git",
+			["-c", "user.name=fixture", "-c", "user.email=fixture@example.com", "commit", "--allow-empty", "-m", "init"],
+			{ cwd, encoding: "utf8" },
+		);
+		expect(commit.status, commit.stderr).toBe(0);
+		// Keep policy-run proof outside the observed worktree so verification stays current.
+		const marker = join(cwd, ".git", "verified.txt");
 		const { session, settingsManager } = await setup();
 		writeFileSync(
 			join(cwd, "agent", "settings.json"),
@@ -254,7 +265,7 @@ describe("interactive session permission mode", () => {
 						{
 							id: "verify",
 							executable: process.execPath,
-							argv: ["-e", 'require("node:fs").writeFileSync("verified.txt", "yes")'],
+							argv: ["-e", `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "yes")`],
 							permission: "allow",
 						},
 					],
@@ -263,13 +274,13 @@ describe("interactive session permission mode", () => {
 		);
 		await settingsManager.reload();
 		expect(await session.requestVerification()).toBe("verified");
-		unlinkSync(join(cwd, "verified.txt"));
+		unlinkSync(marker);
 		await session.setInteractivePermissionMode("plan");
 		expect(await session.requestVerification()).not.toBe("verified");
-		expect(existsSync(join(cwd, "verified.txt"))).toBe(false);
+		expect(existsSync(marker)).toBe(false);
 		session.clearInteractivePermissionMode();
 		expect(await session.requestVerification()).toBe("verified");
-		expect(readFileSync(join(cwd, "verified.txt"), "utf8")).toBe("yes");
+		expect(readFileSync(marker, "utf8")).toBe("yes");
 	});
 
 	it("new and resumed aggregates do not inherit the session mode", async () => {
