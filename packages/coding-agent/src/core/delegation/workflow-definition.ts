@@ -5,7 +5,7 @@ import { Check } from "typebox/value";
 export const WORKFLOW_DEFINITION_MAX_BYTES = 64 * 1024;
 export const WORKFLOW_STEP_LIMIT = 100;
 const identifier = Type.String({ pattern: "^[A-Za-z][A-Za-z0-9_-]{0,63}$" });
-const pointer = Type.String({ maxLength: 1024, pattern: "^(?:/(?:[^~]|~[01])*)*$" });
+const pointer = Type.String({ maxLength: 1024, pattern: "^(?:/(?:[^~/]|~[01])*)*$" });
 const referenceSchema = Type.Object(
 	{ from: identifier, pointer: Type.Optional(pointer) },
 	{ additionalProperties: false },

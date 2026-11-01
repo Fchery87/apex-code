@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { fauxProvider } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AgentSession } from "../../src/core/agent-session.ts";
 import { AuthStorage } from "../../src/core/auth-storage.ts";
@@ -35,6 +35,74 @@ function saveScript(dir: string, name: string, body: string): void {
 }
 
 describe("workflow slash command", () => {
+	it("runs a saved tool call from session cwd rather than process cwd", async () => {
+		const previousCwd = process.cwd();
+		const root = await scratchDir("apex-workflow-sdk-cwd-");
+		scratches.push(root);
+		process.chdir(root);
+		try {
+			const cwd = join(root, "project");
+			const agentDir = join(root, "agent");
+			mkdirSync(join(cwd, ".apex-code", "workflows"), { recursive: true });
+			mkdirSync(agentDir, { recursive: true });
+			writeFileSync(
+				join(cwd, ".apex-code", "workflows", "audit.json"),
+				JSON.stringify({
+					name: "audit",
+					description: "session cwd",
+					definition: {
+						version: 1,
+						steps: [{ id: "one", prompt: "scan", agentType: "explore" }],
+						output: { from: "one" },
+					},
+				}),
+			);
+			const faux = fauxProvider({ provider: `workflow-sdk-cwd-${Math.random().toString(36).slice(2)}` });
+			const runtime = await ModelRuntime.create({
+				credentials: AuthStorage.inMemory(),
+				modelsPath: null,
+				allowModelNetwork: false,
+			});
+			runtime.registerNativeProvider(faux.provider);
+			await runtime.refresh({ allowNetwork: false, providers: [faux.getModel().provider] });
+			const store = new FilePermissionRuleStore({
+				cwd,
+				agentDir,
+				projectTrusted: true,
+				policyPath: join(root, "absent-policy.json"),
+			});
+			const { session } = await createAgentSession({
+				cwd,
+				agentDir,
+				model: faux.getModel(),
+				modelRuntime: runtime,
+				settingsManager: SettingsManager.create(cwd, agentDir, { projectTrusted: true }),
+				sessionManager: SessionManager.inMemory(cwd),
+				tools: ["workflow", "read"],
+				resourceLoader: createTestResourceLoader({ extensionsResult: await createTestExtensionsResult([], cwd) }),
+				permissionGate: { store, getMode: () => "default", responder: { ask: async () => ({ allow: true }) } },
+				delegation: {
+					resolveAgent: () => ({ name: "explore", description: "read", tools: ["read"], systemPrompt: "read" }),
+				},
+			});
+			sessions.push(session);
+			const call = fauxToolCall("workflow", { kind: "saved", name: "audit" });
+			faux.setResponses([
+				fauxAssistantMessage([call], { stopReason: "toolUse" }),
+				fauxAssistantMessage("session-workflow-output"),
+				fauxAssistantMessage("done"),
+			]);
+			await session.prompt("run audit");
+			const result = session.messages.find(
+				(message) => message.role === "toolResult" && message.toolCallId === call.id,
+			);
+			expect(result).toMatchObject({ role: "toolResult", isError: false });
+			if (result?.role !== "toolResult") throw new Error("Missing workflow result");
+			expect(result.content).toContainEqual({ type: "text", text: '"session-workflow-output"' });
+		} finally {
+			process.chdir(previousCwd);
+		}
+	});
 	it("rejects a saved JavaScript workflow with migration guidance before dispatch", async () => {
 		const harness = await createHarness({ responses: ["done"] });
 		cleanups.push(harness.cleanup);
@@ -93,7 +161,7 @@ describe("workflow slash command", () => {
 
 		await session.prompt("/audit");
 
-		expect(asked).toEqual(["workflow"]);
+		expect(asked).toEqual([]);
 		expect(session.messages.filter((message) => message.role === "user")).toHaveLength(0);
 	});
 

@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parseWorkflowDefinition, selectWorkflowReference } from "../../src/core/delegation/workflow-definition.ts";
 
@@ -5,6 +7,66 @@ const worker = { id: "scan", prompt: "Scan files" };
 const graph = () => ({ version: 1, steps: [worker], output: { from: "scan" } });
 
 describe("workflow definition boundary", () => {
+	it("rejects adversarial pointers within a child-process watchdog", async () => {
+		const module = new URL("../../src/core/delegation/workflow-definition.ts", import.meta.url).href;
+		const child = spawn(
+			process.execPath,
+			[
+				"--import",
+				"tsx",
+				"--input-type=module",
+				"-e",
+				`
+			import { parseWorkflowDefinition } from ${JSON.stringify(module)};
+			console.log("PARSER_READY");
+			for (const pointer of ["/".repeat(128) + "~2", "/".repeat(1023) + "~"]) {
+				try {
+					parseWorkflowDefinition({ version: 1, steps: [{ id: "scan", prompt: "go" }], output: { from: "scan", pointer } });
+					process.exit(2);
+				} catch {}
+			}
+		`,
+			],
+			{
+				cwd: fileURLToPath(new URL("../../../..", import.meta.url)),
+				env: { ...process.env, TSX_TSCONFIG_PATH: "tsconfig.runtime.json" },
+			},
+		);
+		let stderr = "";
+		let stdout = "";
+		let timedOut = false;
+		let ready = false;
+		const kill = () => {
+			timedOut = true;
+			child.kill("SIGKILL");
+		};
+		let watchdog = setTimeout(kill, 120000);
+		child.stdout.on("data", (data) => {
+			stdout += data.toString();
+			if (!ready && stdout.includes("PARSER_READY")) {
+				ready = true;
+				clearTimeout(watchdog);
+				watchdog = setTimeout(kill, 10000);
+			}
+		});
+		child.stderr.on("data", (data) => {
+			stderr += data.toString();
+		});
+		try {
+			const status = await new Promise<number | null>((resolve, reject) => {
+				child.on("error", reject);
+				child.on("close", resolve);
+			});
+			expect(timedOut, ready ? "Parser watchdog expired" : "Child startup watchdog expired").toBe(false);
+			expect(status, stderr).toBe(0);
+		} finally {
+			clearTimeout(watchdog);
+			child.kill("SIGKILL");
+		}
+	}, 150000);
+	it.each(["", "/", "//", "///a//", "/~0/~1//"])("preserves valid empty pointer segments: %s", (pointer) => {
+		expect(parseWorkflowDefinition({ ...graph(), output: { from: "scan", pointer } }).output.pointer).toBe(pointer);
+	});
 	it("accepts a versioned graph and inert prompt text", () => {
 		const value = { ...graph(), steps: [{ id: "scan", prompt: "process.exit(1)" }] };
 		expect(parseWorkflowDefinition(value).steps[0].prompt).toBe("process.exit(1)");

@@ -15,6 +15,15 @@ afterEach(() => {
 });
 
 describe("saved JSON workflow definitions", () => {
+	it.each([false, true])("distinguishes bad JSON from malformed legacy diagnostics: legacy=%s", (legacy) => {
+		const root = dir();
+		const workflowDir = join(root, ".apex-code", "workflows");
+		mkdirSync(workflowDir, { recursive: true });
+		writeFileSync(join(workflowDir, legacy ? "broken.js" : "broken.json"), "not valid");
+		expect(() => resolveWorkflowDefinition(root, "unknown")).toThrow(
+			legacy ? /Legacy JavaScript workflows are not supported/ : 'Saved workflow "unknown" was not found.',
+		);
+	});
 	const definition = { version: 1, steps: [{ id: "scan", prompt: "scan" }], output: { from: "scan" } };
 	it("resolves a saved definition by its declared name", () => {
 		const root = dir();

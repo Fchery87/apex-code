@@ -669,7 +669,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			workflowAuthorization: {
 				resolveSaved: (name) => {
 					try {
-						return { digest: workflowDefinitionDigest(resolveWorkflowDefinition(cwd, name).definition) };
+						const { definition } = resolveWorkflowDefinition(cwd, name);
+						return { digest: workflowDefinitionDigest(definition), definition };
 					} catch (error) {
 						const legacy = loadWorkflowScripts(join(cwd, ".apex-code", "workflows")).scripts.find(
 							(script) => script.name === name,

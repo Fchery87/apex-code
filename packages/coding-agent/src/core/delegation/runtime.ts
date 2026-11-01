@@ -274,7 +274,7 @@ export interface DelegationRuntimeOptions {
 	childRunRegistry?: ChildRunRegistry;
 	/** Host-resolved identity binding workflow approval to source and session context. */
 	workflowAuthorization?: {
-		resolveSaved(name: string): { digest: string };
+		resolveSaved(name: string): { digest: string; definition?: unknown };
 		sessionId(): string;
 		trustContext(): string;
 		projectTrusted(): boolean;

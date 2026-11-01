@@ -19,6 +19,56 @@ function runtime(): DelegationRuntimeOptions {
 }
 
 describe("workflow public refusal boundaries", () => {
+	it.each(["default", "bypassPermissions", "allow-rule"] as const)(
+		"denies untrusted saved and inline calls without asking in %s",
+		async (mode) => {
+			for (const kind of ["saved", "inline"] as const) {
+				const definition = { version: 1, steps: [{ id: "one", prompt: "go" }], output: { from: "one" } };
+				const options: DelegationRuntimeOptions = {
+					...runtime(),
+					workflowAuthorization: {
+						resolveSaved: () => ({ definition, digest: "digest" }),
+						sessionId: () => "session",
+						trustContext: () => "project",
+						projectTrusted: () => false,
+					},
+				};
+				const tool = createWorkflowToolDefinition(options);
+				const ask = vi.fn(async () => ({ allow: true }));
+				const ruleContent = tool.contract.permission.ruleForCall(
+					kind === "saved" ? { kind, name: "audit" } : { kind, definition },
+				);
+				const store: PermissionRuleStore = {
+					snapshot: async () => ({
+						rules:
+							mode === "allow-rule"
+								? [
+										{
+											source: "session",
+											behavior: "allow",
+											toolName: "workflow",
+											ruleContent: ruleContent ?? undefined,
+										},
+									]
+								: [],
+						errors: [],
+						modesBySource: new Map(),
+					}),
+					apply: vi.fn(),
+				};
+				await expect(
+					evaluateToolCall("workflow", kind === "saved" ? { kind, name: "audit" } : { kind, definition }, {
+						getContract: () => tool.contract,
+						getMode: () => (mode === "allow-rule" ? "default" : mode),
+						store,
+						responder: { ask },
+					}),
+				).resolves.toMatchObject({ block: true });
+				expect(ask).not.toHaveBeenCalled();
+				expect(options.buildChildSession).not.toHaveBeenCalled();
+			}
+		},
+	);
 	it("binds saved workflow approval to the resolved digest and session context", async () => {
 		let digest = "digest-a";
 		let sessionId = "session-a";

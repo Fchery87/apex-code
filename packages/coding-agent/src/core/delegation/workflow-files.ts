@@ -156,11 +156,10 @@ export function resolveWorkflowDefinition(cwd: string, name: string): WorkflowDe
 	if (matches.length > 1) throw new Error(`Workflow name "${name}" is ambiguous. Remove duplicate saved definitions.`);
 	const definition = matches[0];
 	if (!definition) {
-		const legacyScript = loadWorkflowScripts(join(resolve(cwd), ".apex-code", "workflows")).scripts.find(
-			(script) => script.name === name,
-		);
+		const legacy = loadWorkflowScripts(join(resolve(cwd), ".apex-code", "workflows"));
+		const legacyScript = legacy.scripts.find((script) => script.name === name);
 		if (legacyScript) throw new Error(`${WORKFLOW_MIGRATION_MESSAGE} Found legacy source at ${legacyScript.path}.`);
-		const legacyDiagnostic = loaded.diagnostics.find((entry) => entry.includes(".js"));
+		const legacyDiagnostic = legacy.diagnostics[0];
 		if (legacyDiagnostic) throw new Error(`${WORKFLOW_MIGRATION_MESSAGE} ${legacyDiagnostic}`);
 		throw new Error(`Saved workflow "${name}" was not found.`);
 	}

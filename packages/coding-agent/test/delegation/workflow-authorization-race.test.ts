@@ -6,6 +6,7 @@ import type { DelegationRuntimeOptions } from "../../src/core/delegation/runtime
 import { workflowDefinitionDigest } from "../../src/core/delegation/workflow-definition.ts";
 import { resolveWorkflowDefinition } from "../../src/core/delegation/workflow-files.ts";
 import { evaluateToolCall } from "../../src/core/permissions/gate.ts";
+import { wrapToolDefinition } from "../../src/core/tools/tool-definition-wrapper.ts";
 import { createWorkflowToolDefinition } from "../../src/core/tools/workflow.ts";
 
 const cwd = process.cwd();
@@ -17,6 +18,70 @@ afterEach(() => {
 });
 
 describe("workflow approval execution identity", () => {
+	it("executes the host-resolved saved definition when process and caller cwd differ", async () => {
+		root = mkdtempSync(join(tmpdir(), "apex-workflow-host-cwd-"));
+		process.chdir(root);
+		const sessionCwd = join(root, "session");
+		mkdirSync(join(sessionCwd, ".apex-code", "workflows"), { recursive: true });
+		writeFileSync(
+			join(sessionCwd, ".apex-code", "workflows", "audit.json"),
+			JSON.stringify({
+				name: "audit",
+				description: "host",
+				definition: {
+					version: 1,
+					steps: [{ id: "one", prompt: "host-authorized" }],
+					output: { from: "one" },
+				},
+			}),
+		);
+		const buildChildSession = vi.fn(async () => ({
+			status: "idle" as const,
+			run: async (prompt: string) => ({ output: prompt }),
+			latestResult: () => undefined,
+			wait: async () => {},
+			interrupt: () => {},
+			close: () => {},
+			sendInput: async () => {},
+			followUp: async () => {},
+			dispose: () => {},
+		}));
+		const runtime: DelegationRuntimeOptions = {
+			resolveAgent: () => ({ name: "explore", description: "read", tools: ["read"], systemPrompt: "read" }),
+			getParentCapabilities: () => new Set(["delegate", "fs.read"]),
+			getToolCapabilities: () => new Set(["fs.read"]),
+			getDelegationDepth: () => 0,
+			maxDelegationDepth: 2,
+			buildChildSession,
+			workflowAuthorization: {
+				resolveSaved: (name) => {
+					const { definition } = resolveWorkflowDefinition(sessionCwd, name);
+					return { definition, digest: workflowDefinitionDigest(definition) };
+				},
+				sessionId: () => "session",
+				trustContext: () => sessionCwd,
+				projectTrusted: () => true,
+			},
+		};
+		const tool = createWorkflowToolDefinition(runtime);
+		const params = { kind: "saved" as const, name: "audit" };
+		const store = { snapshot: async () => ({ rules: [], errors: [], modesBySource: new Map() }), apply: vi.fn() };
+		expect(
+			await evaluateToolCall("workflow", params, {
+				getContract: () => tool.contract,
+				getMode: () => "default",
+				store,
+				responder: { ask: async () => ({ allow: true }) },
+			}),
+		).toEqual({ block: false });
+		try {
+			const result = await wrapToolDefinition(tool).execute("host-cwd", params);
+			expect(result.details?.output).toBe('"host-authorized"');
+			expect(buildChildSession).toHaveBeenCalledOnce();
+		} finally {
+			runtime.childRunRegistry?.dispose();
+		}
+	});
 	it.each(["definition", "session", "trust", "during-approval"])(
 		"refuses a changed %s after permission approval and before dispatch",
 		async (change) => {

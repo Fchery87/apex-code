@@ -87,6 +87,8 @@ export async function evaluateToolCall(
 ): Promise<GateDecision> {
 	const contract = resolveToolContract(options.getContract, toolName);
 	const spec = contract.permission;
+	const denyReason = spec.denyReason?.(params as never);
+	if (denyReason !== undefined) return { block: true, reason: `${toolName} was refused: ${denyReason}.` };
 	if (spec.prepareCall) spec.prepareCall(params as never);
 	const snapshot = await options.store.snapshot();
 	if (snapshot.errors.length > 0) {

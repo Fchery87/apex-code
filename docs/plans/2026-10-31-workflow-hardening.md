@@ -60,7 +60,7 @@ The current slice implements [the draft spec](../specs/2026-10-31-workflow-harde
 | Task | State | Verified commit |
 | --- | --- | --- |
 | H1 | Reconstructed fail-closed slice plus home-discovery isolation repair. Focused gates, hook check, build, installed consumer smoke and ten installed-CLI refusal probes passed. Full suite, PTY/media, perf and review gates remain open. | Pending complete acceptance at `6300a200d` |
-| H2 | Reconstructed validated JSON loader, schema/output validation, host identity approval and sequential interpreter. Focused eight files / 54 tests and TypeScript passed before parent isolation repair. Exact-head full-suite and live gates remain open. | None |
+| H2 | Independent review of `e8595d979` reproduced pointer-regex denial of service, incorrect legacy diagnostics, context-free saved-resolution drift and untrusted approval prompting. Repairs passed the coordinator's 27-file / 399-test workflow and permission gate plus TypeScript. Root `npm test` stopped at the local shared-node_modules SBOM consistency check, not a passing suite. Hook check and renewed exact-head live, performance and hosted CI gates remain required. | Review repair under validation after `e8595d979` |
 | H3 | Pending reconstruction. Lifecycle repairs on the recovery branch are not H1 evidence. | None |
 | H4 | Pending reconstruction. Verification and product-claim repairs on the recovery branch are not H1 evidence. | None |
 

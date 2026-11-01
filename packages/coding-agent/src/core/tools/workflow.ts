@@ -5,7 +5,6 @@ import { formatHiddenLines } from "../../modes/interactive/components/keybinding
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import type { DelegationRuntimeOptions } from "../delegation/runtime.ts";
 import { parseWorkflowDefinition, workflowDefinitionDigest } from "../delegation/workflow-definition.ts";
-import { resolveWorkflowDefinition } from "../delegation/workflow-files.ts";
 import { parseWorkflowRequest, runWorkflow, type WorkflowRunResult } from "../delegation/workflow-run.ts";
 import type { ApexToolDefinition, EvidenceRecord } from "./contract.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -79,7 +78,7 @@ export function createWorkflowToolDefinition(
 					const key = authorizationKey(params);
 					if (key) preparedCalls.set(params, key);
 				},
-				protectedTarget: () => {
+				denyReason: () => {
 					if (runtime.workflowAuthorization && !runtime.workflowAuthorization.projectTrusted())
 						return "the project is not trusted for workflow execution";
 					return undefined;
@@ -137,7 +136,7 @@ export function createWorkflowToolDefinition(
 				const request = parseWorkflowRequest(input);
 				const definition =
 					request.kind === "saved"
-						? resolveWorkflowDefinition(ctx?.cwd ?? process.cwd(), request.name).definition
+						? parseWorkflowDefinition(runtime.workflowAuthorization.resolveSaved(request.name).definition)
 						: parseWorkflowDefinition(request.definition);
 				const expectedDigest = JSON.parse(key).digest;
 				if (workflowDefinitionDigest(definition) !== expectedDigest)
