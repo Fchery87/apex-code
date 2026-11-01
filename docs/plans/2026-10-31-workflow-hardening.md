@@ -1,6 +1,6 @@
 # Workflow hardening implementation plan
 
-**Status:** Active. H1 disables executable workflows. This reconstructed H2 branch introduces validated JSON interpretation and host-bound identity. Bounded lifecycle follows in H3 and verification in H4. The prior combined implementation remains a recovery reference, not this branch's acceptance evidence. All phases remain open.
+**Status:** Active. H1 disables executable workflows and H2 introduces validated JSON interpretation and host-bound identity. This reconstructed H3 branch adds bounded admission, cancellation and explicit terminal outcomes. Verification follows in H4. The prior combined implementation remains a recovery reference, not this branch's acceptance evidence. All phases remain open.
 
 **Goal.** Make existing workflows safe to invoke and bounded before adding durable delivery automation.
 **Architecture.** Replace JavaScript execution with validated data interpreted over the existing delegation runtime. Keep permission, child ownership, and session storage authoritative in their current modules.
@@ -61,10 +61,12 @@ The current slice implements [the draft spec](../specs/2026-10-31-workflow-harde
 | --- | --- | --- |
 | H1 | Reconstructed fail-closed slice plus home-discovery isolation repair. Focused gates, hook check, build, installed consumer smoke and ten installed-CLI refusal probes passed. Full suite, PTY/media, perf and review gates remain open. | Pending complete acceptance at `6300a200d` |
 | H2 | Review repairs at `41cd6862c` passed 27 files / 399 tests, TypeScript and enabled hooks. Exact-head packed consumer passed, but installed CLI returned 14/15: a legacy saved workflow lost migration guidance through an obsolete digest-only SDK fallback. A real trusted SDK regression reproduced that diagnostic failure. Removing the fallback preserved fail-closed migration, then three files / 23 tests and TypeScript passed. Root `npm test` remains blocked by local shared-node_modules SBOM consistency. Renewed head-specific gates remain required. | Legacy diagnostic repair under validation after `41cd6862c` |
-| H3 | Pending reconstruction. Lifecycle repairs on the recovery branch are not H1 evidence. | None |
+| H3 | Reconstructed scheduler, finite deadline, construction cancellation, late-handle cleanup and structured failed/cancelled/blocked outcomes. Exact-head validation pending. | None |
 | H4 | Pending reconstruction. Verification and product-claim repairs on the recovery branch are not H1 evidence. | None |
 
 ### Order changes
+
+H3 starts from `ba84782dc`, verified as a commit object. Recovery lifecycle code was restored only after advancing the H3 parent. The inherited H2 schema-failure test ran red because it expected a thrown error where H3 now returns failed and blocked step outcomes. Its replacement asserts those public outcomes and still requires one child start and one close. The H2 interpreter tests remain in the stack rather than being discarded during recovery.
 
 H2 starts from `6300a200d`, verified as a commit object. The sequential interpreter deliberately leaves scheduling, bounded cancellation and explicit failed-step outcomes to H3. Host-bound approval, including the approval-to-execution identity recheck, belongs to H2 because a definition must not execute under a name-only grant. The universal permission fixture now uses a JSON request rather than an obsolete script body. H1's installed refusal probes only demonstrate fail-closed behavior, not H2's digest/session/trust predicates. No reconstructed phase is accepted from recovery receipts.
 
