@@ -272,6 +272,13 @@ export interface DelegationRuntimeOptions {
 	getParentSessionId?: () => string;
 	buildChildSession: (request: BuildChildSessionRequest) => Promise<ChildSessionHandle>;
 	childRunRegistry?: ChildRunRegistry;
+	/** Host-resolved identity binding workflow approval to source and session context. */
+	workflowAuthorization?: {
+		resolveSaved(name: string): { digest: string; definition?: unknown };
+		sessionId(): string;
+		trustContext(): string;
+		projectTrusted(): boolean;
+	};
 	/** Durable session owner. Records are appended to the parent session's existing log. */
 	persistChildRun?: (record: ChildRunRecord) => void;
 	/** Optional workspace owner. It is responsible for real isolation and cleanup. */

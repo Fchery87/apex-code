@@ -101,8 +101,7 @@ import type {
 	DelegationRuntimeOptions,
 } from "./delegation/runtime.ts";
 import { RESUME_CHILD_PROMPT, runDelegation } from "./delegation/runtime.ts";
-import { loadWorkflowScripts } from "./delegation/workflow-files.ts";
-import { WORKFLOW_MIGRATION_MESSAGE } from "./delegation/workflow-run.ts";
+import { loadWorkflowDefinitions, loadWorkflowScripts } from "./delegation/workflow-files.ts";
 import { SessionEvidenceSink } from "./evidence.ts";
 import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.ts";
 import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
@@ -2860,10 +2859,46 @@ export class AgentSession {
 		const spaceIndex = text.indexOf(" ");
 		const name = spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex);
 		if (!name || name.includes(":") || name.includes("/")) return false;
-		const loaded = loadWorkflowScripts(join(this._cwd, ".apex-code", "workflows"));
-		const script = loaded.scripts.find((entry) => entry.name === name);
-		if (!script) return false;
-		throw new Error(WORKFLOW_MIGRATION_MESSAGE);
+		const workflowDir = join(this._cwd, ".apex-code", "workflows");
+		const definitionFile = loadWorkflowDefinitions(workflowDir).definitions.find((entry) => entry.name === name);
+		const script = loadWorkflowScripts(workflowDir).scripts.find((entry) => entry.name === name);
+		if (!definitionFile && !script) return false;
+		const definition = this.getToolDefinition("workflow") as ApexToolDefinition | undefined;
+		if (!definition?.execute) return false;
+		const argsText = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1).trim();
+		let args: unknown;
+		if (argsText) {
+			try {
+				args = JSON.parse(argsText);
+			} catch {
+				args = argsText;
+			}
+		}
+		const params = { kind: "saved" as const, name, args, runId: name };
+		if (this._permissionGate) {
+			const decision = await evaluateToolCall("workflow", params, {
+				...this._permissionGate,
+				getContract: (toolName) => {
+					const contract = (this.getToolDefinition(toolName) as Partial<ApexToolDefinition> | undefined)?.contract;
+					if (toolName !== "workflow" || this.settingsManager.isProjectTrusted() || !contract) return contract;
+					return { ...contract, permission: { ...contract.permission, allowRuleGrants: () => false } };
+				},
+			});
+			if (decision.block) {
+				this._extensionRunner.emitError({
+					extensionPath: definitionFile?.path ?? script?.path ?? workflowDir,
+					event: "workflow",
+					error: decision.reason ?? "workflow denied",
+				});
+				return true;
+			}
+		}
+		const result = await definition.execute("workflow-command", params, undefined, undefined, {
+			hasUI: this._extensionUIContext !== undefined,
+			cwd: this._cwd,
+		} as ExtensionContext);
+		const output = (result as { content?: { text?: string }[] }).content?.[0]?.text ?? "";
+		return `Workflow "${name}" returned: ${output}`;
 	}
 
 	private async _tryExecuteExtensionCommand(text: string): Promise<boolean> {

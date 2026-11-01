@@ -87,6 +87,8 @@ export async function evaluateToolCall(
 ): Promise<GateDecision> {
 	const contract = resolveToolContract(options.getContract, toolName);
 	const spec = contract.permission;
+	const denyReason = spec.denyReason?.(params as never);
+	if (denyReason !== undefined) return { block: true, reason: `${toolName} was refused: ${denyReason}.` };
 	if (spec.prepareCall) spec.prepareCall(params as never);
 	const snapshot = await options.store.snapshot();
 	if (snapshot.errors.length > 0) {
@@ -106,7 +108,10 @@ export async function evaluateToolCall(
 		protectedTarget,
 	);
 
-	if (resolution.behavior === "allow") return { block: false };
+	if (resolution.behavior === "allow") {
+		spec.onApproved?.(params as never);
+		return { block: false };
+	}
 
 	if (resolution.behavior === "deny") {
 		return { block: true, reason: describeDecision(contract, toolName, resolution.rule?.ruleContent) };
@@ -144,6 +149,7 @@ export async function evaluateToolCall(
 	if (!answer.allow) {
 		return { block: true, reason: describeDecline(toolName, answer.guidance) };
 	}
+	spec.onApproved?.(params as never);
 	return { block: false };
 }
 

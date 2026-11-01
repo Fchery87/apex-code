@@ -36,6 +36,9 @@ export interface PermissionSpec<TParams extends TSchema = TSchema> {
 	/** Behavior when no rule matches. Read-only tools may default to "allow". */
 	defaultBehavior: PermissionBehavior;
 
+	/** Non-overridable admission refusal, checked before rules, modes, or interactive approval. */
+	denyReason?(params: Static<TParams>): string | undefined;
+
 	/**
 	 * Per-call behavior when no rule matches, for tools whose calls differ in
 	 * nature (bash: launching a command is "ask", retrieving or killing an
@@ -72,6 +75,8 @@ export interface PermissionSpec<TParams extends TSchema = TSchema> {
 
 	/** Prepare canonical operation facts on the validated call before authorization and execution. */
 	prepareCall?(params: Static<TParams>): void;
+	/** Record approval only after the gate has allowed this exact prepared call. */
+	onApproved?(params: Static<TParams>): void;
 
 	/**
 	 * Describe, for a human about to approve it, what this call would change.
