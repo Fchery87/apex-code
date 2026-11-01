@@ -42,7 +42,7 @@ export function createWorkflowToolDefinition(
 		contract: {
 			capabilities: new Set(["delegate"]),
 			permission: {
-				defaultBehavior: "ask",
+				defaultBehavior: "deny",
 				matches: () => false,
 				describe: () => "Workflow execution is disabled during migration",
 				ruleForCall: () => null,

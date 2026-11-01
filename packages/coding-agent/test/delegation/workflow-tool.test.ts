@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DelegationRuntimeOptions } from "../../src/core/delegation/runtime.ts";
+import { evaluateToolCall } from "../../src/core/permissions/gate.ts";
+import type { PermissionRuleStore } from "../../src/core/permissions/store.ts";
 import { createWorkflowTool, createWorkflowToolDefinition } from "../../src/core/tools/workflow.ts";
 
 function runtime(): DelegationRuntimeOptions {
@@ -40,6 +42,33 @@ describe("workflow tool migration boundary", () => {
 		const permission = createWorkflowToolDefinition(runtime()).contract.permission;
 		expect(permission.matches("*", { script: "return 3", name: "audit" })).toBe(false);
 		expect(permission.ruleForCall?.({ script: "return 3", name: "audit" })).toBeNull();
+	});
+
+	it("denies disabled workflows without asking or dispatching", async () => {
+		const responder = { ask: vi.fn(async () => ({ allow: true })) };
+		const store = {
+			snapshot: async () => ({ rules: [], modesBySource: new Map(), errors: [] }),
+			apply: vi.fn(async () => undefined),
+		} as unknown as PermissionRuleStore;
+		const tool = createWorkflowToolDefinition(runtime());
+
+		const decision = await evaluateToolCall(
+			"workflow",
+			{ script: "return 3" },
+			{
+				getContract: () => tool.contract,
+				store,
+				getMode: () => "default",
+				responder,
+			},
+		);
+
+		expect(decision).toEqual({
+			block: true,
+			reason: "workflow is not permitted by the current permission configuration.",
+		});
+		expect(responder.ask).not.toHaveBeenCalled();
+		expect(store.apply).not.toHaveBeenCalled();
 	});
 
 	it("refuses at the wrapped public tool boundary too", async () => {

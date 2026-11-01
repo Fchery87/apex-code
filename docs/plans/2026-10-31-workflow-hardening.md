@@ -10,6 +10,8 @@
 
 One box is one unit of work. Every box names the evidence that checks it. Check a box only when its evidence exists. Keep logs and media under `.apex-code/modernization/` by PR and head SHA.
 
+H1 through H4 are dependency-ordered review slices within the single active workflow-hardening roadmap phase, not plans for future roadmap phases. The operator authorized reconstructing this existing implementation as one four-PR stack. No delivery or automation phase beyond workflow hardening is planned here.
+
 Execute through `/home/nochaserz/.agents/skills/poteto-mode/playbooks/autopilot-stack.md`. The operator owns landing. The operator authorized implementation, commits, push, and review PR creation in this session on 2026-10-31. This supersedes the earlier planning-only restriction. Do not merge or enable auto-merge.
 
 Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
@@ -106,7 +108,6 @@ After H1, count remaining public invocation paths and shared files before assign
 **Build.**
 
 - [ ] Refuse executable JavaScript through both the tool and public runner before any child dispatch. Ship a clear migration diagnostic while H2 is pending.
-- [ ] Replace name-plus-body requests with saved or inline variants. Resolve saved source host-side and bind approval to session, trust context, and digest. Reject path-like run IDs before storage access.
 - [ ] Remove module-global approvedBodies authority. Test the full permission gate instead of calling only the tool execute method.
 
 **You see.**
@@ -115,7 +116,7 @@ After H1, count remaining public invocation paths and shared files before assign
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] Run `npm run test --workspace packages/coding-agent -- test/delegation/workflow-tool.test.ts test/delegation/workflow-command.test.ts`. Save the intended red failure and final green output. Add cases for every live scenario below at the public boundary.
+- [ ] Run `npm run test --workspace packages/coding-agent -- test/delegation/workflow.test.ts test/delegation/workflow-tool.test.ts test/delegation/workflow-command.test.ts`. Save the intended red failure and final green output. Add cases for every live scenario below at the public boundary.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `inherit-parent` at the PR head, in waves under the boot recipe.
 
@@ -146,6 +147,8 @@ After H1, count remaining public invocation paths and shared files before assign
 - [ ] Obtain an independent clean verdict at the exact head. Complete review-comment triage. Root appends the verified PR to the linear stack. The operator lands it.
 
 ## Interpret validated workflow definitions (H2)
+
+The H2 slice also replaces name-plus-body requests with saved or inline variants, resolves saved source host-side, binds approval to session, trust context and digest, and rejects path-like run IDs before storage access. H1 only refuses executable workflows and removes their old approval authority.
 
 **Depends on.** H1.
 
