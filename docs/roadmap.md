@@ -151,7 +151,8 @@ capable and measurably worse.
 | Optional bash confinement | **landed** at `6999944ab`. Off by default. The user file is the only switch. A present `bwrap` runs the helper argv. A missing helper refuses the call. No host allowlist. See [ADR 0038](adr/0038-optional-bash-confinement.md). | [spec](specs/2026-10-23-shell-confinement.md) | — |
 | Session commands and settings | **active**. `/diff`, command aliases, `/context`, grouped settings, and `/rewind`. | [spec](specs/2026-10-24-session-commands-and-settings.md) | — |
 | Coding-turn quality | **active** — slices 1, 2, 3, 5, and 7 are in the tree and locally tested. Slice 6 has the indent hint only. Slices 4, 8, 9, and 10 are not started. | [spec](specs/2026-10-23-coding-turn-quality.md) | [plan](plans/2026-10-23-coding-turn-quality.md) |
-| Workflow orchestration | **landed** 2026-10-27. Runner, tool, loader, `/<name>`, `phase()`, the 100-call cap, and the untrusted-project ask. Phase counts are on the tool result, not `agent list`. | [spec](specs/2026-10-26-workflow-orchestration.md) | — |
+| Workflow orchestration | **superseded** 2026-10-31. The original JavaScript runner shipped on 2026-10-27. Its execution format and completion claims are replaced by the active hardening slice. | [historical spec](specs/2026-10-26-workflow-orchestration.md) · [hardening spec](specs/2026-10-31-workflow-hardening.md) | [plan](plans/2026-10-31-workflow-hardening.md) |
+| Workflow hardening | **active**. Four review boundaries are being reconstructed from the combined recovery branch. H1 disables executable workflows. JSON interpretation, bounded lifecycle, verification alignment, and acceptance gates follow in H2 through H4. No phase is complete. | [spec](specs/2026-10-31-workflow-hardening.md) | [plan](plans/2026-10-31-workflow-hardening.md) |
 
 ---
 
@@ -1402,6 +1403,7 @@ takes the next free number instead of a reserved one.
 | 0036 | vitest is raised in the forked workspaces; the five frozen ones wait for upstream, and a root override cannot substitute | follow-up | ✅ |
 | 0037 | A permission mode chosen inside a running interactive session governs that session, ranks above `flag`, changes the mode only, and is never persisted | follow-up | ✅ |
 | 0038 | Optional bash confinement covers `bash` only, is off unless the user file turns it on, and does not restore the sandbox | follow-up | ✅ |
+| 0039 | Workflow definitions are data. Legacy JavaScript is refused and child authority stays in the delegation runtime. | follow-up | ✅ |
 
 ## Cross-phase contracts
 
@@ -1439,3 +1441,19 @@ Defended non-goals, so they stop coming back:
   existed called no model and fabricated its numbers. The Phase 0 replay corpus is
   the honest, affordable version. Re-proposing a full eval suite must re-open that
   framing decision, not resume a paused phase.
+
+## Modernization sequence after the October 31 review
+
+The [review](research/2026-10-31-modernization-review.md) supersedes older capability gap lists. Implement the current workflow-hardening slice before expanding autonomous work. The table below records candidate outcomes and entry gates. It is not a set of future specs or live implementation plans.
+
+| Order | Candidate outcome | Entry and exit evidence |
+| --- | --- | --- |
+| 1 | Workflow hardening | Active spec and plan above. Exit requires public-boundary safety tests, bounded execution, truthful claims, packed-runtime checks, and three-OS CI. |
+| 2 | Durable job and step ownership | Start after hardening exits. Reuse child registry, idempotency keys, leases, and existing persistence. Prove crash recovery between dispatch intent and handle persistence, out-of-order completion, failed writes, artifact freshness, cancellation, and uncertain effects becoming blocked. |
+| 3 | Outcome evaluations and local browser verification | Start after recoverable steps exist. Explicitly revisit the model-evaluation non-goal before approving live task trials. Grade resulting code and behavior on scratch repositories with repeated provider trials and cost per success. Browser evidence requires actual local Chrome interaction, assertions, and traces under declared tool contracts. |
+| 4 | One local task-to-reviewable-PR workflow | Start after representative acceptance checks can grade the result. Connect intake, criteria, environment, implementation, verification, integration, and PR artifacts. Prove restart and duplicate submission handling. Human approval owns merge and release. Publish supported operator-owned environment profiles without restoring a built-in OS sandbox. |
+| 5 | Parallel integration and operator control | Start after the single delivery workflow passes failure tests. Prove base-revision handoff, conflict blocking, ordered integration, combined tests, dirty-tree retention, rollback, job inspection, pause/cancel/retry, and correlated traces. |
+| 6 | Triggers and optional runners | Start after local integration is dependable. Use explicit external scheduler and self-hosted runner adapters. Prove event deduplication, authentication, budgets, credential separation, expired credentials, offline periods, artifact transfer, and restart reconciliation. No unowned hosted defaults. |
+| 7 | Evidence-selected additions | Start only when task outcomes justify them. Candidates include memory relevance and lifecycle, semantic rename/code actions, adaptive routing, peer collaboration, richer clients, and cross-repository work. Preserve reviewed memory, ACP, MCP, provider neutrality, and upstream boundaries. |
+
+Do not delete experimental upstream packages or stale plans from a capability review alone. Require reachability, compatibility, and ownership evidence first. Correct the current documentation where a claim is disproved. Keep historical research intact.

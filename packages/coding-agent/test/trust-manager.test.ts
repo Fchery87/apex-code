@@ -79,7 +79,7 @@ describe("project resource registry", () => {
 
 	beforeEach(() => {
 		tempDir = join(tmpdir(), `trust-registry-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		cwd = join(tempDir, "project");
+		cwd = join(tempDir, "home", "project");
 		mkdirSync(cwd, { recursive: true });
 		originalHome = process.env.HOME;
 		process.env.HOME = join(tempDir, "home");

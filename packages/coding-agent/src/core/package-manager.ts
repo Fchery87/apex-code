@@ -473,6 +473,7 @@ function collectAncestorAgentsSkillDirs(startDir: string): string[] {
 	while (true) {
 		if (dir === homeDir && dir !== resolvedStartDir) break;
 		skillDirs.push(join(dir, ".agents", "skills"));
+		if (dir === homeDir) break;
 		if (gitRepoRoot && dir === gitRepoRoot) {
 			break;
 		}

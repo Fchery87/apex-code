@@ -102,6 +102,7 @@ import type {
 } from "./delegation/runtime.ts";
 import { RESUME_CHILD_PROMPT, runDelegation } from "./delegation/runtime.ts";
 import { loadWorkflowScripts } from "./delegation/workflow-files.ts";
+import { WORKFLOW_MIGRATION_MESSAGE } from "./delegation/workflow-run.ts";
 import { SessionEvidenceSink } from "./evidence.ts";
 import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.ts";
 import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
@@ -2852,8 +2853,7 @@ export class AgentSession {
 	}
 
 	/**
-	 * Run /<name> when <name> is a saved workflow script. The call goes through
-	 * the same permission gate as a model tool call, then the tool runs the script.
+	 * Refuse a saved legacy workflow before permission or tool dispatch.
 	 * An unknown name returns false so the text stays a normal prompt.
 	 */
 	private async _tryRunWorkflowCommand(text: string): Promise<boolean | string> {
@@ -2863,41 +2863,7 @@ export class AgentSession {
 		const loaded = loadWorkflowScripts(join(this._cwd, ".apex-code", "workflows"));
 		const script = loaded.scripts.find((entry) => entry.name === name);
 		if (!script) return false;
-		const definition = this.getToolDefinition("workflow") as ApexToolDefinition | undefined;
-		if (!definition?.execute) return false;
-		const argsText = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1).trim();
-		let args: unknown;
-		if (argsText) {
-			try {
-				args = JSON.parse(argsText);
-			} catch {
-				args = argsText;
-			}
-		}
-		const params = { script: script.body, name: script.name, args, runId: script.name };
-		if (this._permissionGate) {
-			const decision = await evaluateToolCall("workflow", params, {
-				...this._permissionGate,
-				getContract: (toolName) => {
-					const contract = (this.getToolDefinition(toolName) as Partial<ApexToolDefinition> | undefined)?.contract;
-					if (toolName !== "workflow" || this.settingsManager.isProjectTrusted() || !contract) return contract;
-					return { ...contract, permission: { ...contract.permission, allowRuleGrants: () => false } };
-				},
-			});
-			if (decision.block) {
-				this._extensionRunner.emitError({
-					extensionPath: script.path,
-					event: "workflow",
-					error: decision.reason ?? "workflow denied",
-				});
-				return true;
-			}
-		}
-		const result = await definition.execute("workflow-command", params, undefined, undefined, {
-			hasUI: this._extensionUIContext !== undefined,
-		} as ExtensionContext);
-		const output = (result as { content?: { text?: string }[] }).content?.[0]?.text ?? "";
-		return `Workflow "${script.name}" returned: ${output}`;
+		throw new Error(WORKFLOW_MIGRATION_MESSAGE);
 	}
 
 	private async _tryExecuteExtensionCommand(text: string): Promise<boolean> {
