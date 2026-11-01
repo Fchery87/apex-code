@@ -282,8 +282,16 @@ async function executeDefinition(
 	} finally {
 		if (signal) signal.removeEventListener("abort", relayAbort);
 	}
+	const outputSource = definition.output.from;
+	const terminalOutputUnavailable =
+		outputSource !== "args" &&
+		!outputs.has(outputSource) &&
+		calls.some((call) => call.stepId === outputSource && (call.outcome === "failed" || call.outcome === "blocked"));
 	return {
-		value: batchController.signal.aborted ? undefined : selectWorkflowReference(definition.output, args, outputs),
+		value:
+			batchController.signal.aborted || terminalOutputUnavailable
+				? undefined
+				: selectWorkflowReference(definition.output, args, outputs),
 		outcome: workflowCancelled ? "cancelled" : workflowFailed ? "failed" : "succeeded",
 		calls,
 		phases: [...phases.values()],

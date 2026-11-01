@@ -411,4 +411,31 @@ describe("runWorkflow", () => {
 		expect(result.calls.find((call) => call.stepId === "blocked")?.outcome).toBe("blocked");
 		expect(result.calls.find((call) => call.stepId === "independent")?.outcome).toBe("succeeded");
 	});
+	it.each(["failure", "blocked"])(
+		"preserves terminal outcome when declared output points to a %s step",
+		async (outputFrom) => {
+			const build = child(async (task) => {
+				if (task === "fail") throw new Error("branch failed");
+				return task;
+			});
+			const result = await runWorkflow(
+				options(build),
+				request({
+					version: 1,
+					failurePolicy: "continue-independent",
+					steps: [
+						{ id: "failure", prompt: "fail" },
+						{ id: "independent", prompt: "keep going" },
+						{ id: "blocked", needs: ["failure"], prompt: "must not run" },
+					],
+					output: { from: outputFrom },
+				}),
+			);
+
+			expect(result).toMatchObject({ outcome: "failed", value: undefined });
+			expect(result.calls.map((call) => call.outcome)).toEqual(
+				expect.arrayContaining(["failed", "succeeded", "blocked"]),
+			);
+		},
+	);
 });
