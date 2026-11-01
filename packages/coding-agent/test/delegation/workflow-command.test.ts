@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fauxProvider } from "@earendil-works/pi-ai";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentSession } from "../../src/core/agent-session.ts";
 import { AuthStorage } from "../../src/core/auth-storage.ts";
 import { ModelRuntime } from "../../src/core/model-runtime.ts";
@@ -14,15 +14,22 @@ import { createHarness } from "../test-harness.ts";
 import { createTestExtensionsResult, createTestResourceLoader } from "../utilities.ts";
 
 /**
- * /<name> loads a saved workflow and the tool runs it. The parent prompt is the
- * script's return value, not the script and not a child's transcript.
+ * /<name> recognizes a saved legacy workflow, but refuses before dispatch.
  */
 
 const cleanups: Array<() => void> = [];
 const sessions: AgentSession[] = [];
 const scratches: string[] = [];
+const originalCwd = process.cwd();
+
+beforeEach(async () => {
+	const cwd = await scratchDir("apex-workflow-command-cwd-");
+	scratches.push(cwd);
+	process.chdir(cwd);
+});
 
 afterEach(async () => {
+	process.chdir(originalCwd);
 	while (cleanups.length > 0) cleanups.pop()?.();
 	for (const session of sessions.splice(0)) session.dispose();
 	for (const dir of scratches.splice(0)) await rmScratchResilient(dir);
@@ -35,20 +42,16 @@ function saveScript(dir: string, name: string, body: string): void {
 }
 
 describe("workflow slash command", () => {
-	it("runs a saved script and sends its return value as the prompt", async () => {
+	it("refuses a saved script without sending a model prompt", async () => {
 		const harness = await createHarness({ responses: ["done"] });
 		cleanups.push(harness.cleanup);
 		saveScript(harness.tempDir, "audit", 'return ["one", "two"];');
 
-		await harness.session.prompt("/audit");
-
-		const user = harness.session.messages.find((message) => message.role === "user");
-		const content = user && user.role === "user" && typeof user.content !== "string" ? user.content : [];
-		const text = content.find((part) => part.type === "text");
-		expect(text && "text" in text ? text.text : "").toBe('Workflow "audit" returned: ["one","two"]');
+		await expect(harness.session.prompt("/audit")).rejects.toThrow(/workflow.*disabled.*migration/i);
+		expect(harness.session.messages.filter((message) => message.role === "user")).toHaveLength(0);
 	});
 
-	it("asks before a saved script runs when the project is untrusted", async () => {
+	it("refuses before asking even when an allow rule names an untrusted script", async () => {
 		const cwd = await scratchDir("apex-workflow-untrusted-");
 		scratches.push(cwd);
 		saveScript(cwd, "audit", "return 1;");
@@ -95,18 +98,18 @@ describe("workflow slash command", () => {
 		});
 		sessions.push(session);
 
-		await session.prompt("/audit");
+		await expect(session.prompt("/audit")).rejects.toThrow(/workflow.*disabled.*migration/i);
 
-		expect(asked).toEqual(["workflow"]);
+		expect(asked).toEqual([]);
 		expect(session.messages.filter((message) => message.role === "user")).toHaveLength(0);
 	});
 
-	it("passes JSON args through and leaves an unknown name as the prompt", async () => {
+	it("refuses arguments too and leaves an unknown name as the prompt", async () => {
 		const harness = await createHarness({ responses: ["done", "done"] });
 		cleanups.push(harness.cleanup);
 		saveScript(harness.tempDir, "audit", "return args;");
 
-		await harness.session.prompt('/audit {"paths":2}');
+		await expect(harness.session.prompt('/audit {"paths":2}')).rejects.toThrow(/workflow.*disabled.*migration/i);
 		await harness.session.prompt("/missing");
 
 		const texts = harness.session.messages
@@ -114,7 +117,6 @@ describe("workflow slash command", () => {
 			.map((message) => (message.role === "user" && typeof message.content !== "string" ? message.content : []))
 			.map((content) => content.find((part) => part.type === "text"))
 			.map((part) => (part && "text" in part ? part.text : ""));
-		expect(texts[0]).toBe('Workflow "audit" returned: {"paths":2}');
-		expect(texts[1]).toBe("/missing");
+		expect(texts).toEqual(["/missing"]);
 	});
 });

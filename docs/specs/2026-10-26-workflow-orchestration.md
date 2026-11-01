@@ -1,6 +1,8 @@
 # Spec: Workflow orchestration over the delegation runtime
 
-**Status:** Landed
+**Status:** Superseded
+
+The JavaScript workflow format shipped on 2026-10-27. The workflow hardening H1 slice now disables its runner, tool, and saved slash-command before dispatch. The replacement JSON graph is specified in [the hardening spec](2026-10-31-workflow-hardening.md) and follows in H2. This historical document does not describe the current executable boundary.
 
 Landed 2026-10-27. The runner, the tool, the loader, `/<name>`, and `phase()` are tested. A workflow closes each child when it finishes, so `apex-code agent list` stays a list of live child runs. Phase titles, the call count under each, and a warning past 25 calls are on the tool result. A run stops at 100 calls. `/<name>` in an untrusted project asks even when a user rule allows the name.
 
