@@ -64,6 +64,8 @@ The current slice implements [the draft spec](../specs/2026-10-31-workflow-harde
 
 ### Order changes
 
+H1 reconstruction at `ff00f4783` passed the focused workflow gate: three files and 16 tests, then the full hook check and offline build. The root suite exceeded the tool's hard 600-second wall-time cap and was killed without a final receipt; this is not a passing suite. The earlier recovery's home-directory discovery repair was initially omitted from reconstruction. It is included in H1 because otherwise scratch fixtures discover host resources and the branch measures external state. The two package/trust files passed 137 tests after restoring that already-proven repair. `ff00f4783` and the earlier no-wrapper commit `d83910aff` have identical tree IDs, but the hook-enabled amended commit is the delivery reference. Long suite retries use detached receipt launchers.
+
 The combined local implementation did not preserve the four review boundaries. The operator authorized reconstruction on 2026-11-01. H1 now removes executable workflow authority without exposing a partial JSON runner. H2 introduces the JSON graph and host identity, H3 enforces admission and terminal lifecycle, and H4 aligns verification and claims. This order makes every PR independently reviewable. Historical recovery receipts below describe the preserved combined branch only and must not be counted against reconstructed heads.
 
 ### Recovery audit

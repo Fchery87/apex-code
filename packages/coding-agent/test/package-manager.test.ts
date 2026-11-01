@@ -80,6 +80,7 @@ describe("DefaultPackageManager", () => {
 		delete process.env.PI_OFFLINE;
 		tempDir = join(tmpdir(), `pm-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		mkdirSync(tempDir, { recursive: true });
+		vi.stubEnv("HOME", tempDir);
 		agentDir = join(tempDir, "agent");
 		mkdirSync(agentDir, { recursive: true });
 
@@ -389,6 +390,7 @@ Content`,
 
 	describe(".agents/skills auto-discovery", () => {
 		it("should scan .agents/skills from cwd up to git repo root", async () => {
+			vi.stubEnv("HOME", join(tempDir, "home"));
 			const repoRoot = join(tempDir, "repo");
 			const nestedCwd = join(repoRoot, "packages", "feature");
 			mkdirSync(nestedCwd, { recursive: true });
@@ -490,6 +492,20 @@ Content`,
 				if (previousHome === undefined) delete process.env.HOME;
 				else process.env.HOME = previousHome;
 			}
+		});
+
+		it("does not load ancestor skills when invoked at the home directory", async () => {
+			const home = join(tempDir, "home");
+			vi.stubEnv("HOME", home);
+			mkdirSync(home, { recursive: true });
+			const aboveHome = join(tempDir, ".agents", "skills", "above-home", "SKILL.md");
+			mkdirSync(join(tempDir, ".agents", "skills", "above-home"), { recursive: true });
+			writeFileSync(aboveHome, "---\nname: above-home\ndescription: above\n---\n");
+			const pm = new DefaultPackageManager({ cwd: home, agentDir, settingsManager });
+
+			const result = await pm.resolve();
+
+			expect(result.skills.some((resource) => resource.path === aboveHome)).toBe(false);
 		});
 
 		it("should keep ~/.agents/skills user-scoped when cwd is under home in a non-git directory", async () => {
