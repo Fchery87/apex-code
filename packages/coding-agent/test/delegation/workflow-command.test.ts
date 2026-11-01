@@ -35,7 +35,7 @@ function saveScript(dir: string, name: string, body: string): void {
 }
 
 describe("workflow slash command", () => {
-	it("runs a saved tool call from session cwd rather than process cwd", async () => {
+	it.each(["json", "legacy"])("resolves a saved %s workflow from session cwd", async (format) => {
 		const previousCwd = process.cwd();
 		const root = await scratchDir("apex-workflow-sdk-cwd-");
 		scratches.push(root);
@@ -87,6 +87,12 @@ describe("workflow slash command", () => {
 			});
 			sessions.push(session);
 			const call = fauxToolCall("workflow", { kind: "saved", name: "audit" });
+			if (format === "legacy") {
+				saveScript(cwd, "legacy", "throw new Error('must not execute');");
+				await expect(session.prompt("/legacy")).rejects.toThrow(/Legacy JavaScript.*versioned JSON/i);
+				expect(faux.state.callCount).toBe(0);
+				return;
+			}
 			faux.setResponses([
 				fauxAssistantMessage([call], { stopReason: "toolUse" }),
 				fauxAssistantMessage("session-workflow-output"),

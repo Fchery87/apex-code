@@ -27,7 +27,7 @@ import {
 	type DelegationRuntimeOptions,
 } from "./delegation/runtime.ts";
 import { workflowDefinitionDigest } from "./delegation/workflow-definition.ts";
-import { loadWorkflowScripts, resolveWorkflowDefinition } from "./delegation/workflow-files.ts";
+import { resolveWorkflowDefinition } from "./delegation/workflow-files.ts";
 import { createCommandJournalRecorder } from "./durable-state/command-journal.ts";
 import { DURABLE_STATE_DATABASE_FILENAME } from "./durable-state/sqlite.ts";
 import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
@@ -668,16 +668,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			childRunRegistry,
 			workflowAuthorization: {
 				resolveSaved: (name) => {
-					try {
-						const { definition } = resolveWorkflowDefinition(cwd, name);
-						return { digest: workflowDefinitionDigest(definition), definition };
-					} catch (error) {
-						const legacy = loadWorkflowScripts(join(cwd, ".apex-code", "workflows")).scripts.find(
-							(script) => script.name === name,
-						);
-						if (legacy) return { digest: workflowDefinitionDigest({ legacy: legacy.body }) };
-						throw error;
-					}
+					const { definition } = resolveWorkflowDefinition(cwd, name);
+					return { digest: workflowDefinitionDigest(definition), definition };
 				},
 				sessionId: () => sessionManager.getSessionId(),
 				trustContext: () => cwd,
