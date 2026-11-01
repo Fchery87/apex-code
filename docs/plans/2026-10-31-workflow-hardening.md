@@ -1,6 +1,6 @@
 # Workflow hardening implementation plan
 
-**Status:** Active. H1 disables executable workflows and H2 introduces validated JSON interpretation and host-bound identity. This reconstructed H3 branch adds bounded admission, cancellation and explicit terminal outcomes. Verification follows in H4. The prior combined implementation remains a recovery reference, not this branch's acceptance evidence. All phases remain open.
+**Status:** Active. The four reconstructed slices are present: H1 disables executable workflows, H2 interprets validated JSON with host-bound identity, H3 bounds lifecycle and terminal outcomes, and H4 binds verification to observed workspace state and aligns shipped claims. Acceptance and independent review remain open. The prior combined implementation is a recovery reference, not reconstructed-head acceptance evidence.
 
 **Goal.** Make existing workflows safe to invoke and bounded before adding durable delivery automation.
 **Architecture.** Replace JavaScript execution with validated data interpreted over the existing delegation runtime. Keep permission, child ownership, and session storage authoritative in their current modules.
@@ -61,10 +61,12 @@ The current slice implements [the draft spec](../specs/2026-10-31-workflow-harde
 | --- | --- | --- |
 | H1 | Reconstructed fail-closed slice plus home-discovery isolation repair. Focused gates, hook check, build, installed consumer smoke and ten installed-CLI refusal probes passed. Full suite, PTY/media, perf and review gates remain open. | Pending complete acceptance at `6300a200d` |
 | H2 | Review repairs at `41cd6862c` passed 27 files / 399 tests, TypeScript and enabled hooks. Exact-head packed consumer passed, but installed CLI returned 14/15: a legacy saved workflow lost migration guidance through an obsolete digest-only SDK fallback. A real trusted SDK regression reproduced that diagnostic failure. Removing the fallback preserved fail-closed migration, then three files / 23 tests and TypeScript passed. Root `npm test` remains blocked by local shared-node_modules SBOM consistency. Renewed head-specific gates remain required. | Legacy diagnostic repair under validation after `41cd6862c` |
-| H3 | Reconstructed scheduler, finite deadline, construction cancellation, late-handle cleanup and structured failed/cancelled/blocked outcomes. Exact-head validation pending. | None |
-| H4 | Pending reconstruction. Verification and product-claim repairs on the recovery branch are not H1 evidence. | None |
+| H3 | Reconstructed scheduler, finite deadline, construction cancellation, late-handle cleanup and structured failed/cancelled/blocked outcomes. Nine focused files / 107 passed, one skipped, plus three abort tests passed. TypeScript and enabled hooks passed. Full acceptance remains open. | Pending complete acceptance at `82c01a77a` |
+| H4 | Reconstructed verification observation, contract-projected mutation invalidation, loaded extension/MCP proxy coverage and generated product claims. Four focused files / 45 tests, TypeScript and 25 documentation tests passed before the H3 parent advance. Exact-head integrated gates remain open. | None |
 
 ### Order changes
+
+H4 starts from `82c01a77a`, verified as a commit object. The four verification-only session hunks were applied separately so the JSON command and H3 lifecycle remained unchanged. The loaded MCP tests drive the proxy/manager with a local connector, not wire transport. H1 and H2 draft PRs are open as #210 and #211 with their intended parents. CI and independent CodeRabbit review were requested while acceptance continues, not as a claim of stack readiness. The CI workflow only auto-runs for PRs targeting main, so stacked-child CI is dispatched explicitly at its branch head.
 
 H3 starts from `ba84782dc`, verified as a commit object. Recovery lifecycle code was restored only after advancing the H3 parent. The inherited H2 schema-failure test ran red because it expected a thrown error where H3 now returns failed and blocked step outcomes. Its replacement asserts those public outcomes and still requires one child start and one close. The H2 interpreter tests remain in the stack rather than being discarded during recovery.
 

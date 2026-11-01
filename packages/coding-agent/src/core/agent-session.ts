@@ -1437,6 +1437,12 @@ export class AgentSession {
 
 	/** Internal handler for agent events - shared by subscribe and reconnect */
 	private _handleAgentEvent = async (event: AgentEvent): Promise<void> => {
+		if (
+			event.type === "tool_execution_end" &&
+			turnMutated([{ toolName: event.toolName }], this.getToolContractSnapshot())
+		) {
+			this._verificationTracker?.noteWorkspaceChange(new Set(["declared-mutation"]));
+		}
 		// When a user message starts, check if it's from either queue and remove it BEFORE emitting
 		// This ensures the UI sees the updated queue state
 		if (event.type === "message_start" && event.message.role === "user") {
@@ -2528,7 +2534,7 @@ export class AgentSession {
 		if (this._completionCondition !== undefined) return false;
 		const first = decideVerificationContinue({
 			policyIds: this.verificationPolicyIds(),
-			mutated: turnMutated(turn.toolResults),
+			mutated: turnMutated(turn.toolResults, this.getToolContractSnapshot()),
 			continuationsUsed: this._verificationContinueUsed,
 		});
 		if (first.type !== "run") return false;
@@ -3687,9 +3693,16 @@ export class AgentSession {
 		if (tracker.policyIds().length === 0) {
 			return "unavailable";
 		}
+		const before = await this._captureWorkspaceObservation(options.signal);
 		const record = await tracker.runExplicit(options.policyId, { signal: options.signal });
 		if (record !== undefined) {
 			this._verificationBaseline = await this._captureWorkspaceObservation(options.signal);
+			if (
+				record.outcome === "verified" &&
+				(before === undefined || compareWorkspaceObservations(before, this._verificationBaseline).result !== "same")
+			) {
+				tracker.noteWorkspaceChange(new Set(["workspace-changed-or-unavailable"]));
+			}
 		}
 		return this.verificationStatus();
 	}
@@ -3779,8 +3792,7 @@ export class AgentSession {
 				}
 			}
 			if (tracker.boundary === "post-turn" && tracker.policyIds().length > 0) {
-				await tracker.runExplicit();
-				this._verificationBaseline = await this._captureWorkspaceObservation(undefined);
+				await this.requestVerification();
 			}
 		} catch {
 			// Verification is advisory; the turn already completed.

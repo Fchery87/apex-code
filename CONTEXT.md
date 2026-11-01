@@ -32,7 +32,7 @@ Rules live in `AGENTS.md`; rationale lives in `docs/`.
 | **Workspace** | The directory the session was started in, and everything beneath it. Not the enclosing git repository. Reads inside it are free; reads outside it ask. One boundary, used by every permission decision that asks "inside or outside". |
 | **Protected target** | A credential location outside the workspace (the agent's own credential file, SSH, cloud, and package-registry credentials). Only the machine owner's managed policy can grant it; no user or project rule can. |
 | **Sensitive path** | A file that commonly holds secrets inside a project, such as `.env`. Asks by default. Unlike a protected target, an ordinary rule can grant it, but only a rule that names the file; a rule covering its whole directory does not. |
-| **Built-in agent type** | A subagent definition shipped with Apex Code (`general`, `explore`). A user or trusted-project definition with the same name replaces it. |
+| **Built-in agent type** | A subagent definition shipped with Apex Code. The generated inventory is in README.md. A user or trusted-project definition with the same name replaces it. |
 | **Read ledger** | What the session has read, per file: a content hash and whether the whole file was read. `write` and `edit` consult it so a replacement is never made against a file the model has not seen, has seen only in part, or that changed since. In memory, per session. |
 | **Foreground subagent** | A delegation whose tool call is still awaiting its result. Aborting the parent interrupts it. A background subagent is not in this set and keeps running. |
 | **Environment block** | The end of the system prompt: date, platform, shell, model, and git state (branch, clean or uncommitted). It is the last section, so the earlier prompt stays cacheable. |
@@ -66,7 +66,7 @@ Rules live in `AGENTS.md`; rationale lives in `docs/`.
                         ▼
         apex-code (fork of pi-coding-agent)
          │        │            │
-         │        │            └── bundled extension: SpecEngine + governance
+         │        │            └── configured extensions loaded by the resource loader
          │        └── extensions (user, project, packages)
          └── ~/.apex-code/  ← sessions, settings, credentials, state
 ```

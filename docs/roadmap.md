@@ -152,7 +152,7 @@ capable and measurably worse.
 | Session commands and settings | **active**. `/diff`, command aliases, `/context`, grouped settings, and `/rewind`. | [spec](specs/2026-10-24-session-commands-and-settings.md) | — |
 | Coding-turn quality | **active** — slices 1, 2, 3, 5, and 7 are in the tree and locally tested. Slice 6 has the indent hint only. Slices 4, 8, 9, and 10 are not started. | [spec](specs/2026-10-23-coding-turn-quality.md) | [plan](plans/2026-10-23-coding-turn-quality.md) |
 | Workflow orchestration | **superseded** 2026-10-31. The original JavaScript runner shipped on 2026-10-27. Its execution format and completion claims are replaced by the active hardening slice. | [historical spec](specs/2026-10-26-workflow-orchestration.md) · [hardening spec](specs/2026-10-31-workflow-hardening.md) | [plan](plans/2026-10-31-workflow-hardening.md) |
-| Workflow hardening | **active**. Four review boundaries are being reconstructed from the combined recovery branch. H1 disables executable workflows. JSON interpretation, bounded lifecycle, verification alignment, and acceptance gates follow in H2 through H4. No phase is complete. | [spec](specs/2026-10-31-workflow-hardening.md) | [plan](plans/2026-10-31-workflow-hardening.md) |
+| Workflow hardening | **active**. Four review slices reconstructed: executable-workflow refusal, host-authorized JSON interpretation, bounded child lifecycle, and workspace-bound verification. Draft PRs #210 through #212 are open in dependency order, with H4 following. Exact-head full-suite, live, performance, three-OS CI and independent review gates remain open. No phase is complete. | [spec](specs/2026-10-31-workflow-hardening.md) | [plan](plans/2026-10-31-workflow-hardening.md) |
 
 ---
 
