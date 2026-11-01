@@ -96,15 +96,19 @@ describe("H2 JSON graph interpreter", () => {
 	});
 	it("validates output before a dependent can consume it and closes failed children", async () => {
 		const r = runtime(() => '{"count":"wrong"}');
-		await expect(
-			runWorkflow(
-				r.options,
-				input([
-					{ id: "one", prompt: "scan", schema: { type: "object", properties: { count: { type: "integer" } } } },
-					{ id: "two", needs: ["one"], prompt: "never" },
-				]),
-			),
-		).rejects.toThrow(/type|integer/i);
+		const result = await runWorkflow(
+			r.options,
+			input([
+				{ id: "one", prompt: "scan", schema: { type: "object", properties: { count: { type: "integer" } } } },
+				{ id: "two", needs: ["one"], prompt: "never" },
+			]),
+		);
+		expect(result.outcome).toBe("failed");
+		expect(result.calls.map(({ stepId, outcome }) => ({ stepId, outcome }))).toEqual([
+			{ stepId: "one", outcome: "failed" },
+			{ stepId: "two", outcome: "blocked" },
+		]);
+		expect(result.calls[0]?.failed).toMatch(/type|integer/i);
 		expect(r.build).toHaveBeenCalledOnce();
 		expect(r.close).toHaveBeenCalledOnce();
 	});

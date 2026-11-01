@@ -272,7 +272,7 @@ export interface DelegationRuntimeOptions {
 	getParentSessionId?: () => string;
 	buildChildSession: (request: BuildChildSessionRequest) => Promise<ChildSessionHandle>;
 	childRunRegistry?: ChildRunRegistry;
-	/** Host-resolved identity binding workflow approval to source and session context. */
+	/** Host-resolved identity used to bind saved workflow approval to source and session context. */
 	workflowAuthorization?: {
 		resolveSaved(name: string): { digest: string; definition?: unknown };
 		sessionId(): string;
@@ -1756,6 +1756,8 @@ export async function runDelegation(
 		options.childRunRegistry = registry;
 	}
 	registry.assertOpen();
+	const constructionSignal = !request.background && request.signal?.aborted ? undefined : request.signal;
+	constructionSignal?.throwIfAborted();
 	registry.setRuntimeOptions(options);
 	// Idempotent spawn: a key that already maps to a handle returns that handle
 	// BEFORE any admission or child construction, so a duplicate spawn consumes
@@ -1819,7 +1821,8 @@ export async function runDelegation(
 			artifactDir = join(parentRoot, "delegations", sessionId);
 			mkdirSync(artifactDir, { recursive: true });
 		}
-		const child = await options.buildChildSession({
+		constructionSignal?.throwIfAborted();
+		const construction = options.buildChildSession({
 			agentType,
 			definition,
 			toolNames: definition.tools,
@@ -1830,6 +1833,45 @@ export async function runDelegation(
 			workspace: preparedWorkspace,
 			...(timeoutMs !== undefined ? { timeoutMs } : {}),
 		});
+		// Cancellation stops waiting, not arbitrary constructor JavaScript. A late
+		// handle is still ours to close, and must never receive the task.
+		const signal = constructionSignal;
+		let removeConstructionAbort: (() => void) | undefined;
+		const guardedConstruction = construction.then((child) => {
+			if (signal?.aborted) {
+				try {
+					child.close();
+				} finally {
+					child.dispose();
+				}
+				signal.throwIfAborted();
+			}
+			return child;
+		});
+		let child: ChildSessionHandle;
+		try {
+			child = signal
+				? await Promise.race([
+						guardedConstruction,
+						new Promise<never>((_, reject) => {
+							const onAbort = () => reject(signal.reason);
+							removeConstructionAbort = () => signal.removeEventListener("abort", onAbort);
+							if (signal.aborted) onAbort();
+							else signal.addEventListener("abort", onAbort, { once: true });
+						}),
+					])
+				: await guardedConstruction;
+		} finally {
+			removeConstructionAbort?.();
+		}
+		if (signal?.aborted) {
+			try {
+				child.close();
+			} finally {
+				child.dispose();
+			}
+			signal.throwIfAborted();
+		}
 		registry.own(child);
 		const handleId = sessionId;
 		const promise = child.run(task).then(({ output }) => ({ agentType, task, output }));
@@ -1862,28 +1904,28 @@ export async function runDelegation(
 			...(request.idempotencyKey !== undefined ? { idempotencyKey: request.idempotencyKey } : {}),
 			...(timeoutMs !== undefined ? { deadlineMs: Date.now() + timeoutMs } : {}),
 		});
+		const runSignal = request.signal;
+		if (runSignal) {
+			const onAbort = () => {
+				try {
+					registry.interrupt(handleId, "parent aborted");
+				} catch {
+					// The child settled before the abort arrived.
+				}
+			};
+			if (runSignal.aborted) onAbort();
+			else {
+				runSignal.addEventListener("abort", onAbort, { once: true });
+				promise.then(
+					() => runSignal.removeEventListener("abort", onAbort),
+					() => runSignal.removeEventListener("abort", onAbort),
+				);
+			}
+		}
 		if (!request.background) {
 			registry.markForeground(handleId);
 			const settle = () => registry.releaseForeground(handleId);
 			promise.then(settle, settle);
-			const { signal } = request;
-			if (signal) {
-				const onAbort = () => {
-					try {
-						registry.interrupt(handleId, "parent aborted");
-					} catch {
-						// The child settled before the abort arrived; there is nothing left to stop.
-					}
-				};
-				if (signal.aborted) onAbort();
-				else {
-					signal.addEventListener("abort", onAbort, { once: true });
-					promise.then(
-						() => signal.removeEventListener("abort", onAbort),
-						() => signal.removeEventListener("abort", onAbort),
-					);
-				}
-			}
 			return promise;
 		}
 		return { agentType, task, output: `Delegation started. Retrieve result with handle "${handleId}".`, handleId };
