@@ -490,12 +490,45 @@ Place in `~/.apex-code/agent/extensions/`, `.apex-code/extensions/`, or a [pi pa
 
 ### Subagents
 
-`delegate` runs a subagent with its own context. Two built-in types ship: `explore`, which can
-read, search, and list files, and `general`, which has the default file and shell tools and cannot
-delegate further. Define your own in `~/.apex-code/agent/agents/<name>.md`, or in
+`delegate` runs a subagent with its own context. The generated built-in inventory is:
+
+<!-- builtin-agent-inventory:start -->
+- `explore`: Read-only search of the workspace: find files, grep contents, and list directories. Cannot edit files or run commands.
+- `debugger`: Find why something fails. Can read and run commands. Cannot edit files or delegate.
+- `verifier`: Run the check and report its real result. Can read and run the test tool. Cannot edit files.
+- `general`: General-purpose helper with the default file and shell tools. Cannot delegate further.
+<!-- builtin-agent-inventory:end -->
+
+Define your own in `~/.apex-code/agent/agents/<name>.md`, or in
 `.apex-code/agents/<name>.md` for a trusted project. A definition with the same name replaces a
 built-in. Its frontmatter takes `name`, `description`, `tools` as a list or a comma-separated string,
 and an optional `model`. Press `Escape` to interrupt a foreground subagent.
+
+### JSON workflows
+
+The `workflow` tool accepts a saved or inline versioned JSON definition. Workflow text is
+data. Apex Code does not execute JavaScript workflow files. Replace legacy `.js` workflows
+with saved `.apex-code/workflows/*.json` files containing `name`, `description`, and `definition`.
+An inline request carries `kind: "inline"` and `definition`. A saved request carries
+`kind: "saved"` and `name`, never a replacement body. Both may carry `args`.
+
+```json
+{
+  "version": 1,
+  "steps": [
+    { "id": "scan", "phase": "inspect", "prompt": ["Inspect ", { "from": "args", "pointer": "/path" }] },
+    { "id": "summarize", "needs": ["scan"], "prompt": ["Summarize: ", { "from": "scan" }] }
+  ],
+  "output": { "from": "summarize" }
+}
+```
+
+Steps without dependencies may run in parallel. `needs` creates a pipeline, `phase` labels
+related steps, and JSON Pointer references select arguments or predecessor output. Steps can
+declare a bounded output `schema`. The complete graph and schemas are validated before
+dispatch. Default concurrency is four, reduced by the parent's limit, with at most 100
+attempts. Cancellation stops queued work and interrupts active children. Workflow execution
+is not crash-resumable. Child permissions remain bounded by the parent, not by the definition.
 
 ### Themes
 

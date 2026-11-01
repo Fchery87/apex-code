@@ -1,4 +1,5 @@
 import type { ToolResultMessage } from "@earendil-works/pi-ai/compat";
+import type { ToolContractSnapshotEntry } from "./tools/contract-snapshot.ts";
 
 /**
  * Spec 2026-10-23-coding-turn-quality.md, slice 3. A mutating turn with a
@@ -6,8 +7,6 @@ import type { ToolResultMessage } from "@earendil-works/pi-ai/compat";
  * fails. A read-only turn does not run the policy. The caller still owns the
  * command. This only decides whether to ask.
  */
-
-const MUTATING_TOOLS = new Set(["edit", "write", "apply_patch", "bash", "powershell"]);
 
 export interface VerificationContinueInput {
 	readonly policyIds: readonly string[];
@@ -22,8 +21,13 @@ export type VerificationContinueDecision =
 	| { readonly type: "continue"; readonly prompt: string }
 	| { readonly type: "stop" };
 
-export function turnMutated(toolResults: readonly Pick<ToolResultMessage, "toolName">[]): boolean {
-	return toolResults.some((result) => MUTATING_TOOLS.has(result.toolName));
+export function turnMutated(
+	toolResults: readonly Pick<ToolResultMessage, "toolName">[],
+	snapshot: readonly ToolContractSnapshotEntry[],
+): boolean {
+	return toolResults.some((result) =>
+		snapshot.some((entry) => entry.name === result.toolName && entry.capabilities.includes("fs.write")),
+	);
 }
 
 export function decideVerificationContinue(input: VerificationContinueInput): VerificationContinueDecision {

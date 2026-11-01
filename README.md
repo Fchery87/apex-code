@@ -305,10 +305,14 @@ The tool does not click, type, or follow a second URL. It launches a headless Ch
 already on the machine, with an empty temporary profile, and it does not attach to the browser
 you have open. A missing binary returns the path and `ENOENT`.
 
-`delegate` runs a subagent with its own context. Two built-in types ship:
+`delegate` runs a subagent with its own context. The generated built-in inventory is:
 
-- `explore` reads, searches, and lists files. It cannot edit files or run commands.
-- `general` has the default file and shell tools. It cannot delegate further.
+<!-- builtin-agent-inventory:start -->
+- `explore`: Read-only search of the workspace: find files, grep contents, and list directories. Cannot edit files or run commands.
+- `debugger`: Find why something fails. Can read and run commands. Cannot edit files or delegate.
+- `verifier`: Run the check and report its real result. Can read and run the test tool. Cannot edit files.
+- `general`: General-purpose helper with the default file and shell tools. Cannot delegate further.
+<!-- builtin-agent-inventory:end -->
 
 A definition in `~/.apex-code/agent/agents/` or, in a trusted project, `.apex-code/agents/`
 with the same name replaces a built-in. Press `Esc` to interrupt a foreground subagent.
@@ -539,6 +543,31 @@ hosted catalog. An optional remote catalog overlay is used only when you explici
 startup network operations.
 
 ## Common workflows
+
+### Run a JSON workflow
+
+The `workflow` tool accepts a saved or inline versioned JSON definition. Workflow text is data. Apex Code does not execute JavaScript workflow files.
+
+Each step has a stable `id`, a prompt, and optional `needs`, `phase`, `agentType`, `isolation`, and output `schema` fields. The `output` field selects a step result with a JSON Pointer.
+
+```json
+{
+  "version": 1,
+  "steps": [
+    { "id": "scan", "prompt": "Inspect the source tree" },
+    {
+      "id": "summarize",
+      "needs": ["scan"],
+      "prompt": ["Summarize this result\n", { "from": "scan" }]
+    }
+  ],
+  "output": { "from": "summarize" }
+}
+```
+
+Saved definitions live in `.apex-code/workflows/*.json`. A saved file has `name`, `description`, and `definition` fields. A legacy `.js` workflow is refused with migration guidance. Saved names cannot include paths, and a saved request cannot supply a replacement body.
+
+The runner validates the complete graph before dispatch. It rejects duplicate IDs, unknown dependencies, cycles, references outside dependency ancestry, unsupported output-schema keywords, and invalid JSON results. It admits at most 100 attempts and four active children by default. Cancellation stops queued work and interrupts active children through the delegation runtime. Workflow execution is not crash-resumable.
 
 ### Review without changing files
 

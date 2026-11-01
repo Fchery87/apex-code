@@ -500,6 +500,16 @@ describe("child budget and verification wiring (spec 2026-09-09)", () => {
 	});
 
 	it("completes a child turn whose configured verification policy passes, and the policy really ran", async () => {
+		const git = spawnSync("git", ["init", "-b", "main"], { cwd: scratch, encoding: "utf8" });
+		expect(git.status, git.stderr).toBe(0);
+		const commit = spawnSync(
+			"git",
+			["-c", "user.name=fixture", "-c", "user.email=fixture@example.com", "commit", "--allow-empty", "-m", "init"],
+			{ cwd: scratch, encoding: "utf8" },
+		);
+		expect(commit.status, commit.stderr).toBe(0);
+		// Git metadata is outside the observed worktree, so proof of execution does not invalidate verification.
+		const marker = join(scratch, ".git", "verification-ran.txt");
 		const { session, faux } = await buildParentSession("child-verification-pass-e2e", {
 			settings: {
 				policies: {
@@ -508,7 +518,7 @@ describe("child budget and verification wiring (spec 2026-09-09)", () => {
 						{
 							id: "child-check",
 							executable: process.execPath,
-							argv: ["-e", `require("fs").writeFileSync("verification-ran.txt", "ran", "utf8")`],
+							argv: ["-e", `require("fs").writeFileSync(${JSON.stringify(marker)}, "ran", "utf8")`],
 							permission: "allow",
 							blocksCompletion: true,
 						},
@@ -529,7 +539,7 @@ describe("child budget and verification wiring (spec 2026-09-09)", () => {
 			outcome: "completed",
 		});
 		// The completion gate executed the configured policy inside the child.
-		await access(join(scratch, "verification-ran.txt"));
+		await access(marker);
 		session.dispose();
 	});
 

@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AssistantMessage, createAssistantMessageEventStream, fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AgentSession } from "../src/core/agent-session.ts";
 import {
@@ -13,6 +14,7 @@ import {
 } from "../src/core/agent-session-runtime.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
+import { type ApexToolDefinition, UNCLASSIFIED } from "../src/core/tools/contract.ts";
 
 /**
  * VF.4 session integration (spec
@@ -27,9 +29,11 @@ import { SettingsManager } from "../src/core/settings-manager.ts";
 const directories: string[] = [];
 
 let currentTempDir: string | undefined;
+const originalCwd = process.cwd();
 let currentRuntime: Awaited<ReturnType<typeof createAgentSessionRuntime>> | undefined;
 
 afterEach(async () => {
+	process.chdir(originalCwd);
 	if (currentRuntime !== undefined) {
 		await currentRuntime.dispose();
 		currentRuntime = undefined;
@@ -63,9 +67,13 @@ interface SessionUnderTest {
 	settingsPath: string;
 }
 
-async function createVerifiedSession(settings: unknown): Promise<SessionUnderTest> {
+async function createVerifiedSession(
+	settings: unknown,
+	customTools: ApexToolDefinition[] = [],
+): Promise<SessionUnderTest> {
 	const tempDir = mkdtempSync(join(tmpdir(), "apex-vf4-"));
 	currentTempDir = tempDir;
+	process.chdir(tempDir);
 	directories.push(tempDir);
 	mkdirSync(join(tempDir, "sessions"), { recursive: true });
 	execFileSync("git", ["init", "-b", "main", tempDir]);
@@ -90,7 +98,8 @@ async function createVerifiedSession(settings: unknown): Promise<SessionUnderTes
 			...(await createAgentSessionFromServices({
 				services,
 				sessionManager: manager,
-				tools: [],
+				tools: customTools.map((tool) => tool.name),
+				customTools,
 			})),
 			services,
 			diagnostics: services.diagnostics,
@@ -154,6 +163,54 @@ function mockTurn(target: AgentSession): void {
 }
 
 describe("session verification lifecycle (VF.4)", () => {
+	it.each(["extension_write", "mcp__workspace__update", "readonly_command"])("tracks a real %s turn", async (name) => {
+		const mutating = name !== "readonly_command";
+		const tool: ApexToolDefinition = {
+			name,
+			label: name,
+			description: name,
+			parameters: Type.Object({}),
+			contract: { ...UNCLASSIFIED, capabilities: new Set(mutating ? ["fs.write"] : ["exec"]) },
+			async execute() {
+				if (mutating) writeFileSync("tool-change.txt", name);
+				return { content: [{ type: "text", text: "done" }], details: {} };
+			},
+		};
+		const { session } = await createVerifiedSession(
+			{ policies: { schemaVersion: 1, verification: [passPolicy("typecheck")] } },
+			[tool],
+		);
+		await session.requestVerification();
+		expect(session.getActiveToolNames()).toContain(name);
+		let afterTool: string | undefined;
+		session.subscribe((event) => {
+			if (event.type === "tool_execution_end") afterTool = session.verificationStatus();
+		});
+		let calls = 0;
+		const finalStream = session.agent.streamFunction!;
+		session.agent.streamFunction = (...args) => {
+			if (calls++ > 0) return finalStream(...args);
+			const stream = createAssistantMessageEventStream();
+			queueMicrotask(() =>
+				stream.push({
+					type: "done",
+					reason: "toolUse",
+					message: {
+						...fauxAssistantMessage(""),
+						api: session.model!.api,
+						provider: session.model!.provider,
+						model: session.model!.id,
+						content: [{ type: "toolCall", id: "declared-tool", name, arguments: {} }],
+						stopReason: "toolUse",
+					},
+				}),
+			);
+			return stream;
+		};
+		await session.prompt("run the tool");
+		expect(afterTool).toBe(mutating ? "unavailable" : "verified");
+		expect(session.verificationStatus()).toBe("verified");
+	});
 	it("is unavailable when nothing is configured", async () => {
 		const { session } = await createVerifiedSession({});
 		expect(await session.requestVerification()).toBe("unavailable");
@@ -204,6 +261,47 @@ describe("session verification lifecycle (VF.4)", () => {
 		await session.requestVerification();
 		await session.prompt("carry on");
 		expect(session.verificationStatus()).toBe("verified");
+	});
+
+	it("invalidates a pass when HEAD changes with identical workspace contents", async () => {
+		const { session, tempDir } = await createVerifiedSession({
+			policies: { schemaVersion: 1, verification: [passPolicy("typecheck")] },
+		});
+		await session.requestVerification();
+		execFileSync("git", ["-C", tempDir, "commit", "--allow-empty", "-m", "new revision"]);
+		await session.prompt("carry on");
+		expect(session.verificationStatus()).toBe("unavailable");
+	});
+
+	it.each(["throw", "failed", "unsupported", "incomplete"] as const)(
+		"does not verify when workspace observations are %s",
+		async (status) => {
+			const { session, tempDir } = await createVerifiedSession({
+				policies: { schemaVersion: 1, verification: [passPolicy("typecheck")] },
+			});
+			const observe = session._workspaceObserver;
+			session._workspaceObserver = async () => {
+				if (status === "throw") throw new Error("observation unavailable");
+				return { ...(await observe(tempDir)), status };
+			};
+			expect(await session.requestVerification()).toBe("unavailable");
+			expect(session.verificationRecord()).toBeUndefined();
+		},
+	);
+
+	it("does not verify workspace changes made during a policy run", async () => {
+		const { session } = await createVerifiedSession({
+			policies: {
+				schemaVersion: 1,
+				verification: [
+					passPolicy("mutating-check", {
+						argv: ["-e", "require('node:fs').writeFileSync('tracked.txt', 'changed during verification')"],
+					}),
+				],
+			},
+		});
+		expect(await session.requestVerification()).toBe("unavailable");
+		expect(session.verificationRecord()).toBeUndefined();
 	});
 
 	it("runs a post-turn boundary automatically after a completed turn", async () => {

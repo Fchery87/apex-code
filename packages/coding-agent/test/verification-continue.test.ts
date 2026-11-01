@@ -1,9 +1,34 @@
 import { describe, expect, it } from "vitest";
+import { UNCLASSIFIED } from "../src/core/tools/contract.ts";
+import { buildToolContractSnapshot } from "../src/core/tools/contract-snapshot.ts";
 import { decideVerificationContinue, turnMutated } from "../src/core/verification-continue.ts";
 
 describe("verification continue", () => {
+	it.each(["extension_write", "mcp__workspace__update"])("recognizes declared writes from %s", (name) => {
+		const snapshot = buildToolContractSnapshot([
+			{ name, contract: { ...UNCLASSIFIED, capabilities: new Set(["fs.write"]) } },
+		]);
+		expect(turnMutated([{ toolName: name }], snapshot)).toBe(true);
+	});
+	it("does not infer mutation from read-only command names or exec capability", () => {
+		const snapshot = buildToolContractSnapshot([
+			{ name: "bash", contract: { ...UNCLASSIFIED, capabilities: new Set(["exec"]) } },
+		]);
+		expect(turnMutated([{ toolName: "bash" }], snapshot)).toBe(false);
+	});
 	it("skips a turn that did not mutate", () => {
-		expect(turnMutated([{ toolName: "read" }])).toBe(false);
+		expect(turnMutated([{ toolName: "read" }], [])).toBe(false);
+		expect(
+			turnMutated(
+				[{ toolName: "extension_write" }],
+				buildToolContractSnapshot([
+					{
+						name: "extension_write",
+						contract: { ...UNCLASSIFIED, capabilities: new Set(["fs.write"]) },
+					},
+				]),
+			),
+		).toBe(true);
 		expect(decideVerificationContinue({ policyIds: ["typecheck"], mutated: false, continuationsUsed: 0 })).toEqual({
 			type: "skip",
 		});

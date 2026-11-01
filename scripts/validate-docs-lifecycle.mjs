@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join, normalize, relative, resolve, sep } from "node:path";
 import { UPSTREAM_OWNED_DOCS } from "./apex/upstream-owned-docs.mjs";
+import { checkProductClaims } from "./product-claims.mjs";
 
 const root = resolve(process.argv[2] ?? process.cwd());
 const docsDir = join(root, "docs");
@@ -371,6 +372,14 @@ for (const [name, row] of roadmapContracts(roadmap)) {
 	if (row.status !== authoritative.status) {
 		report(roadmapPath, `${name}: roadmap says ${row.status} but contracts.md says ${authoritative.status}`);
 	}
+}
+
+if (existsSync(join(root, "packages/coding-agent/src/core/delegation/agents.ts"))) {
+	errors.push(...checkProductClaims(
+		await readFile(join(root, "README.md"), "utf8"),
+		await readFile(join(root, "CONTEXT.md"), "utf8"),
+		await readFile(join(root, "packages/coding-agent/README.md"), "utf8"),
+	));
 }
 
 if (errors.length > 0) {

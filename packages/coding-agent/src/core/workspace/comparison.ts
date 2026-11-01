@@ -99,7 +99,8 @@ export function compareWorkspaceObservations(
 		}
 	}
 
-	if (sameIndex && sameWorktree) {
+	const sameRevision = storedBase.headCommit === freshBase.headCommit;
+	if (sameIndex && sameWorktree && sameRevision) {
 		return { result: "same", warnings };
 	}
 	const changedPaths = changedPathsBetween(stored, fresh, warnings);
