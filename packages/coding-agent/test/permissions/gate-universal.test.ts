@@ -42,7 +42,10 @@ const REPRESENTATIVE_PARAMS: Record<ToolName, JsonObject> = {
 	ask_user: { question: "Which approach?", options: ["a", "b"] },
 	plan_present: { plan: "1. Do a thing" },
 	delegate: { agentType: "explore", task: "find the config loader" },
-	workflow: { script: "return 1" },
+	workflow: {
+		kind: "inline",
+		definition: { version: 1, steps: [{ id: "one", prompt: "scan" }], output: { from: "one" } },
+	},
 	test: { executable: "npm", args: ["test", "--", "unit"] },
 	memory_note: { title: "Tabs", body: "Indent with tabs." },
 	apply_patch: { patches: [{ path: "file.txt", oldText: "a", newText: "b" }] },

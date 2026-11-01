@@ -72,6 +72,8 @@ export interface PermissionSpec<TParams extends TSchema = TSchema> {
 
 	/** Prepare canonical operation facts on the validated call before authorization and execution. */
 	prepareCall?(params: Static<TParams>): void;
+	/** Record approval only after the gate has allowed this exact prepared call. */
+	onApproved?(params: Static<TParams>): void;
 
 	/**
 	 * Describe, for a human about to approve it, what this call would change.

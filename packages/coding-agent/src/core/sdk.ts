@@ -26,6 +26,8 @@ import {
 	type ChildTurnResult,
 	type DelegationRuntimeOptions,
 } from "./delegation/runtime.ts";
+import { workflowDefinitionDigest } from "./delegation/workflow-definition.ts";
+import { loadWorkflowScripts, resolveWorkflowDefinition } from "./delegation/workflow-files.ts";
 import { createCommandJournalRecorder } from "./durable-state/command-journal.ts";
 import { DURABLE_STATE_DATABASE_FILENAME } from "./durable-state/sqlite.ts";
 import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
@@ -664,6 +666,22 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		const delegationMaxDepth = settingsManager.getDelegationMaxDepth();
 		delegationRuntime = {
 			childRunRegistry,
+			workflowAuthorization: {
+				resolveSaved: (name) => {
+					try {
+						return { digest: workflowDefinitionDigest(resolveWorkflowDefinition(cwd, name).definition) };
+					} catch (error) {
+						const legacy = loadWorkflowScripts(join(cwd, ".apex-code", "workflows")).scripts.find(
+							(script) => script.name === name,
+						);
+						if (legacy) return { digest: workflowDefinitionDigest({ legacy: legacy.body }) };
+						throw error;
+					}
+				},
+				sessionId: () => sessionManager.getSessionId(),
+				trustContext: () => cwd,
+				projectTrusted: () => settingsManager.isProjectTrusted(),
+			},
 			resolveAgent,
 			// Concurrency cap (spec 2026-09-09, "Shared budgets"): the registry's
 			// admission path reads it from the runtime options. Undefined is

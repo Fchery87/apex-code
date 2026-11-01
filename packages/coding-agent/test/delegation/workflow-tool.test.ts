@@ -1,79 +1,166 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DelegationRuntimeOptions } from "../../src/core/delegation/runtime.ts";
+import { parseWorkflowRequest, runWorkflow } from "../../src/core/delegation/workflow-run.ts";
 import { evaluateToolCall } from "../../src/core/permissions/gate.ts";
 import type { PermissionRuleStore } from "../../src/core/permissions/store.ts";
 import { createWorkflowTool, createWorkflowToolDefinition } from "../../src/core/tools/workflow.ts";
 
 function runtime(): DelegationRuntimeOptions {
-	const touched = () => {
-		throw new Error("runtime must not be touched");
-	};
 	return {
-		resolveAgent: touched,
-		getParentCapabilities: touched,
-		getToolCapabilities: touched,
-		getDelegationDepth: touched,
+		resolveAgent: () => undefined,
+		getParentCapabilities: () => new Set(["delegate"]),
+		getToolCapabilities: () => undefined,
+		getDelegationDepth: () => 0,
 		maxDelegationDepth: 2,
-		buildChildSession: touched,
+		buildChildSession: vi.fn(async () => {
+			throw new Error("must not dispatch");
+		}),
 	};
 }
 
-describe("workflow tool migration boundary", () => {
-	it.each([
-		{ hasUI: true, name: undefined },
-		{ hasUI: false, name: undefined },
-		{ hasUI: true, name: "audit" },
-		{ hasUI: false, name: "audit" },
-	])("refuses without approval or child dispatch: %j", async ({ hasUI, name }) => {
-		const select = vi.fn(async () => "Run");
-		const tool = createWorkflowToolDefinition(runtime());
-		for (let attempt = 0; attempt < 2; attempt++) {
-			await expect(
-				tool.execute("call", { script: "return 3", name }, undefined, undefined, {
-					hasUI,
-					ui: { select },
-				} as never),
-			).rejects.toThrow(/workflow.*disabled.*migration/i);
-		}
-		expect(select).not.toHaveBeenCalled();
+describe("workflow public refusal boundaries", () => {
+	it("binds saved workflow approval to the resolved digest and session context", async () => {
+		let digest = "digest-a";
+		let sessionId = "session-a";
+		let trustContext = "project-a";
+		const options = {
+			...runtime(),
+			workflowAuthorization: {
+				resolveSaved: () => ({ definition: { version: 1 }, digest }),
+				sessionId: () => sessionId,
+				trustContext: () => trustContext,
+				projectTrusted: () => true,
+			},
+		};
+		const tool = createWorkflowToolDefinition(options);
+		const params = { kind: "saved" as const, name: "audit" };
+		const ruleContent = tool.contract.permission.ruleForCall(params);
+		const gate = () =>
+			evaluateToolCall("workflow", params, {
+				getContract: () => tool.contract,
+				getMode: () => "default" as const,
+				store: {
+					snapshot: async () => ({
+						rules: [
+							{
+								source: "session",
+								behavior: "allow",
+								toolName: "workflow",
+								ruleContent: ruleContent ?? undefined,
+							},
+						],
+						errors: [],
+					}),
+					apply: vi.fn(),
+				} as never,
+			});
+		await expect(gate()).resolves.toEqual({ block: false });
+		digest = "digest-b";
+		await expect(gate()).resolves.toMatchObject({ block: true });
+		digest = "digest-a";
+		sessionId = "session-b";
+		await expect(gate()).resolves.toMatchObject({ block: true });
+		sessionId = "session-a";
+		trustContext = "project-b";
+		await expect(gate()).resolves.toMatchObject({ block: true });
 	});
 
-	it("does not confer authority through a model supplied saved name", () => {
-		const permission = createWorkflowToolDefinition(runtime()).contract.permission;
-		expect(permission.matches("*", { script: "return 3", name: "audit" })).toBe(false);
-		expect(permission.ruleForCall?.({ script: "return 3", name: "audit" })).toBeNull();
+	it("refuses a legacy request before permission or dispatch", () => {
+		expect(() => parseWorkflowRequest({ script: "return 3", name: "audit" })).toThrow(
+			/JavaScript.*disabled|migration/i,
+		);
 	});
 
-	it("denies disabled workflows without asking or dispatching", async () => {
+	it("denies disabled legacy workflows without asking or dispatching", async () => {
 		const responder = { ask: vi.fn(async () => ({ allow: true })) };
 		const store = {
 			snapshot: async () => ({ rules: [], modesBySource: new Map(), errors: [] }),
 			apply: vi.fn(async () => undefined),
 		} as unknown as PermissionRuleStore;
 		const tool = createWorkflowToolDefinition(runtime());
-
-		const decision = await evaluateToolCall(
-			"workflow",
-			{ script: "return 3" },
-			{
-				getContract: () => tool.contract,
-				store,
-				getMode: () => "default",
-				responder,
-			},
-		);
-
-		expect(decision).toEqual({
-			block: true,
-			reason: "workflow is not permitted by the current permission configuration.",
-		});
+		await expect(
+			evaluateToolCall(
+				"workflow",
+				{ kind: "inline", definition: "return 3" },
+				{
+					getContract: () => tool.contract,
+					store,
+					getMode: () => "default",
+					responder,
+				},
+			),
+		).rejects.toThrow(/JavaScript.*disabled|migration/i);
 		expect(responder.ask).not.toHaveBeenCalled();
 		expect(store.apply).not.toHaveBeenCalled();
 	});
 
 	it("refuses at the wrapped public tool boundary too", async () => {
+		const options = runtime();
 		await expect(
-			createWorkflowTool(runtime()).execute("call", { script: "return 3", name: "audit" }),
-		).rejects.toThrow(/workflow.*disabled.*migration/i);
+			createWorkflowTool(options).execute("call", { kind: "inline", definition: "return 3" }),
+		).rejects.toThrow(/JavaScript.*disabled|migration/i);
+		expect(options.buildChildSession).not.toHaveBeenCalled();
+	});
+
+	it("does not let an untrusted project bypass saved workflow approval", async () => {
+		const options = {
+			...runtime(),
+			workflowAuthorization: {
+				resolveSaved: () => ({ definition: { version: 1 }, digest: "digest-a" }),
+				sessionId: () => "session-a",
+				trustContext: () => "project-a",
+				projectTrusted: () => false,
+			},
+		};
+		const tool = createWorkflowToolDefinition(options);
+		await expect(
+			evaluateToolCall(
+				"workflow",
+				{ kind: "saved", name: "audit" },
+				{
+					getContract: () => tool.contract,
+					getMode: () => "bypassPermissions",
+					store: { snapshot: async () => ({ rules: [], errors: [] }), apply: vi.fn() } as never,
+				},
+			),
+		).resolves.toMatchObject({ block: true });
+	});
+
+	it.each(["return 1", 'await worker("do not start");', 'return args.constructor.constructor("return process")();'])(
+		"refuses JavaScript at public runWorkflow: %s",
+		async (script) => {
+			const options = runtime();
+			await expect(runWorkflow(options, script)).rejects.toThrow(/JavaScript.*(?:disabled|unsupported|no longer)/i);
+			expect(options.buildChildSession).not.toHaveBeenCalled();
+		},
+	);
+
+	it("refuses forged saved authority through the full permission gate", async () => {
+		const options = runtime();
+		const tool = createWorkflowToolDefinition(options);
+		const ask = vi.fn(async () => ({ allow: true }));
+		const params = { kind: "saved" as const, name: "audit" };
+		await expect(
+			evaluateToolCall("workflow", params, {
+				getContract: () => tool.contract,
+				getMode: () => "bypassPermissions",
+				store: { snapshot: async () => ({ rules: [], errors: [] }), apply: vi.fn() } as never,
+				responder: { ask },
+			}),
+		).resolves.toEqual({ block: false });
+		expect(ask).not.toHaveBeenCalled();
+		await expect(tool.execute("forged", params, undefined, undefined, { hasUI: false } as never)).rejects.toThrow(
+			/not found|migration/i,
+		);
+		expect(options.buildChildSession).not.toHaveBeenCalled();
+	});
+
+	it("direct tool execution cannot bypass refusal with a name", async () => {
+		const options = runtime();
+		const tool = createWorkflowToolDefinition(options);
+		await expect(
+			tool.execute("forged", { kind: "saved", name: "audit" }, undefined, undefined, { hasUI: false } as never),
+		).rejects.toThrow(/not found|migration/i);
+		expect(options.buildChildSession).not.toHaveBeenCalled();
 	});
 });

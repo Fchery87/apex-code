@@ -1,6 +1,6 @@
 # Workflow hardening implementation plan
 
-**Status:** Active. This reconstructed H1 branch disables executable workflows before rebuilding JSON interpretation in H2, bounded lifecycle in H3, and verification in H4. The prior combined implementation remains a recovery reference, not this branch's acceptance evidence. All phases remain open.
+**Status:** Active. H1 disables executable workflows. This reconstructed H2 branch introduces validated JSON interpretation and host-bound identity. Bounded lifecycle follows in H3 and verification in H4. The prior combined implementation remains a recovery reference, not this branch's acceptance evidence. All phases remain open.
 
 **Goal.** Make existing workflows safe to invoke and bounded before adding durable delivery automation.
 **Architecture.** Replace JavaScript execution with validated data interpreted over the existing delegation runtime. Keep permission, child ownership, and session storage authoritative in their current modules.
@@ -59,12 +59,14 @@ The current slice implements [the draft spec](../specs/2026-10-31-workflow-harde
 
 | Task | State | Verified commit |
 | --- | --- | --- |
-| H1 | Reconstructed fail-closed slice. Public runner, tool, and saved slash-command refuse executable workflows before dispatch. Acceptance evidence is pending at this branch head. | None |
-| H2 | Pending reconstruction from the preserved combined implementation. JSON interpretation and host identity authorization remain disabled in H1. | None |
+| H1 | Reconstructed fail-closed slice plus home-discovery isolation repair. Focused gates, hook check, build, installed consumer smoke and ten installed-CLI refusal probes passed. Full suite, PTY/media, perf and review gates remain open. | Pending complete acceptance at `6300a200d` |
+| H2 | Reconstructed validated JSON loader, schema/output validation, host identity approval and sequential interpreter. Focused eight files / 54 tests and TypeScript passed before parent isolation repair. Exact-head full-suite and live gates remain open. | None |
 | H3 | Pending reconstruction. Lifecycle repairs on the recovery branch are not H1 evidence. | None |
 | H4 | Pending reconstruction. Verification and product-claim repairs on the recovery branch are not H1 evidence. | None |
 
 ### Order changes
+
+H2 starts from `6300a200d`, verified as a commit object. The sequential interpreter deliberately leaves scheduling, bounded cancellation and explicit failed-step outcomes to H3. Host-bound approval, including the approval-to-execution identity recheck, belongs to H2 because a definition must not execute under a name-only grant. The universal permission fixture now uses a JSON request rather than an obsolete script body. H1's installed refusal probes only demonstrate fail-closed behavior, not H2's digest/session/trust predicates. No reconstructed phase is accepted from recovery receipts.
 
 H1 reconstruction at `ff00f4783` passed the focused workflow gate: three files and 16 tests, then the full hook check and offline build. The root suite exceeded the tool's hard 600-second wall-time cap and was killed without a final receipt; this is not a passing suite. The earlier recovery's home-directory discovery repair was initially omitted from reconstruction. It is included in H1 because otherwise scratch fixtures discover host resources and the branch measures external state. The two package/trust files passed 137 tests after restoring that already-proven repair. `ff00f4783` and the earlier no-wrapper commit `d83910aff` have identical tree IDs, but the hook-enabled amended commit is the delivery reference. Long suite retries use detached receipt launchers.
 
